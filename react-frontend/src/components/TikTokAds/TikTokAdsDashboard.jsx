@@ -236,10 +236,10 @@ const mergeInsights = (rows, insightsRows = []) => {
 
 // ─── small atoms ────────────────────────────────────────────────────────────
 const KpiCard = ({ icon: Icon, label, value }) => (
-  <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl workspace-card p-4 transition-all duration-300 hover:border-gray-300 2xl:p-5 dark:border-white/8 dark:bg-[#161616] dark:hover:border-white/15 dark:hover:bg-white/3">
+  <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-gray-200 p-4 transition-all duration-300 hover:border-gray-300 2xl:p-5 dark:border-white/10 dark:bg-[#161616] dark:hover:border-white/20 dark:hover:bg-white/3">
     {/* top row: icon left, label right */}
     <div className="flex items-start justify-between">
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 dark:border-white/8 dark:bg-white/5">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/5">
         {Icon && <Icon className="h-4 w-4 text-gray-400 dark:text-white/50" />}
       </div>
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 dark:text-white/35">
@@ -1136,7 +1136,7 @@ const TikTokAdsDashboard = () => {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-auto p-6 text-gray-900 dark:text-white">
       {/* Header — title left, account + date pickers and theme toggle top-right (Meta-style) */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DDD7CD] pb-3 dark:border-white/10">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs 2xl:h-12 2xl:w-12 dark:border-white/10 dark:bg-white">
@@ -1204,7 +1204,7 @@ const TikTokAdsDashboard = () => {
       </div>
 
       {accounts.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-8 text-center dark:border-white/8 dark:bg-[#161616]">
+        <div className="rounded-xl border border-[#DDD7CD] bg-white p-8 text-center dark:border-white/10 dark:bg-[#161616]">
           <p className="text-lg font-medium">No TikTok ad accounts found</p>
           <p className="mt-2 text-sm text-gray-500">
             Make sure your TikTok Business account has at least one ad account.
@@ -1215,7 +1215,7 @@ const TikTokAdsDashboard = () => {
         <>
           {/* Account summary strip — metadata left, Disconnect right (Meta-style) */}
           {selectedAccount && (
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-5 border-b border-gray-100 px-1 py-3 dark:border-white/6">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-5 border-b border-[#DDD7CD] px-1 py-3 dark:border-white/10">
               <div className="flex flex-wrap items-center gap-5">
                 {[
                   { label: 'Account', value: selectedAccount.name },
@@ -1234,8 +1234,8 @@ const TikTokAdsDashboard = () => {
                   { label: 'Status', value: prettyStatus(selectedAccount.status) },
                 ].map((item, i) => (
                   <React.Fragment key={item.label}>
-                    {i > 0 && <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />}
-                    <div className="flex items-center gap-2 text-sm">
+                    {i > 0 && <div className="h-3.5 w-px self-center bg-gray-300 dark:bg-white/20" />}
+                    <div className="flex items-center gap-2 text-sm leading-none">
                       <span className="text-xs font-medium uppercase tracking-wider text-gray-400">
                         {item.label}
                       </span>
@@ -1249,7 +1249,7 @@ const TikTokAdsDashboard = () => {
           )}
 
           {/* Tabs (Analytics | Campaigns) — matches Meta Ads Manager */}
-          <div className="mb-5 flex items-center gap-1 border-b border-gray-100 dark:border-white/6">
+          <div className="mb-4 flex items-center gap-1 border-b border-[#DDD7CD] dark:border-white/10">
             {[
               { id: 'analytics', label: 'Analytics', icon: TrendingUp },
               { id: 'campaigns', label: 'Campaigns', icon: Layers },
@@ -1269,7 +1269,7 @@ const TikTokAdsDashboard = () => {
                   }}
                   className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition ${
                     tab === t.id
-                      ? 'border-gray-900 text-gray-900 dark:border-white/60 dark:text-white'
+                      ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
                       : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'
                   }`}
                 >
@@ -1294,7 +1294,7 @@ const TikTokAdsDashboard = () => {
 
           {/* KPI cards */}
           {loadingStats ? (
-            <div className="mb-6 rounded-xl workspace-card dark:border-white/8 dark:bg-[#161616]">
+            <div className="mb-6 rounded-xl border border-gray-200 dark:border-white/10 dark:bg-[#161616]">
               <Spinner label="Loading performance..." />
             </div>
           ) : (
@@ -1309,12 +1309,12 @@ const TikTokAdsDashboard = () => {
 
           {/* Performance over time (matches Meta Ads Manager) */}
           {!loadingStats && (
-            <div className="mb-6 rounded-2xl workspace-card p-4 dark:border-white/8 dark:bg-[#161616]">
+            <div className="mb-6 rounded-2xl border border-gray-200 p-4 dark:border-white/10 dark:bg-[#161616]">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
                   <TrendingUp className="h-4 w-4" /> Performance over time
                 </h2>
-                <div className="flex items-center gap-1 rounded-lg border border-gray-200 p-1 dark:border-white/8">
+                <div className="flex items-center gap-1 rounded-lg border border-gray-200 p-1 dark:border-white/10">
                   {['spend', 'clicks'].map((m) => (
                     <button
                       key={m}
@@ -1437,7 +1437,7 @@ const TikTokAdsDashboard = () => {
               </div>
 
               {/* Campaigns Table Card with fixed internal scroll container */}
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-white/10 dark:bg-[#141414]">
                 {/* Card Header Toolbar — Count on left, Search, Refresh, Columns, Create on right */}
                 <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 p-3 dark:border-white/12">
                   <div className="flex min-w-0 items-center gap-2">

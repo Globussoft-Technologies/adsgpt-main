@@ -14,9 +14,9 @@ const StepsIndicator = ({ doneLabels = [], activeLabel = null, completedLabel = 
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="flex items-center gap-2 text-[13px] text-white/55"
+            className="flex items-center gap-2 text-[13px] font-medium text-gray-700 dark:text-white/70"
           >
-            <Check className="h-3 w-3 text-white/45" />
+            <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>{label}</span>
           </motion.div>
         ))}
@@ -28,15 +28,15 @@ const StepsIndicator = ({ doneLabels = [], activeLabel = null, completedLabel = 
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.18 }}
-          className="flex items-center gap-2 text-[13px] text-white/85"
+          className="flex items-center gap-2 text-[13.5px] font-semibold text-gray-900 dark:text-white"
         >
-          <Loader2 className="h-3 w-3 animate-spin text-white/70" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-[#099794] dark:text-[#15DCFF]" />
           <span>{activeLabel}</span>
         </motion.div>
       )}
 
       {completedLabel && !activeLabel && (
-        <p className="mt-1 text-[12px] text-white/40">{completedLabel}</p>
+        <p className="mt-1 text-[12px] font-medium text-gray-600 dark:text-white/60">{completedLabel}</p>
       )}
     </div>
   );

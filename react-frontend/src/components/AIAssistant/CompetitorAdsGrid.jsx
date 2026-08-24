@@ -87,7 +87,7 @@ const BrandAvatar = ({ brand, logoUrl }) => {
       src={logoUrl}
       alt=""
       onError={() => setFailed(true)}
-      className="h-9 w-9 flex-shrink-0 rounded-full border border-white/10 object-cover"
+      className="h-9 w-9 flex-shrink-0 rounded-full border border-black/10 object-cover dark:border-white/10"
     />
   );
 };
@@ -123,7 +123,7 @@ const AdCard = ({ ad, onLoadFail, onRecreate, onPreview }) => {
   if (imgExhausted && !isVideo && !snippet && !headline) return null;
 
   return (
-    <article className="group mb-3 block w-full overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0F0F0F] transition-colors duration-200 hover:border-white/15 hover:bg-[#141414]">
+    <article className="group mb-3 block w-full overflow-hidden rounded-2xl border border-black/[0.07] bg-gray-50 transition-colors duration-200 hover:border-black/15 hover:bg-gray-100 dark:border-white/[0.07] dark:bg-[#0F0F0F] dark:hover:border-white/15 dark:hover:bg-[#141414]">
       {/* ── Header: logo, brand, platform, optional external-link icon ───────── */}
       <a
         href={adUrl || undefined}
@@ -133,21 +133,21 @@ const AdCard = ({ ad, onLoadFail, onRecreate, onPreview }) => {
       >
         <BrandAvatar brand={brand} logoUrl={ad.owner_image} />
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1 truncate text-[13.5px] font-medium text-white">
+          <p className="flex items-center gap-1 truncate text-[13.5px] font-medium text-gray-900 dark:text-white">
             <span className="truncate">{truncate(brand, 40)}</span>
             {ad.verified && (
               <BadgeCheck className="h-3.5 w-3.5 flex-shrink-0 text-[#15DCFF]" />
             )}
           </p>
-          <p className="flex items-center gap-1.5 text-[11px] text-white/45">
+          <p className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-white/45">
             <NetworkIcon className={`h-3 w-3 ${meta.color}`} />
             <span>{meta.label}</span>
-            {lastSeen && <span className="text-white/30">·</span>}
+            {lastSeen && <span className="text-gray-300 dark:text-white/30">·</span>}
             {lastSeen && <span>{lastSeen}</span>}
           </p>
         </div>
         {adUrl && (
-          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-white/30 transition-colors duration-150 group-hover:text-white/70" />
+          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-gray-300 transition-colors duration-150 group-hover:text-gray-600 dark:text-white/30 dark:group-hover:text-white/70" />
         )}
       </a>
 
@@ -190,13 +190,13 @@ const AdCard = ({ ad, onLoadFail, onRecreate, onPreview }) => {
       {(headline || snippet) && (
         <div className="px-3 pt-3">
           {headline && (
-            <p className="line-clamp-2 text-[13.5px] leading-snug font-medium text-white">
+            <p className="line-clamp-2 text-[13.5px] leading-snug font-medium text-gray-900 dark:text-white">
               {headline}
             </p>
           )}
           {snippet && snippet !== headline && (
             <p
-              className={`line-clamp-3 text-[12.5px] leading-relaxed text-white/65 ${
+              className={`line-clamp-3 text-[12.5px] leading-relaxed text-gray-500 dark:text-white/65 ${
                 headline ? 'mt-1.5' : ''
               }`}
             >
@@ -212,11 +212,11 @@ const AdCard = ({ ad, onLoadFail, onRecreate, onPreview }) => {
           The CTA truncates (it's the flexible part) and the action pills stay
           whole on a line of their own. */}
       {(ad.call_to_action || adUrl || canRecreate) && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] px-3 py-2">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-black/[0.06] px-3 py-2 dark:border-white/[0.06]">
           {ad.call_to_action ? (
             <span
               title={ad.call_to_action}
-              className="inline-flex h-7 min-w-0 max-w-full shrink items-center rounded-full bg-white/[0.06] px-2.5 text-[11px] font-medium tracking-wide text-white/70 capitalize"
+              className="inline-flex h-7 min-w-0 max-w-full shrink items-center rounded-full bg-black/[0.06] px-2.5 text-[11px] font-medium tracking-wide text-gray-600 capitalize dark:bg-white/[0.06] dark:text-white/70"
             >
               <span className="truncate">{ad.call_to_action}</span>
             </span>
@@ -230,7 +230,7 @@ const AdCard = ({ ad, onLoadFail, onRecreate, onPreview }) => {
                 type="button"
                 onClick={() => onRecreate(ad)}
                 title="Recreate a similar ad with the AI Assistant"
-                className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-3 text-[11.5px] font-medium text-white/85 transition-colors duration-150 hover:from-[#15DCFF]/25 hover:to-[#5E66F5]/25 hover:text-white"
+                className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full bg-gradient-to-r from-[#15DCFF]/10 to-[#5E66F5]/10 px-3 text-[11.5px] font-medium text-gray-600 transition-colors duration-150 hover:from-[#15DCFF]/20 hover:to-[#5E66F5]/20 hover:text-gray-900 dark:from-[#15DCFF]/15 dark:to-[#5E66F5]/15 dark:text-white/85 dark:hover:from-[#15DCFF]/25 dark:hover:to-[#5E66F5]/25 dark:hover:text-white"
               >
                 <Sparkles className="h-3 w-3 text-[#15DCFF]" />
                 Recreate
@@ -242,7 +242,7 @@ const AdCard = ({ ad, onLoadFail, onRecreate, onPreview }) => {
                 target="_blank"
                 rel="noreferrer"
                 title="View the original ad"
-                className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/10 px-3 text-[11.5px] font-medium text-white/60 transition-colors duration-150 hover:border-white/25 hover:text-white"
+                className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-black/10 px-3 text-[11.5px] font-medium text-gray-500 transition-colors duration-150 hover:border-black/20 hover:text-gray-900 dark:border-white/10 dark:text-white/60 dark:hover:border-white/25 dark:hover:text-white"
               >
                 View ad
                 <ExternalLink className="h-3 w-3" />

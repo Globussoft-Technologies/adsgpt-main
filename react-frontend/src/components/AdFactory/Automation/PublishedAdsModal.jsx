@@ -377,7 +377,7 @@ export default function PublishedAdsModal() {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
       onClick={close}
-      className="fixed inset-0 z-1001 flex items-center justify-center bg-[#0D0D0D]/70 p-4 backdrop-blur-md sm:p-6"
+      className="fixed inset-0 z-1001 flex items-center justify-center bg-black/20 p-4 backdrop-blur-md dark:bg-[#0D0D0D]/70 sm:p-6"
     >
       <motion.div
         initial={{ scale: 0.97, opacity: 0 }}
@@ -385,23 +385,23 @@ export default function PublishedAdsModal() {
         exit={{ scale: 0.97, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 320, damping: 30 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative flex h-full max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0F0F12] text-white shadow-2xl"
+        className="relative flex h-full max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-black/15 bg-[#F7F4EE] text-gray-900 shadow-2xl dark:border-white/10 dark:bg-[#0F0F12] dark:text-white"
       >
         <div className="pointer-events-none absolute -top-32 -right-24 size-72 rounded-full bg-[#15DCFF]/10 blur-3xl" />
 
         {/* Header */}
-        <header className="relative flex flex-wrap items-start justify-between gap-3 border-b border-white/5 px-6 py-4">
+        <header className="relative flex flex-wrap items-start justify-between gap-3 border-b border-black/10 px-6 py-4 dark:border-white/5">
           <div>
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-2 py-0.5 text-10 font-semibold tracking-wider text-[#15DCFF] uppercase">
                 <span className="size-1.5 rounded-full bg-[#15DCFF]" />
                 Posted Ads
               </span>
-              <span className="text-xs text-[#AFAFAF]">Campaign · {campaignLabel}</span>
+              <span className="text-xs text-gray-500 dark:text-[#AFAFAF]">Campaign · {campaignLabel}</span>
             </div>
-            <h2 className="mt-2 flex items-baseline gap-2 text-xl font-semibold text-white">
+            <h2 className="mt-2 flex items-baseline gap-2 text-xl font-semibold text-gray-900 dark:text-white">
               History
-              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs font-medium text-[#AFAFAF]">
+              <span className="rounded-full border border-black/10 bg-black/5 px-2 py-0.5 text-xs font-medium text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-[#AFAFAF]">
                 {filtered.length} of {allAds.length}
               </span>
             </h2>
@@ -410,14 +410,14 @@ export default function PublishedAdsModal() {
             type="button"
             onClick={close}
             aria-label="Close"
-            className="rounded-full p-1.5 text-[#AFAFAF] transition hover:bg-white/5 hover:text-white"
+            className="rounded-full p-1.5 text-gray-500 transition hover:bg-black/5 hover:text-gray-900 dark:text-[#AFAFAF] dark:hover:bg-white/5 dark:hover:text-white"
           >
             <X className="size-5" />
           </button>
         </header>
 
         {/* Filter bar */}
-        <div className="relative flex flex-wrap items-center gap-3 border-b border-white/5 px-6 py-3">
+        <div className="relative flex flex-wrap items-center gap-3 border-b border-black/10 px-6 py-3 dark:border-white/5">
           <FilterRow
             label="Status"
             options={STATUS_FILTERS}
@@ -437,7 +437,7 @@ export default function PublishedAdsModal() {
               onClear={handleCustomDateClear}
             />
           )}
-          <span className="hidden h-5 w-px bg-white/10 sm:block" />
+          <span className="hidden h-5 w-px bg-black/10 sm:block dark:bg-white/10" />
           <CustomDropdown
             label="Platform"
             options={availablePlatforms}
@@ -446,7 +446,7 @@ export default function PublishedAdsModal() {
           />
           {availableAccounts.length > 1 && (
             <>
-              <span className="hidden h-5 w-px bg-white/10 sm:block" />
+              <span className="hidden h-5 w-px bg-black/10 sm:block dark:bg-white/10" />
               <CustomDropdown
                 label="Account"
                 options={availableAccounts}
@@ -455,7 +455,7 @@ export default function PublishedAdsModal() {
               />
             </>
           )}
-          <div className="ml-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-white/3 p-0.5">
+          <div className="ml-auto flex items-center gap-0.5 rounded-full border border-black/10 bg-black/5 p-0.5 dark:border-white/10 dark:bg-white/3">
             {DENSITY_OPTIONS.map((d) => (
               <button
                 key={d.id}
@@ -463,8 +463,8 @@ export default function PublishedAdsModal() {
                 onClick={() => setDensity(d.id)}
                 className={`rounded-full px-2.5 py-1 text-[11px] font-medium tabular-nums transition ${
                   density === d.id
-                    ? 'bg-white text-[#0F0F12]'
-                    : 'text-[#AFAFAF] hover:text-white'
+                    ? 'bg-gray-900 text-white dark:bg-white dark:text-[#0F0F12]'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-[#AFAFAF] dark:hover:text-white'
                 }`}
               >
                 {d.id}
@@ -494,8 +494,8 @@ export default function PublishedAdsModal() {
               {buckets.map(({ key, label, items }) => (
                 <section key={key}>
                   <div className="mb-3 flex items-baseline gap-2">
-                    <h3 className="text-sm font-semibold text-white">{label}</h3>
-                    <span className="text-11 text-[#AFAFAF]">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{label}</h3>
+                    <span className="text-11 text-gray-500 dark:text-[#AFAFAF]">
                       {items.length} {items.length === 1 ? 'post' : 'posts'}
                     </span>
                   </div>

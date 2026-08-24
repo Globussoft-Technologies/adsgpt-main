@@ -675,8 +675,16 @@ export default function VideoCard({
         <>
           <CreativeGeneratingLoader />
 
-          <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 transform flex-col items-center justify-center">
-            <p className="mt-4 text-sm whitespace-nowrap text-white">{item?.promptPercentage}%</p>
+          <div className="absolute bottom-4 left-1/2 flex w-36 -translate-x-1/2 transform flex-col items-center justify-center gap-1.5">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/15 shadow-xs dark:bg-white/25">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] transition-all duration-300 dark:from-[#15DCFF] dark:to-[#6b72f8]"
+                style={{ width: `${item?.promptPercentage ?? 50}%` }}
+              />
+            </div>
+            <p className="text-xs font-semibold whitespace-nowrap text-gray-900 dark:text-white">
+              {item?.promptPercentage ?? 50}%
+            </p>
           </div>
         </>
       ) : item?.inputs?.type === 'avatar' &&

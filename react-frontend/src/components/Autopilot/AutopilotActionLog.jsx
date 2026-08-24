@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Check,
   Search,
   RefreshCw,
   RotateCcw,
@@ -411,6 +412,7 @@ const AutopilotActionLog = ({ selectedAdAccountId, adAccounts, scopedAdAccountId
               ]}
               onChange={(v) => setFilter('outcome', v)}
               widthClass="w-36"
+              anchor="right"
             />
             <FilterDropdown
               value={filters.severity}
@@ -422,6 +424,7 @@ const AutopilotActionLog = ({ selectedAdAccountId, adAccounts, scopedAdAccountId
               ]}
               onChange={(v) => setFilter('severity', v)}
               widthClass="w-36"
+              anchor="right"
             />
           </div>
         </div>
@@ -1012,10 +1015,10 @@ const PageSizeMenu = ({ value, sizes, onChange }) => {
               onChange(s);
               setOpen(false);
             }}
-            className={`w-full rounded-lg px-3 py-1.5 text-left text-xs transition-all hover:bg-[var(--ws-surface-header)] dark:hover:bg-white/5 ${
+            className={`w-full rounded-lg px-3 py-1.5 text-left text-xs transition-all ${
               value === s
-                ? 'bg-[var(--ws-surface-header)] text-[#15DCFF] dark:bg-white/5'
-                : 'text-gray-900 dark:text-white'
+                ? 'bg-[#02C8C4]/15 font-semibold text-[#099794] dark:bg-[#15DCFF]/20 dark:text-[#15DCFF]'
+                : 'text-gray-900 hover:bg-black/5 dark:text-white dark:hover:bg-white/5'
             }`}
           >
             {s}
@@ -1027,12 +1030,12 @@ const PageSizeMenu = ({ value, sizes, onChange }) => {
 };
 
 // ─── filter dropdown ──────────────────────────────────────────────────────
-const FilterDropdown = ({ value, options, onChange, widthClass = 'w-44' }) => {
+const FilterDropdown = ({ value, options, onChange, widthClass = 'w-44', anchor = 'left' }) => {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value) || options[0];
   return (
     <Dropdown
-      anchor="left"
+      anchor={anchor}
       open={open}
       onClose={() => setOpen(false)}
       trigger={
@@ -1048,22 +1051,29 @@ const FilterDropdown = ({ value, options, onChange, widthClass = 'w-44' }) => {
     >
       <div className="w-56 p-1">
         <div className="max-h-64 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--ws-border-strong)] dark:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent">
-          {options.map((o) => (
-            <button
-              key={o.value}
-              onClick={() => {
-                onChange(o.value);
-                setOpen(false);
-              }}
-              className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-all hover:bg-[var(--ws-surface-header)] dark:hover:bg-white/5 ${
-                value === o.value
-                  ? 'bg-[var(--ws-surface-header)] text-[#15DCFF] dark:bg-white/5'
-                  : 'text-gray-900 dark:text-white'
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
+          {options.map((o) => {
+            const isSelected = value === o.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-all ${
+                  isSelected
+                    ? 'bg-[#02C8C4]/15 font-semibold text-[#099794] dark:bg-[#15DCFF]/20 dark:text-[#15DCFF]'
+                    : 'text-gray-900 hover:bg-black/5 dark:text-white dark:hover:bg-white/5'
+                }`}
+              >
+                <span className="truncate">{o.label}</span>
+                {isSelected && (
+                  <Check className="h-3.5 w-3.5 shrink-0 text-[#099794] dark:text-[#15DCFF]" />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
     </Dropdown>

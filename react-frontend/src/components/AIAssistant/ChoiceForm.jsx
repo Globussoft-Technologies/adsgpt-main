@@ -182,8 +182,8 @@ const SegmentedField = ({ field, value, onChange, disabled }) => {
             disabled={disabled}
             className={`h-8 rounded-full border px-3 text-[12px] font-medium transition-all ${
               isOn
-                ? 'border-white/40 bg-white/15 text-white shadow-[0_0_0_1px_#ffffff40]'
-                : 'border-white/10 bg-transparent text-white/65 hover:border-white/25 hover:text-white'
+                ? 'border-black/30 bg-black/10 text-gray-900 shadow-[0_0_0_1px_rgba(0,0,0,0.1)] dark:border-white/40 dark:bg-white/15 dark:text-white dark:shadow-[0_0_0_1px_#ffffff40]'
+                : 'border-black/10 bg-transparent text-gray-600 hover:border-black/25 hover:text-gray-900 dark:border-white/10 dark:text-white/65 dark:hover:border-white/25 dark:hover:text-white'
             } disabled:cursor-not-allowed disabled:opacity-60`}
           >
             {o.label}
@@ -206,10 +206,10 @@ const SelectField = ({ field, value, onChange, disabled }) => {
         onChange(match ? match.value : raw);
       }}
       disabled={disabled}
-      className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
+      className="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-[13px] text-gray-900 outline-none transition-colors hover:border-black/25 focus:border-black/40 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#111] dark:text-white dark:hover:border-white/25 dark:focus:border-white/40"
     >
       {opts.map((o) => (
-        <option key={String(o.value)} value={String(o.value)} className="bg-[#111]">
+        <option key={String(o.value)} value={String(o.value)} className="bg-white text-gray-900 dark:bg-[#111] dark:text-white">
           {o.label}
         </option>
       ))}
@@ -324,15 +324,15 @@ const DropdownShell = ({
         aria-label={ariaLabel}
         className={
           triggerClassName ||
-          `flex h-9 w-full items-center justify-between gap-2 rounded-full bg-[#2b2a2a]/80 px-3.5 text-left ring-1 transition-colors hover:bg-[#33333a] disabled:cursor-not-allowed disabled:opacity-60 ${
-            isOpen ? 'ring-white/25' : 'ring-white/5'
+          `flex h-9 w-full items-center justify-between gap-2 rounded-full bg-black/5 text-gray-900 dark:bg-[#2b2a2a]/80 dark:text-white px-3.5 text-left ring-1 transition-colors hover:bg-black/10 dark:hover:bg-[#33333a] disabled:cursor-not-allowed disabled:opacity-60 ${
+            isOpen ? 'ring-black/20 dark:ring-white/25' : 'ring-black/5 dark:ring-white/5'
           }`
         }
       >
         {trigger}
         {!hideChevron && (
           <ChevronDown
-            className={`h-4 w-4 shrink-0 text-white/40 transition-transform ${
+            className={`h-4 w-4 shrink-0 text-gray-500 dark:text-white/40 transition-transform ${
               isOpen ? 'rotate-180' : ''
             }`}
             strokeWidth={2}
@@ -353,10 +353,7 @@ const DropdownShell = ({
               width: menu.width,
               maxHeight: estHeight,
             }}
-            className={`subtle-scroll dark pointer-events-auto z-[80] overflow-y-auto bg-[#1f1f1f] shadow-2xl ring-1 ring-white/10 transition-all duration-150 ease-out will-change-transform ${
-              // `dark` above: the Ad Studio panel we host is theme-aware, but the
-              // assistant card is always dark — without this it renders its light
-              // variant whenever the app is in light mode.
+            className={`subtle-scroll pointer-events-auto z-[80] overflow-y-auto bg-[#F7F4EE] text-gray-900 shadow-2xl ring-1 ring-black/10 transition-all duration-150 ease-out will-change-transform dark:bg-[#1f1f1f] dark:text-white dark:ring-white/10 ${
               panel ? 'rounded-[20px] p-4' : 'rounded-[18px] py-1'
             } ${menu.below ? 'origin-top' : 'origin-bottom'} ${
               visible
@@ -392,11 +389,11 @@ const ModelSelectField = ({ field, value, onChange, disabled, creditCosts }) => 
       ariaLabel={`Model: ${selected?.label || 'none selected'}`}
       trigger={
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-[13px] text-white/90">
+          <span className="truncate text-[13px] text-gray-800 dark:text-white/90">
             {selected?.label || 'Select a model'}
           </span>
           {selectedCost != null && (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[10.5px] font-semibold text-white/75">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-black/10 bg-black/[0.04] px-2 py-0.5 text-[10.5px] font-semibold text-gray-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/75">
               <Sparkles className="h-2.5 w-2.5 text-[#15DCFF]" />
               {selectedCost} cr/img
             </span>
@@ -425,22 +422,22 @@ const ModelSelectField = ({ field, value, onChange, disabled, creditCosts }) => 
               }}
               className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-[13px] transition-colors ${
                 isOn
-                  ? 'bg-[#373839] text-white'
-                  : 'text-white/80 hover:bg-white/5 hover:text-white'
+                  ? 'bg-black/10 text-gray-900 dark:bg-[#373839] dark:text-white'
+                  : 'text-gray-700 hover:bg-black/5 hover:text-gray-900 dark:text-white/80 dark:hover:bg-white/5 dark:hover:text-white'
               }`}
             >
               <span className="flex min-w-0 items-center gap-2">
                 <span
                   className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
-                    isOn ? 'border-white' : 'border-white/30'
+                    isOn ? 'border-gray-900 dark:border-white' : 'border-gray-400 dark:border-white/30'
                   }`}
                 >
-                  {isOn && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                  {isOn && <span className="h-1.5 w-1.5 rounded-full bg-gray-900 dark:bg-white" />}
                 </span>
                 <span className="truncate">{o.label}</span>
               </span>
               {cost != null && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[10.5px] font-semibold text-white/75">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-black/10 bg-black/[0.04] px-2 py-0.5 text-[10.5px] font-semibold text-gray-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/75">
                   <Sparkles className="h-2.5 w-2.5 text-[#15DCFF]" />
                   {cost} cr/img
                 </span>
@@ -460,7 +457,7 @@ const TextField = ({ field, value, onChange, disabled }) => (
     placeholder={field.placeholder || ''}
     onChange={(e) => onChange(e.target.value)}
     disabled={disabled}
-    className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors placeholder:text-white/35 hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
+    className="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-[13px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 hover:border-black/25 focus:border-black/40 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#111] dark:text-white dark:placeholder:text-white/35 dark:hover:border-white/25 dark:focus:border-white/40"
   />
 );
 
@@ -471,7 +468,7 @@ const TextareaField = ({ field, value, onChange, disabled }) => (
     onChange={(e) => onChange(e.target.value)}
     disabled={disabled}
     rows={field.rows || 3}
-    className="subtle-scroll w-full resize-y rounded-lg border border-white/10 bg-[#111] px-3 py-2 text-[13px] leading-relaxed text-white outline-none transition-colors placeholder:text-white/35 hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
+    className="subtle-scroll w-full resize-y rounded-lg border border-black/10 bg-white px-3 py-2 text-[13px] leading-relaxed text-gray-900 outline-none transition-colors placeholder:text-gray-400 hover:border-black/25 focus:border-black/40 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#111] dark:text-white dark:placeholder:text-white/35 dark:hover:border-white/25 dark:focus:border-white/40"
   />
 );
 
@@ -487,7 +484,7 @@ const NumberField = ({ field, value, onChange, disabled }) => (
       onChange(raw === '' ? '' : Number(raw));
     }}
     disabled={disabled}
-    className="h-9 w-full rounded-lg border border-white/10 bg-[#111] px-3 text-[13px] text-white outline-none transition-colors hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
+    className="h-9 w-full rounded-lg border border-black/10 bg-white px-3 text-[13px] text-gray-900 outline-none transition-colors hover:border-black/25 focus:border-black/40 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#111] dark:text-white dark:hover:border-white/25 dark:focus:border-white/40"
   />
 );
 
@@ -507,11 +504,11 @@ const StepperField = ({ field, value, onChange, disabled }) => {
         onClick={() => set(current - step)}
         disabled={disabled || current <= min}
         aria-label="Decrease"
-        className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-white/70 transition-colors hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 text-gray-700 transition-colors hover:border-black/25 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-white/70 dark:hover:border-white/25 dark:hover:text-white"
       >
         <Minus className="h-3.5 w-3.5" />
       </button>
-      <span className="min-w-[2.25rem] text-center text-[14px] font-semibold tabular-nums text-white">
+      <span className="min-w-[2.25rem] text-center text-[14px] font-semibold tabular-nums text-gray-900 dark:text-white">
         {current}
       </span>
       <button
@@ -519,7 +516,7 @@ const StepperField = ({ field, value, onChange, disabled }) => {
         onClick={() => set(current + step)}
         disabled={disabled || current >= max}
         aria-label="Increase"
-        className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-white/70 transition-colors hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 text-gray-700 transition-colors hover:border-black/25 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-white/70 dark:hover:border-white/25 dark:hover:text-white"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
@@ -547,10 +544,10 @@ const AspectRatioCountsField = ({ field, value, onChange, disabled, creditsPerIm
       estHeight={380}
       ariaLabel={`Aspect ratios — ${total} image${total === 1 ? '' : 's'}`}
       trigger={
-        <span className="flex min-w-0 flex-1 items-center gap-2 text-white/85">
-          <Proportions className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.8} />
-          <span className="h-3 w-px shrink-0 bg-white/20" />
-          <LayoutGrid className="h-3 w-3 shrink-0 text-white/50" strokeWidth={1.8} />
+        <span className="flex min-w-0 flex-1 items-center gap-2 text-gray-800 dark:text-white/85">
+          <Proportions className="h-4 w-4 shrink-0 text-gray-600 dark:text-white/70" strokeWidth={1.8} />
+          <span className="h-3 w-px shrink-0 bg-black/15 dark:bg-white/20" />
+          <LayoutGrid className="h-3 w-3 shrink-0 text-gray-400 dark:text-white/50" strokeWidth={1.8} />
           <span className="truncate text-[13px]">
             {total} Image{total === 1 ? '' : 's'}
           </span>
@@ -591,8 +588,8 @@ const CheckboxField = ({ field, value, onChange, disabled }) => {
             disabled={disabled}
             className={`h-8 rounded-full border px-3 text-[12px] font-medium transition-all ${
               isOn
-                ? 'border-white/40 bg-white/15 text-white shadow-[0_0_0_1px_#ffffff40]'
-                : 'border-white/10 bg-transparent text-white/65 hover:border-white/25 hover:text-white'
+                ? 'border-black/30 bg-black/10 text-gray-900 shadow-[0_0_0_1px_rgba(0,0,0,0.1)] dark:border-white/40 dark:bg-white/15 dark:text-white dark:shadow-[0_0_0_1px_#ffffff40]'
+                : 'border-black/10 bg-transparent text-gray-600 hover:border-black/25 hover:text-gray-900 dark:border-white/10 dark:text-white/65 dark:hover:border-white/25 dark:hover:text-white'
             } disabled:cursor-not-allowed disabled:opacity-60`}
           >
             {o.label}
@@ -611,10 +608,6 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
       ? value.split(',').map((s) => s.trim()).filter(Boolean)
       : [];
   const [draft, setDraft] = useState('');
-  // The native <input type="color"> fires onChange continuously while the user
-  // drags through the picker, so committing on every change added a whole trail
-  // of intermediate colors. We debounce instead: the picker only updates a live
-  // draft, and we commit the single FINAL value ~300ms after the user settles.
   const commitTimer = useRef(null);
   const HEX6 = /^#[0-9a-fA-F]{6}$/;
   const add = (c) => {
@@ -637,12 +630,12 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
           {arr.map((c) => (
             <span
               key={c}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] py-0.5 pr-1 pl-1.5 text-[11px] text-white/80"
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-black/[0.04] py-0.5 pr-1 pl-1.5 text-[11px] text-gray-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80"
             >
-              <span className="h-3.5 w-3.5 rounded-full border border-white/20" style={{ background: c }} />
+              <span className="h-3.5 w-3.5 rounded-full border border-black/20 dark:border-white/20" style={{ background: c }} />
               {c}
               {!disabled && (
-                <button type="button" onClick={() => remove(c)} className="text-white/40 hover:text-white">
+                <button type="button" onClick={() => remove(c)} className="text-gray-400 hover:text-gray-900 dark:text-white/40 dark:hover:text-white">
                   <X className="h-3 w-3" />
                 </button>
               )}
@@ -663,19 +656,19 @@ const ColorChipsField = ({ field, value, onChange, disabled }) => {
                 add(draft);
               }
             }}
-            className="h-8 w-28 rounded-lg border border-white/10 bg-[#111] px-2.5 text-[12px] text-white outline-none placeholder:text-white/35 focus:border-white/40"
+            className="h-8 w-28 rounded-lg border border-black/10 bg-white px-2.5 text-[12px] text-gray-900 outline-none placeholder:text-gray-400 focus:border-black/40 dark:border-white/10 dark:bg-[#111] dark:text-white dark:placeholder:text-white/35 dark:focus:border-white/40"
           />
           <input
             type="color"
             value={HEX6.test(draft) ? draft : '#000000'}
             onChange={(e) => pickColor(e.target.value)}
-            className="h-8 w-8 cursor-pointer rounded-lg border border-white/10 bg-[#111] p-0.5"
+            className="h-8 w-8 cursor-pointer rounded-lg border border-black/10 bg-white p-0.5 dark:border-white/10 dark:bg-[#111]"
             title="Pick a color"
           />
           <button
             type="button"
             onClick={() => add(draft)}
-            className="h-8 rounded-lg border border-white/10 px-2.5 text-[12px] text-white/70 hover:border-white/25 hover:text-white"
+            className="h-8 rounded-lg border border-black/10 px-2.5 text-[12px] text-gray-700 hover:border-black/25 hover:text-gray-900 dark:border-white/10 dark:text-white/70 dark:hover:border-white/25 dark:hover:text-white"
           >
             Add
           </button>
@@ -814,7 +807,7 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
                 disabled={disabled}
                 title={on ? 'Selected — double-click to preview' : 'Click to use · double-click to preview'}
                 className={`group h-full w-full overflow-hidden rounded-lg border-2 transition-all disabled:cursor-not-allowed ${
-                  on ? 'border-white' : 'border-transparent hover:border-white/30'
+                  on ? 'border-gray-900 dark:border-white' : 'border-transparent hover:border-black/30 dark:hover:border-white/30'
                 }`}
               >
                 <img
@@ -826,7 +819,7 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
                   className={`h-full w-full object-cover transition-opacity ${on ? '' : 'opacity-60 group-hover:opacity-90'}`}
                 />
                 {on && (
-                  <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-black shadow">
+                  <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-900 text-white shadow dark:bg-white dark:text-black">
                     <Check className="h-3 w-3" />
                   </span>
                 )}
@@ -836,7 +829,7 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
                   type="button"
                   onClick={() => removeAt(i, on)}
                   title="Remove"
-                  className="absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-black/80 text-white/80 ring-1 ring-white/20 hover:bg-black hover:text-white"
+                  className="absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-black/80 text-white/80 ring-1 ring-black/20 hover:bg-black hover:text-white dark:ring-white/20"
                 >
                   <X className="h-2.5 w-2.5" />
                 </button>
@@ -850,7 +843,7 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
             estHeight={160}
             ariaLabel="Add an image"
             hideChevron
-            triggerClassName="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/15 text-white/45 hover:border-white/40 hover:text-white/70"
+            triggerClassName="flex h-16 w-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-black/20 text-gray-500 hover:border-black/40 hover:text-gray-800 dark:border-white/15 dark:text-white/45 dark:hover:border-white/40 dark:hover:text-white/70"
             trigger={
               <>
                 {uploading ? (
@@ -870,9 +863,9 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
                     close();
                     fileInputRef.current?.click();
                   }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-gray-700 transition-colors hover:bg-black/5 hover:text-gray-900 dark:text-white/80 dark:hover:bg-white/5 dark:hover:text-white"
                 >
-                  <Upload className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                  <Upload className="h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-white/50" />
                   Upload from your computer
                 </button>
                 <button
@@ -882,9 +875,9 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
                     setBrandOpen(false);
                     setUrlOpen(true);
                   }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-gray-700 transition-colors hover:bg-black/5 hover:text-gray-900 dark:text-white/80 dark:hover:bg-white/5 dark:hover:text-white"
                 >
-                  <Link2 className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                  <Link2 className="h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-white/50" />
                   Paste image or URL
                 </button>
                 <button
@@ -894,11 +887,11 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
                     setUrlOpen(false);
                     setBrandOpen(true);
                   }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-gray-700 transition-colors hover:bg-black/5 hover:text-gray-900 dark:text-white/80 dark:hover:bg-white/5 dark:hover:text-white"
                 >
-                  <Images className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                  <Images className="h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-white/50" />
                   <span className="flex-1">Choose brand image</span>
-                  <span className="text-[11px] text-white/40">{brandImages.length}</span>
+                  <span className="text-[11px] text-gray-400 dark:text-white/40">{brandImages.length}</span>
                 </button>
               </>
             )}
@@ -915,8 +908,8 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
       </div>
 
       {urlOpen && !disabled && (
-        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/30 p-1.5">
-          <Link2 className="ml-1 h-3.5 w-3.5 shrink-0 text-white/45" />
+        <div className="flex items-center gap-2 rounded-lg border border-black/10 bg-black/5 p-1.5 dark:border-white/10 dark:bg-black/30">
+          <Link2 className="ml-1 h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-white/45" />
           <input
             type="url"
             value={urlDraft}
@@ -931,13 +924,13 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
               }
             }}
             placeholder="https://example.com/image.png"
-            className="min-w-0 flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/35"
+            className="min-w-0 flex-1 bg-transparent text-[12px] text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-white/35"
           />
           <button
             type="button"
             onClick={addByUrl}
             disabled={!urlDraft.trim()}
-            className="inline-flex h-6 items-center rounded-full bg-white px-2.5 text-[11px] font-semibold text-black hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-6 items-center rounded-full bg-gray-900 px-2.5 text-[11px] font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black dark:hover:bg-white/90"
           >
             Add
           </button>
@@ -945,7 +938,7 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
             type="button"
             onClick={() => setUrlOpen(false)}
             aria-label="Close image URL input"
-            className="flex h-6 w-6 items-center justify-center rounded-full text-white/45 hover:bg-white/10 hover:text-white"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-gray-500 hover:bg-black/10 hover:text-gray-900 dark:text-white/45 dark:hover:bg-white/10 dark:hover:text-white"
           >
             <X className="h-3 w-3" />
           </button>
@@ -953,9 +946,9 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
       )}
 
       {brandOpen && !disabled && (
-        <div className="rounded-lg border border-white/10 bg-black/30 p-2">
+        <div className="rounded-lg border border-black/10 bg-black/5 p-2 dark:border-white/10 dark:bg-black/30">
           <div className="mb-1.5 flex items-center justify-between">
-            <span className="truncate text-[11px] font-medium text-white/70">
+            <span className="truncate text-[11px] font-medium text-gray-700 dark:text-white/70">
               {/* Naming the brand makes it obvious these follow the selection —
                   and that an empty panel means THIS brand has none, rather than
                   the picker being broken. */}
@@ -969,13 +962,13 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
               type="button"
               onClick={() => setBrandOpen(false)}
               aria-label="Close brand images"
-              className="flex h-5 w-5 items-center justify-center rounded-full text-white/45 hover:bg-white/10 hover:text-white"
+              className="flex h-5 w-5 items-center justify-center rounded-full text-gray-500 hover:bg-black/10 hover:text-gray-900 dark:text-white/45 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <X className="h-3 w-3" />
             </button>
           </div>
           {brandImages.length === 0 ? (
-            <p className="px-0.5 py-1 text-[11px] text-white/40">
+            <p className="px-0.5 py-1 text-[11px] text-gray-500 dark:text-white/40">
               {brandName
                 ? `No saved ${isLogoField ? 'logos' : 'images'} for ${brandName}.`
                 : `No saved ${isLogoField ? 'logos' : 'images'} on your brands yet.`}
@@ -993,8 +986,8 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
                     title={already ? 'Already added' : 'Add this image'}
                     className={`h-14 w-14 overflow-hidden rounded-lg border-2 transition-all ${
                       already
-                        ? 'cursor-not-allowed border-white/40 opacity-40'
-                        : 'border-transparent hover:border-white/50'
+                        ? 'cursor-not-allowed border-gray-400 opacity-40 dark:border-white/40'
+                        : 'border-transparent hover:border-black/40 dark:hover:border-white/50'
                     }`}
                   >
                     <img
@@ -1012,7 +1005,7 @@ const ImageUploadField = ({ field, value, onChange, disabled, brandName, extraAs
       )}
       {arr.length > 0 && (
         <span
-          className={`text-[11px] font-medium ${selectedCount ? 'text-emerald-400/90' : 'text-amber-400/90'}`}
+          className={`text-[11px] font-medium ${selectedCount ? 'text-emerald-600 dark:text-emerald-400/90' : 'text-amber-600 dark:text-amber-400/90'}`}
         >
           {selectedCount
             ? `${selectedCount} of ${arr.length} used in generation — click to add or remove`
@@ -1056,7 +1049,7 @@ const ImagePickerField = ({ field, value, onChange, disabled }) => {
               disabled={disabled}
               title="Click to use · double-click to preview"
               className={`group relative aspect-square overflow-hidden rounded-lg border-2 transition-all disabled:cursor-not-allowed ${
-                on ? 'border-white' : 'border-transparent hover:border-white/30'
+                on ? 'border-gray-900 dark:border-white' : 'border-transparent hover:border-black/30 dark:hover:border-white/30'
               }`}
             >
               <img
@@ -1073,7 +1066,7 @@ const ImagePickerField = ({ field, value, onChange, disabled }) => {
                 className={`h-full w-full object-cover transition-opacity ${on ? '' : 'opacity-75 group-hover:opacity-100'}`}
               />
               {on && (
-                <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-black shadow">
+                <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-900 text-white shadow dark:bg-white dark:text-black">
                   <Check className="h-3 w-3" />
                 </span>
               )}
@@ -1082,7 +1075,7 @@ const ImagePickerField = ({ field, value, onChange, disabled }) => {
         })}
       </div>
       <span
-        className={`text-[11.5px] font-medium ${selected.length ? 'text-emerald-400/90' : 'text-amber-400/90'}`}
+        className={`text-[11.5px] font-medium ${selected.length ? 'text-emerald-600 dark:text-emerald-400/90' : 'text-amber-600 dark:text-amber-400/90'}`}
       >
         {selected.length
           ? `${selected.length} image${selected.length > 1 ? 's' : ''} selected`
@@ -1160,32 +1153,19 @@ const BrandPicker = ({
   const brands = useSelector((s) => s.brandIQTabs?.myBrands) || [];
   const [open, setOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  // Snapshot of the brand fields as they were BEFORE the most recent change, so
-  // a user who accidentally picks (or clears) the wrong brand can restore their
-  // previous selection in one click instead of hunting for it again.
   const [prevBrand, setPrevBrand] = useState(null);
-  // "Add from website" — analyze a typed domain and hydrate the brand fields
-  // from it (for brands that aren't in the saved list).
   const [siteDraft, setSiteDraft] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
-  // A brand switch rewrites the brief for the new brand (see `pick`). Only the
-  // latest switch matters, so an in-flight rewrite is aborted when another
-  // starts — otherwise a slow first response could land after a later one.
-  // The flag is reported UP to the card, which owns the prompt field's loader
-  // and blocks Generate until the brief matches the brand on screen.
   const rewriteAbort = useRef(null);
   const setRewriting = onRewritingChange;
   useEffect(() => () => rewriteAbort.current?.abort(), []);
   const wrapRef = useRef(null);
 
-  // Load the user's brands once if we don't have them yet — the assistant can
-  // be opened without ever visiting Brand IQ (where they're normally fetched).
   useEffect(() => {
     if (userId && brands.length === 0) dispatch(fetchBrands(userId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  // Close the dropdown on an outside click.
   useEffect(() => {
     const onDoc = (e) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
@@ -1194,17 +1174,12 @@ const BrandPicker = ({
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
-  // Same tolerant lookup the scrape path uses — this one also missed
-  // `brandLogo` / `logoUrl`, so a saved brand storing its logo under either
-  // showed no logo on its row, its trigger, or in the Logo field.
   const logoOf = pickLogoUrl;
   const fieldKeys = new Set((form.fields || []).map((f) => f.key));
   const currentName = (values.brand_name || '').trim();
   const matched =
     brands.find((b) => (b?.name || '').trim().toLowerCase() === currentName.toLowerCase()) || null;
 
-  // Capture the current brand fields so a subsequent change can be undone. Only
-  // remembers a non-empty selection (nothing to restore from a blank state).
   const rememberCurrentBrand = () => {
     if (!currentName) return;
     const snap = {};
@@ -1215,8 +1190,6 @@ const BrandPicker = ({
   };
 
   const pick = (b) => {
-    // Remember the outgoing selection before overwriting it (unless re-picking
-    // the same brand, which isn't a change worth undoing).
     if (currentName.toLowerCase() !== (b.name || '').trim().toLowerCase()) {
       rememberCurrentBrand();
     }
@@ -1232,18 +1205,10 @@ const BrandPicker = ({
       const colors = b.colors || b.brandColors || b.palette;
       if (Array.isArray(colors) && colors.length) patch.brand_colors = colors;
     }
-    // The rest of the brief has to follow the brand too, or the card still
-    // describes (and generates) the previous one.
     if (fieldKeys.has('product')) {
-      // Product Details describe the BRAND's product, so they follow the brand
-      // outright. (This used to only fire when Product was literally the old
-      // brand's name, which is why picking a new brand left the previous
-      // product sitting there.) "Restore previous" puts it back.
       patch.product = nextName;
     }
     if (fieldKeys.has('reference_images')) {
-      // Replace, don't merge: the outgoing brand's product photos are exactly
-      // what shouldn't feed the new brand's creative.
       const images = brandProductImagesOf(b);
       patch.reference_images = images.map((url, i) => ({
         url,
@@ -1252,8 +1217,6 @@ const BrandPicker = ({
       }));
     }
     if (fieldKeys.has('prompt')) {
-      // Feed every name the outgoing brand might appear under: the card's
-      // brand_name, and the saved record it matched (they can differ).
       patch.prompt = applyBrandToPrompt(
         values.prompt,
         [currentName, matched?.name || ''],
@@ -1272,22 +1235,10 @@ const BrandPicker = ({
     });
   };
 
-  // Renaming the brand isn't enough on its own — everything AROUND the name
-  // still describes the previous brand. Rewrite the brief for the new one.
-  //
-  // Shared by BOTH ways of changing brand: picking a saved one and adding one
-  // from its website. It used to hang off the saved-brand path only, so the
-  // website flow — which is what the bug report records — changed the name and
-  // left the rest of the brief describing whatever came before.
-  //
-  // The deterministic rename has already landed by the time this runs, so it's
-  // a refinement: slow or failing, the card is still on the right brand.
   const rewriteBriefFor = ({ prompt, brandName, brandDescription, product, previousBrand }) => {
     if (!fieldKeys.has('prompt') || !prompt || !brandName) return;
     const creativeType = values.creative_type;
 
-    // Comparing two brands means switching back and forth. The first switch to
-    // a brand pays for the model call; returning to it is instant.
     const cached = getCachedBrief(brandName, creativeType);
     if (cached) {
       onPick({ prompt: cached });
@@ -1324,8 +1275,6 @@ const BrandPicker = ({
       });
   };
 
-  // Clear a wrong selection — blanks every brand field the form has so the
-  // user can re-pick (or leave brand-less) without restarting the workflow.
   const clear = () => {
     rememberCurrentBrand();
     const patch = {};
@@ -1336,15 +1285,12 @@ const BrandPicker = ({
     onPick(patch);
   };
 
-  // Restore the brand selection that was active before the last pick/clear.
   const restorePrevious = () => {
     if (!prevBrand) return;
     onPick(prevBrand);
     setPrevBrand(null);
   };
 
-  // Only offer "restore" when the remembered brand actually differs from what's
-  // currently selected (otherwise there's nothing to undo).
   const canRestore =
     !!prevBrand?.brand_name &&
     prevBrand.brand_name.trim().toLowerCase() !== currentName.toLowerCase();
@@ -1361,10 +1307,6 @@ const BrandPicker = ({
     const site = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     setAnalyzing(true);
     try {
-      // We render our own failure messages below, so opt out of the shared
-      // helper's handling — its 403 branch navigates the whole page to login,
-      // which is catastrophic when the 403 came from the SITE being scraped
-      // rather than from our own auth.
       const res = await analazeDomain(site, { handleErrors: false });
       const patch = {};
       if (fieldKeys.has('brand_name')) {
@@ -1374,10 +1316,6 @@ const BrandPicker = ({
       if (fieldKeys.has('brand_description')) {
         patch.brand_description = res?.aiInsights?.aiSummary || res?.meta?.description || '';
       }
-      // The scrape returns the site's imagery too, and we were throwing it away
-      // — a brand added from a website ended up with empty Product Images and
-      // Logo even though the response carried them. Same filtering BrandIQ's
-      // onboarding applies: drop broken URLs and SVGs (icons, not product shots).
       const scraped = (Array.isArray(res?.images) ? res.images : []).filter(
         (u) => typeof u === 'string' && u && !u.includes('undefined') && !u.endsWith('.svg'),
       );
@@ -1388,17 +1326,10 @@ const BrandPicker = ({
           selected: i === 0,
         }));
       }
-      // Not every scrape identifies a logo; only set the field when it did.
-      // The response's key is `brandLogo` and it holds an ARRAY — reading only
-      // `logo`/`logoUrl` meant a perfectly good logo came back and the Logo
-      // field stayed empty.
       const scrapedLogo = pickLogoUrl(res);
       if (fieldKeys.has('brand_logo') && scrapedLogo) {
         patch.brand_logo = [{ url: scrapedLogo, filename: 'logo', selected: true }];
       }
-      // The brief has to follow a website-added brand exactly as it follows a
-      // saved one — this path used to change the name and leave the rest of the
-      // brief describing the previous brand.
       if (fieldKeys.has('prompt')) {
         patch.prompt = applyBrandToPrompt(
           values.prompt,
@@ -1410,16 +1341,11 @@ const BrandPicker = ({
       onPick(patch);
       setSiteDraft('');
       setOpen(false);
-      // Remember what the scrape found so "Choose brand image" can offer it.
-      // Brand IQ may not have this brand yet (or may never store its logo), and
-      // without this the panel stays empty right after a successful scrape.
-      // Tagged with the brand so another brand's assets can never show up here.
       onAssetsDiscovered?.({
         brandName: patch.brand_name || '',
         logos: brandLogosOf(res),
         images: scraped,
       });
-      // Analyzing can save the brand server-side — refresh so it's listed next time.
       if (userId) dispatch(fetchBrands(userId));
       rewriteBriefFor({
         prompt: patch.prompt,
@@ -1429,10 +1355,6 @@ const BrandPicker = ({
         previousBrand: currentName,
       });
     } catch (err) {
-      // 409 = the brand is already saved. This used to refresh the list and say
-      // NOTHING (the shared helper's toast is a different toast system and its
-      // text is the raw backend string), so the user pressed Add and watched
-      // nothing happen.
       if (err?.response?.status === 409) {
         refresh();
         toast(`That brand is already saved — pick it from the list above.`, {
@@ -1440,9 +1362,6 @@ const BrandPicker = ({
           duration: 5000,
         });
       } else {
-        // Say WHICH site failed, WHY, and what to do next. One generic line for
-        // every failure left users with no idea whether to retry, fix the URL,
-        // or give up and fill the brand in by hand.
         toast.error(brandFetchMessage(err, site), { duration: 6000 });
       }
     } finally {
@@ -1455,10 +1374,10 @@ const BrandPicker = ({
 
   return (
     <div ref={wrapRef} className="relative flex flex-col gap-1.5 sm:col-span-2">
-      <label className="flex items-center gap-1 text-[12px] font-medium text-white/80">
+      <label className="flex items-center gap-1 text-[12px] font-medium text-gray-700 dark:text-white/80">
         Brand
         <Tip content="Pick a saved brand to fill its description, logo and colors — or add one from its website. Use ✕ to clear a wrong selection.">
-          <span className="cursor-help text-white/35 hover:text-white/70">
+          <span className="cursor-help text-gray-400 hover:text-gray-700 dark:text-white/35 dark:hover:text-white/70">
             <Info className="h-3 w-3" />
           </span>
         </Tip>
@@ -1470,7 +1389,7 @@ const BrandPicker = ({
                 onClick={restorePrevious}
                 disabled={disabled}
                 aria-label="Restore previous brand"
-                className="rounded p-0.5 text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed"
+                className="rounded p-0.5 text-gray-400 transition-colors hover:text-gray-900 disabled:cursor-not-allowed dark:text-white/40 dark:hover:text-white"
               >
                 <RotateCcw className="h-3 w-3" />
               </button>
@@ -1482,7 +1401,7 @@ const BrandPicker = ({
               onClick={refresh}
               disabled={disabled || refreshing}
               aria-label="Refresh brand list"
-              className="rounded p-0.5 text-white/40 transition-colors hover:text-white disabled:cursor-not-allowed"
+              className="rounded p-0.5 text-gray-400 transition-colors hover:text-gray-900 disabled:cursor-not-allowed dark:text-white/40 dark:hover:text-white"
             >
               <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
@@ -1493,7 +1412,7 @@ const BrandPicker = ({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
-        className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-white/10 bg-[#111] px-3 text-left transition-colors hover:border-white/25 focus:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-black/10 bg-white px-3 text-left transition-colors hover:border-black/25 focus:border-black/40 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#111] dark:text-white dark:hover:border-white/25 dark:focus:border-white/40"
       >
         <span className="flex min-w-0 items-center gap-2">
           {currentName ? (
@@ -1501,25 +1420,23 @@ const BrandPicker = ({
               {triggerLogo ? (
                 <img src={toMediaUrl(triggerLogo)} alt="" className="h-5 w-5 shrink-0 rounded object-cover" />
               ) : (
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/10 text-[10px] font-semibold text-white/70">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-black/10 text-[10px] font-semibold text-gray-700 dark:bg-white/10 dark:text-white/70">
                   {currentName.charAt(0).toUpperCase()}
                 </span>
               )}
-              <span className="truncate text-[13px] text-white/90">{currentName}</span>
+              <span className="truncate text-[13px] text-gray-900 dark:text-white/90">{currentName}</span>
               {!matched && (
-                <span className="shrink-0 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[9.5px] whitespace-nowrap text-white/45">
+                <span className="shrink-0 rounded-full bg-black/[0.06] px-1.5 py-0.5 text-[9.5px] whitespace-nowrap text-gray-600 dark:bg-white/[0.06] dark:text-white/45">
                   from website
                 </span>
               )}
             </>
           ) : (
-            <span className="text-[13px] text-white/45">Select a brand…</span>
+            <span className="text-[13px] text-gray-400 dark:text-white/45">Select a brand…</span>
           )}
         </span>
         <span className="flex shrink-0 items-center gap-1">
           {currentName && !disabled && (
-            // Not a <button> — nesting one inside the trigger button is invalid
-            // HTML. stopPropagation keeps the clear click from toggling the list.
             <span
               role="button"
               tabIndex={0}
@@ -1535,18 +1452,18 @@ const BrandPicker = ({
                   clear();
                 }
               }}
-              className="rounded-full p-0.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-full p-0.5 text-gray-400 transition-colors hover:bg-black/10 hover:text-gray-900 dark:text-white/40 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <X className="h-3.5 w-3.5" />
             </span>
           )}
           <ChevronDown
-            className={`h-4 w-4 text-white/50 transition-transform ${open ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 text-gray-400 transition-transform dark:text-white/50 ${open ? 'rotate-180' : ''}`}
           />
         </span>
       </button>
       {open && (
-        <div className="absolute top-full left-0 z-30 mt-1 w-full rounded-lg border border-white/10 bg-[#141414] p-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]">
+        <div className="absolute top-full left-0 z-30 mt-1 w-full rounded-lg border border-black/10 bg-[#F7F4EE] p-1 shadow-xl dark:border-white/10 dark:bg-[#141414]">
           <div className="subtle-scroll max-h-52 overflow-auto">
             {hasList ? (
               brands.map((b) => {
@@ -1558,39 +1475,39 @@ const BrandPicker = ({
                     type="button"
                     onClick={() => pick(b)}
                     className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors ${
-                      on ? 'bg-white/10' : 'hover:bg-white/[0.06]'
+                      on ? 'bg-black/10 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/[0.06]'
                     }`}
                   >
                     {logo ? (
                       <img
                         src={toMediaUrl(logo)}
                         alt=""
-                        className="h-7 w-7 shrink-0 rounded object-cover ring-1 ring-white/10"
+                        className="h-7 w-7 shrink-0 rounded object-cover ring-1 ring-black/10 dark:ring-white/10"
                       />
                     ) : (
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white/10 text-[11px] font-semibold text-white/60">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-black/10 text-[11px] font-semibold text-gray-700 dark:bg-white/10 dark:text-white/60">
                         {(b?.name || '?').charAt(0).toUpperCase()}
                       </span>
                     )}
                     <span className="flex min-w-0 flex-col">
-                      <span className="truncate text-[13px] text-white/90">{b?.name || 'Untitled brand'}</span>
+                      <span className="truncate text-[13px] text-gray-900 dark:text-white/90">{b?.name || 'Untitled brand'}</span>
                       {b?.description ? (
-                        <span className="truncate text-[11px] text-white/45">{b.description}</span>
+                        <span className="truncate text-[11px] text-gray-500 dark:text-white/45">{b.description}</span>
                       ) : null}
                     </span>
-                    {on && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-400" />}
+                    {on && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />}
                   </button>
                 );
               })
             ) : (
-              <p className="px-2 py-1.5 text-[12px] text-white/45">
+              <p className="px-2 py-1.5 text-[12px] text-gray-500 dark:text-white/45">
                 No saved brands yet — add one from its website below.
               </p>
             )}
           </div>
           {/* Brand not in the list? Analyze its website and fill the fields. */}
-          <div className="mt-1 flex flex-col gap-1.5 border-t border-white/10 p-1.5">
-            <span className="flex items-center gap-1 text-[10.5px] font-medium text-white/45">
+          <div className="mt-1 flex flex-col gap-1.5 border-t border-black/10 p-1.5 dark:border-white/10">
+            <span className="flex items-center gap-1 text-[10.5px] font-medium text-gray-600 dark:text-white/45">
               <Globe className="h-3 w-3" />
               Brand not listed? Add it from its website
             </span>
@@ -1607,13 +1524,13 @@ const BrandPicker = ({
                     analyzeSite();
                   }
                 }}
-                className="h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111] px-2.5 text-[12px] text-white outline-none placeholder:text-white/35 focus:border-white/40 disabled:opacity-60"
+                className="h-8 min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-2.5 text-[12px] text-gray-900 outline-none placeholder:text-gray-400 focus:border-black/40 disabled:opacity-60 dark:border-white/10 dark:bg-[#111] dark:text-white dark:placeholder:text-white/35 dark:focus:border-white/40"
               />
               <button
                 type="button"
                 onClick={analyzeSite}
                 disabled={analyzing || !siteDraft.trim()}
-                className="inline-flex h-8 items-center gap-1 rounded-lg border border-white/10 px-2.5 text-[12px] text-white/70 transition-colors hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-black/10 px-2.5 text-[12px] text-gray-700 transition-colors hover:border-black/25 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-white/70 dark:hover:border-white/25 dark:hover:text-white"
               >
                 {analyzing ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Add'}
               </button>
@@ -1629,8 +1546,6 @@ const BrandPicker = ({
 const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   const dispatch = useDispatch();
 
-  // Seed from the form spec; once the user starts editing this is the
-  // authoritative state. After submission `result.values` is the truth.
   const initialValues = useMemo(() => {
     if (result?.values) {
       return {
@@ -1646,27 +1561,10 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   const [values, setValues] = useState(initialValues);
   const [submitting, setSubmitting] = useState(false);
   const [editing, setEditing] = useState(false);
-  // Double-clicking the header collapses the brief to just its title bar.
   const [collapsed, setCollapsed] = useState(false);
-  // The brief is being regenerated for a newly picked brand. Generating while
-  // this runs would use a brief written for the PREVIOUS brand, so the card
-  // shows a loader over the prompt and holds Generate until it lands.
   const [rewritingPrompt, setRewritingPrompt] = useState(false);
-  // Assets a website scrape turned up this session: { brandName, logos, images }.
-  // Offered in "Choose brand image" alongside saved Brand IQ records, since a
-  // just-added brand isn't in Brand IQ yet.
   const [scrapedAssets, setScrapedAssets] = useState(null);
-  // Model / quality / aspect-ratio catalogue.
-  //
-  // Prefer the surface the BROWSER fetches (`useAdCreativeConfig` →
-  // /usage/model-credit-value), which is the exact source Ad Studio and the
-  // Profile credit table read. The agent also inlines this on the form, but
-  // that path goes through the secret-gated /credits/models endpoint and
-  // returns NOTHING on any failure — when that happened the card silently fell
-  // back to the MCP's hardcoded options, so credits stopped varying by quality
-  // and every model showed the same aspect ratios. That mismatch with Profile
-  // is the bug; reading the same endpoint as Profile is the fix. The inlined
-  // copy stays as the fallback for when the browser fetch is the one that fails.
+
   const { models: surfaceModels } = useAdCreativeConfig();
   const modelConfigs = useMemo(
     () => buildModelConfigs(surfaceModels, form.ad_creative_models),
@@ -1682,27 +1580,18 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
   );
 
   const isSubmitted = !!result;
-  // After submitting, the card collapses to a summary — but the user can reopen
-  // it ("Edit & regenerate"), tweak values, and fire a fresh generation. So the
-  // lock only applies while collapsed (or disabled / mid-submit), not forever.
   const isLocked = (isSubmitted && !editing) || disabled || submitting;
 
   const setField = (key, val) =>
     setValues((prev) => {
       const next = { ...prev, [key]: val };
-      // The tiles edit the counts map; keep the legacy pair derived from it so
-      // validation, the summary and the submitted payload all stay consistent.
       if (key === 'aspect_ratio_counts') {
         next.aspect_ratios = ratiosFromCounts(val);
         next.num_images = numImagesFromCounts(val);
       }
-      // Switching creative type has to be reflected in the brief itself, not
-      // just in which tool ends up being called.
       if (key === 'creative_type' && prev.prompt) {
         next.prompt = applyCreativeTypeToPrompt(prev.prompt, val, prev.brand_name);
       }
-      // A hand-edited brief is the user's, not the model's — drop the cached
-      // version so switching away and back doesn't silently discard their work.
       if (key === 'prompt' && prev.brand_name) {
         forgetCachedBrief(prev.brand_name, prev.creative_type);
       }
@@ -1715,8 +1604,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         }
         const allowedRatios = modelConfigByValue.get(val)?.aspect_ratios;
         if (Array.isArray(allowedRatios) && allowedRatios.length) {
-          // Models support different ratio sets — carry the per-ratio counts
-          // the new model still supports, and fall back to one square image.
           const prevCounts = countsFromValues(prev);
           const kept = {};
           allowedRatios.forEach((ratio) => {
@@ -1733,9 +1620,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       return next;
     });
 
-  // Reconcile older/persisted briefs when the live Ad Creative catalog arrives:
-  // a removed model, quality, or ratio must not remain hidden in state and still
-  // influence the displayed total or submitted generation request.
   useEffect(() => {
     if (!modelConfigs.length) return;
     setValues((prev) => {
@@ -1795,12 +1679,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     return resolved;
   }, [form.credit_costs, creditCostsByQuality, values.quality]);
 
-  // What the "Submitted with" summary should show for a field. Prefer the
-  // submitted `result.values`, but fall back to the card's live `values` when
-  // that field came back empty — on a regenerate (esp. after a first attempt
-  // failed and was retried) the submitted snapshot can lose optional fields
-  // (logo, brand, reference images) even though the card still holds them,
-  // which otherwise renders every optional row as "—".
   const summaryValue = (f) => {
     const rv = result?.values?.[f.key];
     const empty =
@@ -1814,8 +1692,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     for (const f of form.fields || []) {
       if (!f.required) continue;
       const v = values[f.key];
-      // A required image field needs at least one SELECTED image (having images
-      // present but none picked would silently generate without a reference).
       if (f.type === 'image_upload') {
         if (!(Array.isArray(v) && v.some(isImgSelected))) return `${f.label || f.key} is required`;
         continue;
@@ -1827,9 +1703,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         (Array.isArray(v) && v.length === 0);
       if (isEmpty) return `${f.label || f.key} is required`;
     }
-    // Nothing chosen in the ratio tiles means there is nothing to generate.
-    // Without this the card offered a live Generate button for a request that
-    // could only ever produce zero images.
     const hasRatioField = (form.fields || []).some((f) => f.key === 'aspect_ratios');
     if (hasRatioField && ratiosFromCounts(countsFromValues(values)).length === 0) {
       return 'Pick at least one aspect ratio';
@@ -1837,24 +1710,14 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     return null;
   }, [form, values]);
 
-  // ── Live credit + image-count math ────────────────────────────────────────
-  // The agent inlines `form.credit_costs` ({model: creditPerImage, plus "auto"}).
-  // Real cost = perImage × (images per ratio) × (#ratios). An ad pack is fixed
-  // at 3 variants regardless of the stepper. Falls back to the server's static
-  // `estimated_credits` only when the live cost map is unavailable.
   const creditInfo = useMemo(() => {
     const costs = creditCostsForQuality;
     const isPack = values.creative_type === 'ad_pack';
-    // Per-ratio counts are authoritative — the tiles can ask for 2×1:1 and
-    // 1×9:16, which a single "per ratio" number can't express.
     const counts = countsFromValues(values);
     const selected = ratiosFromCounts(counts);
     const ratios = Math.max(1, selected.length);
     const countTotal = selected.reduce((sum, key) => sum + counts[key], 0);
     const perRatio = isPack ? 3 : Math.max(1, Number(values.num_images) || 1);
-    // No ratio picked = no images = nothing to charge for. This used to floor at
-    // 1 image, so a card with "0 Images" selected still quoted a full credit
-    // price for a generation that couldn't happen.
     const totalImages = isPack ? perRatio * ratios : countTotal;
     let perImage = null;
     if (costs) {
@@ -1874,10 +1737,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
     if (isLocked || validationError) return;
     setSubmitting(true);
     try {
-      // Fold any picked website_images into reference_images (the field the
-      // agent maps to product_images), then drop the UI-only picker key. Picked
-      // website images are marked selected so they survive the selected-only
-      // filter below.
       const submitValues = { ...values };
       const picked = Array.isArray(submitValues.website_images) ? submitValues.website_images : [];
       if (picked.length) {
@@ -1892,10 +1751,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       }
       delete submitValues.website_images;
 
-      // The card keeps the FULL image list (with selection flags) so the summary
-      // and a later "Edit & regenerate" still show every candidate. Generation,
-      // however, only gets the SELECTED images (flag stripped) — nothing the user
-      // didn't pick is ever sent.
       const agentValues = { ...submitValues };
       for (const f of form.fields || []) {
         if (f.type !== 'image_upload') continue;
@@ -1908,26 +1763,13 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       }
 
       dispatch(submitAssistantChoiceForm({ messageId, values: submitValues }));
-      // Hand the selected-only values back to the parent (ChatInterface) which
-      // decides whether to fire a real streamChat turn or a mocked one.
-      // `regenerate` when the brief was already submitted once — tells the backend
-      // to force a fresh generation instead of replying about the prior result.
       await onSubmit?.({ formId: form.form_id, values: agentValues, regenerate: isSubmitted });
-      setEditing(false); // collapse back to the summary after a (re)generation
+      setEditing(false);
     } finally {
       setSubmitting(false);
     }
   };
 
-  // No card chrome of its own (no border/rounded corners/separate fill) —
-  // GenCanvas's own panel is already the glass surface; a second nested card
-  // on top of it just reads as two stacked boxes. This is content sections
-  // within that one panel, divided by thin border lines, not a card-in-card.
-  //
-  // Expanded, it fills GenCanvas's available height so the fields grid
-  // (below) can scroll internally while this header and the footer (credits +
-  // image count + Generate) stay pinned in view — no scrolling to find
-  // Generate. Collapsed, it shrinks back to just the header row.
   return (
     <div
       className={`mt-3 flex w-full flex-col ${collapsed ? '' : 'h-full min-h-0'}`}
@@ -1936,26 +1778,24 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
       <div
         onDoubleClick={() => setCollapsed((c) => !c)}
         title={collapsed ? 'Double-click to expand' : 'Double-click to collapse'}
-        className="flex shrink-0 cursor-pointer items-start justify-between gap-3 border-b border-white/[0.05] bg-gradient-to-b from-white/[0.03] to-transparent px-4 py-3 select-none"
+        className="flex shrink-0 cursor-pointer items-start justify-between gap-3 border-b border-black/[0.05] bg-gradient-to-b from-black/[0.02] to-transparent px-4 py-3 select-none dark:border-white/[0.05] dark:from-white/[0.03]"
       >
         <div className="min-w-0">
-          <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white/80 uppercase">
+          <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#15DCFF]/15 to-[#5E66F5]/15 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-gray-700 uppercase dark:text-white/80">
             <Sparkles className="h-2.5 w-2.5" />
             <span>Creative brief</span>
           </div>
           {form.title && (
-            <h4 className="mt-1.5 text-[15px] leading-snug font-semibold text-white">
+            <h4 className="mt-1.5 text-[15px] leading-snug font-semibold text-gray-900 dark:text-white">
               {form.title}
             </h4>
           )}
           {form.subtitle && !collapsed && (
-            <p className="mt-0.5 text-[12px] leading-relaxed text-white/55">
+            <p className="mt-0.5 text-[12px] leading-relaxed text-gray-600 dark:text-white/55">
               {form.subtitle}
             </p>
           )}
         </div>
-        {/* Single-click fallback for collapse — double-click on some devices /
-            after text focus is easy to miss, so the chevron always toggles too. */}
         <button
           type="button"
           onClick={(e) => {
@@ -1964,7 +1804,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
           }}
           aria-expanded={!collapsed}
           title={collapsed ? 'Expand' : 'Collapse'}
-          className="mt-0.5 shrink-0 rounded-md p-1 text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white"
+          className="mt-0.5 shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:bg-black/[0.07] hover:text-gray-900 dark:text-white/45 dark:hover:bg-white/[0.07] dark:hover:text-white"
         >
           <ChevronDown
             className={`h-4 w-4 transition-transform ${collapsed ? '-rotate-90' : ''}`}
@@ -1974,9 +1814,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
 
       {!collapsed && (
       <>
-      {/* Fields — two-column grid; wide controls span both columns. Scrolls
-          internally (min-h-0 + flex-1 on a flex-col parent) so the footer
-          below never needs a scroll to reach. */}
+      {/* Fields */}
       <div className="subtle-scroll grid min-h-0 flex-1 grid-cols-1 gap-x-3 gap-y-3.5 overflow-y-auto px-4 py-4 sm:grid-cols-2">
         {formHasBrandFields(form) && (
           <BrandPicker
@@ -1989,9 +1827,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
           />
         )}
         {(form.fields || []).map((field) => {
-          // The ratio tiles carry a per-ratio quantity, so the separate "how
-          // many per ratio" stepper has nothing left to say — same as Ad Studio,
-          // which has no such control. Its value is still derived and submitted.
           if (field.key === 'num_images') return null;
           const model = isModelField(field);
           const isRatios = field.key === 'aspect_ratios';
@@ -2036,14 +1871,14 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
               className={`flex flex-col gap-1.5 ${full ? 'sm:col-span-2' : ''}`}
             >
               <div className="flex items-baseline justify-between gap-2">
-                <label className="flex items-center gap-1 text-[12px] font-medium text-white/80">
+                <label className="flex items-center gap-1 text-[12px] font-medium text-gray-700 dark:text-white/80">
                   <span>
                     {field.label || field.key}
-                    {field.required && <span className="ml-0.5 text-white/50">*</span>}
+                    {field.required && <span className="ml-0.5 text-gray-400 dark:text-white/50">*</span>}
                   </span>
                   {field.tooltip && (
                     <Tip content={field.tooltip}>
-                      <span className="cursor-help text-white/35 hover:text-white/70">
+                      <span className="cursor-help text-gray-400 hover:text-gray-700 dark:text-white/35 dark:hover:text-white/70">
                         <Info className="h-3 w-3" />
                       </span>
                     </Tip>
@@ -2056,17 +1891,13 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                   </span>
                 ) : (
                   field.description && (
-                    <span className="text-[11px] text-white/40">{field.description}</span>
+                    <span className="text-[11px] text-gray-500 dark:text-white/40">{field.description}</span>
                   )
                 )}
               </div>
               <div className="relative">
-                {/* The brief on screen still belongs to the previous brand
-                    until the rewrite lands, so it's covered rather than left
-                    editable — an edit made here would be overwritten a moment
-                    later, and Generate is held for the same reason. */}
                 {isPromptField && rewritingPrompt && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-lg bg-[#111]/85 text-[12px] text-white/70 backdrop-blur-[2px]">
+                  <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-lg bg-white/85 text-[12px] text-gray-700 backdrop-blur-[2px] dark:bg-[#111]/85 dark:text-white/70">
                     <Loader2 className="h-4 w-4 animate-spin text-[#15DCFF]" />
                     Rewriting for {(values.brand_name || 'this brand').trim()}…
                   </div>
@@ -2078,11 +1909,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                 disabled={isLocked || (isPromptField && rewritingPrompt)}
                 creditCosts={model ? creditCostsForQuality : undefined}
                 creditsPerImage={isRatios ? creditInfo.perImage : undefined}
-                // Lets the image fields offer THIS brand's saved images first.
                 brandName={field.type === 'image_upload' ? values.brand_name : undefined}
-                // Scraped assets, but only while they still belong to the brand
-                // on the card — otherwise the last site's logo would follow the
-                // user onto an unrelated brand.
                 extraAssets={
                   field.type === 'image_upload' &&
                   scrapedAssets &&
@@ -2099,19 +1926,11 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         })}
       </div>
 
-      {/* Footer — submit OR submitted summary. Pinned outside the scrolling
-          fields grid (shrink-0 on a flex-col parent) so credits, image count,
-          and Generate are always visible without scrolling. */}
-      <div className="shrink-0 border-t border-white/[0.05] bg-black/30 px-4 py-3">
-        {/* Total-images notice — shown regardless of submitted state (unlike
-            the credit badge/Generate row below), so it stays visible even
-            after the brief collapses to its "Submitted with" summary.
-            Highlighted when >1 image so a multi-image spend isn't mistaken for
-            the per-ratio count — in the design system's blue, not red: this is
-            information, not an error, and red read as "something is wrong". */}
+      {/* Footer */}
+      <div className="shrink-0 border-t border-black/[0.05] bg-black/[0.03] px-4 py-3 dark:border-white/[0.05] dark:bg-black/30">
         <p
           className={`mb-2 flex items-center gap-1.5 text-[11.5px] font-medium ${
-            creditInfo.totalImages > 1 ? 'text-[#15DCFF]' : 'text-white/55'
+            creditInfo.totalImages > 1 ? 'text-[#15DCFF]' : 'text-gray-600 dark:text-white/55'
           }`}
         >
           <Info className="h-3.5 w-3.5 shrink-0" />
@@ -2133,12 +1952,12 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         </p>
         {isSubmitted && !editing ? (
           <div className="flex flex-wrap items-center gap-1.5">
-            <Check className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="text-[11.5px] text-white/55">Submitted with</span>
+            <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-[11.5px] text-gray-600 dark:text-white/55">Submitted with</span>
             {form.fields.map((f) => (
               <span
                 key={f.key}
-                className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10.5px] text-white/80"
+                className="rounded-full bg-black/[0.06] px-2 py-0.5 text-[10.5px] text-gray-700 dark:bg-white/[0.06] dark:text-white/80"
               >
                 {f.label || f.key}: {formatValueLabel(f, summaryValue(f))}
               </span>
@@ -2147,7 +1966,7 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-full bg-white/[0.06] px-3 text-[11.5px] font-medium text-white/80 transition-colors hover:bg-white/[0.12]"
+                className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-full bg-black/[0.06] px-3 text-[11.5px] font-medium text-gray-700 transition-colors hover:bg-black/[0.12] dark:bg-white/[0.06] dark:text-white/80 dark:hover:bg-white/[0.12]"
               >
                 <Pencil className="h-3 w-3" />
                 <span>Edit &amp; regenerate</span>
@@ -2157,23 +1976,14 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <div className="flex min-w-0 flex-col gap-1">
-              {/* Credit total lives here, pinned next to Generate, so the
-                  user can confirm exactly what they'll spend right before
-                  firing. Image count is the persistent notice above. */}
-              {/* Hidden entirely at zero images — quoting "0 credits" next to a
-                  Generate button is just as confusing as quoting a real price
-                  for a generation that can't happen. */}
               {creditInfo.totalCredits != null && creditInfo.totalImages > 0 && (
-                // Exact, live figure — matches Ad Studio's confident credit
-                // badge (no "~" hedge; it recomputes instantly from the same
-                // live per-model/quality registry Ad Studio reads).
-                <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/[0.08] px-3 py-1 text-[12px] font-semibold text-white/90">
+                <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-black/[0.06] px-3 py-1 text-[12px] font-semibold text-gray-900 dark:bg-white/[0.08] dark:text-white/90">
                   <Sparkles className="h-3.5 w-3.5 text-[#15DCFF]" />
                   {creditInfo.totalCredits} credits
                 </span>
               )}
               <span
-                className={`text-[11px] ${validationError ? 'text-amber-400/90' : 'text-white/40'}`}
+                className={`text-[11px] ${validationError ? 'text-amber-600 dark:text-amber-400/90' : 'text-gray-500 dark:text-white/40'}`}
               >
                 {validationError
                   ? validationError
@@ -2182,8 +1992,6 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
                     : 'You can change anything before submitting.'}
               </span>
             </div>
-            {/* Held while the brief is being rewritten: generating now would
-                spend credits on a brief still written for the previous brand. */}
             <button
               type="button"
               onClick={handleSubmit}
@@ -2191,8 +1999,8 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
               title={rewritingPrompt ? 'Writing the brief for this brand…' : undefined}
               className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[12.5px] font-medium transition-all ${
                 isLocked || validationError || rewritingPrompt
-                  ? 'cursor-not-allowed bg-white/[0.06] text-white/35'
-                  : 'bg-white text-black hover:bg-white/90 shadow-[0_2px_10px_rgba(255,255,255,0.12)]'
+                  ? 'cursor-not-allowed bg-black/[0.06] text-gray-400 dark:bg-white/[0.06] dark:text-white/35'
+                  : 'bg-gray-900 text-white hover:bg-gray-800 shadow-[0_2px_10px_rgba(0,0,0,0.12)] dark:bg-white dark:text-black dark:hover:bg-white/90 dark:shadow-[0_2px_10px_rgba(255,255,255,0.12)]'
               }`}
             >
               {submitting || rewritingPrompt ? (
@@ -2212,3 +2020,4 @@ const ChoiceForm = ({ form, messageId, result, onSubmit, disabled }) => {
 };
 
 export default ChoiceForm;
+

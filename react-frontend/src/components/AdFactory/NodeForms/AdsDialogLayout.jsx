@@ -57,7 +57,7 @@ const AdsDialogLayout = ({ type, open, onOpenChange, handleDownloadWithFormat })
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="backdrop-blur-100 w-[96%] !max-w-3xl scale-100! overflow-hidden rounded-[30px] border border-black/10 bg-white text-gray-900 dark:border-white/10 dark:bg-[#303030]/50 dark:text-white px-6 pt-16 md:w-full 2xl:!max-w-5xl 2xl:pt-20">
+        <DialogContent className="backdrop-blur-100 w-[96%] !max-w-3xl scale-100! overflow-hidden rounded-[30px] border border-black/15 bg-[#F7F4EE] text-gray-900 dark:border-white/10 dark:bg-[#303030]/50 dark:text-white px-6 pt-16 md:w-full 2xl:!max-w-5xl 2xl:pt-20">
           <div className="max-h-[calc(100svh-200px)] space-y-4 overflow-y-auto sm:px-6">
             {type === 'text' && <AdCopyList />}
             {type === 'image' && (

@@ -209,8 +209,8 @@ export default function ValidateForm({ onComplete }) {
           };
 
           return (
-            <Form className="">
-              <div className="max-h-[calc(100svh-250px)] space-y-6 overflow-y-auto p-2 pr-5">
+            <Form className="flex flex-col gap-0">
+              <div className="max-h-[calc(100svh-320px)] space-y-6 overflow-y-auto p-2 pr-5">
                 {/* Platform Selection */}
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
@@ -330,16 +330,16 @@ export default function ValidateForm({ onComplete }) {
                                     return (
                                       <div
                                         key={value}
-                                        className={`group rounded-full transition-all ${
+                                        className={`group cursor-pointer select-none rounded-full transition-all ${
                                           isSelected
-                                            ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-[1.5px] shadow-[0_0_12px_rgba(2,200,196,0.30)]'
+                                            ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-[1.5px] shadow-[0_0_12px_rgba(2,200,196,0.20)] dark:from-[#02C8C4]/60 dark:to-[#5867EB]/60 dark:shadow-none'
                                             : 'bg-black/10 p-[1px] dark:bg-white/10'
                                         } w-fit`}
                                       >
                                         <button
                                           type="button"
                                           onClick={() => handleRatioToggle(pIdx, value)}
-                                          className={`flex items-center justify-center gap-1.5 rounded-full px-5 py-1.5 text-xs transition-all ${
+                                          className={`flex cursor-pointer select-none items-center justify-center gap-1.5 rounded-full px-5 py-1.5 text-xs transition-all ${
                                             isSelected
                                               ? 'bg-[#02C8C4]/15 text-gray-900 dark:bg-[#02C8C4]/25 dark:text-white'
                                               : 'bg-gray-100 text-gray-600 hover:bg-gray-200/80 hover:text-black dark:bg-[#2d2d2d] dark:text-[#AFAFAF] dark:hover:bg-[#383838] dark:hover:text-white'

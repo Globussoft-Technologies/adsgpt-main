@@ -19,7 +19,7 @@ const ConceptCards = ({ cards, messageId, result, onSelect, disabled }) => {
 
   return (
     <div className="mt-3 w-full">
-      <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-white/60">
+      <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-gray-500 dark:text-white/60">
         <Lightbulb className="h-3.5 w-3.5" />
         <span>
           {locked
@@ -39,35 +39,35 @@ const ConceptCards = ({ cards, messageId, result, onSelect, disabled }) => {
               onClick={() => !locked && onSelect?.({ messageId, concept: c })}
               className={`group relative flex flex-col rounded-xl border p-3 text-left transition-all duration-150 ${
                 isChosen
-                  ? 'border-[#5E66F5] bg-[#5E66F5]/10'
-                  : 'border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]'
+                  ? 'border-[#5E66F5] bg-[#5E66F5]/10 text-gray-900 dark:text-white'
+                  : 'border-black/10 bg-white/70 hover:border-black/25 hover:bg-white text-gray-900 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/25 dark:hover:bg-white/[0.06] dark:text-white'
               } ${locked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
             >
               {c.angle_label ? (
-                <span className="mb-1.5 inline-flex w-fit items-center rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium tracking-wide text-white/55 uppercase">
+                <span className="mb-1.5 inline-flex w-fit items-center rounded-full border border-black/10 bg-black/[0.04] px-2 py-0.5 text-[10px] font-medium tracking-wide text-gray-600 uppercase dark:border-white/10 dark:bg-white/[0.04] dark:text-white/55">
                   {c.angle_label}
                 </span>
               ) : null}
 
               {c.title ? (
-                <h4 className="text-[13.5px] leading-snug font-semibold text-white/90">{c.title}</h4>
+                <h4 className="text-[13.5px] leading-snug font-semibold text-gray-900 dark:text-white/90">{c.title}</h4>
               ) : null}
 
               {c.description ? (
-                <p className="mt-1 text-[12px] leading-relaxed text-white/55 line-clamp-4">
+                <p className="mt-1 text-[12px] leading-relaxed text-gray-600 dark:text-white/55 line-clamp-4">
                   {c.description}
                 </p>
               ) : null}
 
               {c.headline ? (
-                <p className="mt-2 border-l-2 border-white/15 pl-2 text-[11.5px] leading-snug text-white/70 italic">
+                <p className="mt-2 border-l-2 border-black/15 pl-2 text-[11.5px] leading-snug text-gray-700 italic dark:border-white/15 dark:text-white/70">
                   “{c.headline}”
                 </p>
               ) : null}
 
               <div className="mt-3 flex items-center justify-between pt-1">
                 {c.creative_type ? (
-                  <span className="text-[10.5px] text-white/40">
+                  <span className="text-[10.5px] text-gray-500 dark:text-white/40">
                     {c.creative_type.replace(/_/g, ' ')}
                   </span>
                 ) : (
@@ -75,7 +75,7 @@ const ConceptCards = ({ cards, messageId, result, onSelect, disabled }) => {
                 )}
                 <span
                   className={`inline-flex items-center gap-1 text-[11px] font-medium ${
-                    isChosen ? 'text-[#8b91ff]' : 'text-white/45 group-hover:text-white/80'
+                    isChosen ? 'text-[#5E66F5] dark:text-[#8b91ff]' : 'text-gray-500 group-hover:text-gray-900 dark:text-white/45 dark:group-hover:text-white/80'
                   }`}
                 >
                   {isChosen ? (
@@ -95,7 +95,7 @@ const ConceptCards = ({ cards, messageId, result, onSelect, disabled }) => {
       </div>
 
       {chosenId ? (
-        <p className="mt-2 text-[11px] text-white/40">
+        <p className="mt-2 text-[11px] text-gray-500 dark:text-white/40">
           Opening your creative brief on the right — tweak it and hit Generate. Pick
           another concept any time to open a brief for that one instead.
         </p>

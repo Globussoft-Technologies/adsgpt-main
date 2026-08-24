@@ -29,7 +29,7 @@ const InputCommonDropdown = ({
     >
       <SelectTrigger
         hideIcon
-        className={`group placeholder:sm relative flex h-10! w-full items-center gap-0 rounded-full bg-gray-100 dark:bg-[#383838]/50 px-4! py-2.5 text-[9px] text-gray-900 shadow-none backdrop-blur-md transition duration-200 ease-in outline-none placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] hover:bg-slate-100 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] 2xl:text-base 2xl:placeholder:text-base dark:border-none dark:text-[#AFAFAF] ${
+        className={`group placeholder:sm relative flex h-10! w-full items-center gap-0 rounded-full border border-gray-300 bg-gray-100 dark:border-none dark:bg-[#383838]/50 px-4! py-2.5 text-[9px] text-gray-900 shadow-none backdrop-blur-md transition duration-200 ease-in outline-none placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] hover:border-gray-400 hover:bg-gray-100 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] 2xl:text-base 2xl:placeholder:text-base dark:text-[#AFAFAF] ${
           disabled ? 'cursor-not-allowed opacity-50' : ''
         }`}
         disabled={disabled}
@@ -38,7 +38,7 @@ const InputCommonDropdown = ({
           {Icon
             ? Icon
             : icon && <img src={icon} alt="icon" className="h-3 w-3 2xl:h-full 2xl:w-full" />}
-          <span className="text-sm font-light 2xl:text-base dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
+          <span className="text-sm font-light text-gray-700 group-data-[state=open]:text-gray-900 2xl:text-base dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
             {triggerLabel}
           </span>
         </div>
@@ -94,10 +94,12 @@ const InputCommonDropdown = ({
 
                     <span
                       className={`absolute right-1 flex h-4 w-4 items-center justify-center rounded-full border ${
-                        isSelected ? 'border-[#575757] bg-[#575757] dark:bg-[#575757]' : 'border-[#AFAFAF]'
+                        isSelected
+                          ? 'border-gray-500 bg-gray-500 dark:border-[#575757] dark:bg-[#575757]'
+                          : 'border-gray-400 dark:border-[#AFAFAF]'
                       }`}
                     >
-                      {isSelected && <div className="h-[6px] w-[6px] rounded-full bg-white dark:bg-white" />}
+                      {isSelected && <div className="h-[6px] w-[6px] rounded-full bg-white" />}
                     </span>
                   </div>
                 </SelectItem>

@@ -78,8 +78,8 @@ const QuotedBlock = ({ quote, align = 'left' }) => {
   if (!quote?.text) return null;
   return (
     <div className={`mb-1.5 max-w-3xl ${align === 'right' ? 'ml-12 self-end' : ''}`}>
-      <div className="rounded-lg border-l-2 border-white/40 bg-white/[0.04] px-3 py-1.5">
-        <div className="flex items-center gap-1 text-[10px] font-medium tracking-wide text-white/70 uppercase">
+      <div className="rounded-lg border-l-2 border-gray-400 bg-black/[0.04] px-3 py-1.5 dark:border-white/40 dark:bg-white/[0.04]">
+        <div className="flex items-center gap-1 text-[10px] font-medium tracking-wide uppercase text-gray-600 dark:text-white/70">
           <Quote className="h-2.5 w-2.5" />
           {quote.role === 'assistant'
             ? 'Replying to assistant'
@@ -87,7 +87,7 @@ const QuotedBlock = ({ quote, align = 'left' }) => {
               ? 'Replying to you'
               : 'Replying to'}
         </div>
-        <div className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/55">
+        <div className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-gray-700 dark:text-white/55">
           {quote.text}
         </div>
       </div>
@@ -459,9 +459,9 @@ const Messages = ({
                 showLiveSteps &&
                 !pendingActiveLabel?.length && (
                   <div className="flex animate-pulse flex-col gap-2 py-1">
-                    <div className="h-3.5 w-4/5 rounded-full bg-white/10" />
-                    <div className="h-3.5 w-3/5 rounded-full bg-white/10" />
-                    <div className="h-3.5 w-2/5 rounded-full bg-white/10" />
+                    <div className="h-3.5 w-4/5 rounded-full bg-gray-200 dark:bg-white/10" />
+                    <div className="h-3.5 w-3/5 rounded-full bg-gray-200 dark:bg-white/10" />
+                    <div className="h-3.5 w-2/5 rounded-full bg-gray-200 dark:bg-white/10" />
                   </div>
                 )
               )}

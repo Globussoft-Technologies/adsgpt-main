@@ -983,31 +983,101 @@ export function AdSetupStep({
               {/* Inline brand-voice picker — replaces the standalone
                   BrandInfoStep. Picking from BrandIQ or hitting Add on a
                   URL autofills the form below. */}
-              <div ref={brandIqWrapperRef} className="relative lg:mr-3">
+              <div className="relative lg:mr-3">
                 <FieldLabel>Attach your Brand Voice</FieldLabel>
-                <div className="mt-3 flex min-w-0 items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 p-1 ring-1 ring-black/10 dark:ring-white/5">
-                  <button
-                    type="button"
-                    onClick={handleBrandIqOpen}
-                    className={`flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-gray-900 dark:text-white transition-colors ${
-                      brandSource.kind === 'list' || brandSource.kind === 'autofill'
-                        ? 'bg-black/5 dark:bg-white/15 ring-1 ring-black/10 dark:ring-white/20'
-                        : 'bg-white dark:bg-[#303030] hover:bg-black/5 dark:hover:bg-[#3a3a3a]'
-                    }`}
-                  >
-                    <img src={brandIqIcon} alt="" className="h-3.5 w-3.5" />
-                    <span className="min-w-0 max-w-[200px] truncate">
-                      {brandSource.kind === 'list'
-                        ? brandSource.item.name
-                        : brandSource.kind === 'autofill'
-                          ? brandSource.data?.brandInfo?.brandName || 'Brand IQ'
-                          : 'Brand IQ'}
-                    </span>
-                    <ChevronDown
-                      size={12}
-                      className={`transition-transform ${showBrandIqPicker ? 'rotate-180' : ''}`}
-                    />
-                  </button>
+                <div className="mt-3 flex min-w-0 items-center gap-2 rounded-full bg-[var(--ws-surface-control)] dark:bg-[#909294]/10 p-1 border border-[var(--ws-border)] dark:border-white/5">
+                  <div ref={brandIqWrapperRef} className="relative min-w-0">
+                    <button
+                      type="button"
+                      onClick={handleBrandIqOpen}
+                      className={`flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-[#24211D] dark:text-white transition-colors ${
+                        brandSource.kind === 'list' || brandSource.kind === 'autofill'
+                          ? 'bg-[var(--ws-surface-header)] border border-[var(--ws-border)] dark:border-transparent dark:bg-white/15'
+                          : 'bg-white border border-[var(--ws-border)] hover:bg-[var(--ws-surface-header)] dark:bg-[#303030] dark:border-transparent dark:hover:bg-[#3a3a3a]'
+                      }`}
+                    >
+                      <img src={brandIqIcon} alt="" className="h-3.5 w-3.5" />
+                      <span className="min-w-0 max-w-[200px] truncate">
+                        {brandSource.kind === 'list'
+                          ? brandSource.item.name
+                          : brandSource.kind === 'autofill'
+                            ? brandSource.data?.brandInfo?.brandName || 'Brand IQ'
+                            : 'Brand IQ'}
+                      </span>
+                      <ChevronDown
+                        size={12}
+                        className={`transition-transform ${showBrandIqPicker ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+                    {/* BrandIQ dropdown */}
+                    {showBrandIqPicker && (
+                      <div className="absolute top-full left-0 z-40 mt-2 w-[280px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+                        <div
+                          className="max-h-[280px] overflow-y-auto overscroll-contain [scrollbar-width:thin]"
+                          onWheel={(e) => e.stopPropagation()}
+                        >
+                          {brandListState === 'loading' && (
+                            <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-gray-500 dark:text-white/60">
+                              <Loader2 size={12} className="animate-spin" />
+                              Loading brands…
+                            </div>
+                          )}
+                          {brandListState === 'error' && (
+                            <div className="px-4 py-3 text-[12px] text-red-600 dark:text-red-300">
+                              {brandListError || 'Failed to load brands'}
+                            </div>
+                          )}
+                          {brandListState === 'loaded' && brandList.length === 0 && (
+                            <div className="px-4 py-3 text-[12px] text-gray-500 dark:text-white/50">
+                              No brands saved yet.
+                            </div>
+                          )}
+                          {brandListState === 'loaded' &&
+                            brandList.map((item) => {
+                              const itemId = item.id || item._id;
+                              const sourceId =
+                                brandSource.kind === 'list'
+                                  ? brandSource.item.id || brandSource.item._id
+                                  : null;
+                              const selected = sourceId && itemId && sourceId === itemId;
+                              return (
+                                <button
+                                  type="button"
+                                  key={itemId || item.name}
+                                  onClick={() => handleBrandIqSelect(item)}
+                                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                                    selected
+                                      ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                                      : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                                  }`}
+                                >
+                                  {item.logoUrls?.[0] ? (
+                                    <img
+                                      src={item.logoUrls[0]}
+                                      alt=""
+                                      className="h-7 w-7 shrink-0 rounded-full bg-black/5 dark:bg-white/10 object-cover"
+                                    />
+                                  ) : (
+                                    <span className="h-7 w-7 shrink-0 rounded-full bg-black/5 dark:bg-white/10" />
+                                  )}
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-[13px] font-medium text-gray-900 dark:text-white">
+                                      {item.name}
+                                    </span>
+                                    <span className="block truncate text-[11px] text-gray-500 dark:text-white/50">
+                                      {item.websiteUrl || item.description}
+                                    </span>
+                                  </span>
+                                  {selected && (
+                                    <Check size={14} className="shrink-0 text-emerald-400" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <span className="text-[11px] text-gray-500 dark:text-white/40">or</span>
                   <input
                     type="text"
@@ -1027,7 +1097,7 @@ export function AdSetupStep({
                       }
                     }}
                     placeholder="Enter your website URL..."
-                    className="min-w-0 flex-1 bg-transparent px-2 text-[13px] text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
+                    className="min-w-0 flex-1 border-0 border-none bg-transparent px-2 text-[13px] font-light text-gray-900 shadow-none outline-none ring-0 placeholder:text-gray-500 focus:border-0 focus:outline-none focus:ring-0 dark:text-white dark:placeholder:text-[#afafaf]/80"
                   />
                   <button
                     type="button"
@@ -1050,69 +1120,6 @@ export function AdSetupStep({
                   <p className="mt-2 flex items-center gap-1.5 text-[11px] text-red-400">
                     <AlertCircle size={12} /> {autofillError}
                   </p>
-                )}
-
-                {/* BrandIQ dropdown */}
-                {showBrandIqPicker && (
-                  <div className="absolute z-30 mt-2 max-h-72 w-full max-w-sm overflow-y-auto rounded-2xl bg-white dark:bg-[#1f1f1f] p-2 shadow-xl ring-1 ring-black/10 dark:ring-white/10">
-                    {brandListState === 'loading' && (
-                      <div className="flex items-center justify-center py-6 text-[12px] text-gray-500 dark:text-white/50">
-                        <Loader2 size={14} className="mr-2 animate-spin" /> Loading brands…
-                      </div>
-                    )}
-                    {brandListState === 'error' && (
-                      <p className="px-3 py-4 text-[12px] text-red-400">
-                        {brandListError || 'Failed to load brands'}
-                      </p>
-                    )}
-                    {brandListState === 'loaded' && brandList.length === 0 && (
-                      <p className="px-3 py-4 text-[12px] text-gray-500 dark:text-white/50">
-                        No brands saved yet.
-                      </p>
-                    )}
-                    {brandListState === 'loaded' &&
-                      brandList.map((item) => {
-                        const itemId = item.id || item._id;
-                        const sourceId =
-                          brandSource.kind === 'list'
-                            ? brandSource.item.id || brandSource.item._id
-                            : null;
-                        const selected = sourceId && itemId && sourceId === itemId;
-                        return (
-                          <button
-                            type="button"
-                            key={itemId || item.name}
-                            onClick={() => handleBrandIqSelect(item)}
-                            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
-                              selected ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white' : 'hover:bg-black/5 dark:hover:bg-white/5'
-                            }`}
-                          >
-                            {item.logoUrls?.[0] ? (
-                              <img
-                                src={item.logoUrls[0]}
-                                alt=""
-                                className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-black/10 dark:ring-white/10"
-                              />
-                            ) : (
-                              <div className="h-8 w-8 shrink-0 rounded-full bg-black/5 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10" />
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">
-                                {item.name}
-                              </p>
-                              {item.description && (
-                                <p className="truncate text-[11px] text-gray-500 dark:text-white/50">
-                                  {item.description}
-                                </p>
-                              )}
-                            </div>
-                            {selected && (
-                              <Check size={14} className="shrink-0 text-emerald-400" />
-                            )}
-                          </button>
-                        );
-                      })}
-                  </div>
                 )}
               </div>
 
@@ -1366,7 +1373,7 @@ function LabeledInput({ label, required, value, onChange, placeholder, error, cl
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-invalid={Boolean(error) || undefined}
-        className={`mt-3 h-[50px] w-full rounded-full bg-gray-100 dark:bg-[#909294]/10 px-5 text-[14px] font-light text-gray-900 dark:text-white outline-none ring-1 placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20 ${error ? 'ring-2 ring-red-500/60' : 'ring-black/10 dark:ring-white/5'}`}
+        className={`mt-3 h-[50px] w-full rounded-full bg-[var(--ws-surface-control)] dark:bg-[#909294]/10 px-5 text-[14px] font-light text-[#24211D] dark:text-white outline-none border border-[var(--ws-border)] dark:border-white/5 placeholder:text-[#948C80] dark:placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-[#02C8C4]/20 focus-visible:border-[#02C8C4] transition-all ${error ? 'border-red-500 ring-2 ring-red-500/60' : ''}`}
       />
       <FieldError message={error} />
     </div>
@@ -1382,7 +1389,7 @@ function LabeledTextarea({ label, required, value, onChange, placeholder, error 
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-invalid={Boolean(error) || undefined}
-        className={`mt-2 min-h-[80px] w-full resize-none rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 px-5 py-4 text-[14px] font-light text-gray-900 dark:text-white outline-none ring-1 placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20 ${error ? 'ring-2 ring-red-500/60' : 'ring-black/10 dark:ring-white/5'}`}
+        className={`mt-2 min-h-[80px] w-full resize-none rounded-[24px] bg-[var(--ws-surface-control)] dark:bg-[#909294]/10 px-5 py-4 text-[14px] font-light text-[#24211D] dark:text-white outline-none border border-[var(--ws-border)] dark:border-white/5 placeholder:text-[#948C80] dark:placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-[#02C8C4]/20 focus-visible:border-[#02C8C4] transition-all ${error ? 'border-red-500 ring-2 ring-red-500/60' : ''}`}
       />
       <FieldError message={error} />
     </div>
@@ -1478,7 +1485,7 @@ function FileUploadField({
             onUrlChange('');
           }
         }}
-        className="mt-2 flex h-[50px] items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 pl-4 pr-1 ring-1 ring-black/10 dark:ring-white/5"
+        className="mt-2 flex h-[50px] items-center gap-2 rounded-full bg-[var(--ws-surface-control)] dark:bg-[#909294]/10 pl-5 pr-1.5 border border-[var(--ws-border)] dark:border-white/5"
       >
         <input
           type="url"
@@ -1507,13 +1514,13 @@ function FileUploadField({
             }
           }}
           placeholder={placeholder}
-          className="min-w-0 flex-1 bg-transparent text-[13px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
+          className="min-w-0 flex-1 border-0 border-none bg-transparent text-[14px] font-light text-[#24211D] shadow-none outline-none ring-0 placeholder:text-[#948C80] focus:border-0 focus:outline-none focus:ring-0 dark:text-white dark:placeholder:text-[#afafaf]/80"
         />
-        <LinkIcon size={14} strokeWidth={1.6} className="shrink-0 text-gray-500 dark:text-white/40" />
+        <LinkIcon size={14} strokeWidth={1.6} className="shrink-0 text-[#7A7369] dark:text-white/40" />
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-black/5 dark:bg-white/20 px-4 text-[12px] font-medium text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 transition-colors hover:bg-black/10 dark:hover:bg-white/25"
+          className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-[var(--ws-surface-header)] dark:bg-white/20 px-4 text-[12px] font-medium text-[#24211D] dark:text-white border border-[var(--ws-border)] dark:border-transparent transition-colors hover:bg-[var(--ws-surface-muted)] dark:hover:bg-white/25"
         >
           <UploadCloud size={14} strokeWidth={1.8} />
           Upload Image

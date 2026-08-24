@@ -184,7 +184,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
           aria-hidden
           className="pointer-events-none absolute bottom-0 left-0 z-5 h-8 w-full opacity-0 transition-opacity duration-300 group-hover:opacity-100"
           style={{
-            background: `linear-gradient(to bottom, transparent 0%, ${isDarkMode ? '#2A2A2A' : '#f3f4f6'} 100%)`,
+            background: `linear-gradient(to bottom, transparent 0%, ${isDarkMode ? '#2A2A2A' : '#e5e7eb'} 100%)`,
           }}
         />
       </div>
@@ -192,7 +192,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
       {/* Bottom hover-revealed action bar — exact AdLibrary pattern */}
       <div className="pointer-events-none max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-300 ease-out group-hover:pointer-events-auto group-hover:max-h-14 group-hover:opacity-100">
         <div
-          className="flex h-14 w-full items-center px-3 bg-gray-100 dark:bg-[#2A2A2A]"
+          className="flex h-14 w-full items-center border-t border-black/5 bg-gray-100 px-3 dark:border-white/5 dark:bg-[#2A2A2A]"
         >
           <button
             type="button"
@@ -200,7 +200,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
               e.stopPropagation();
               setIsRecreateModalOpen(true);
             }}
-            className="w-full rounded-full bg-white px-4 py-2 text-sm font-bold tracking-tight text-black shadow-md transition-colors duration-150 hover:bg-gray-50 dark:bg-white dark:text-black dark:hover:bg-[#F2F2F2] active:bg-[#E5E5E5] 2xl:py-2.5 2xl:text-15"
+            className="w-full rounded-full bg-[#14181D] px-4 py-2 text-sm font-bold tracking-tight text-white shadow-md transition-colors duration-150 hover:bg-black active:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-[#F2F2F2] dark:active:bg-[#E5E5E5] 2xl:py-2.5 2xl:text-15"
           >
             Recreate
           </button>

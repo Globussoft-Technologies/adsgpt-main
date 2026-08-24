@@ -37,7 +37,7 @@ const STATE_CONFIG = {
     dotColor: '#FBBF24',
     pulse: false,
     border: 'border-amber-400/30',
-    badge: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
+    badge: 'border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-200',
     badgeIcon: null,
     nextLabel: 'Paused — next',
     countdownEnabled: false,
@@ -50,7 +50,7 @@ const STATE_CONFIG = {
     dotColor: '#34D399',
     pulse: false,
     border: 'border-emerald-400/30',
-    badge: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
+    badge: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-200',
     badgeIcon: <CheckCircle2 className="size-3" />,
     nextLabel: 'Finished',
     countdownEnabled: false,
@@ -63,7 +63,7 @@ const STATE_CONFIG = {
     dotColor: '#F87171',
     pulse: false,
     border: 'border-red-500/30',
-    badge: 'border-red-500/30 bg-red-500/10 text-red-200',
+    badge: 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-200',
     badgeIcon: <AlertTriangle className="size-3" />,
     nextLabel: 'Failed',
     countdownEnabled: false,
@@ -125,13 +125,12 @@ const AutomationActiveNode = ({ data, dragging }) => {
           handleCardClick(e);
         }
       }}
-      className={`group relative w-80 cursor-pointer rounded-2xl border backdrop-blur-3xl transition-all duration-200 select-none hover:border-[#15DCFF]/60 ${
+      className={`group relative w-80 cursor-pointer rounded-2xl border backdrop-blur-3xl transition-all duration-200 select-none hover:border-[#15DCFF]/60
+        bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(247,248,250,0.95))]
+        dark:bg-[linear-gradient(135deg,rgba(48,48,48,0.3),rgba(40,40,40,0.5))]
+        ${
         dragging ? 'z-50 shadow-blue-500/30' : ''
       } ${cfg.border}`}
-      style={{
-        background:
-          'linear-gradient(135deg, rgba(48, 48, 48, 0.3), rgba(40, 40, 40, 0.5))',
-      }}
     >
       <Handle
         type="target"
@@ -145,7 +144,7 @@ const AutomationActiveNode = ({ data, dragging }) => {
           <div className="flex items-start gap-2">
             <PulseDot color={cfg.dotColor} animate={cfg.pulse} />
             <div className="flex flex-col">
-              <h3 className="text-sm font-semibold text-white">{cfg.title}</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{cfg.title}</h3>
               <span
                 className={`mt-0.5 inline-flex w-fit items-center gap-1 rounded-full border px-1.5 py-0.5 text-10 font-medium tracking-wide uppercase ${cfg.badge}`}
               >
@@ -173,7 +172,7 @@ const AutomationActiveNode = ({ data, dragging }) => {
                 <StopIcon className="size-3" />
               </IconButton>
             )}
-            <span className="mx-0.5 h-4 w-px bg-white/10" />
+            <span className="mx-0.5 h-4 w-px bg-gray-300 dark:bg-white/10" />
             <IconButton tooltip="Edit" onClick={onEdit}>
               <Pencil className="size-3" />
             </IconButton>
@@ -208,17 +207,17 @@ const AutomationActiveNode = ({ data, dragging }) => {
         </div>
 
         {/* Footer line */}
-        <div className="flex items-center justify-between text-10 text-[#AFAFAF]">
+        <div className="flex items-center justify-between text-10 text-gray-400 dark:text-[#AFAFAF]">
           <span>
             Last:{' '}
-            <span className="text-[#E3E3E3]">
+            <span className="text-gray-600 dark:text-[#E3E3E3]">
               {stats?.lastRunAt ? formatShort(stats.lastRunAt) : '—'}
             </span>
           </span>
           {nextRunAt && (
             <span>
               Next:{' '}
-              <span className="text-[#E3E3E3]">{formatShort(nextRunAt.toISOString())}</span>
+              <span className="text-gray-600 dark:text-[#E3E3E3]">{formatShort(nextRunAt.toISOString())}</span>
             </span>
           )}
         </div>
@@ -256,14 +255,14 @@ function PulseDot({ color, animate }) {
 
 function Stat({ icon, label, value, highlight }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-md border border-white/5 bg-[#0D0D0D]/40 px-2 py-1.5">
-      <span className="flex items-center gap-1 text-10 tracking-wide text-[#AFAFAF] uppercase">
+    <div className="flex flex-col gap-0.5 rounded-md border border-gray-200 bg-gray-100/60 px-2 py-1.5 dark:border-white/5 dark:bg-[#0D0D0D]/40">
+      <span className="flex items-center gap-1 text-10 tracking-wide text-gray-500 uppercase dark:text-[#AFAFAF]">
         {icon}
         <span className="truncate">{label}</span>
       </span>
       <span
         className={`text-xs font-semibold tabular-nums ${
-          highlight ? 'text-[#15DCFF]' : 'text-white'
+          highlight ? 'text-[#15DCFF]' : 'text-gray-900 dark:text-white'
         }`}
       >
         {value}
@@ -284,8 +283,8 @@ function IconButton({ children, tooltip, onClick, tone }) {
       }}
       className={`flex size-6 items-center justify-center rounded border transition ${
         isDanger
-          ? 'border-red-500/20 bg-red-500/5 text-red-300 hover:border-red-500/40 hover:bg-red-500/15 hover:text-red-200'
-          : 'border-white/10 bg-white/3 text-[#AFAFAF] hover:border-white/20 hover:bg-white/6 hover:text-white'
+          ? 'border-red-500/20 bg-red-500/5 text-red-500 hover:border-red-500/40 hover:bg-red-500/15 hover:text-red-600 dark:text-red-300 dark:hover:text-red-200'
+          : 'border-gray-300 bg-gray-100 text-gray-500 hover:border-gray-400 hover:bg-gray-200 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-[#AFAFAF] dark:hover:border-white/20 dark:hover:bg-white/10 dark:hover:text-white'
       }`}
     >
       {children}

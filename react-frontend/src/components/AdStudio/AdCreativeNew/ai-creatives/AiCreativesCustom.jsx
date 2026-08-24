@@ -1265,7 +1265,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                         onClick={openBrandIqPicker}
                         className={`flex min-w-0 items-center gap-2 rounded-full px-4 py-2.5 text-[12px] font-light ring-1 transition-colors ${
                           brandSource.kind === 'list'
-                            ? 'bg-black/5 text-gray-900 ring-black/10 dark:bg-white/15 dark:text-white dark:ring-white/20'
+                            ? 'bg-black/5 text-gray-900 ring-black/10 dark:bg-white/15 dark:text-white dark:ring-white/5'
                             : 'bg-gray-100 text-gray-600 ring-black/10 hover:bg-black/5 dark:bg-[#909294]/10 dark:text-[#f0f0f0] dark:ring-white/5 dark:hover:bg-[#33333a]'
                         }`}
                       >
@@ -1389,43 +1389,41 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     onPaste={handleRefPaste}
                     onDragOver={preventDefaultDragOver}
                     onDrop={handleRefDrop}
-                    className="flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-[10px] text-gray-500 dark:text-[#afafaf] 2xl:py-2"
+                    className="relative w-full"
                   >
-                    <div className="flex flex-1 items-center justify-between">
-                      <input
-                        // text (not "url") so the browser doesn't block inputs
-                        // without a scheme — we accept any string here.
-                        type="text"
-                        inputMode="url"
-                        value={referenceImageUrl}
-                        onChange={(e) => setReferenceImageUrl(e.target.value)}
-                        onKeyDown={(e) =>
-                          e.key === 'Enter' && (e.preventDefault(), handleRefImageUrlAdd())
-                        }
-                        onDragOver={preventDefaultDragOver}
-                        onDrop={handleRefDrop}
-                        placeholder="Paste your image URL or upload"
-                        className="w-full rounded-lg px-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
-                      />
+                    <input
+                      // text (not "url") so the browser doesn't block inputs
+                      // without a scheme — we accept any string here.
+                      type="text"
+                      inputMode="url"
+                      value={referenceImageUrl}
+                      onChange={(e) => setReferenceImageUrl(e.target.value)}
+                      onKeyDown={(e) =>
+                        e.key === 'Enter' && (e.preventDefault(), handleRefImageUrlAdd())
+                      }
+                      onDragOver={preventDefaultDragOver}
+                      onDrop={handleRefDrop}
+                      placeholder="Paste your image URL or upload"
+                      className={`${inputCls} pr-36`}
+                    />
+                    <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5">
                       <button
                         type="button"
                         onClick={handleRefImageUrlAdd}
                         disabled={!referenceImageUrl.trim()}
                         aria-label="Add image URL"
-                        className="shrink-0 px-1 text-gray-500 dark:text-[#909294] transition-colors hover:text-black dark:hover:text-white disabled:opacity-40 disabled:hover:text-gray-500 dark:disabled:hover:text-[#909294]"
+                        className="shrink-0 px-1 text-gray-500 transition-colors hover:text-black disabled:opacity-30 dark:text-[#909294] dark:hover:text-white"
                       >
-                        <LinkIcon className="h-3 w-3 2xl:h-4 2xl:w-4" />
+                        <LinkIcon className="h-3.5 w-3.5" />
                       </button>
+                      <label
+                        htmlFor="ref-image-upload"
+                        className="flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-3 py-1.5 text-[11px] font-medium text-gray-900 ring-1 ring-black/10 transition-colors hover:bg-black/10 dark:bg-white/20 dark:text-white dark:ring-white/10 dark:hover:bg-white/25"
+                      >
+                        <UploadCloud className="h-3.5 w-3.5 text-current" />
+                        <span className="whitespace-nowrap">Upload Image</span>
+                      </label>
                     </div>
-                    <label
-                      htmlFor="ref-image-upload"
-                      className="flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-2.5 py-1.5 text-[10px] font-medium text-gray-900 ring-1 ring-black/10 transition-colors hover:bg-black/10 2xl:gap-2 dark:bg-white/20 dark:text-white dark:ring-white/10 dark:hover:bg-white/25"
-                    >
-                      <UploadCloud className="h-3 w-3 text-current 2xl:h-4 2xl:w-4" />
-                      <span className="!text-[10px] whitespace-nowrap 2xl:!text-xs">
-                        Upload Image
-                      </span>
-                    </label>
                     <input
                       id="ref-image-upload"
                       ref={refImgInputRef}
@@ -1545,38 +1543,36 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     }}
                     onDragOver={preventDefaultDragOver}
                     onDrop={handleLogoDrop}
-                    className="flex items-center gap-3 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-1 py-1 text-[10px] text-gray-500 dark:text-[#afafaf] 2xl:py-2"
+                    className="relative w-full"
                   >
-                    <div className="flex flex-1 items-center justify-between">
-                      <input
-                        // text (not "url") so the browser doesn't reject inputs
-                        // without a scheme — the field is for image URLs but
-                        // some users paste host-relative paths.
-                        type="text"
-                        inputMode="url"
-                        value={brandLogoUrl}
-                        onChange={(e) => {
-                          // Typing/pasting clears any previously-uploaded file —
-                          // the typed URL takes precedence.
-                          setBrandLogoUrl(e.target.value);
-                          if (brandLogoFile) setBrandLogoFile(null);
-                        }}
-                        onDragOver={preventDefaultDragOver}
-                        onDrop={handleLogoDrop}
-                        placeholder="Paste your image URL or upload"
-                        className="w-full rounded-lg px-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none 2xl:text-base"
-                      />
-                      <LinkIcon className="h-3 w-3 text-gray-500 dark:text-[#909294] 2xl:h-4 2xl:w-4" />
+                    <input
+                      // text (not "url") so the browser doesn't reject inputs
+                      // without a scheme — the field is for image URLs but
+                      // some users paste host-relative paths.
+                      type="text"
+                      inputMode="url"
+                      value={brandLogoUrl}
+                      onChange={(e) => {
+                        // Typing/pasting clears any previously-uploaded file —
+                        // the typed URL takes precedence.
+                        setBrandLogoUrl(e.target.value);
+                        if (brandLogoFile) setBrandLogoFile(null);
+                      }}
+                      onDragOver={preventDefaultDragOver}
+                      onDrop={handleLogoDrop}
+                      placeholder="Paste your image URL or upload"
+                      className={`${inputCls} pr-36`}
+                    />
+                    <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5">
+                      <LinkIcon className="h-3.5 w-3.5 text-gray-500 dark:text-[#909294]" />
+                      <label
+                        htmlFor="brand-logo-upload"
+                        className="flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-3 py-1.5 text-[11px] font-medium text-gray-900 ring-1 ring-black/10 transition-colors hover:bg-black/10 dark:bg-white/20 dark:text-white dark:ring-white/10 dark:hover:bg-white/25"
+                      >
+                        <UploadCloud className="h-3.5 w-3.5 text-current" />
+                        <span className="whitespace-nowrap">Upload Image</span>
+                      </label>
                     </div>
-                    <label
-                      htmlFor="brand-logo-upload"
-                      className="flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-2.5 py-1.5 text-[10px] font-medium text-gray-900 ring-1 ring-black/10 transition-colors hover:bg-black/10 2xl:gap-2 dark:bg-white/20 dark:text-white dark:ring-white/10 dark:hover:bg-white/25"
-                    >
-                      <UploadCloud className="h-3 w-3 text-current 2xl:h-4 2xl:w-4" />
-                      <span className="!text-[10px] whitespace-nowrap 2xl:!text-xs">
-                        Upload Image
-                      </span>
-                    </label>
                     <input
                       id="brand-logo-upload"
                       ref={logoImgInputRef}

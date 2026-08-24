@@ -30,7 +30,7 @@ const GenCanvas = ({
       // actually shows through — this panel is meant to be glass too, and at
       // /75 it was dark enough to flatten the Creative Brief card's own glass
       // fill into solid black regardless of what's behind it.
-      className={`z-30 flex h-full shrink-0 flex-col border-l border-white/[0.08] bg-[#0A0A0A]/30 backdrop-blur-2xl transition-[width,transform] duration-300 ease-out ${
+      className={`z-30 flex h-full shrink-0 flex-col border-l border-black/[0.08] bg-[#F7F4EE]/95 backdrop-blur-2xl transition-[width,transform] duration-300 ease-out dark:border-white/[0.08] dark:bg-[#0A0A0A]/30 ${
         isOpen
           ? 'pointer-events-auto w-full translate-x-0 opacity-100 sm:w-[440px] lg:w-[520px]'
           : 'pointer-events-none w-0 translate-x-full opacity-0'
@@ -39,10 +39,10 @@ const GenCanvas = ({
       {isOpen && (
         <>
           {/* Header */}
-          <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2 border-b border-black/[0.06] px-3 py-2.5 dark:border-white/[0.06]">
             <div className="inline-flex min-w-0 items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#15DCFF]" />
-              <span className="truncate text-[12.5px] font-semibold text-white/85">
+              <span className="truncate text-[12.5px] font-semibold text-gray-700 dark:text-white/85">
                 Creative Studio
               </span>
             </div>
@@ -54,11 +54,11 @@ const GenCanvas = ({
                     onClick={onPrev}
                     disabled={idx === 0}
                     title="Previous brief"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/[0.07] hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-black/[0.07] hover:text-gray-900 disabled:opacity-30 disabled:hover:bg-transparent dark:text-white/55 dark:hover:bg-white/[0.07] dark:hover:text-white"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
-                  <span className="min-w-[38px] text-center text-[11px] tabular-nums text-white/45">
+                  <span className="min-w-[38px] text-center text-[11px] tabular-nums text-gray-400 dark:text-white/45">
                     {idx + 1} / {count}
                   </span>
                   <button
@@ -66,7 +66,7 @@ const GenCanvas = ({
                     onClick={onNext}
                     disabled={idx === count - 1}
                     title="Next brief"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/[0.07] hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-black/[0.07] hover:text-gray-900 disabled:opacity-30 disabled:hover:bg-transparent dark:text-white/55 dark:hover:bg-white/[0.07] dark:hover:text-white"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </button>
@@ -76,7 +76,7 @@ const GenCanvas = ({
                 type="button"
                 onClick={onClose}
                 title="Close canvas"
-                className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/[0.07] hover:text-white"
+                className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-black/[0.07] hover:text-gray-900 dark:text-white/55 dark:hover:bg-white/[0.07] dark:hover:text-white"
               >
                 <PanelRightClose className="h-4 w-4" />
               </button>

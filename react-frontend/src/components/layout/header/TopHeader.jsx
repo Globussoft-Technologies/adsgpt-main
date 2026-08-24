@@ -390,6 +390,12 @@ export default function TopHeader() {
     }
   }, [myBrands, selectedCompetitorBrand, dispatch]);
 
+  const isMySpaceView =
+    currentRoute === '/my-space' ||
+    (currentRoute === '/adstudio' &&
+      activeAdStudioTabId === 'adVideoNew' &&
+      activePage === 'myVideos');
+
   if (currentRoute !== '/adfactory-demo' && hideHeader) {
     // Meta and TikTok Ads Manager include controls in their own row so they
     // participate in layout instead of floating over provider controls.
@@ -404,7 +410,7 @@ export default function TopHeader() {
       <div className="pointer-events-none fixed top-4 right-5 z-[60] flex items-center gap-2">
         <div className="pointer-events-auto flex items-center gap-2">
           <WorkspaceSwitcher />
-          {SHOW_HIDDEN_HEADER_UI && currentRoute !== '/my-space' && currentRoute !== '/autopilot/meta' && <ThemeToggle />}
+          {SHOW_HIDDEN_HEADER_UI && !isMySpaceView && currentRoute !== '/autopilot/meta' && <ThemeToggle />}
         </div>
       </div>
     );
@@ -721,7 +727,7 @@ export default function TopHeader() {
         >
           {/* Theme toggle — floating fallback */}
           <WorkspaceSwitcher />
-          {SHOW_HIDDEN_HEADER_UI && <ThemeToggle />}
+          {SHOW_HIDDEN_HEADER_UI && !isMySpaceView && <ThemeToggle />}
         </div>
       )}
     </>

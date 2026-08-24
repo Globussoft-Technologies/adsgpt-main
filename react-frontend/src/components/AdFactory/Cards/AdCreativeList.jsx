@@ -462,17 +462,17 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
         }`}
         onClick={() => handleImageClick(item, key, index)}
       >
-        <div className="flex h-full flex-col overflow-hidden rounded-xl bg-gray-50 transition dark:bg-[#292929]">
+        <div className="flex h-full flex-col overflow-hidden rounded-xl bg-gray-100 transition dark:bg-[#292929]">
           {/* Version badge for history images */}
           {(isHistory || item?.timestamp || item?.createdAt) && item?.status === 200 && (
-            <div className="flex items-center justify-between bg-gray-100 px-4 py-2 dark:bg-[#1a1a1a]">
+            <div className="flex items-center justify-between bg-gray-200 px-4 py-2 dark:bg-[#1a1a1a]">
               <span className="text-xs font-medium text-[#02C8C4]">
                 {item?.prompt === 'Edited image' ? 'Edited Image' : (() => {
                   const model = item?.modelLabel || (isHistory ? item?.imageModel : imageModelLabel);
                   if (!model) return '';
                   const labelMap = { google: 'Nano Banana Pro', openai: 'OpenAI 1.5', openai2: 'OpenAI 2.0', auto: 'Auto' };
                   return (
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-10 font-medium text-white/70">
+                    <span className="rounded-full bg-black/10 px-2 py-0.5 text-10 font-medium text-gray-700 dark:bg-white/10 dark:text-white/70">
                       {labelMap[model] || model}
                     </span>
                   );
@@ -493,12 +493,12 @@ export const AdCreativeList = ({ onImageClick, renderHeaderDownloadButton }) => 
                     if (!model) return <span />;
                     const labelMap = { google: 'Nano Banana Pro', openai: 'OpenAI 1.5', openai2: 'OpenAI 2.0', auto: 'Auto' };
                     return (
-                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-10 font-medium text-white/70">
+                      <span className="rounded-full bg-black/10 px-2 py-0.5 text-10 font-medium text-gray-700 dark:bg-white/10 dark:text-white/70">
                         {labelMap[model] || model}
                       </span>
                     );
                   })()}
-                  <span className="text-xs text-[#888]">
+                  <span className="text-xs text-gray-500 dark:text-[#888]">
                     {new Date(item?.timestamp || item?.createdAt).toLocaleDateString()}
                   </span>
                 </div>

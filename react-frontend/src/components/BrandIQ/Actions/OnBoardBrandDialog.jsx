@@ -602,7 +602,7 @@ const OnBoardBrandDialog = () => {
           <Info className="h-3.5 w-3.5 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className={UPLOAD_FIELD_WRAPPER} onPaste={handleBrandLogoPaste} tabIndex={0}>
+      <div className={`${UPLOAD_FIELD_WRAPPER} pl-1.5 pr-4`} onPaste={handleBrandLogoPaste} tabIndex={0}>
         <label className={`${UPLOAD_BUTTON} cursor-pointer`}>
           <input
             type="file"
@@ -615,7 +615,7 @@ const OnBoardBrandDialog = () => {
           <CloudUpload className="h-3.5 w-3.5" />
           Upload
         </label>
-        <span className="text-[12px] font-light text-gray-500 dark:text-white/60">
+        <span className="truncate text-[12px] font-light text-gray-500 dark:text-white/60">
           {brandLogos?.length === 0 ? 'No files selected' : `${brandLogos?.length} files selected`}
         </span>
       </div>
@@ -664,7 +664,7 @@ const OnBoardBrandDialog = () => {
           <Info className="h-3.5 w-3.5 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className={UPLOAD_FIELD_WRAPPER} onPaste={handleProductImagePaste} tabIndex={0}>
+      <div className={`${UPLOAD_FIELD_WRAPPER} pl-1.5 pr-4`} onPaste={handleProductImagePaste} tabIndex={0}>
         <label className={`${UPLOAD_BUTTON} cursor-pointer`}>
           <input
             type="file"
@@ -677,7 +677,7 @@ const OnBoardBrandDialog = () => {
           <CloudUpload className="h-3.5 w-3.5" />
           Upload
         </label>
-        <span className="text-[12px] font-light text-gray-500 dark:text-white/60">
+        <span className="truncate text-[12px] font-light text-gray-500 dark:text-white/60">
           {productImages?.length === 0
             ? 'No files selected'
             : `${productImages?.length} files selected`}
