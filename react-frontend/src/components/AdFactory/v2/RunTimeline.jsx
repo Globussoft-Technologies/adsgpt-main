@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, ChevronDown, ExternalLink, Loader2 } from 'lucide-react';
 
 import { AnimatePresence, motion } from 'framer-motion';
@@ -49,6 +49,9 @@ export default function RunTimeline({
   pairsPerCycle,
 }) {
   const M = useMotionPresets();
+  const live = summary?.status === 'active';
+  const nextRunAt = summary?.nextRunAt ? new Date(summary.nextRunAt) : null;
+  const remaining = useCountdown(nextRunAt, live);
 
   if (loading && rows.length === 0) {
     return (
@@ -61,7 +64,6 @@ export default function RunTimeline({
   // A brief nobody has scheduled yet is the normal case, not an error.
   if (!summary && rows.length === 0) return null;
 
-  const live = summary?.status === 'active';
   const cadence = [
     summary?.frequency,
     Number.isInteger(summary?.hour) ? clock(summary.hour) : null,
@@ -102,8 +104,16 @@ export default function RunTimeline({
           <Metric label="Ads live" value={summary?.adsPublished ?? 0} />
           <Metric label="Cycles run" value={summary?.totalRuns ?? 0} />
           <Metric
-            label="Next run"
-            value={summary?.nextRunAt ? when(summary.nextRunAt) : '—'}
+            label={live && nextRunAt ? 'Next cycle' : 'Next run'}
+            value={
+              live && nextRunAt
+                ? remaining || '—'
+                : summary?.nextRunAt
+                  ? when(summary.nextRunAt)
+                  : '—'
+            }
+            subtext={live && nextRunAt ? when(summary.nextRunAt) : null}
+            highlight={live && !!remaining}
             small
           />
         </div>
@@ -124,15 +134,49 @@ export default function RunTimeline({
   );
 }
 
-function Metric({ label, value, small = false }) {
+function Metric({ label, value, subtext = null, small = false, highlight = false }) {
   return (
     <div className={`flex flex-col gap-1.5 px-3.5 py-3 ${CONTROL}`}>
       <span className={LABEL}>{label}</span>
-      <b className={`font-semibold tracking-[-0.017em] ${NUM} ${small ? 'text-13' : 'text-[17px]'}`}>
+      <b
+        className={`font-semibold tracking-[-0.017em] ${NUM} ${
+          small ? 'text-13' : 'text-[17px]'
+        } ${highlight ? 'text-[#15DCFF]' : ''}`}
+      >
         {value}
       </b>
+      {subtext && <span className={`text-[11px] ${MUTED}`}>{subtext}</span>}
     </div>
   );
+}
+
+function useCountdown(target, running) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!running || !target) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [running, target]);
+
+  if (!target) return '';
+  const diff = target.getTime() - now;
+  if (diff <= 0) return 'Any moment now';
+
+  const totalSeconds = Math.floor(diff / 1000);
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+
+  if (d > 0) return `${d}d ${pad(h)}h`;
+  if (h > 0) return `${h}h ${pad(m)}m`;
+  if (m > 0) return `${m}m ${pad(s)}s`;
+  return `${s}s`;
+}
+
+function pad(n) {
+  return n.toString().padStart(2, '0');
 }
 
 const BULLET = {

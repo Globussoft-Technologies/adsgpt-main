@@ -123,6 +123,8 @@ function pickAllowed({ requested, allowed, fallback, field }) {
  * @param {string}  [input.leadFormId]        Required by preflight for instant-form cells
  * @param {string}  [input.applicationId]     App cells only
  * @param {string}  [input.objectStoreUrl]    App cells only
+ * @param {string}  [input.dsaBeneficiary]    Advertiser beneficiary required by Meta in some regions
+ * @param {string}  [input.dsaPayor]          Advertiser payor; defaults to beneficiary at Meta boundary
  *
  * @returns {{name, objective, conversionLocation, pageId, source, payload}}
  * @throws  {TemplateSynthesisError}
@@ -144,6 +146,8 @@ function synthesizeTemplate(input = {}) {
     leadFormId,
     applicationId,
     objectStoreUrl,
+    dsaBeneficiary,
+    dsaPayor,
   } = input;
 
   if (!objective) {
@@ -291,6 +295,8 @@ function synthesizeTemplate(input = {}) {
     ...(leadFormId ? { leadFormId: String(leadFormId) } : {}),
     ...(applicationId ? { applicationId: String(applicationId) } : {}),
     ...(objectStoreUrl ? { objectStoreUrl } : {}),
+    ...(dsaBeneficiary ? { dsaBeneficiary: String(dsaBeneficiary) } : {}),
+    ...(dsaPayor ? { dsaPayor: String(dsaPayor) } : {}),
   };
 
   return {

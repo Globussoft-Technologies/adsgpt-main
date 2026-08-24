@@ -1,28 +1,10 @@
-import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, Pause, Play, Square, Zap } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Loader2, Pause, Pencil, Play } from 'lucide-react';
 
-import { Panel, PanelBody, PanelHeader, GhostBtn } from './Panel';
+import { Panel, PanelBody, PanelHeader, GhostBtn, PrimaryBtn } from './Panel';
 import CadencePills from './CadencePills';
 import AlertEmails from './AlertEmails';
 import { MUTED, RULE_BORDER } from './_tokens';
-
-// ----------------------------------------------------------------------------
-// SchedulePanel — the cadence of a LIVE brief, and the controls that change it.
-//
-// This is the half of automation Quick setup didn't have. Once a brief went
-// live the schedule became unreachable: the setup card only renders before
-// activation, so there was no way to move the time, change how often, or stop —
-// only pause. v1 had Edit and Stop on its active node from day one.
-//
-// The edit path is not a second implementation. It is the same CadencePills the
-// setup card uses, and the same PATCH — the server now forwards job-owned
-// fields onto the running job (services/adFactory/briefToJobPatch). Before that
-// existed, editing here would have saved, rendered, and changed nothing.
-//
-// `syncWarning` is how that honesty reaches the screen. `updateJob` refuses
-// while a cycle is mid-run, and a refusal the user cannot see is the exact bug
-// this whole change is fixing, one layer further out.
-// ----------------------------------------------------------------------------
 
 export default function SchedulePanel({
   status,
@@ -37,23 +19,68 @@ export default function SchedulePanel({
   onAlertEmailsChange,
   nextRunAt,
   onCadenceChange,
+  onScheduleUpdate,
   onPause,
   onResume,
-  onStop,
-  onRunNow,
-  runningNow = false,
+  onRestartSetup,
+  restartSetupOpen = false,
   runNowQueued = false,
   busy = false,
   saving = false,
   syncWarning,
 }) {
-  const [confirmingStop, setConfirmingStop] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draftCadence, setDraftCadence] = useState(null);
+  const [draftEmails, setDraftEmails] = useState(alertEmails || []);
 
   const live = status === 'active';
   const paused = status === 'paused';
-  // Archived or completed: nothing left to schedule, and editing a cadence that
-  // will never run again would be theatre.
   const over = !live && !paused;
+  const cadenceValue = draftCadence || {
+    frequency,
+    hour,
+    timezone,
+    pairsPerCycle,
+    custom,
+    startDate,
+    endDate,
+  };
+
+  useEffect(() => {
+    if (editing) return;
+    setDraftCadence(null);
+    setDraftEmails(alertEmails || []);
+  }, [alertEmails, custom, editing, endDate, frequency, hour, pairsPerCycle, startDate, timezone]);
+
+  const beginEdit = () => {
+    setDraftCadence({
+      frequency,
+      hour,
+      timezone,
+      pairsPerCycle,
+      custom,
+      startDate,
+      endDate,
+    });
+    setDraftEmails(alertEmails || []);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setDraftCadence(null);
+    setDraftEmails(alertEmails || []);
+  };
+
+  const submitEdit = () => {
+    if (onScheduleUpdate) {
+      onScheduleUpdate({ cadence: draftCadence || cadenceValue, alertEmails: draftEmails || [] });
+    } else {
+      if (draftCadence) onCadenceChange?.(draftCadence);
+      onAlertEmailsChange?.(draftEmails || []);
+    }
+    setEditing(false);
+  };
 
   return (
     <Panel>
@@ -64,7 +91,7 @@ export default function SchedulePanel({
             ? 'Deliveries have ended. Your past runs are below.'
             : nextRunAt
               ? `Next run ${when(nextRunAt)}`
-              : 'Paused — nothing is scheduled'
+              : 'Paused - nothing is scheduled'
         }
         right={
           <span className="flex items-center gap-2">
@@ -72,21 +99,26 @@ export default function SchedulePanel({
               <Loader2 className="h-3.5 w-3.5 animate-spin text-[#9CA3AF] dark:text-[#8B939E]" />
             )}
             {live && (
-              <GhostBtn onClick={onPause} disabled={busy}>
+              <GhostBtn onClick={onPause} disabled={busy || editing}>
                 <Pause className="h-3.5 w-3.5" />
                 <span>Pause</span>
               </GhostBtn>
             )}
             {paused && (
-              <GhostBtn onClick={onResume} disabled={busy}>
+              <GhostBtn onClick={onResume} disabled={busy || editing}>
                 <Play className="h-3.5 w-3.5" />
                 <span>Resume</span>
               </GhostBtn>
             )}
-            {!over && (
-              <GhostBtn onClick={() => setConfirmingStop(true)} disabled={busy}>
-                <Square className="h-3.5 w-3.5" />
-                <span>Stop</span>
+            {over && onRestartSetup && !restartSetupOpen && (
+              <PrimaryBtn onClick={onRestartSetup}>
+                <span>Set up deliveries again</span>
+              </PrimaryBtn>
+            )}
+            {!over && !editing && (
+              <GhostBtn onClick={beginEdit} disabled={busy}>
+                <Pencil className="h-3.5 w-3.5" />
+                <span>Edit</span>
               </GhostBtn>
             )}
           </span>
@@ -95,25 +127,27 @@ export default function SchedulePanel({
 
       <PanelBody className="flex flex-col gap-3">
         <CadencePills
-          frequency={frequency}
-          hour={hour}
-          timezone={timezone}
-          pairsPerCycle={pairsPerCycle}
-          custom={custom}
-          startDate={startDate}
-          endDate={endDate}
-          onChange={onCadenceChange}
-          disabled={over || busy}
+          frequency={cadenceValue.frequency}
+          hour={cadenceValue.hour}
+          timezone={cadenceValue.timezone}
+          pairsPerCycle={cadenceValue.pairsPerCycle}
+          custom={cadenceValue.custom}
+          startDate={cadenceValue.startDate}
+          endDate={cadenceValue.endDate}
+          onChange={(change) =>
+            setDraftCadence((current) => ({
+              ...(current || cadenceValue),
+              ...change,
+            }))
+          }
+          disabled={over || busy || !editing}
         />
 
-        {/* Queued, not finished. Nothing appears in the timeline until the
-            orchestrator picks it up, so this says what actually happened
-            rather than implying ads exist. */}
         {runNowQueued && (
           <div className="flex items-start gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/8 px-3.5 py-3">
             <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
             <p className="text-13 leading-relaxed text-emerald-700 dark:text-emerald-400">
-              A run is queued. It&apos;ll appear below once it starts — this is an extra cycle, so
+              A run is queued. It&apos;ll appear below once it starts - this is an extra cycle, so
               your schedule is unchanged.
             </p>
           </div>
@@ -122,15 +156,13 @@ export default function SchedulePanel({
         {!over && (
           <div className={`border-t pt-4 ${RULE_BORDER}`}>
             <AlertEmails
-              value={alertEmails}
-              onChange={onAlertEmailsChange}
-              disabled={busy}
+              value={draftEmails}
+              onChange={setDraftEmails}
+              disabled={busy || !editing}
             />
           </div>
         )}
 
-        {/* The one message that must never be swallowed: the brief now says one
-            thing and the running job still does another. */}
         {syncWarning && (
           <div className="flex items-start gap-2.5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/8 px-3.5 py-3">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#B45309] dark:text-[#E8A33D]" />
@@ -143,42 +175,21 @@ export default function SchedulePanel({
 
         {!over && !syncWarning && (
           <p className={MUTED}>
-            Changes apply from the next run. Pausing keeps everything; stopping ends deliveries for
-            good.
+            Changes apply from the next run. Pausing keeps the automation ready to resume.
           </p>
         )}
-      </PanelBody>
 
-      {/* Stopping is irreversible and spends nothing to confirm, so it asks.
-          Inline rather than a modal: it belongs to this panel, and a dialog over
-          the whole page for one sentence is heavier than the decision. */}
-      {confirmingStop && (
-        <div className={`border-t px-5 py-4 ${RULE_BORDER} 2xl:px-6`}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className={`max-w-150 ${MUTED}`}>
-              Stop deliveries for good? Ads already live stay live, and your run history is kept —
-              but restarting means setting the schedule up again.
-            </p>
-            <span className="flex shrink-0 items-center gap-2">
-              <GhostBtn onClick={() => setConfirmingStop(false)} disabled={busy}>
-                <span>Keep running</span>
-              </GhostBtn>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setConfirmingStop(false);
-                  onStop?.();
-                }}
-                className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/8 px-3.5 text-13 font-medium text-red-600 transition-colors hover:bg-red-500/15 disabled:opacity-50 dark:text-red-400"
-              >
-                {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                Stop deliveries
-              </button>
-            </span>
+        {editing && (
+          <div className={`flex flex-wrap items-center justify-end gap-2 border-t pt-4 ${RULE_BORDER}`}>
+            <GhostBtn onClick={cancelEdit} disabled={busy || saving}>
+              <span>Cancel</span>
+            </GhostBtn>
+            <PrimaryBtn onClick={submitEdit} busy={saving} disabled={busy}>
+              <span>Update automation</span>
+            </PrimaryBtn>
           </div>
-        </div>
-      )}
+        )}
+      </PanelBody>
     </Panel>
   );
 }

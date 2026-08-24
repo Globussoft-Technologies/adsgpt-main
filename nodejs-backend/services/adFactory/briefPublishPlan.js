@@ -231,6 +231,8 @@ function briefPublishPlan(brief = {}, connection = {}, opts = {}) {
     throw new BriefPublishError("Set a daily budget first", "budget");
   }
 
+  const advertiserName = str(connection.pageName || b.brand?.name);
+
   let template;
   try {
     template = synthesizeTemplate({
@@ -246,6 +248,7 @@ function briefPublishPlan(brief = {}, connection = {}, opts = {}) {
         : {}),
       ...(str(connection.leadFormId) ? { leadFormId: str(connection.leadFormId) } : {}),
       ...(str(b.brand?.name) ? { campaignName: str(b.brand.name).slice(0, 120) } : {}),
+      ...(advertiserName ? { dsaBeneficiary: advertiserName, dsaPayor: advertiserName } : {}),
     });
   } catch (err) {
     if (err instanceof TemplateSynthesisError) {
@@ -292,6 +295,8 @@ function briefPublishPlan(brief = {}, connection = {}, opts = {}) {
     ...(p.leadFormId ? { leadFormId: p.leadFormId } : {}),
     ...(p.applicationId ? { applicationId: p.applicationId } : {}),
     ...(p.objectStoreUrl ? { objectStoreUrl: p.objectStoreUrl } : {}),
+    ...(p.dsaBeneficiary ? { dsaBeneficiary: p.dsaBeneficiary } : {}),
+    ...(p.dsaPayor ? { dsaPayor: p.dsaPayor } : {}),
     status: "ACTIVE",
     // No startTime/endTime. Meta reads an absent start_time as "now" and an
     // absent end_time as open-ended, which is what a one-off post wants. The

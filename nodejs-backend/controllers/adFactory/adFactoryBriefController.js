@@ -301,6 +301,49 @@ exports.listBriefs = async (req, res) => {
       .sort({ updatedAt: -1 })
       .limit(limit)
       .lean();
+
+    const jobIds = briefs
+      .map((brief) => brief.jobId)
+      .filter(Boolean);
+
+    if (jobIds.length) {
+      const jobs = await AdsFactoryJob.find({
+        _id: { $in: jobIds },
+        userId: req.user.user_id,
+      })
+        .select("_id status")
+        .lean();
+
+      const jobStatusById = new Map(jobs.map((job) => [String(job._id), job.status]));
+      const updates = [];
+
+      for (const brief of briefs) {
+        if (!brief.jobId) continue;
+
+        const jobStatus = jobStatusById.get(String(brief.jobId));
+        let derivedStatus = brief.status;
+
+        if (jobStatus === "active") derivedStatus = "live";
+        else if (jobStatus === "paused") derivedStatus = "paused";
+        else if (jobStatus === "completed" || jobStatus === "archived") derivedStatus = "ended";
+        else if (!jobStatus && (brief.status === "live" || brief.status === "paused")) derivedStatus = "ended";
+
+        if (derivedStatus !== brief.status) {
+          brief.status = derivedStatus;
+          updates.push({
+            updateOne: {
+              filter: { _id: brief._id, userId: req.user.user_id },
+              update: { $set: { status: derivedStatus } },
+            },
+          });
+        }
+      }
+
+      if (updates.length) {
+        await AdFactoryBrief.bulkWrite(updates, { ordered: false });
+      }
+    }
+
     return res.status(200).json({ success: true, data: briefs });
   } catch (err) {
     logger.error(`[adFactory:brief:list] ${err.message}`);

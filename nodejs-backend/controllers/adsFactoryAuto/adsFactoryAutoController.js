@@ -1,5 +1,6 @@
 const AdsFactoryJob = require("../../Module/adsFactoryAuto/adsFactoryAutoJob");
 const Campaign      = require("../../Module/adFactory/adFactory");
+const AdFactoryBrief = require("../../Module/adFactory/adFactoryBrief");
 const FBUsers       = require('../../Module/adPosting/facebookUsers');
 const { CELLS, CTA_LABELS } = require("../../config/wizardSchema");
 const { scheduleJob, cancelJob, resolveScheduleForQueue, resolvePresetCron, resolveInclusiveEndDate, getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
@@ -716,6 +717,10 @@ class AdsFactoryAutoController {
 
       job.status = "paused";
       await job.save();
+      await AdFactoryBrief.updateMany(
+        { userId, jobId: job._id.toString() },
+        { $set: { status: "paused" } }
+      );
       await cancelJob(job._id.toString());
       if (job.campaignId) {
         const stuckCampaign = await Campaign.findOne(
@@ -788,6 +793,10 @@ class AdsFactoryAutoController {
       const nextTime = await getNextRunTime(job._id.toString(), job.schedule);
       if (nextTime) job.schedule.nextRunAt = nextTime;
       await job.save();
+      await AdFactoryBrief.updateMany(
+        { userId, jobId: job._id.toString() },
+        { $set: { status: "live" } }
+      );
 
       return res.json({ success: true, data: job });
     } catch (err) {

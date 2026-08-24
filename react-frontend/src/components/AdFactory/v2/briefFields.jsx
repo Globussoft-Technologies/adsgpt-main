@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Loader2, Minus, Plus, Search, X } from 'lucide-react';
 import { InfoTip } from '@/components/Autopilot/_atoms';
 import { getClipboardImageFiles } from '@/utils/clipboardImages';
@@ -461,7 +461,8 @@ export function ImageStrip({
   uploadFile,
   formatHint = 'JPG, PNG, WebP, GIF, SVG',
 }) {
-  const list = Array.isArray(urls) ? urls.filter(Boolean) : [];
+  const rawList = useMemo(() => (Array.isArray(urls) ? urls.filter(Boolean) : []), [urls]);
+  const list = useMemo(() => rawList.slice(0, max), [rawList, max]);
   const [busy, setBusy] = useState(false);
   const [urlDraft, setUrlDraft] = useState('');
   const [showUrl, setShowUrl] = useState(false);
@@ -469,6 +470,12 @@ export function ImageStrip({
 
   const full = list.length >= max;
   const room = max - list.length;
+
+  useEffect(() => {
+    if (rawList.length > max) {
+      onChange?.(list);
+    }
+  }, [rawList.length, max, list, onChange]);
 
   // Adds are capped and de-duplicated here rather than at each call site —
   // uploading four files with two slots left must add two, not overflow.
@@ -579,9 +586,6 @@ export function ImageStrip({
 
         {list.length === 0 && !uploadFile && <p className={FAINT}>{emptyLabel}</p>}
 
-        <span className={`ml-1 ${FAINT} ${NUM}`}>
-          {list.length}/{max}
-        </span>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">

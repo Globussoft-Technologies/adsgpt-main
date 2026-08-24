@@ -124,6 +124,7 @@ const INFER_POLL_MS = 3000;
 // Generation runs for minutes, not seconds — polling it as eagerly as inference
 // would be dozens of pointless round trips per run.
 const GENERATION_POLL_MS = 15000;
+const MIN_DAILY_BUDGET_INR = 100;
 
 export default function AdFactoryV2Page() {
   const dispatch = useDispatch();
@@ -305,9 +306,19 @@ export default function AdFactoryV2Page() {
   // is what is saved. The typed value wins while it exists so the input doesn't
   // fight the user mid-edit.
   const budget = useMemo(
-    () => (pendingBudget !== '' && pendingBudget != null
-      ? pendingBudget
-      : brief?.delivery?.budget?.daily ?? ''),
+    () => {
+      if (pendingBudget !== '' && pendingBudget != null) return pendingBudget;
+      const saved = brief?.delivery?.budget?.daily;
+      const savedNumber = Number(saved);
+      if (
+        Number.isFinite(savedNumber)
+        && savedNumber > 0
+        && savedNumber < MIN_DAILY_BUDGET_INR
+      ) {
+        return MIN_DAILY_BUDGET_INR;
+      }
+      return saved ?? '';
+    },
     [brief, pendingBudget],
   );
 
@@ -318,20 +329,29 @@ export default function AdFactoryV2Page() {
   const savedBudget = brief?.delivery?.budget?.daily;
 
   const persistBudget = useCallback(() => {
-    const n = Number(pendingBudget);
-    if (!briefId || !Number.isFinite(n) || n <= 0) return;
-    if (savedBudget === n) return;
+    const raw = pendingBudget !== '' && pendingBudget != null ? pendingBudget : savedBudget;
+    const n = Number(raw);
+    if (!briefId || !Number.isFinite(n) || n <= 0) return null;
+    const daily = Math.max(MIN_DAILY_BUDGET_INR, Math.round(n));
+    if (pendingBudget !== '' && String(pendingBudget) !== String(daily)) {
+      dispatch(setPendingBudget(String(daily)));
+    }
+    if (savedBudget === daily) return null;
     // Write it locally FIRST. The save response deliberately doesn't merge
     // server state back (it would clobber an edit still in flight), so without
     // this the guard above compares against a value that never changes and the
     // effect below dispatches forever.
     dispatch(
-      applyLocalEdit({ section: 'delivery', field: 'budget', value: { daily: n, currency: 'INR' } }),
+      applyLocalEdit({
+        section: 'delivery',
+        field: 'budget',
+        value: { daily, currency: 'INR' },
+      }),
     );
-    dispatch(
+    return dispatch(
       saveBriefEdits({
         briefId,
-        patch: { delivery: { budget: { daily: n, currency: 'INR' } } },
+        patch: { delivery: { budget: { daily, currency: 'INR' } } },
       }),
     );
   }, [dispatch, briefId, pendingBudget, savedBudget]);
@@ -401,12 +421,12 @@ export default function AdFactoryV2Page() {
     [dispatch, briefId],
   );
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     if (!briefId) return;
     // Write the budget first: it is the one field the user can still be typing
     // when they press Generate, and the payload is built server-side from the
     // stored brief.
-    persistBudget();
+    await persistBudget();
     // The ads are about to become the page, so the fields step aside. A clear
     // cause the user just triggered, rather than the panel closing on its own.
     setAdjustOpen(false);
@@ -438,19 +458,24 @@ export default function AdFactoryV2Page() {
     setSearchParams(next, { replace: true });
   }, [dispatch, searchParams, setSearchParams]);
 
-  const handleActivate = useCallback(() => {
+  const handleActivate = useCallback(async () => {
     if (!briefId || !isConnectionComplete(connection)) return;
-    dispatch(
+    const result = await dispatch(
       activateAutomation({
         briefId,
         connection: {
           facebookId: connection.facebookId,
           connectionId: connection.connectionId,
           adAccountId: connection.adAccountId,
+          adAccountName: connection.adAccountName,
           pageId: connection.pageId,
+          pageName: connection.pageName,
         },
       }),
     );
+    if (activateAutomation.fulfilled.match(result)) {
+      setScheduleOn(false);
+    }
   }, [dispatch, briefId, connection]);
 
   // Meta's enums are SHOUTY_SNAKE; render them as a human would read them.
@@ -603,6 +628,39 @@ export default function AdFactoryV2Page() {
     [dispatch, briefId, brief?.delivery?.frequency],
   );
 
+  const handleScheduleUpdate = useCallback(
+    async ({ cadence: change = {}, alertEmails: emails = [] }) => {
+      if (!briefId) return;
+
+      const { pairsPerCycle, ...scheduleBits } = change;
+      const patch = {};
+
+      if (Object.keys(scheduleBits).length) {
+        const { frequency: preset, ...rest } = scheduleBits;
+        const next = {
+          ...(brief?.delivery?.frequency || {}),
+          ...rest,
+          ...(preset ? { preset } : {}),
+        };
+        patch.delivery = { ...(patch.delivery || {}), frequency: next };
+        dispatch(applyLocalEdit({ section: 'delivery', field: 'frequency', value: next }));
+      }
+
+      if (pairsPerCycle != null) {
+        patch.delivery = { ...(patch.delivery || {}), pairsPerCycle };
+        dispatch(applyLocalEdit({ section: 'delivery', field: 'pairsPerCycle', value: pairsPerCycle }));
+      }
+
+      patch.alertEmails = emails;
+      dispatch(applyLocalEdit({ field: 'alertEmails', value: emails }));
+      const result = await dispatch(saveBriefEdits({ briefId, patch }));
+      if (saveBriefEdits.fulfilled.match(result)) {
+        dispatch(fetchTimeline(briefId));
+      }
+    },
+    [dispatch, briefId, brief?.delivery?.frequency],
+  );
+
   // Read straight off the brief, with the same defaults the schema uses, so the
   // controls show what will actually run rather than a local guess.
   const cadence = useMemo(
@@ -651,7 +709,10 @@ export default function AdFactoryV2Page() {
     }
   }, [brief]);
 
-  const canGenerate = Number(budget) > 0;
+  const budgetNumber = Number(budget);
+  const budgetTooLow =
+    Number.isFinite(budgetNumber) && budgetNumber > 0 && budgetNumber < MIN_DAILY_BUDGET_INR;
+  const canGenerate = Number.isFinite(budgetNumber) && budgetNumber >= MIN_DAILY_BUDGET_INR;
 
   // ── Render ────────────────────────────────────────────────────────────────
   // No header here: the page title comes from TopHeader and the mode switch is
@@ -840,7 +901,7 @@ export default function AdFactoryV2Page() {
                   <span className={FAINT}>₹</span>
                   <input
                     type="number"
-                    min="1"
+                    min={MIN_DAILY_BUDGET_INR}
                     inputMode="numeric"
                     value={budget ?? ''}
                     onChange={(e) => dispatch(setPendingBudget(e.target.value))}
@@ -850,6 +911,11 @@ export default function AdFactoryV2Page() {
                   />
                   <span className={`shrink-0 ${FAINT}`}>/day</span>
                 </div>
+                {budgetTooLow && (
+                  <span className="text-[11px] font-medium text-[#F59E0B]">
+                    Minimum ₹{MIN_DAILY_BUDGET_INR}/day
+                  </span>
+                )}
               </div>
 
               {/* What this click costs, BEFORE it is clicked.
@@ -1023,6 +1089,35 @@ export default function AdFactoryV2Page() {
               a live brief could only be paused: the setup card renders before
               activation only, so there was no way to change the time, the
               frequency, or to stop. */}
+          {scheduleOn && (
+            <div ref={scheduleRef}>
+              <KeepTheseComing
+                enabled={scheduleOn}
+                onToggle={setScheduleOn}
+                frequency={cadence.frequency}
+                custom={cadence.custom}
+                startDate={cadence.startDate}
+                endDate={cadence.endDate}
+                alertEmails={brief.alertEmails}
+                onAlertEmailsChange={handleAlertEmailsChange}
+                onCadenceChange={handleCadenceChange}
+                onActivate={handleActivate}
+                activating={activating}
+                isMetaConnected={isConnectionComplete(connection)}
+                connection={connection}
+                onConnectionChange={setConnection}
+                pairsPerCycle={cadence.pairsPerCycle}
+                budget={budget}
+                hour={cadence.hour}
+                timezone={cadence.timezone}
+                objectiveLabel={objectiveLabel}
+                creditsPerCycle={estimate?.total ?? null}
+                firstRunLabel={nextRunLabel}
+                activationError={activationError}
+                busy={pausing}
+              />
+            </div>
+          )}
           <SchedulePanel
             status={timeline?.summary?.status}
             frequency={cadence.frequency}
@@ -1036,9 +1131,12 @@ export default function AdFactoryV2Page() {
             onAlertEmailsChange={handleAlertEmailsChange}
             nextRunAt={timeline?.summary?.nextRunAt}
             onCadenceChange={handleCadenceChange}
+            onScheduleUpdate={handleScheduleUpdate}
             onPause={() => handlePause(true)}
             onResume={() => handlePause(false)}
             onStop={handleStop}
+            onRestartSetup={handleWantSchedule}
+            restartSetupOpen={scheduleOn}
             onRunNow={handleRunNow}
             runningNow={runningNow}
             runNowQueued={runNowQueued}

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { AlertCircle, Info, Loader2, Pause, Play, Square } from 'lucide-react';
+import React from 'react';
+import { Pause, Play } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Switch } from '@/components/Autopilot/_atoms';
 
@@ -9,12 +9,7 @@ import AlertEmails from './AlertEmails';
 import LaunchConnection from './LaunchConnection';
 import { Section, SectionRule } from './briefFields';
 import { useMotionPresets } from './_motion';
-import { CONTROL, FAINT, MUTED, NUM, RULE_BORDER } from './_tokens';
-
-// ----------------------------------------------------------------------------
-// KeepTheseComing — the subscription, and the moment the product's promise
-// actually lands.
-// ----------------------------------------------------------------------------
+import { MUTED, NUM, RULE_BORDER } from './_tokens';
 
 export default function KeepTheseComing({
   enabled,
@@ -32,33 +27,21 @@ export default function KeepTheseComing({
   connection,
   onConnectionChange,
   pairsPerCycle = 3,
-  budget,
-  currencySymbol = '₹',
   hour = 9,
   timezone,
   creditsPerCycle,
   firstRunLabel,
-  objectiveLabel,
   activationError = null,
   status = null,
   onPause,
   onResume,
-  onStop,
   busy = false,
 }) {
   const M = useMotionPresets();
-  const [confirmingStop, setConfirmingStop] = useState(false);
 
   const isLive = status === 'active' || status === 'live';
   const isPaused = status === 'paused';
   const isRunning = isLive || isPaused;
-
-  const campaignHint = [
-    objectiveLabel,
-    budget ? `${currencySymbol}${Number(budget).toLocaleString('en-IN')}/day` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
 
   return (
     <Panel>
@@ -66,10 +49,10 @@ export default function KeepTheseComing({
         title="Keep these coming"
         subtitle={
           isPaused
-            ? 'Paused — schedule is stopped'
+            ? 'Paused - schedule is stopped'
             : isLive
-              ? 'Active — new ads delivered on schedule. Pause or stop any time.'
-              : 'New ads from this brief, on a schedule. Pause or stop any time.'
+              ? 'Active - new ads delivered on schedule. Pause any time.'
+              : 'New ads from this brief, on a schedule. Pause any time.'
         }
         right={
           <div className="flex items-center gap-2">
@@ -85,12 +68,6 @@ export default function KeepTheseComing({
                 <span>Resume</span>
               </GhostBtn>
             )}
-            {isRunning && onStop && (
-              <GhostBtn onClick={() => setConfirmingStop(true)} disabled={busy || activating}>
-                <Square className="h-3.5 w-3.5" />
-                <span>Stop</span>
-              </GhostBtn>
-            )}
             <Switch
               checked={enabled}
               onChange={(next) => onToggle?.(next)}
@@ -100,7 +77,6 @@ export default function KeepTheseComing({
         }
       />
 
-      {/* Flipping the switch reveals the whole commitment */}
       <AnimatePresence initial={false}>
         {enabled && (
           <motion.div key="body" {...M.expand}>
@@ -163,7 +139,7 @@ export default function KeepTheseComing({
                         {creditsPerCycle}
                       </b>{' '}
                       credits per cycle
-                      {firstRunLabel ? ' · ' : ''}
+                      {firstRunLabel ? ' - ' : ''}
                     </>
                   )}
                   {firstRunLabel && (
@@ -177,40 +153,18 @@ export default function KeepTheseComing({
                   {creditsPerCycle == null && !firstRunLabel && 'Nothing spends until you start.'}
                 </p>
 
-                <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   {isLive && (
-                    <>
-                      <GhostBtn onClick={onPause} disabled={busy || activating}>
-                        <Pause className="h-3.5 w-3.5" />
-                        <span>Pause schedule</span>
-                      </GhostBtn>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmingStop(true)}
-                        disabled={busy || activating}
-                        className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/8 px-3.5 text-13 font-medium text-red-600 transition-colors hover:bg-red-500/15 disabled:opacity-50 dark:text-red-400"
-                      >
-                        <Square className="h-3.5 w-3.5" />
-                        <span>Stop automation</span>
-                      </button>
-                    </>
+                    <GhostBtn onClick={onPause} disabled={busy || activating}>
+                      <Pause className="h-3.5 w-3.5" />
+                      <span>Pause schedule</span>
+                    </GhostBtn>
                   )}
 
                   {isPaused && (
-                    <>
-                      <PrimaryBtn onClick={onResume} busy={busy}>
-                        Resume deliveries
-                      </PrimaryBtn>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmingStop(true)}
-                        disabled={busy || activating}
-                        className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/8 px-3.5 text-13 font-medium text-red-600 transition-colors hover:bg-red-500/15 disabled:opacity-50 dark:text-red-400"
-                      >
-                        <Square className="h-3.5 w-3.5" />
-                        <span>Stop automation</span>
-                      </button>
-                    </>
+                    <PrimaryBtn onClick={onResume} busy={busy}>
+                      Resume deliveries
+                    </PrimaryBtn>
                   )}
 
                   {!isRunning && (
@@ -220,34 +174,6 @@ export default function KeepTheseComing({
                   )}
                 </div>
               </div>
-
-              {confirmingStop && (
-                <div className={`mt-4 border-t pt-4 ${RULE_BORDER}`}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className={`max-w-150 ${MUTED}`}>
-                      Stop deliveries for good? Ads already live stay live, and your run history is kept —
-                      but restarting means setting the schedule up again.
-                    </p>
-                    <span className="flex shrink-0 items-center gap-2">
-                      <GhostBtn onClick={() => setConfirmingStop(false)} disabled={busy}>
-                        <span>Keep running</span>
-                      </GhostBtn>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          setConfirmingStop(false);
-                          onStop?.();
-                        }}
-                        className="inline-flex h-8.5 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/8 px-3.5 text-13 font-medium text-white bg-red-600 transition-colors hover:bg-red-700 disabled:opacity-50"
-                      >
-                        {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                        Stop deliveries
-                      </button>
-                    </span>
-                  </div>
-                </div>
-              )}
             </PanelFooter>
           </motion.div>
         )}

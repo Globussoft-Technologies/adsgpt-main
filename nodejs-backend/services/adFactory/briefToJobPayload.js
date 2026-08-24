@@ -178,6 +178,7 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
 
   const objective = offer.primaryObjective;
   const conversionLocation = offer.conversionLocation;
+  const advertiserName = String(connection.pageName || b.brand?.name || "").trim();
   if (!objective || !conversionLocation) {
     throw new BriefJobPayloadError(
       "This brief has no advertising objective resolved yet",
@@ -237,6 +238,7 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
           // boundary. Never pre-multiply here.
           budget: daily,
           ...(connection.pageId ? { pageId: String(connection.pageId) } : {}),
+          ...(advertiserName ? { dsaBeneficiary: advertiserName, dsaPayor: advertiserName } : {}),
           ...(connection.instagramUserId
             ? { instagramUserId: String(connection.instagramUserId) }
             : {}),

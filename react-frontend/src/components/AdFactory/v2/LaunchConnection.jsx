@@ -175,6 +175,7 @@ export default function LaunchConnection({ value, onChange, disabled = false }) 
           onChange={handleAccount}
           disabled={disabled}
           dropdownAnchor="left"
+          className="self-start"
         />
       </div>
 

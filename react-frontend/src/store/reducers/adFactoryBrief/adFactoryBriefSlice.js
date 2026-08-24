@@ -74,6 +74,12 @@ const persistMode = (mode) => {
 const message = (err, fallback) =>
   err?.response?.data?.error || err?.message || fallback;
 
+const patchBriefListStatus = (briefs, briefId, status) => {
+  if (!Array.isArray(briefs) || !briefId || !status) return;
+  const match = briefs.find((brief) => brief?._id === briefId);
+  if (match) match.status = status;
+};
+
 // ─── Thunks ──────────────────────────────────────────────────────────────────
 
 export const startBriefFromUrl = createAsyncThunk(
@@ -564,6 +570,7 @@ const adFactoryBriefSlice = createSlice({
         if (state.brief) {
           state.brief.status = BRIEF_STATUS.LIVE;
           state.brief.jobId = payload?.data?._id || state.brief.jobId;
+          patchBriefListStatus(state.briefs, state.brief._id, BRIEF_STATUS.LIVE);
         }
       })
       .addCase(activateAutomation.rejected, (state, { payload }) => {
@@ -579,7 +586,10 @@ const adFactoryBriefSlice = createSlice({
       .addCase(setAutomationPaused.fulfilled, (state, { payload, meta }) => {
         state.pausing = false;
         const status = payload?.data?.status;
-        if (state.brief) state.brief.status = meta.arg.paused ? 'paused' : 'live';
+        if (state.brief) {
+          state.brief.status = meta.arg.paused ? BRIEF_STATUS.PAUSED : BRIEF_STATUS.LIVE;
+          patchBriefListStatus(state.briefs, state.brief._id, state.brief.status);
+        }
         if (state.timeline?.summary && status) state.timeline.summary.status = status;
       })
       .addCase(setAutomationPaused.rejected, (state, { payload }) => {
@@ -596,7 +606,10 @@ const adFactoryBriefSlice = createSlice({
       })
       .addCase(stopAutomation.fulfilled, (state) => {
         state.pausing = false;
-        if (state.brief) state.brief.status = BRIEF_STATUS.ENDED;
+        if (state.brief) {
+          state.brief.status = BRIEF_STATUS.ENDED;
+          patchBriefListStatus(state.briefs, state.brief._id, BRIEF_STATUS.ENDED);
+        }
         // The job is archived, not deleted — `selectStep` keeps `ended` on the
         // deliveries screen so the record of what already ran stays reachable.
         if (state.timeline?.summary) {

@@ -1,6 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import { Check, ChevronDown, Globe, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, CalendarDays, ChevronDown, Globe, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Calendar } from 'react-date-range';
+import { format } from 'date-fns';
+import 'react-date-range/dist/styles.css';
+import 'react-date-range/dist/theme/default.css';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -181,12 +185,11 @@ export default function CadencePills({
         </Pill>
 
         <Pill label="Starting">
-          <input
-            type="date"
+          <DatePillField
             value={startDate ? String(startDate).slice(0, 10) : ''}
             disabled={disabled}
-            onChange={(e) => set({ startDate: e.target.value || null })}
-            className={`bg-transparent outline-none disabled:opacity-60 dark:scheme-dark ${VALUE}`}
+            onChange={(value) => set({ startDate: value || null })}
+            placeholder="today"
           />
           {startDate && (
             <button
@@ -199,19 +202,18 @@ export default function CadencePills({
               <X className="h-3 w-3" />
             </button>
           )}
-          {!startDate && <span className={FAINT}>today</span>}
         </Pill>
 
         {/* Optional, and it says so. An end date is the difference between a
             campaign and a standing order, and without one there was no way to
             express "run this for a month". */}
         <Pill label="Until">
-          <input
-            type="date"
+          <DatePillField
             value={endDate ? String(endDate).slice(0, 10) : ''}
             disabled={disabled}
-            onChange={(e) => set({ endDate: e.target.value || null })}
-            className={`bg-transparent outline-none disabled:opacity-60 dark:scheme-dark ${VALUE}`}
+            onChange={(value) => set({ endDate: value || null })}
+            min={startDate ? String(startDate).slice(0, 10) : undefined}
+            placeholder="no end"
           />
           {endDate && (
             <button
@@ -224,7 +226,6 @@ export default function CadencePills({
               <X className="h-3 w-3" />
             </button>
           )}
-          {!endDate && <span className={FAINT}>no end</span>}
         </Pill>
       </div>
 
@@ -309,6 +310,101 @@ export default function CadencePills({
       </AnimatePresence>
     </div>
   );
+}
+
+function DatePillField({ value, onChange, min, disabled, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const dateObj = parseInputDate(value);
+  const minDate = parseInputDate(min);
+  const display = dateObj ? format(dateObj, 'd MMM yyyy') : placeholder;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handler = (event) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handler = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open]);
+
+  return (
+    <span ref={wrapRef} className="relative inline-flex items-center">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+        className={`inline-flex items-center gap-1.5 bg-transparent outline-none disabled:opacity-60 ${
+          dateObj ? VALUE : FAINT
+        }`}
+      >
+        <span>{display}</span>
+        <CalendarDays className="h-3.5 w-3.5 text-[#9CA3AF] dark:text-[#8B939E]" />
+      </button>
+
+      {open && (
+        <span className="adsgpt-cal-pop absolute top-full left-0 z-10000 mt-2 overflow-hidden rounded-lg border border-black/10 bg-[#eef1f3] shadow-xl dark:border-white/10 dark:bg-[#1a1a1a] dark:shadow-2xl">
+          <style>{`
+            .adsgpt-cal-pop .rdrCalendarWrapper { background: #1a1a1a; color: #fff; font-size: 11px; }
+            .adsgpt-cal-pop .rdrDateDisplayWrapper { display: none; }
+            .adsgpt-cal-pop .rdrMonthAndYearWrapper { background: #1a1a1a; height: 44px; padding-top: 6px; }
+            .adsgpt-cal-pop .rdrMonthAndYearPickers select { color: #fff; background: #0D0D0D; border-radius: 6px; padding: 2px 6px; }
+            .adsgpt-cal-pop .rdrNextPrevButton { background: #2a2a2a; }
+            .adsgpt-cal-pop .rdrNextPrevButton:hover { background: #3a3a3a; }
+            .adsgpt-cal-pop .rdrPprevButton i { border-color: transparent #fff transparent transparent; }
+            .adsgpt-cal-pop .rdrNextButton i { border-color: transparent transparent transparent #fff; }
+            .adsgpt-cal-pop .rdrMonth { padding: 0 0.6em 0.6em; }
+            .adsgpt-cal-pop .rdrWeekDay { color: #AFAFAF; font-size: 11px; }
+            .adsgpt-cal-pop .rdrDayNumber span { color: #E3E3E3; font-size: 12px; }
+            .adsgpt-cal-pop .rdrDayPassive .rdrDayNumber span { color: #555; }
+            .adsgpt-cal-pop .rdrDayDisabled { background: transparent; }
+            .adsgpt-cal-pop .rdrDayDisabled .rdrDayNumber span { color: #444; }
+            .adsgpt-cal-pop .rdrDayToday .rdrDayNumber span::after { background: #15DCFF; }
+            .adsgpt-cal-pop .rdrDayHovered .rdrDayNumber span { color: #fff; }
+            .adsgpt-cal-pop .rdrSelected,
+            .adsgpt-cal-pop .rdrDayStartPreview,
+            .adsgpt-cal-pop .rdrDayEndPreview { color: #15DCFF !important; }
+          `}</style>
+          <Calendar
+            date={dateObj || minDate || new Date()}
+            onChange={(date) => {
+              onChange?.(toInputDate(date));
+              setOpen(false);
+            }}
+            minDate={minDate || undefined}
+            color="#15DCFF"
+          />
+        </span>
+      )}
+    </span>
+  );
+}
+
+function parseInputDate(value) {
+  if (!value || typeof value !== 'string') return null;
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function toInputDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function Pill({ label, children }) {
