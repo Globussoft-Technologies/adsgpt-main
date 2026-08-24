@@ -74,6 +74,8 @@ const synthesizeMetaTemplateSchema = Joi.object({
   leadFormId: Joi.string().trim().allow("").optional(),
   applicationId: Joi.string().trim().allow("").optional(),
   objectStoreUrl: Joi.string().trim().allow("").optional(),
+  dsaBeneficiary: Joi.string().trim().allow("").optional(),
+  dsaPayor: Joi.string().trim().allow("").optional(),
   optimizationGoal: Joi.string().trim().optional(),
   billingEvent: Joi.string().trim().optional(),
   targeting: Joi.object().optional(),
