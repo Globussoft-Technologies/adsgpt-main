@@ -504,6 +504,10 @@ group("parseAdAccountIdFilter", () => {
 // so we can exercise the controller's ownership filter without a live DB.
 const stubs = {
   docs: [], // [{ _id, userId, ...rule }]
+  // Plan gate. null = uncapped plan, no attachment restriction — what these
+  // tests assume. Set a number to exercise the capped path.
+  campaignLimit: null,
+  managedCampaignIds: [],
 };
 
 const originalLoad = Module._load;
@@ -574,6 +578,15 @@ Module._load = function patched(request, parent, isMain) {
         if (ids.length === 0) return undefined;
         return ids.length === 1 ? ids[0] : { $in: ids };
       },
+    };
+  }
+  if (request.endsWith("services/managedCampaigns")) {
+    // Unstubbed, `getCampaignLimit` reaches a real `UserProfile.findOne` —
+    // with no Mongo connection under test that buffers for mongoose's default
+    // bufferTimeoutMS (10s) before rejecting, costing this file 10s silently.
+    return {
+      getCampaignLimit: async (_userId) => stubs.campaignLimit,
+      listManagedCampaignIds: async (_userId) => stubs.managedCampaignIds,
     };
   }
   if (request.endsWith("utils/logger")) {

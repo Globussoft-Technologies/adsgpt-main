@@ -80,6 +80,12 @@ const stubs = {
   budgetWriteFailNext: null,
   budgetWrites: [],      // { level, entityId, payload }
   scaleHistory: [],      // prior scale_budget rows for the 7d ratio lookup
+  // ── plan-gate stubs ──
+  // null = uncapped plan, every attachment allowed (the default the rest of
+  // these tests assume). Set a number to exercise the capped path.
+  campaignLimit: null,
+  managedCampaignIds: [],   // slots held, only consulted when campaignLimit !== null
+  managedCampaignCalls: [], // userIds the gate resolved, in order
 };
 
 function resetStubs() {
@@ -107,6 +113,9 @@ function resetStubs() {
   stubs.budgetWriteFailNext = null;
   stubs.budgetWrites = [];
   stubs.scaleHistory = [];
+  stubs.campaignLimit = null;
+  stubs.managedCampaignIds = [];
+  stubs.managedCampaignCalls = [];
   delete process.env.AUTOPILOT_MAX_SCALE_ACTIONS_PER_RUN;
   delete process.env.AUTOPILOT_MAX_RESUME_ACTIONS_PER_RUN;
   // Default to live-actions ON so tests don't accidentally hit the
@@ -321,6 +330,20 @@ Module._load = function patched(request, parent, isMain) {
         stubs.alertCalls.push(summary);
         return { slacks: [], emails: [] };
       },
+    };
+  }
+  if (request.endsWith("services/managedCampaigns") || request.endsWith("../managedCampaigns")) {
+    // The orchestrator's plan gate. Unstubbed, `getCampaignLimit` reaches a
+    // real `UserProfile.findOne` — with no Mongo connection under test that
+    // buffers for mongoose's default bufferTimeoutMS (10s) before rejecting,
+    // and the gate's fail-open catch swallows it. Every full-cycle test paid
+    // that 10s silently.
+    return {
+      getCampaignLimit: async (userId) => {
+        stubs.managedCampaignCalls.push(userId);
+        return stubs.campaignLimit;
+      },
+      listManagedCampaignIds: async (_userId) => stubs.managedCampaignIds,
     };
   }
   if (request.endsWith("config/autopilotConfig")) {
