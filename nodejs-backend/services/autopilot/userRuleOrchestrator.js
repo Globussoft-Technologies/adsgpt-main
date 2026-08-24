@@ -98,6 +98,11 @@ function getLogger() {
 const LOCK_KEY = "autopilot:lock";
 const LOCK_TTL_SECONDS = 55 * 60; // matches v3, prevents double-fire
 
+// Terminal state for the resume retrial loop: the entity ran out of trials
+// and Autopilot has stopped retrying it. Written once per pause — see
+// resumeAtAccount. The UI keys off this string to surface the entity.
+const RETIRED_SKIP_REASON = "retired-out-of-retries";
+
 async function acquireLock(runId) {
   const r = await redisClient.set(LOCK_KEY, runId, "EX", LOCK_TTL_SECONDS, "NX");
   return r === "OK";
@@ -482,21 +487,34 @@ async function evaluateRuleAtAccount({
 // is never touched, and neither is one a human has edited since — see the
 // manual-intervention guard below.
 //
-// Predicate: re-evaluate the SAME rule that caused the pause against the
-// CURRENT insights window, and resume when it no longer matches.
+// RESUME IS A RETRIAL, NOT RECOVERY DETECTION. Read this before changing it.
 //
-// Known consequence of that predicate: a paused entity stops accruing
-// metrics, so a rolling-window rule like `spend > X` eventually stops
-// matching *because the entity is off*, not because it recovered — which can
-// resume, underperform, re-pause. The flap cooldown is the guard that bounds
-// this (default 3 transitions inside 7 days, then the entity is left alone),
-// which is why it is not optional here. Tune with
-// AUTOPILOT_FLAP_COOLDOWN_STRIKES / AUTOPILOT_FLAP_COOLDOWN_DAYS.
+// You cannot detect that a paused entity recovered. Pausing removes the very
+// delivery that would produce the metrics a rule reads, so every candidate
+// predicate reduces to the same thing: the pause-time evidence rolled out of
+// the window. `spend > X` stops matching because the entity is OFF, not
+// because it improved.
+//
+// So this is modelled honestly as a trial, and each part has a job:
+//
+//   - The trigger is `evaluateRule` no longer matching. That is a real check
+//     while pause-time evidence is still inside the window — it stops us
+//     resuming something that is visibly still bad. Once the evidence ages
+//     out it degrades into a timer, which is exactly what a retrial is.
+//   - One TRIAL CYCLE is the rule's own lookback: that is how long the
+//     pause-time evidence takes to cycle out.
+//   - The STRIKE WINDOW must therefore span at least two trial cycles, or
+//     `countFlaps` sees at most one transition and the brake is decorative.
+//     Hence flapDays scales off the lookback; the env var is only a floor.
+//   - After `flapStrikes` trials the entity is RETIRED: it stays paused, and
+//     we write that down ONCE so it stops being invisible. Without that row
+//     a permanently-paused entity silently disappears from the log.
 //
 // Runs per lookback group so each rule is re-evaluated against the same
 // window it was paused on.
 async function resumeAtAccount({
   rules,
+  effectiveLookback,
   acctKey,
   acctName,
   entities,
@@ -512,9 +530,17 @@ async function resumeAtAccount({
     1,
     parseInt(process.env.AUTOPILOT_FLAP_COOLDOWN_STRIKES || "3", 10) || 3,
   );
+  // The env value is a FLOOR, not the window — see the note above. The window
+  // has to cover two trial cycles, and a cycle is this group's lookback. The
+  // 'maximum' preset has no rolling window (lifetime evidence never ages
+  // out), so there is nothing to scale against and the floor stands.
+  const trialCycleDays = Number.isFinite(Number(effectiveLookback))
+    ? Number(effectiveLookback)
+    : 0;
   const flapDays = Math.max(
     1,
     parseInt(process.env.AUTOPILOT_FLAP_COOLDOWN_DAYS || "7", 10) || 7,
+    trialCycleDays * 2,
   );
   const lookbackDays = Math.max(
     1,
@@ -633,6 +659,54 @@ async function resumeAtAccount({
     }
     if (flaps >= flapStrikes) {
       resumeCounters.skipped += 1;
+      // Out of trials — the entity is retired: it stays paused until a human
+      // decides otherwise. Record that ONCE per pause so the UI can surface
+      // "Autopilot stopped retrying this" instead of the entity silently
+      // vanishing from the log. Re-writing it hourly would be the same noise
+      // the other silent skips exist to avoid.
+      let alreadyRecorded = false;
+      try {
+        alreadyRecorded = !!(await AutopilotActionLog.exists({
+          adAccountId: acctKey,
+          entityId,
+          ruleId: String(rule._id),
+          action: "resume",
+          skipReason: RETIRED_SKIP_REASON,
+          runAt: { $gte: row.lastPausedAt },
+        }));
+      } catch (err) {
+        // Can't prove we haven't already written it — stay silent rather
+        // than risk an hourly duplicate.
+        logger.warn(
+          `[autopilot v4] resume: retire-check failed ${level}=${entityId}: ${err.message}`,
+        );
+        continue;
+      }
+      if (!alreadyRecorded) {
+        await writeResumeLogRow({
+          runId,
+          userId,
+          acctKey,
+          acctName,
+          rule,
+          entity,
+          level,
+          entityId,
+          entityName: row.entityName,
+          outcome: "skipped",
+          skipReason: RETIRED_SKIP_REASON,
+          actionPayload: {
+            priorPausedAt: row.lastPausedAt,
+            flapsInWindow: flaps,
+            strikeLimit: flapStrikes,
+            windowDays: flapDays,
+            detail:
+              `Paused and retried ${flaps} times in ${flapDays} days — ` +
+              `Autopilot has stopped retrying and will leave this paused.`,
+          },
+          dryRun: finalDryRun,
+        });
+      }
       continue;
     }
 
@@ -1125,6 +1199,7 @@ async function runUserRuleCycle({
             if (!userSettings || userSettings.autoResumeEnabled !== false) {
               await resumeAtAccount({
                 rules: rulesAtLookback,
+                effectiveLookback,
                 acctKey,
                 acctName: audit.account_name,
                 entities: audit.entities,
@@ -1192,5 +1267,6 @@ module.exports = {
     resolveEffectiveLookback,
     LOCK_KEY,
     LOCK_TTL_SECONDS,
+    RETIRED_SKIP_REASON,
   },
 };

@@ -73,6 +73,7 @@ const stubs = {
   entityMetaById: {}, // entityId → { updated_time, status, effective_status }
   metaReadFailNext: null,
   resumeFailNext: null,
+  retiredRowExists: false, // stands in for the retirement-row idempotency check
 };
 
 function resetStubs() {
@@ -94,12 +95,36 @@ function resetStubs() {
   stubs.entityMetaById = {};
   stubs.metaReadFailNext = null;
   stubs.resumeFailNext = null;
+  stubs.retiredRowExists = false;
   // Default to live-actions ON so tests don't accidentally hit the
   // dry-run gate. Tests that need it off override per-case.
   process.env.AUTOPILOT_LIVE_ACTIONS_ALLOWED = "true";
   delete process.env.AUTOPILOT_FLAP_COOLDOWN_STRIKES;
   delete process.env.AUTOPILOT_FLAP_COOLDOWN_DAYS;
 }
+
+// Hoisted so individual tests can wrap a method — e.g. to capture the date
+// window the flap query asks for — and restore it afterwards.
+const AutopilotActionLogStub = {
+  create: async (doc) => {
+    stubs.actionLogWrites.push(doc);
+    return doc;
+  },
+  // Resume path: "which entities did these rules really pause?" The
+  // orchestrator's $match/$group is exercised for shape only — the fixture
+  // stands in for the grouped result.
+  aggregate: async (_pipeline) => stubs.pausedLogRows,
+  // Resume path: flap history. Chainable to mirror
+  // `.find(q, proj).sort().lean()`.
+  find: (_q, _proj) => ({
+    sort: () => ({
+      lean: async () => stubs.flapHistory,
+    }),
+  }),
+  // Resume path: "have we already written the retirement row for this
+  // pause?" — the idempotency check on the terminal state.
+  exists: async (_q) => stubs.retiredRowExists,
+};
 
 const originalLoad = Module._load;
 Module._load = function patched(request, parent, isMain) {
@@ -147,23 +172,7 @@ Module._load = function patched(request, parent, isMain) {
     };
   }
   if (request.endsWith("Module/autopilot/autopilotActionLog")) {
-    return {
-      create: async (doc) => {
-        stubs.actionLogWrites.push(doc);
-        return doc;
-      },
-      // Resume path: "which entities did these rules really pause?" The
-      // orchestrator's $match/$group is exercised for shape only — the
-      // fixture stands in for the grouped result.
-      aggregate: async (_pipeline) => stubs.pausedLogRows,
-      // Resume path: flap history. Chainable to mirror
-      // `.find(q, proj).sort().lean()`.
-      find: (_q, _proj) => ({
-        sort: () => ({
-          lean: async () => stubs.flapHistory,
-        }),
-      }),
-    };
+    return AutopilotActionLogStub;
   }
   if (request.endsWith("db/redis")) {
     return {
@@ -1504,7 +1513,7 @@ const { runUserRuleCycle } = orchestrator;
     );
 
     await testAsync(
-      "flap cooldown: 3 transitions in the window blocks the resume",
+      "out of trials: entity stays paused and is retired",
       async () => {
         await arrangeResume();
         // pause → resume → pause = 2 transitions … plus one more to hit 3.
@@ -1517,9 +1526,128 @@ const { runUserRuleCycle } = orchestrator;
 
         const result = await runUserRuleCycle({ dryRun: false });
 
-        assert.equal(resumeCalls().length, 0, "cooldown must hold it down");
-        assert.equal(resumeRows().length, 0);
+        assert.equal(resumeCalls().length, 0, "must stop retrying");
         assert.equal(result.accounts[0].resume.skipped, 1);
+        // The terminal state is recorded rather than silent — that is the
+        // whole point of retirement.
+        assert.equal(resumeRows().length, 1);
+        const row = resumeRows()[0];
+        assert.equal(row.outcome, "skipped");
+        assert.equal(row.skipReason, "retired-out-of-retries");
+        assert.equal(row.actionPayload.strikeLimit, 3);
+        assert.equal(row.actionPayload.flapsInWindow, 3);
+        assert.match(row.actionPayload.detail, /stopped retrying/i);
+      },
+    );
+
+    await testAsync(
+      "retirement is recorded once per pause, not every hour",
+      async () => {
+        await arrangeResume();
+        stubs.flapHistory = [
+          { action: "pause", runAt: new Date(Date.now() - 96 * 3600e3) },
+          { action: "resume", runAt: new Date(Date.now() - 72 * 3600e3) },
+          { action: "pause", runAt: new Date(Date.now() - 48 * 3600e3) },
+          { action: "resume", runAt: new Date(Date.now() - 24 * 3600e3) },
+        ];
+        stubs.retiredRowExists = true; // a prior tick already wrote it
+
+        const result = await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeRows().length, 0, "must not duplicate hourly");
+        assert.equal(result.accounts[0].resume.skipped, 1, "still counted");
+      },
+    );
+
+    await testAsync(
+      "retire-check failure stays silent rather than risk a duplicate",
+      async () => {
+        await arrangeResume();
+        stubs.flapHistory = [
+          { action: "pause", runAt: new Date(Date.now() - 96 * 3600e3) },
+          { action: "resume", runAt: new Date(Date.now() - 72 * 3600e3) },
+          { action: "pause", runAt: new Date(Date.now() - 48 * 3600e3) },
+          { action: "resume", runAt: new Date(Date.now() - 24 * 3600e3) },
+        ];
+        const realExists = AutopilotActionLogStub.exists;
+        AutopilotActionLogStub.exists = async () => {
+          throw new Error("mongo down");
+        };
+
+        const result = await runUserRuleCycle({ dryRun: false });
+        AutopilotActionLogStub.exists = realExists;
+
+        assert.equal(resumeCalls().length, 0);
+        assert.equal(resumeRows().length, 0);
+        assert.equal(result.accounts[0].ok, true, "cycle must survive");
+      },
+    );
+
+    await testAsync(
+      "trial cycle is the rule's lookback: strike window spans two of them",
+      async () => {
+        // A 14-day rule's evidence takes 14 days to age out, so its
+        // pause→resume pairs land ~14 days apart. Against a fixed 7-day
+        // window those transitions fall outside the query and the brake is
+        // decorative. Window must be lookback × 2 = 28 days.
+        let queriedSince = null;
+        await arrangeResume({ rule: resumeRule({ lookbackDays: 14 }) });
+        const realFind = AutopilotActionLogStub.find;
+        AutopilotActionLogStub.find = (q, proj) => {
+          queriedSince = q?.runAt?.$gte || null;
+          return realFind(q, proj);
+        };
+
+        await runUserRuleCycle({ dryRun: false });
+        AutopilotActionLogStub.find = realFind;
+
+        assert.ok(queriedSince, "flap history should have been queried");
+        const windowDays = Math.round(
+          (Date.now() - new Date(queriedSince).getTime()) / 86400000,
+        );
+        assert.equal(windowDays, 28, `expected 28d window, got ${windowDays}d`);
+      },
+    );
+
+    await testAsync(
+      "strikes spaced a full trial cycle apart now accumulate",
+      async () => {
+        await arrangeResume({ rule: resumeRule({ lookbackDays: 14 }) });
+        // Invisible to the old 7-day window; caught by the scaled one.
+        stubs.flapHistory = [
+          { action: "pause", runAt: new Date(Date.now() - 27 * 86400e3) },
+          { action: "resume", runAt: new Date(Date.now() - 20 * 86400e3) },
+          { action: "pause", runAt: new Date(Date.now() - 13 * 86400e3) },
+          { action: "resume", runAt: new Date(Date.now() - 6 * 86400e3) },
+        ];
+
+        const result = await runUserRuleCycle({ dryRun: false });
+
+        assert.equal(resumeCalls().length, 0, "brake must engage");
+        assert.equal(result.accounts[0].resume.skipped, 1);
+      },
+    );
+
+    await testAsync(
+      "env floor wins when it exceeds two trial cycles",
+      async () => {
+        await arrangeResume({ rule: resumeRule({ lookbackDays: 2 }) });
+        process.env.AUTOPILOT_FLAP_COOLDOWN_DAYS = "30";
+        let queriedSince = null;
+        const realFind = AutopilotActionLogStub.find;
+        AutopilotActionLogStub.find = (q, proj) => {
+          queriedSince = q?.runAt?.$gte || null;
+          return realFind(q, proj);
+        };
+
+        await runUserRuleCycle({ dryRun: false });
+        AutopilotActionLogStub.find = realFind;
+        delete process.env.AUTOPILOT_FLAP_COOLDOWN_DAYS;
+
+        const windowDays = Math.round(
+          (Date.now() - new Date(queriedSince).getTime()) / 86400000,
+        );
+        assert.equal(windowDays, 30, "env floor beats lookback*2=4");
       },
     );
 
