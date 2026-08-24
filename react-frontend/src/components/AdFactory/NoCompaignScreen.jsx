@@ -255,7 +255,7 @@ const NoCompaignScreen = () => {
             </div>
           </div>
         ) : (
-          <div className="h-full max-h-[calc(100svh-152px)] overflow-y-auto sm:max-h-[calc(100svh-196px)] 2xl:max-h-[calc(100svh-216px)]">
+          <div className="scrollbar-thin h-full max-h-[calc(100svh-152px)] overflow-y-auto pr-3 sm:max-h-[calc(100svh-196px)] sm:pr-4 2xl:max-h-[calc(100svh-216px)]">
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {campaignsList?.map((campaign) => (
                 <div

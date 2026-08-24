@@ -1446,6 +1446,11 @@ class TiktokAdController {
         incoming.optimization_event = eventMap[incoming.optimization_event];
       }
 
+      // TikTok requires billing_event = "CPC" when optimization_goal is "CLICK"
+      if (incoming.optimization_goal === "CLICK" && (!incoming.billing_event || incoming.billing_event === "CPM")) {
+        incoming.billing_event = "CPC";
+      }
+
       const payload = {
         advertiser_id: advertiserId,
         campaign_id: campaignId,

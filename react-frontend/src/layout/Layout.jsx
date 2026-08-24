@@ -97,7 +97,11 @@ const Layout = () => {
           <AppSidebar />
           <main className="relative flex h-svh w-full flex-col overflow-hidden">
             <TopHeader />
-            <div className="flex dark:bg-inherit bg-[#F7F4EE] min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0!">
+            <div
+              className={`flex dark:bg-inherit bg-[#F7F4EE] min-h-0 flex-1 flex-col ${
+                location.pathname === '/adfactory' ? 'overflow-hidden' : 'overflow-y-auto'
+              } p-4 pb-0!`}
+            >
               <Outlet />
             </div>
             {/* <TourGuide /> */}
@@ -112,12 +116,6 @@ const Layout = () => {
   }
 
   // ------------------ NEW LAYOUT ------------------
-  // const { baseImage, isEditorOpen, adIndex } = useSelector((state) => state.editor);
-  // const [baseImg, baseImgStatus] = useImage(
-  //   baseImage ? `${HOST}/adsgpt/img/preview?url=${S3_BASE_URL}${baseImage}` : null,
-  //   'Anonymous'
-  // );
-
   const usesAdsOperationsAmbient = [
     '/ads-manager',
     '/meta-ads',
@@ -149,7 +147,6 @@ const Layout = () => {
       )}
 
       <Toaster position="top-center" reverseOrder={false} />
-      {/* <AdBlockerModal /> */}
 
       <SidebarProvider className={lightAmbientClassName}>
         {!isEditorOpen && (
@@ -157,7 +154,11 @@ const Layout = () => {
             <AppSidebar />
             <main className="relative flex h-svh w-full flex-col overflow-hidden bg-transparent dark:bg-inherit">
               <TopHeader />
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-0! bg-transparent dark:bg-inherit">
+              <div
+                className={`flex min-h-0 flex-1 flex-col ${
+                  location.pathname === '/adfactory' ? 'overflow-hidden' : 'overflow-y-auto'
+                } p-4 pb-0! bg-transparent dark:bg-inherit`}
+              >
                 <Outlet />
               </div>
               {/* <TourGuide /> */}

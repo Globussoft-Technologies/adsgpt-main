@@ -212,9 +212,16 @@ function formatTiktokError(error) {
     formatted.status = 429;
     formatted.userMessage = "TikTok API rate limit exceeded. Please try again shortly.";
   } else {
-    // Any other non-zero code: surface TikTok's own message so the real cause
-    // (budget too low, account unaudited, missing field, etc.) is visible.
     formatted.userMessage = message || "TikTok API request failed.";
+  }
+
+  // Humanize common raw parameter errors from TikTok API
+  if (formatted.userMessage) {
+    if (formatted.userMessage.includes("special_industries") && formatted.userMessage.includes("POLITICS")) {
+      formatted.userMessage = "TikTok does not support 'Politics' under Special Industries. Only Housing, Employment, and Credit are supported.";
+    } else if (formatted.userMessage.includes("special_industries") && formatted.userMessage.includes("one or more value of the param is not acceptable")) {
+      formatted.userMessage = "Invalid Special Industries selection. TikTok only supports Housing, Employment, and Credit.";
+    }
   }
 
   return formatted;

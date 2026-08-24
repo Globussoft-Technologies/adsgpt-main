@@ -627,8 +627,25 @@ const SPECIAL_INDUSTRIES = [
   { value: 'HOUSING', label: 'Housing' },
   { value: 'EMPLOYMENT', label: 'Employment' },
   { value: 'CREDIT', label: 'Credit' },
-  { value: 'POLITICS', label: 'Politics' },
 ];
+
+const formatFriendlyError = (raw) => {
+  if (!raw || typeof raw !== 'string') return raw || 'Failed to create';
+  if (raw.includes('special_industries') && raw.includes('POLITICS')) {
+    return "TikTok does not support 'Politics' under Special Industries. Only Housing, Employment, and Credit are supported.";
+  }
+  if (raw.includes('special_industries') && raw.includes('one or more value of the param is not acceptable')) {
+    return 'Invalid Special Industries selection. TikTok only supports Housing, Employment, and Credit.';
+  }
+  if (raw.includes('one or more value of the param is not acceptable')) {
+    const field = raw.split(':')[0]?.replace(/\.\d+/, '')?.replace(/_/g, ' ');
+    const correctMatch = raw.match(/correct is \[(.*?)\]/);
+    if (field && correctMatch) {
+      return `Invalid ${field}. Supported values: ${correctMatch[1].replace(/'/g, '')}.`;
+    }
+  }
+  return raw;
+};
 
 const PLACEMENTS = [
   { value: 'PLACEMENT_TIKTOK', label: 'TikTok' },
@@ -685,7 +702,7 @@ const billingEventForGoal = (goal, bidType) => {
     case 'TRAFFIC':
     case 'LANDING_PAGE':
     default:
-      return bidType === 'BID_TYPE_CUSTOM' ? 'CPC' : 'CPM';
+      return 'CPC';
   }
 };
 
@@ -2072,14 +2089,14 @@ const CreateCampaignWizard = ({
       if (longer > MAX_IMAGE_LONG_SIDE || shorter > MAX_IMAGE_SHORT_SIDE) {
         setErrors((e) => ({
           ...e,
-          image: `Not supported by TikTok. The longer side must be ${MAX_IMAGE_LONG_SIDE} or less, and the shorter side must be ${MAX_IMAGE_SHORT_SIDE} or less.`,
+          image: `Image resolution (${dims.width}×${dims.height}px) exceeds TikTok limits. Max allowed is ${MAX_IMAGE_LONG_SIDE}px on the longest side and ${MAX_IMAGE_SHORT_SIDE}px on the shortest side. Recommended: 1080×1920 (9:16) or 1200×1200 (1:1).`,
         }));
         return;
       }
       if (shorter < MIN_IMAGE_SHORT_SIDE) {
         setErrors((e) => ({
           ...e,
-          image: `Image is too small. The shorter side must be at least ${MIN_IMAGE_SHORT_SIDE}px.`,
+          image: `Image resolution (${dims.width}×${dims.height}px) is too small. Minimum resolution is at least ${MIN_IMAGE_SHORT_SIDE}px.`,
         }));
         return;
       }
@@ -2104,14 +2121,14 @@ const CreateCampaignWizard = ({
         if (longer > MAX_IMAGE_LONG_SIDE || shorter > MAX_IMAGE_SHORT_SIDE) {
           setErrors((e) => ({
             ...e,
-            carousel: `Not supported by TikTok. The longer side must be ${MAX_IMAGE_LONG_SIDE} or less, and the shorter side must be ${MAX_IMAGE_SHORT_SIDE} or less.`,
+            carousel: `"${file.name}" (${dims.width}×${dims.height}px) exceeds TikTok limits. Max allowed is ${MAX_IMAGE_LONG_SIDE}px on longest side and ${MAX_IMAGE_SHORT_SIDE}px on shortest side. Recommended: 1080×1920 or 1200×1200.`,
           }));
           return;
         }
         if (shorter < MIN_IMAGE_SHORT_SIDE) {
           setErrors((e) => ({
             ...e,
-            carousel: `An image is too small. The shorter side must be at least ${MIN_IMAGE_SHORT_SIDE}px.`,
+            carousel: `"${file.name}" (${dims.width}×${dims.height}px) is too small. Minimum resolution is at least ${MIN_IMAGE_SHORT_SIDE}px.`,
           }));
           return;
         }
@@ -2652,7 +2669,8 @@ const CreateCampaignWizard = ({
       onCreated?.();
       onClose();
     } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Failed to save';
+      const rawMsg = err.response?.data?.error || err.message || 'Failed to save';
+      const msg = formatFriendlyError(rawMsg);
       setError(msg);
       toast.error(msg);
     } finally {
@@ -2932,7 +2950,8 @@ const CreateCampaignWizard = ({
       onCreated?.();
       onClose();
     } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Failed to create';
+      const rawMsg = err.response?.data?.error || err.message || 'Failed to create';
+      const msg = formatFriendlyError(rawMsg);
       setError(msg);
       toast.error(msg);
     } finally {
