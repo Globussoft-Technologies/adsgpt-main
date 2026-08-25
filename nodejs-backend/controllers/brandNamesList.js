@@ -507,19 +507,6 @@ const createBrands = async (req, res) => {
       success: true,
     });
 
-    // ── V2 Onboarding Sync: Blast socket event ONLY on the first brand creation
-    if (isFirstBrand) {
-      try {
-        if (global.io) {
-          global.io.to(userId).emit("user_onboarding_status", { 
-            isOnboarded: true, 
-            timestamp: new Date() 
-          });
-        }
-      } catch (socketErr) {
-        console.warn("[createBrands] Non-critical socket emit warning:", socketErr.message);
-      }
-    }
 
     res.status(201).json({
       message: 'Brand added successfully',

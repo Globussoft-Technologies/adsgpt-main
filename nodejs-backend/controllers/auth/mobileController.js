@@ -3348,8 +3348,7 @@ const ForgotPassword = async (req, res) => {
 //        isNewUser, isOnboarded } } }
 //  • isOnboarded is derived at runtime: user has ≥1 brand in BrandsList = true.
 //    No schema fields added to UserProfile.
-//  • API 1D: non-blocking socket "user_onboarding_status" event emitted
-//    after every successful auth, wrapped in try/catch.
+
 // ───────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -3367,26 +3366,6 @@ async function _v2IsOnboarded(userId) {
   }
 }
 
-/**
- * Emit "user_onboarding_status" to the authenticated user's socket room.
- * 100 % non-blocking — wrapped in try/catch, never throws.
- *
- * @param {string}  email       – user email (legacy FE room key)
- * @param {string}  userId      – MongoDB user_id, e.g. "GPT-12345"
- * @param {boolean} isOnboarded – whether onboarding is completed
- */
-function _v2EmitOnboardingStatus(email, userId, isOnboarded) {
-  try {
-    const io = global.io;
-    if (!io) return;
-    const payload = { email, isOnboarded: Boolean(isOnboarded), timestamp: new Date() };
-    // Emit to both room-key styles used across the codebase
-    if (email)  io.to(email).emit("user_onboarding_status", payload);
-    if (userId) io.to(userId).emit("user_onboarding_status", payload);
-  } catch (socketErr) {
-    console.warn("[v2Auth] Non-critical socket emit warning:", socketErr.message);
-  }
-}
 
 /**
  * Build the standard V2 success response envelope.
