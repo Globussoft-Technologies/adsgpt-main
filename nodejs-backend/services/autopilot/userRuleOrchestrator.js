@@ -209,17 +209,31 @@ function groupRulesByUserAndAccount(rules) {
  * The campaign/adset/ad row shape uses Meta-style snake_case
  * (`campaign_id`, `adset_id`) so we read accordingly.
  */
-function collectTargetsForRule(rule, entities, campaignId) {
+function collectTargetsForRule(rule, entities, campaignId, adsetId = null) {
   if (!entities) return [];
+  const sameCampaign = (x) => String(x.campaign_id) === String(campaignId);
+  // An attachment may narrow to ONE ad set inside the campaign. ABO campaigns
+  // are usually geo-split — IND / USA / Canada ad sets under one campaign,
+  // with completely different economics — so "every ad set in this campaign"
+  // is the wrong scope for a threshold that is only correct for one of them.
+  const sameAdset = (x) => String(x.adset_id) === String(adsetId);
+
   if (rule.evaluateOn === "campaign") {
-    const c = (entities.campaigns || []).find((x) => x.campaign_id === campaignId);
+    // Guarded at the validator: a campaign-level rule can't hold an ad-set
+    // attachment. Belt-and-braces here so a hand-written document can't make
+    // the cron score a whole campaign the author meant to scope down.
+    if (adsetId) return [];
+    const c = (entities.campaigns || []).find(sameCampaign);
     return c ? [c] : [];
   }
   if (rule.evaluateOn === "adset") {
-    return (entities.adsets || []).filter((s) => s.campaign_id === campaignId);
+    const pool = (entities.adsets || []).filter(sameCampaign);
+    return adsetId ? pool.filter(sameAdset) : pool;
   }
   if (rule.evaluateOn === "ad") {
-    return (entities.ads || []).filter((a) => a.campaign_id === campaignId);
+    const pool = (entities.ads || []).filter(sameCampaign);
+    // Ad-level rule under an ad-set attachment = only that ad set's ads.
+    return adsetId ? pool.filter(sameAdset) : pool;
   }
   return [];
 }
@@ -271,7 +285,7 @@ async function pauseEntity({ level, entityId }) {
 // Persist the orphan flag onto the matching attachment in the rule doc so
 // the UI can show "this campaign was deleted on Meta" without re-checking
 // every cycle.
-async function markAttachmentOrphan({ ruleId, adAccountId, campaignId }) {
+async function markAttachmentOrphan({ ruleId, adAccountId, campaignId, adsetId = null }) {
   try {
     await AutopilotUserRule.updateOne(
       { _id: ruleId, "attachments.campaignId": campaignId },
@@ -286,6 +300,12 @@ async function markAttachmentOrphan({ ruleId, adAccountId, campaignId }) {
           {
             "a.adAccountId": adAccountId,
             "a.campaignId": campaignId,
+            // Must be part of the filter, not just the query: two attachments
+            // can share a campaign and differ only by ad set (the whole point
+            // of ABO geo-splits). Without this, flagging the India ad set
+            // would flag the USA one too. Mongo matches `null` against a
+            // missing field, so campaign-level attachments still resolve.
+            "a.adsetId": adsetId,
           },
         ],
       },
@@ -301,7 +321,7 @@ async function markAttachmentOrphan({ ruleId, adAccountId, campaignId }) {
 // previously-flagged campaign reappears on Meta. Without this, a
 // paused-then-resumed campaign would stay flagged forever despite being
 // fine to evaluate.
-async function unmarkAttachmentOrphan({ ruleId, adAccountId, campaignId }) {
+async function unmarkAttachmentOrphan({ ruleId, adAccountId, campaignId, adsetId = null }) {
   try {
     await AutopilotUserRule.updateOne(
       { _id: ruleId, "attachments.campaignId": campaignId },
@@ -316,6 +336,12 @@ async function unmarkAttachmentOrphan({ ruleId, adAccountId, campaignId }) {
           {
             "a.adAccountId": adAccountId,
             "a.campaignId": campaignId,
+            // Must be part of the filter, not just the query: two attachments
+            // can share a campaign and differ only by ad set (the whole point
+            // of ABO geo-splits). Without this, flagging the India ad set
+            // would flag the USA one too. Mongo matches `null` against a
+            // missing field, so campaign-level attachments still resolve.
+            "a.adsetId": adsetId,
           },
         ],
       },
@@ -419,6 +445,13 @@ async function evaluateRuleAtAccount({
     (entities.allCampaignIds || (entities.campaigns || []).map((c) => c.campaign_id))
       .map((s) => String(s)),
   );
+  // Same idea one level down, for ad-set-scoped attachments. Falls back to the
+  // insight-bearing list only when the roster is missing, which would
+  // false-positive a silent ad set — so prefer allAdsetIds.
+  const allAdsetIds = new Set(
+    (entities.allAdsetIds || (entities.adsets || []).map((s) => s.adset_id))
+      .map((s) => String(s)),
+  );
   for (const att of myAttachments) {
     // Plan gate — skip campaigns outside the user's managed slots. Silent by
     // design: this is not an error or an orphan, the rule is simply dormant
@@ -427,14 +460,20 @@ async function evaluateRuleAtAccount({
     if (managedCampaignIds && !managedCampaignIds.has(String(att.campaignId))) {
       continue;
     }
-    // Orphan check — does this campaign still exist on Meta at all?
+    // Orphan check — does the attached thing still exist on Meta at all?
+    // An ad-set attachment dies if EITHER the ad set or its campaign is gone,
+    // so both are checked; without the ad-set half, deleting one ad set out of
+    // an ABO campaign would leave the rule looking healthy while silently
+    // matching nothing.
     const campaignAlive = allIds.has(String(att.campaignId));
-    if (!campaignAlive) {
+    const adsetAlive = !att.adsetId || allAdsetIds.has(String(att.adsetId));
+    if (!campaignAlive || !adsetAlive) {
       if (!att.orphan) {
         await markAttachmentOrphan({
           ruleId: rule._id,
           adAccountId: acctKey,
           campaignId: att.campaignId,
+          adsetId: att.adsetId || null,
         });
       }
       continue;
@@ -448,10 +487,16 @@ async function evaluateRuleAtAccount({
         ruleId: rule._id,
         adAccountId: acctKey,
         campaignId: att.campaignId,
+        adsetId: att.adsetId || null,
       });
     }
 
-    const targets = collectTargetsForRule(rule, entities, att.campaignId);
+    const targets = collectTargetsForRule(
+      rule,
+      entities,
+      att.campaignId,
+      att.adsetId || null,
+    );
     for (const target of targets) {
       if (!evaluateRule(rule, target)) continue;
 

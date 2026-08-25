@@ -2239,6 +2239,192 @@ const { runUserRuleCycle } = orchestrator;
     });
   });
 
+  // ── ad-set-level attachments ──────────────────────────────────────────
+  //
+  // ABO campaigns hold several ad sets under one campaign, usually split by
+  // geo. Those have different economics, so a rule must be able to target ONE
+  // of them: a CPI that's excellent in India is unreachable in the US.
+  const abo = () => ({
+    account_name: "Acct 42",
+    accountDailyBudget: 1000000,
+    entities: {
+      campaigns: [
+        { campaign_id: "camp_1", campaign_name: "ABO Camp", status: "ACTIVE", cpi: 50 },
+      ],
+      adsets: [
+        { adset_id: "as_ind", adset_name: "IND", campaign_id: "camp_1", status: "ACTIVE", cpi: 30, installs: 500 },
+        { adset_id: "as_usa", adset_name: "USA", campaign_id: "camp_1", status: "ACTIVE", cpi: 90, installs: 200 },
+        { adset_id: "as_can", adset_name: "CAN", campaign_id: "camp_1", status: "ACTIVE", cpi: 70, installs: 150 },
+      ],
+      ads: [
+        { ad_id: "ad_ind", ad_name: "IND ad", adset_id: "as_ind", adset_name: "IND", campaign_id: "camp_1", status: "ACTIVE", cpi: 30 },
+        { ad_id: "ad_usa", ad_name: "USA ad", adset_id: "as_usa", adset_name: "USA", campaign_id: "camp_1", status: "ACTIVE", cpi: 90 },
+      ],
+      allCampaignIds: ["camp_1"],
+      allAdsetIds: ["as_ind", "as_usa", "as_can"],
+    },
+  });
+
+  // "cpi < 100" matches all three ad sets; the attachment is what narrows it.
+  const aboRule = (over = {}) => ({
+    _id: "abo1",
+    userId: "u1",
+    enabled: true,
+    name: "Pause weak geo",
+    severity: "high",
+    evaluateOn: "adset",
+    conditions: { operator: "AND", rules: [{ field: "cpi", op: "<", value: 100 }] },
+    action: { type: "pause" },
+    attachments: [{ adAccountId: "act_42", campaignId: "camp_1", adsetId: "as_usa" }],
+    ...over,
+  });
+
+  async function arrangeAbo(rule) {
+    resetStubs();
+    stubs.rules = [rule || aboRule()];
+    stubs.fbUsers = [{ userId: "u1", accessToken: "tok" }];
+    stubs.auditByAccount.set("act_42", abo());
+  }
+
+  await group("runUserRuleCycle — ad-set-level attachments", async () => {
+    await testAsync("acts on ONLY the attached ad set", async () => {
+      await arrangeAbo();
+      await runUserRuleCycle({ dryRun: false });
+
+      assert.equal(stubs.pauseCalls.length, 1, "must not touch sibling ad sets");
+      assert.equal(stubs.pauseCalls[0].entityId, "as_usa");
+      assert.equal(stubs.actionLogWrites.length, 1);
+      assert.equal(stubs.actionLogWrites[0].entityId, "as_usa");
+    });
+
+    await testAsync("campaign attachment still hits every ad set", async () => {
+      await arrangeAbo(
+        aboRule({ attachments: [{ adAccountId: "act_42", campaignId: "camp_1" }] }),
+      );
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.pauseCalls.length, 3, "legacy behaviour must be intact");
+    });
+
+    await testAsync("two ad sets in one campaign can carry different rules", async () => {
+      resetStubs();
+      stubs.rules = [
+        aboRule({
+          _id: "r_ind",
+          name: "India: tight CPI",
+          conditions: { operator: "AND", rules: [{ field: "cpi", op: ">", value: 40 }] },
+          attachments: [{ adAccountId: "act_42", campaignId: "camp_1", adsetId: "as_ind" }],
+        }),
+        aboRule({
+          _id: "r_usa",
+          name: "USA: loose CPI",
+          conditions: { operator: "AND", rules: [{ field: "cpi", op: ">", value: 80 }] },
+          attachments: [{ adAccountId: "act_42", campaignId: "camp_1", adsetId: "as_usa" }],
+        }),
+      ];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok" }];
+      stubs.auditByAccount.set("act_42", abo());
+
+      await runUserRuleCycle({ dryRun: false });
+
+      // IND cpi 30 fails ">40"; USA cpi 90 passes ">80". Exactly the case a
+      // single campaign-wide threshold cannot express.
+      assert.equal(stubs.pauseCalls.length, 1);
+      assert.equal(stubs.pauseCalls[0].entityId, "as_usa");
+      assert.equal(stubs.actionLogWrites[0].ruleId, "r_usa");
+    });
+
+    await testAsync("ad-level rule under an ad-set attachment walks only that ad set's ads", async () => {
+      await arrangeAbo(
+        aboRule({
+          evaluateOn: "ad",
+          attachments: [{ adAccountId: "act_42", campaignId: "camp_1", adsetId: "as_usa" }],
+        }),
+      );
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.pauseCalls.length, 1);
+      assert.equal(stubs.pauseCalls[0].entityId, "ad_usa");
+    });
+
+    await testAsync("campaign-level rule with an ad-set attachment is inert", async () => {
+      // The validator rejects this shape; a hand-written document must still
+      // not cause the cron to score the whole campaign.
+      await arrangeAbo(
+        aboRule({
+          evaluateOn: "campaign",
+          conditions: { operator: "AND", rules: [{ field: "cpi", op: "<", value: 100 }] },
+          attachments: [{ adAccountId: "act_42", campaignId: "camp_1", adsetId: "as_usa" }],
+        }),
+      );
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.pauseCalls.length, 0);
+      assert.equal(stubs.actionLogWrites.length, 0);
+    });
+
+    await testAsync("deleted ad set marks the attachment orphan", async () => {
+      await arrangeAbo(
+        aboRule({
+          attachments: [
+            { adAccountId: "act_42", campaignId: "camp_1", adsetId: "as_gone" },
+          ],
+        }),
+      );
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.pauseCalls.length, 0);
+      assert.equal(stubs.ruleUpdateLog.length, 1, "should flag the orphan");
+      const filt = stubs.ruleUpdateLog[0].opts.arrayFilters[0];
+      assert.equal(filt["a.adsetId"], "as_gone", "filter must be ad-set scoped");
+    });
+
+    await testAsync("a live ad set is never flagged orphan", async () => {
+      await arrangeAbo();
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.ruleUpdateLog.length, 0);
+    });
+
+    await testAsync("ad set with no insights this window is not an orphan", async () => {
+      // Present in allAdsetIds but absent from `adsets` — a silent ad set,
+      // not a deleted one. Flagging it would be the same false positive the
+      // campaign-level roster check exists to prevent.
+      const f = abo();
+      f.entities.adsets = f.entities.adsets.filter((s) => s.adset_id !== "as_can");
+      resetStubs();
+      stubs.rules = [
+        aboRule({
+          attachments: [
+            { adAccountId: "act_42", campaignId: "camp_1", adsetId: "as_can" },
+          ],
+        }),
+      ];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok" }];
+      stubs.auditByAccount.set("act_42", f);
+
+      await runUserRuleCycle({ dryRun: false });
+      assert.equal(stubs.ruleUpdateLog.length, 0, "silent != deleted");
+      assert.equal(stubs.pauseCalls.length, 0, "nothing to evaluate either");
+    });
+
+    await testAsync("ABO ad-set scale targets that ad set's own budget", async () => {
+      await arrangeAbo(
+        aboRule({
+          action: { type: "scale", pct: 20 },
+          conditions: { operator: "AND", rules: [{ field: "cpi", op: "<", value: 40 }] },
+          attachments: [
+            { adAccountId: "act_42", campaignId: "camp_1", adsetId: "as_ind" },
+          ],
+        }),
+      );
+      stubs.budgetById = { as_ind: { daily_budget: "50000" } };
+
+      await runUserRuleCycle({ dryRun: false });
+
+      // ABO is exactly where ad-set scaling works: each ad set owns a budget,
+      // unlike CBO where it sits on the campaign.
+      assert.equal(stubs.budgetWrites.length, 1);
+      assert.equal(stubs.budgetWrites[0].entityId, "as_ind");
+      assert.equal(stubs.budgetWrites[0].payload.daily_budget, 60000);
+    });
+  });
+
   // restore + report
   Module._load = originalLoad;
   console.log(`\n${pass} passed, ${fail} failed`);

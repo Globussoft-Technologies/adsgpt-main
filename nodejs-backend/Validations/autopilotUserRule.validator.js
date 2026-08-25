@@ -207,11 +207,41 @@ const attachmentSchema = Joi.object({
         "adAccountId must be a Meta ad-account id (digits, optionally `act_`-prefixed)",
     }),
   campaignId: Joi.string().pattern(/^\d+$/).required(),
+  // Optional: narrow this attachment to a single ad set in that campaign.
+  // Absent means the whole campaign (original behaviour).
+  adsetId: Joi.string()
+    .pattern(/^\d+$/)
+    .allow(null)
+    .optional()
+    .messages({
+      "string.pattern.base": "adsetId must be a Meta ad-set id (digits only)",
+    }),
   // Orphan flag is set by the cron; the validator allows it to round-trip
   // on PATCH but ignores it on create.
   orphan: Joi.boolean().optional(),
   orphanedAt: Joi.date().allow(null).optional(),
 });
+
+// A campaign-level rule attached to a single ad set is a contradiction: the
+// attachment says "just this ad set", the level says "score the whole
+// campaign". Reject rather than silently reinterpret — a rule that doesn't do
+// what its author reads it as doing is worse than one that won't save.
+const rejectAdsetWithCampaignLevel = (value, helpers) => {
+  if (
+    value &&
+    value.evaluateOn === "campaign" &&
+    Array.isArray(value.attachments) &&
+    value.attachments.some((a) => a && a.adsetId)
+  ) {
+    return helpers.error("rule.adsetWithCampaignLevel");
+  }
+  return value;
+};
+
+const CROSS_FIELD_MESSAGES = {
+  "rule.adsetWithCampaignLevel":
+    "This rule is attached to a specific ad set, so it can't evaluate at campaign level. Pick Ad set or Ad, or attach the whole campaign instead.",
+};
 
 // ─── full schemas ──────────────────────────────────────────────────────────
 
@@ -250,7 +280,9 @@ const createRuleSchema = Joi.object({
         "A rule must be attached to at least one campaign.",
       "array.max": `A rule can be attached to at most ${MAX_ATTACHMENTS} campaigns.`,
     }),
-});
+})
+  .custom(rejectAdsetWithCampaignLevel)
+  .messages(CROSS_FIELD_MESSAGES);
 
 // PATCH semantics: every field optional, but body must contain at least
 // one. The .min(1) on the wrapper is what enforces "no empty patches".
@@ -278,9 +310,13 @@ const updateRuleSchema = Joi.object({
     }),
 })
   .min(1)
+  // Only checkable when the patch carries BOTH fields; a patch that changes
+  // one of them alone is validated against the stored rule in the controller.
+  .custom(rejectAdsetWithCampaignLevel)
   .messages({
     "object.min":
       "PATCH body must contain at least one field to update.",
+    ...CROSS_FIELD_MESSAGES,
   });
 
 module.exports = {

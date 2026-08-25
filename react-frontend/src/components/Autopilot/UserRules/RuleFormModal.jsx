@@ -20,7 +20,12 @@ import {
   isStringField,
 } from './ruleFieldsCatalog';
 import { createUserRule, updateUserRule, testUserRule } from '@/apis/autopilot/autopilotApi';
-import { getAdAccounts, getCampaigns, getFacebookAccounts } from '@/apis/metaAds/metaAdsApi';
+import {
+  getAdAccounts,
+  getAdSets,
+  getCampaigns,
+  getFacebookAccounts,
+} from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import { GA4Events } from '@/utils/ga4';
 
@@ -256,6 +261,14 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
 
     if (!form.attachments || form.attachments.length === 0) {
       fieldErrors.attachments = 'Attach the rule to at least one campaign.';
+    } else if (
+      form.evaluateOn === 'campaign' &&
+      form.attachments.some((a) => a.adsetId)
+    ) {
+      // Mirrors the Joi cross-field rule. The two say opposite things: the
+      // attachment scopes to one ad set, the level scores the whole campaign.
+      fieldErrors.attachments =
+        "This rule is attached to specific ad sets, so it can't evaluate at campaign level. Switch \"Evaluate on\" to Ad set or Ad, or attach whole campaigns instead.";
     }
 
     const flatList = [];
@@ -1286,6 +1299,83 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
 //
 // Inline accordion (no floating dropdown). Same pattern as the wizard's
 // in-form group panels — never clipped by the modal scroll container.
+// AdsetRows — the ad sets inside one campaign, when attaching at ad-set level.
+//
+// Exists because ABO campaigns put a separate budget on each ad set and are
+// usually split by geo. A campaign-wide rule can't serve IND / USA / Canada at
+// once: a CPI that's excellent in one is unreachable in another. Picking the
+// ad set is the only way to write a threshold that's correct for it.
+function AdsetRows({ acctKey, campaignId, adsets, loading, attachments, onToggle }) {
+  if (loading || !adsets) {
+    return (
+      <p className="px-4 py-2 pl-11 text-[12px] text-gray-500 dark:text-white/55">
+        Loading ad sets…
+      </p>
+    );
+  }
+  if (adsets.length === 0) {
+    return (
+      <p className="px-4 py-2 pl-11 text-[12px] text-gray-500 dark:text-white/55">
+        No ad sets in this campaign.
+      </p>
+    );
+  }
+  return (
+    <div className="bg-gray-200/50 dark:bg-black/20">
+      {adsets.map((s) => {
+        const adsetId = String(s.id);
+        const checked = attachments.some(
+          (a) =>
+            a.adAccountId === acctKey &&
+            a.campaignId === campaignId &&
+            String(a.adsetId) === adsetId,
+        );
+        return (
+          <button
+            key={adsetId}
+            type="button"
+            onClick={() => onToggle(acctKey, campaignId, adsetId)}
+            className={`flex w-full items-center justify-between gap-2 py-2 pr-4 pl-11 text-left transition-colors hover:bg-gray-200 dark:hover:bg-white/5 ${
+              checked ? 'bg-gray-200 dark:bg-white/5' : ''
+            }`}
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span
+                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors ${
+                  checked
+                    ? 'bg-linear-to-r from-[#02C8C4] to-[#5867EB]'
+                    : 'border border-gray-300 dark:border-white/20'
+                }`}
+              >
+                {checked && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+              </span>
+              <div className="min-w-0">
+                <div
+                  className={`text-13 truncate ${
+                    checked
+                      ? 'font-medium text-gray-900 dark:text-white'
+                      : 'text-gray-700 dark:text-white/85'
+                  }`}
+                >
+                  {s.name || '(unnamed ad set)'}
+                </div>
+                <div className="truncate font-mono text-[11px] text-gray-400 dark:text-white/45">
+                  {adsetId}
+                </div>
+              </div>
+            </div>
+            {s.status && (
+              <span className="text-10 shrink-0 tracking-wider text-gray-400 uppercase dark:text-white/45">
+                {s.status}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function AttachmentPicker({ attachments, onChange }) {
   const userId = useSelector((state) => state.socket.userData?.user_id);
   const [facebookAccounts, setFacebookAccounts] = useState([]);
@@ -1302,6 +1392,63 @@ function AttachmentPicker({ attachments, onChange }) {
   const [loadingAccount, setLoadingAccount] = useState(null);
   const [openAccount, setOpenAccount] = useState(null);
   const [search, setSearch] = useState('');
+  // Campaign level or ad-set level. ABO campaigns hold several ad sets, usually
+  // geo-split, whose economics differ enough that one campaign-wide threshold
+  // is wrong for all of them — so a rule has to be able to target one ad set.
+  // Derived from what's already attached when editing an existing rule.
+  const [attachLevel, setAttachLevel] = useState(() =>
+    (attachments || []).some((a) => a.adsetId) ? 'adset' : 'campaign',
+  );
+  const [adsetsByCampaign, setAdsetsByCampaign] = useState({});
+  const [loadingCampaign, setLoadingCampaign] = useState(null);
+  const [openCampaign, setOpenCampaign] = useState(null);
+
+  const ensureAdsets = async (acctKey, campaignId) => {
+    if (adsetsByCampaign[campaignId]) return;
+    setLoadingCampaign(campaignId);
+    try {
+      const r = await getAdSets(campaignId, acctKey.replace(/^act_/, ''));
+      const list = r?.adSets || r?.adsets || r?.data || [];
+      setAdsetsByCampaign((prev) => ({ ...prev, [campaignId]: list }));
+    } catch {
+      setAdsetsByCampaign((prev) => ({ ...prev, [campaignId]: [] }));
+    } finally {
+      setLoadingCampaign(null);
+    }
+  };
+
+  const toggleCampaignOpen = (acctKey, campaignId) => {
+    if (openCampaign === campaignId) {
+      setOpenCampaign(null);
+    } else {
+      setOpenCampaign(campaignId);
+      ensureAdsets(acctKey, campaignId);
+    }
+  };
+
+  const toggleAdset = (acctKey, campaignId, adsetId) => {
+    const match = (a) =>
+      a.adAccountId === acctKey &&
+      a.campaignId === campaignId &&
+      String(a.adsetId) === String(adsetId);
+    if (attachments.some(match)) {
+      onChange(attachments.filter((a) => !match(a)));
+    } else {
+      onChange([...attachments, { adAccountId: acctKey, campaignId, adsetId }]);
+    }
+  };
+
+  // The two shapes can't coexist on one rule: a campaign attachment means
+  // "every ad set", an ad-set attachment means "only this one". Switching
+  // clears rather than trying to translate, because neither direction has a
+  // correct automatic answer — expanding one ad set to a whole campaign would
+  // silently widen the rule's blast radius.
+  const changeLevel = (next) => {
+    if (next === attachLevel) return;
+    setAttachLevel(next);
+    setOpenCampaign(null);
+    if (attachments.length > 0) onChange([]);
+  };
 
   useEffect(() => {
     if (!userId) return undefined;
@@ -1489,6 +1636,37 @@ function AttachmentPicker({ attachments, onChange }) {
         <div className="flex flex-col gap-2.5 border-b border-gray-200 p-2.5 dark:border-white/10">
           <div>
             <p className="mb-1.5 text-[11px] font-semibold text-gray-600 dark:text-white/65">
+              Attach to
+            </p>
+            <div className="flex gap-1.5 rounded-full bg-gray-100 p-1 dark:bg-white/6">
+              {[
+                { value: 'campaign', label: 'Whole campaign' },
+                { value: 'adset', label: 'Specific ad sets' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => changeLevel(opt.value)}
+                  aria-pressed={attachLevel === opt.value}
+                  className={`text-13 flex-1 rounded-full px-3 py-1.5 font-medium transition-colors ${
+                    attachLevel === opt.value
+                      ? 'bg-white text-gray-900 shadow-sm dark:bg-[#1d1d1d] dark:text-white'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-white/60 dark:hover:text-white'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[11px] leading-snug text-gray-500 dark:text-white/50">
+              {attachLevel === 'adset'
+                ? 'Open a campaign to pick individual ad sets. Use this for ABO campaigns split by geo, where each ad set needs its own thresholds.'
+                : 'The rule applies to every ad set in the campaigns you pick.'}
+            </p>
+          </div>
+
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold text-gray-600 dark:text-white/65">
               Facebook account
             </p>
             <SelectInput
@@ -1509,7 +1687,9 @@ function AttachmentPicker({ attachments, onChange }) {
           </div>
           {attachments.length > 0 && (
             <p className="text-[11px] text-gray-500 dark:text-white/50">
-              {attachments.length} campaign{attachments.length === 1 ? '' : 's'} selected across{' '}
+              {attachments.length}{' '}
+              {attachLevel === 'adset' ? 'ad set' : 'campaign'}
+              {attachments.length === 1 ? '' : 's'} selected across{' '}
               {new Set(attachments.map((attachment) => attachment.adAccountId)).size} ad account
               {new Set(attachments.map((attachment) => attachment.adAccountId)).size === 1
                 ? ''
@@ -1655,9 +1835,26 @@ function AttachmentPicker({ attachments, onChange }) {
                         </p>
                       ) : (
                         filtered.map((c) => {
-                          const checked = attachments.some(
-                            (a) => a.adAccountId === acctKey && a.campaignId === String(c.id)
-                          );
+                          // In ad-set mode a campaign row is an expander, not
+                          // a selection: it reads as "checked" only when one
+                          // of ITS ad sets is attached.
+                          const attachedAdsets = attachments.filter(
+                            (a) =>
+                              a.adAccountId === acctKey &&
+                              a.campaignId === String(c.id) &&
+                              a.adsetId,
+                          ).length;
+                          const checked =
+                            attachLevel === 'adset'
+                              ? attachedAdsets > 0
+                              : attachments.some(
+                                  (a) =>
+                                    a.adAccountId === acctKey &&
+                                    a.campaignId === String(c.id) &&
+                                    !a.adsetId,
+                                );
+                          const campaignOpen =
+                            attachLevel === 'adset' && openCampaign === String(c.id);
                           // Unmanaged campaigns can't be automated. Kept
                           // visible (not filtered out) so the user can see
                           // what's there and why it's unavailable — matches
@@ -1670,8 +1867,8 @@ function AttachmentPicker({ attachments, onChange }) {
                             !managedCampaignIds || managedCampaignIds.has(String(c.id));
                           const locked = !manageable && !checked;
                           return (
+                            <div key={c.id}>
                             <button
-                              key={c.id}
                               type="button"
                               disabled={locked}
                               title={
@@ -1679,7 +1876,11 @@ function AttachmentPicker({ attachments, onChange }) {
                                   ? "Not one of the campaigns you're managing on your plan — add it from the Campaigns list first."
                                   : undefined
                               }
-                              onClick={() => toggle(acctKey, String(c.id))}
+                              onClick={() =>
+                                attachLevel === 'adset'
+                                  ? toggleCampaignOpen(acctKey, String(c.id))
+                                  : toggle(acctKey, String(c.id))
+                              }
                               className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left transition-colors ${
                                 locked
                                   ? 'cursor-not-allowed opacity-45'
@@ -1724,8 +1925,33 @@ function AttachmentPicker({ attachments, onChange }) {
                                     {c.status}
                                   </span>
                                 )}
+                                {attachLevel === 'adset' && (
+                                  <>
+                                    {attachedAdsets > 0 && (
+                                      <span className="text-10 rounded-full bg-linear-to-r from-[#02C8C4] to-[#5867EB] px-1.5 py-0.5 font-medium text-white">
+                                        {attachedAdsets}
+                                      </span>
+                                    )}
+                                    <ChevronDown
+                                      className={`h-3.5 w-3.5 transition-transform ${
+                                        campaignOpen ? 'rotate-180' : ''
+                                      }`}
+                                    />
+                                  </>
+                                )}
                               </div>
                             </button>
+                            {campaignOpen && (
+                              <AdsetRows
+                                acctKey={acctKey}
+                                campaignId={String(c.id)}
+                                adsets={adsetsByCampaign[String(c.id)]}
+                                loading={loadingCampaign === String(c.id)}
+                                attachments={attachments}
+                                onToggle={toggleAdset}
+                              />
+                            )}
+                          </div>
                           );
                         })
                       )}

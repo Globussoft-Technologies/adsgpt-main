@@ -779,6 +779,10 @@ async function runAuditForAccount({
       adsets: adsetData,
       ads: adData,
       allCampaignIds: campaigns.map((c) => String(c.id)),
+      // Same purpose as allCampaignIds, for ad-set-level rule attachments:
+      // an ad set that exists but didn't deliver in the window is absent
+      // from `adsets`, and must not be mistaken for a deleted one.
+      allAdsetIds: adSets.map((s) => String(s.id)),
     },
   };
 }

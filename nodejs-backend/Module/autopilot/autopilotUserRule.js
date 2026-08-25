@@ -75,6 +75,22 @@ const attachmentSchema = new mongoose.Schema(
     // Both stored canonical: `act_<id>` and bare numeric id respectively.
     adAccountId: { type: String, required: true },
     campaignId: { type: String, required: true },
+    // Optional narrowing to ONE ad set inside that campaign.
+    //
+    // Absent = the whole campaign, which is the original behaviour and what
+    // every pre-existing rule means. Present = evaluate only this ad set (and
+    // for an ad-level rule, only the ads beneath it).
+    //
+    // Why this exists: ABO campaigns give each ad set its own budget and are
+    // usually split by geo — one campaign holding IND / USA / Canada ad sets.
+    // Those have completely different economics, so a single threshold across
+    // all of them is meaningless: a CPI that is excellent in India is
+    // unreachable in the US. Attaching per ad set is the only way to express
+    // a rule that is correct for each.
+    //
+    // `campaignId` stays REQUIRED alongside it — the plan-limit gate resolves
+    // managed slots by campaign, and the orphan check needs the parent too.
+    adsetId: { type: String, default: null },
     // Lazy-detected orphan flag. Cron sets this when the campaign no
     // longer appears in /me/campaigns; UI shows a badge so the user
     // knows the rule isn't acting on this campaign anymore.
