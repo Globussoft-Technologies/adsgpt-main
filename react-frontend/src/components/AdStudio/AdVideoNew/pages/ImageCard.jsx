@@ -109,6 +109,7 @@ export default function ImageCard({
   // nothing to show in the tooltip and nowhere for Recreate to route.
   enableInfo = true,
   enableRecreate = true,
+  showGeneratingProgress = false,
   // Optional override for the logo editor's "Save as new". Default: persist via
   // the save-edited endpoint (needs generation inputs). Slim-row hosts pass
   // this to own the save instead.
@@ -521,7 +522,10 @@ export default function ImageCard({
 
       {item?.status === 'processing' || item?.status === 'pending' ? (
         <>
+          <div className="absolute inset-0">
           <CreativeGeneratingLoader />
+          </div>
+          {showGeneratingProgress && (
           <div className="absolute bottom-4 left-1/2 flex w-36 -translate-x-1/2 transform flex-col items-center justify-center gap-1.5">
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/15 shadow-xs dark:bg-white/25">
               <div
@@ -533,6 +537,7 @@ export default function ImageCard({
               {item?.promptPercentage ?? 50}%
             </p>
           </div>
+          )}
         </>
       ) : item?.status === 'completed' ? (
         <div ref={containerRef} className="relative h-full w-full bg-black">

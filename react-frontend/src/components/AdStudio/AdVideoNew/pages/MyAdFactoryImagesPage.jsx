@@ -28,6 +28,8 @@ const breakpointColumnsObj = {
   340: 1,
 };
 
+const STALE_GENERATING_MS = 10 * 60 * 1000;
+
 // Post Ad nav (Megaphone) visibility. Flip to false to hide the
 // "Post as ad" trigger on MySpace cards.
 const SHOW_POST_AD_NAV = true;
@@ -38,6 +40,22 @@ const resolveImageUrl = (url) => {
   if (!url) return '';
   return url.startsWith('http') ? url : `${S3_BASE_URL}${url}`;
 };
+
+function isStaleGenerating(item, now) {
+  if (item?.status !== 'generating') return false;
+  const timestampMs = item?.timestamp ? new Date(item.timestamp).getTime() : 0;
+  return timestampMs > 0 && now - timestampMs > STALE_GENERATING_MS;
+}
+
+function deriveDisplayItem(item, now) {
+  if (!isStaleGenerating(item, now)) return item;
+
+  return {
+    ...item,
+    status: 'error',
+    error: item?.error || 'We could not generate this image right now. Please try again. Note: Your credits were not deducted.',
+  };
+}
 
 // ── Single card ─────────────────────────────────────────────────────────────
 function AdFactoryImageCard({ item, isSelected, onSelect, onFullscreen, onOpenPostAdModal, onOpenLogoEditor }) {
@@ -232,6 +250,7 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
   const userId = userData?.user_id;
 
   const [items, setItems] = useState([]);
+  const [now, setNow] = useState(() => Date.now());
   const [isLoading, setIsLoading] = useState(false);
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -348,6 +367,11 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
     }
   }, []);
 
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const load = async (nextSkip, replace) => {
     if (!userId) return;
     setIsLoading(true);
@@ -391,7 +415,9 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
   // Join campaign rooms for any on-screen generating placeholders.
   useEffect(() => {
     const pending = new Set(
-      items.filter((i) => i.status === 'generating' && i.campaignId).map((i) => i.campaignId)
+      items
+        .filter((i) => i.status === 'generating' && !isStaleGenerating(i, now) && i.campaignId)
+        .map((i) => i.campaignId)
     );
     pending.forEach((campaignId) => {
       if (!joinedRoomsRef.current.has(campaignId)) {
@@ -399,7 +425,7 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
         emitWhenConnected('adFactoryRequest', campaignId).catch(() => {});
       }
     });
-  }, [items]);
+  }, [items, now]);
 
   // Live placeholder filling. We listen on the app event bus rather than
   // binding our own socket listener: the global `adFactoryResponse` handler in
@@ -424,8 +450,13 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
   };
 
   const completedUrls = useMemo(
-    () => items.filter((i) => i.status === 'success' && i.url).map((i) => i.url),
-    [items]
+    () => items.map((item) => deriveDisplayItem(item, now)).filter((i) => i.status === 'success' && i.url).map((i) => i.url),
+    [items, now]
+  );
+
+  const displayedItems = useMemo(
+    () => items.map((item) => deriveDisplayItem(item, now)),
+    [items, now]
   );
 
   const selectAll = () => {
@@ -497,7 +528,7 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
       )}
 
       <Masonry breakpointCols={breakpointColumnsObj} className="flex w-full gap-2" columnClassName="flex flex-col gap-2">
-        {items
+        {displayedItems
           // The backend occasionally returns rows with a null status
           // (legacy / partial records). They have no meaningful UI state —
           // skip them entirely instead of rendering the generic error card.
@@ -518,7 +549,7 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
           ))}
       </Masonry>
 
-      {items.filter((item) => item?.status != null).length === 0 && !isLoading && (
+      {displayedItems.filter((item) => item?.status != null).length === 0 && !isLoading && (
         <div className="flex h-full w-full items-center justify-center text-gray-400">No images found.</div>
       )}
       {isLoading && (

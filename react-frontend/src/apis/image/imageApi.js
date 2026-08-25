@@ -3,6 +3,7 @@
 // Endpoints (all on VITE_SOCKET_URL):
 //   POST /image/generate          — submit a generation request
 //   GET  /image/all               — paginated history
+//   GET  /my-space/images         — unified My Space image history
 //   GET  /image/{imageId}         — single record (used for both polling and detail)
 //
 // Auth follows the project convention: Bearer ${getCookies()} from the
@@ -64,6 +65,27 @@ export const getAllImages = async ({
 } = {}) => {
   const { data } = await axios.get(`${BASE_URL}/image/all`, {
     params: { type, model, status, skip, limit, startDate, endDate },
+    headers: headers(),
+  });
+  return data;
+};
+
+// ── GET /my-space/images ─────────────────────────────────────────────────────
+//
+// Unified My Space image history. For now the backend supports source=all,
+// adCreative, and adFactory; the React app uses this only for source=all.
+export const getMySpaceImages = async ({
+  source = 'all',
+  type,
+  model,
+  status,
+  skip = 0,
+  limit = 20,
+  startDate,
+  endDate,
+} = {}) => {
+  const { data } = await axios.get(`${BASE_URL}/my-space/images`, {
+    params: { source, type, model, status, skip, limit, startDate, endDate },
     headers: headers(),
   });
   return data;

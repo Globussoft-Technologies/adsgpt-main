@@ -11,12 +11,13 @@ const getInitialMySpaceTab = () => {
 };
 
 // Which image source the MySpace › Images tab is browsing:
+//   'all'         — unified My Space images endpoint
 //   'adCreative'  — Ad Studio's ImageGeneration store (default)
 //   'adFactory'   — AdFactory images API
 //   'aiAssistant' — AI Assistant (Sherry) generations, from /generated-media/library
 const getInitialImageSource = () => {
   const stored = sessionStorage.getItem('mySpaceImageSource');
-  return ['adCreative', 'adFactory', 'aiAssistant'].includes(stored)
+  return ['all', 'adCreative', 'adFactory', 'aiAssistant'].includes(stored)
     ? stored
     : 'adCreative';
 };

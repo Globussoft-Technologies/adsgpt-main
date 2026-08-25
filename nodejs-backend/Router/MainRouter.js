@@ -61,6 +61,7 @@ const workspaceMemberAuthRoutes = require("./workspaceMemberAuthRoutes");
 const amemberSsoRoute = require("./auth/amemberSsoRoute");
 const mobileRoutes = require("./auth/mobileRoutes");
 const adsSearchRoutes = require("./adsSearchRoutes");
+const mySpaceRoutes = require("./mySpaceRoutes");
 
 const app = express();
 app.use("/mobile", mobileRoutes);
@@ -127,5 +128,6 @@ app.use("/notify", assistantNotifyRoutes);
 app.use("/landing-page-analyzer", landingPageAnalyzerRoutes);
 app.use("/device-tokens", authenticateJWT, deviceTokenRoutes);
 app.use("/ads", authenticateJWT, adsSearchRoutes);
+app.use("/my-space", authenticateJWT, mySpaceRoutes);
 
 module.exports = app;

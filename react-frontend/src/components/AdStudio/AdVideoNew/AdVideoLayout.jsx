@@ -32,6 +32,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import genieMinimize, { captureModal } from '@/utils/ui/genieMinimize';
 import MyVideosPage from './pages/MyVideosPage';
 import MyImagesPage from './pages/MyImagesPage';
+import MyAllImagesPage from './pages/MyAllImagesPage';
 import MyAdFactoryImagesPage from './pages/MyAdFactoryImagesPage';
 import MyAssistantImagesPage from './pages/MyAssistantImagesPage';
 import MyClaudeImagesPage from './pages/MyClaudeImagesPage';
@@ -104,6 +105,7 @@ const selectImageType = [
 
 // MySpace → Images tab → which image source to browse.
 const selectImageSource = [
+  { value: 'all', label: 'All' },
   { value: 'adCreative', label: 'AdCreative' },
   { value: 'adFactory', label: 'AdFactory' },
   // { value: 'aiAssistant', label: 'AI Assistant' },
@@ -136,6 +138,9 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const availableImageSources = useMemo(
     () =>
       selectImageSource.filter(({ value }) => {
+        if (value === 'all') {
+          return canUseWorkspaceFeature('adStudio.adCreative') || canUseWorkspaceFeature('adFactory');
+        }
         if (value === 'adFactory') return canUseWorkspaceFeature('adFactory');
         if (value === 'aiAssistant' || value === 'claudeAI') {
           return canUseWorkspaceFeature('assistant');
@@ -495,7 +500,9 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
               </div>
             </div>
           ) : mySpaceTab === 'images' ? (
-            imageSource === 'adFactory' ? (
+            imageSource === 'all' ? (
+              <MyAllImagesPage startDate={startDate} endDate={endDate} />
+            ) : imageSource === 'adFactory' ? (
               <MyAdFactoryImagesPage startDate={startDate} endDate={endDate} />
             ) : imageSource === 'aiAssistant' ? (
               <MyAssistantImagesPage />
