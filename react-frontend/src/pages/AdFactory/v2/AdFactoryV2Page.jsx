@@ -43,6 +43,8 @@ import {
 } from '@/components/AdFactory/v2/_tokens';
 import AdFactoryBgEffect from '@/components/AdFactory/NodeForms/AdFactoryBgEffect';
 import { useMotionPresets } from '@/components/AdFactory/v2/_motion';
+import emitter from '@/utils/eventEmitter';
+import { emitWhenConnected } from '@/utils/socketEmitter';
 
 import {
   startBriefFromUrl,
@@ -69,6 +71,7 @@ import {
   setPendingBudget,
   selectBrief,
   selectBriefId,
+  selectLiveCampaignId,
   selectBriefError,
   selectActivationError,
   selectBriefErrorCode,
@@ -163,6 +166,7 @@ export default function AdFactoryV2Page() {
 
   const brief = useSelector(selectBrief);
   const briefId = useSelector(selectBriefId);
+  const liveCampaignId = useSelector(selectLiveCampaignId);
   const step = useSelector(selectStep);
   const run = useSelector(selectRun);
   const estimate = useSelector(selectEstimate);
@@ -248,6 +252,28 @@ export default function AdFactoryV2Page() {
     const id = setInterval(() => dispatch(fetchBrief(briefId)), INFER_POLL_MS);
     return () => clearInterval(id);
   }, [dispatch, inferring, briefId]);
+
+  // Manual Quick setup generation still reports progress through the legacy
+  // Ad Factory campaign room. Join it when we know the metadata campaign id so
+  // `adFactoryResponse` events can reach this tab too.
+  useEffect(() => {
+    if (!liveCampaignId) return;
+    emitWhenConnected('adFactoryRequest', liveCampaignId).catch(() => {});
+  }, [liveCampaignId]);
+
+  // When Python lands another image/text result for THIS quick-setup run,
+  // refresh the brief immediately instead of waiting for the next poll tick.
+  useEffect(() => {
+    if (!briefId || !liveCampaignId) return undefined;
+    const onImageResult = (data) => {
+      if (!data?.campaignId || String(data.campaignId) !== String(liveCampaignId)) return;
+      dispatch(fetchBrief(briefId));
+    };
+    emitter.on('adfactory:imageResult', onImageResult);
+    return () => {
+      emitter.off('adfactory:imageResult', onImageResult);
+    };
+  }, [dispatch, briefId, liveCampaignId]);
 
   // Generation has no completion event of its own — Python writes results to
   // the campaign and the webhook that receives them is v1's, which knows
@@ -1100,6 +1126,30 @@ export default function AdFactoryV2Page() {
               </motion.div>
             )}
           </AnimatePresence>
+          {hasCreatives && (
+            <>
+              <RunPicker
+                history={history}
+                value={viewRun}
+                onChange={setViewRun}
+                currentCount={run?.pairs?.length || 0}
+                currentPending={isViewingPast ? 0 : run?.pending || 0}
+              />
+              <CreativePreview
+                run={viewedRun}
+                callToAction={ctaLabel}
+                ratio={brief.delivery?.ratios?.[0] || '4:5'}
+                onRegenerate={handleGenerate}
+                onContinue={handleWantSchedule}
+                shipping={publishing}
+                regenerating={generating}
+                creditsHeld={isViewingPast ? null : estimate?.total ?? null}
+                estimate={isViewingPast ? null : estimate?.total ?? null}
+                readOnly={isViewingPast}
+                showActions={false}
+              />
+            </>
+          )}
           {/* The cadence and the three lifecycle controls. Until this existed
               a live brief could only be paused: the setup card renders before
               activation only, so there was no way to change the time, the

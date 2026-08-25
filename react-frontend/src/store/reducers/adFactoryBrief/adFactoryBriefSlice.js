@@ -283,6 +283,9 @@ export const fetchTimeline = createAsyncThunk(
 const initialState = {
   brief: null,
   briefId: null,
+  // The v1-style socket room for manual quick-setup generation results.
+  // Returned by POST /briefs/:id/generate as metadata.campaignId.
+  liveCampaignId: null,
   // What came back from the last generation run, served with the brief.
   run: { status: 'idle', pairs: [], pending: 0, failed: 0, requested: 0 },
   // What one run costs, priced server-side the same way the freeze is. Null
@@ -549,8 +552,9 @@ const adFactoryBriefSlice = createSlice({
         const want = Number(state.brief?.generation?.imageCount) || 3;
         state.run = { status: 'running', pairs: [], pending: want, failed: 0, requested: want };
       })
-      .addCase(generateAds.fulfilled, (state) => {
+      .addCase(generateAds.fulfilled, (state, { payload }) => {
         state.run = { ...state.run, status: 'running' };
+        state.liveCampaignId = payload?.data?.campaignId || state.liveCampaignId;
       })
       .addCase(generateAds.rejected, (state, { payload }) => {
         state.generating = false;
@@ -683,6 +687,7 @@ export const {
 
 export const selectBrief = (s) => s.adFactoryBrief.brief;
 export const selectBriefId = (s) => s.adFactoryBrief.briefId;
+export const selectLiveCampaignId = (s) => s.adFactoryBrief.liveCampaignId;
 export const selectRun = (s) => s.adFactoryBrief.run;
 export const selectEstimate = (s) => s.adFactoryBrief.estimate;
 export const selectHistory = (s) => s.adFactoryBrief.history;

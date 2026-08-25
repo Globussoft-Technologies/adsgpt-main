@@ -1,5 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ChevronDown, ExternalLink, Loader2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  EllipsisVertical,
+  ExternalLink,
+  Loader2,
+  MessageCircle,
+  Share2,
+  ThumbsUp,
+} from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -195,6 +211,7 @@ const PILL = {
 
 function Cycle({ row, last, onRetry, motionProps }) {
   const [open, setOpen] = useState(false);
+  const [previewCreative, setPreviewCreative] = useState(null);
   const scheduled = row.scheduled || row.status === 'scheduled';
   const failedOnly = !scheduled && row.liveCount === 0 && row.failedCount > 0;
   const partial = row.liveCount > 0 && row.failedCount > 0;
@@ -259,19 +276,19 @@ function Cycle({ row, last, onRetry, motionProps }) {
               aria-expanded={open}
               className="mt-2.5 flex w-full items-center gap-2 text-left"
             >
-              <span className="flex flex-wrap items-center gap-2">
-                {row.creatives.slice(0, 6).map((c, i) => (
-                  <img
-                    key={c.creativeId || i}
-                    src={srcOf(c.imageUrl)}
-                    alt={c.headline || ''}
-                    loading="lazy"
-                    className={`h-12 w-10 rounded-md border object-cover ${
-                      c.posted === false
-                        ? 'border-red-500/40 opacity-50'
-                        : 'border-[#E5E7EB] dark:border-[#2E353E]'
-                    }`}
-                  />
+                <span className="flex flex-wrap items-center gap-2">
+                  {row.creatives.slice(0, 6).map((c, i) => (
+                    <img
+                      key={c.creativeId || i}
+                      src={srcOf(c.imageUrl)}
+                      alt={c.headline || ''}
+                      loading="lazy"
+                      className={`h-12 w-10 rounded-md border object-cover ${
+                        c.posted === false
+                          ? 'border-red-500/40 opacity-50'
+                          : 'border-[#E5E7EB] dark:border-[#2E353E]'
+                      }`}
+                    />
                 ))}
               </span>
               <span className={`ml-auto inline-flex shrink-0 items-center gap-1 ${MUTED}`}>
@@ -293,13 +310,25 @@ function Cycle({ row, last, onRetry, motionProps }) {
                   className="m-0 mt-2.5 flex list-none flex-col gap-1.5 overflow-hidden p-0"
                 >
                   {row.creatives.map((c, i) => (
-                    <PublishedAd key={c.creativeId || i} creative={c} />
+                    <PublishedAd
+                      key={c.creativeId || i}
+                      creative={c}
+                      onPreview={() => setPreviewCreative(c)}
+                    />
                   ))}
                 </motion.ul>
               )}
             </AnimatePresence>
           </>
         )}
+
+        <TimelinePreviewDialog
+          creative={previewCreative}
+          open={Boolean(previewCreative)}
+          onOpenChange={(next) => {
+            if (!next) setPreviewCreative(null);
+          }}
+        />
 
         {row.error && (
           <div className="mt-2.5 flex flex-wrap items-center gap-2.5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/8 px-3 py-2.5 text-13 text-[#92400E] dark:text-[#E8A33D]">
@@ -323,12 +352,23 @@ function Cycle({ row, last, onRetry, motionProps }) {
 // a partial run shows exactly which pair failed rather than a count. `posted`
 // is checked against `false` explicitly — an older timeline payload has no such
 // field, and treating undefined as "failed" would mark every historical ad red.
-function PublishedAd({ creative }) {
+function PublishedAd({ creative, onPreview }) {
   const failed = creative.posted === false;
   const link = (creative.adLinks || [])[0];
 
   return (
-    <li className={`flex items-center gap-2.5 p-2 ${CONTROL}`}>
+    <li
+      role="button"
+      tabIndex={0}
+      onClick={onPreview}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onPreview?.();
+        }
+      }}
+      className={`flex cursor-pointer items-center gap-2.5 p-2 transition-colors hover:bg-white/3 ${CONTROL}`}
+    >
       {creative.imageUrl ? (
         <img
           src={srcOf(creative.imageUrl)}
@@ -364,6 +404,7 @@ function PublishedAd({ creative }) {
           href={link.url}
           target="_blank"
           rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
           className="inline-flex shrink-0 items-center gap-1 text-13 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
         >
           View
@@ -394,4 +435,149 @@ function shortZone(tz) {
   } catch {
     return String(tz).split('/').pop();
   }
+}
+
+function TimelinePreviewDialog({ creative, open, onOpenChange }) {
+  const failed = creative?.posted === false;
+  const link = (creative?.adLinks || [])[0];
+  const platformLabel = link?.platform || creative?.platform || 'Meta';
+  const accountName = creative?.accountName || creative?.pageName || 'Preview account';
+  const postedAt = creative?.postedAt || creative?.createdAt || creative?.timestamp;
+  const initial = (creative?.brandName || creative?.headline || 'A').slice(0, 1).toUpperCase();
+  const ctaLabel = formatCta(creative?.cta || creative?.callToAction);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(420px,92vw)] max-w-[400px] overflow-hidden rounded-[24px] border border-white/10 bg-[#0F1115] p-0 text-white shadow-2xl [&>button]:top-5 [&>button]:right-5 [&>button]:z-20 [&>button]:rounded-md [&>button]:border [&>button]:border-white/10 [&>button]:bg-[#171A20] [&>button]:p-1 [&>button]:text-white/80 [&>button]:opacity-100 [&>button]:transition-colors [&>button]:hover:bg-[#1E222B] [&>button]:hover:text-white [&>button]:focus:ring-0 [&>button_svg]:h-3.5 [&>button_svg]:w-3.5">
+        <DialogHeader className="border-b border-white/8 px-5 py-4 pr-16 text-left">
+          <DialogTitle className="text-[16px] font-semibold text-white">
+            Ad Preview
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex justify-center p-5">
+          <div className="w-full max-w-[360px] overflow-hidden rounded-xl border border-white/10 bg-white text-gray-800 shadow-sm">
+            <div className="flex items-start justify-between gap-2 px-3 pt-3">
+              <div className="flex min-w-0 flex-1 items-start gap-2">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#167beb] text-xs font-bold text-white">
+                  {initial}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="truncate text-[12px] leading-tight font-semibold text-gray-900">
+                      {creative?.brandName || 'Brand'}
+                    </span>
+                    <span className="truncate rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                      {platformLabel} · {accountName}
+                    </span>
+                  </div>
+                  {postedAt && (
+                    <div className="mt-0.5 truncate text-[10px] text-gray-500">
+                      {formatPostedAt(postedAt)}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <span
+                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow ${
+                    failed ? 'bg-red-500' : 'bg-emerald-500'
+                  }`}
+                >
+                  {failed ? (
+                    <>
+                      <AlertTriangle className="size-3" />
+                      Failed
+                    </>
+                  ) : (
+                    <>
+                      <Check className="size-3" />
+                      Posted
+                    </>
+                  )}
+                </span>
+                <EllipsisVertical className="size-4 text-gray-400" />
+              </div>
+            </div>
+
+            <div className="mt-2 px-3 text-[11px] leading-snug text-gray-700">
+              {creative?.message || (
+                <span className="text-gray-500">No ad copy available</span>
+              )}
+            </div>
+
+            <div className="mx-3 mt-2 aspect-square overflow-hidden rounded-md bg-[#E4E6EB]">
+              {creative?.imageUrl ? (
+                <img
+                  src={srcOf(creative.imageUrl)}
+                  alt={creative?.headline || 'Published ad'}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-gray-500">
+                  No image available
+                </div>
+              )}
+            </div>
+
+            <div className="m-3 flex items-center justify-between gap-2 rounded bg-[#F7F8FA] p-2">
+              <div className="min-w-0">
+                <div className="line-clamp-1 break-all text-[9px] text-gray-500">
+                  {link?.url || creative?.linkUrl || 'No link'}
+                </div>
+                <div className="truncate text-[11px] leading-tight font-semibold text-gray-900">
+                  {creative?.headline || 'Untitled ad'}
+                </div>
+              </div>
+              <span className="shrink-0 rounded-md bg-[#E4E6EB] px-3 py-1.5 text-[10px] font-semibold text-[#191919]">
+                {ctaLabel || 'Learn More'}
+              </span>
+            </div>
+
+            <div className="mx-3 mb-3 flex items-center justify-around border-t border-gray-200 pt-2 text-gray-500">
+              <span className="flex items-center gap-1 text-[10px] font-medium">
+                <ThumbsUp className="size-3.5" />
+                Like
+              </span>
+              <span className="flex items-center gap-1 text-[10px] font-medium">
+                <MessageCircle className="size-3.5" />
+                Comment
+              </span>
+              <span className="flex items-center gap-1 text-[10px] font-medium">
+                <Share2 className="size-3.5" />
+                Share
+              </span>
+            </div>
+
+            {failed && creative?.runError && (
+              <div className="border-t border-red-200 bg-red-50 px-3 py-1.5 text-[10px] leading-tight text-red-700">
+                <span className="font-semibold">Reason:</span> {creative.runError}
+              </div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function formatPostedAt(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatCta(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  return raw
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
 }
