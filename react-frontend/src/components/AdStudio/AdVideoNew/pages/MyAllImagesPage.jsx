@@ -8,8 +8,11 @@ import { downloadMediaZipAction } from '@/store/actions/adVideoNew/Advideoaction
 import { saveEditedImageAction } from '@/store/actions/image/imageActions';
 import RecreateAdModal from '@/components/AdLibrary/RecreateAdModal';
 import ImageCard from './ImageCard';
+import { mergeCampaignImageResults } from './adFactoryImagesMerge';
 import PostAdMySpaceModal from '../PostAdMySpace/PostAdMySpaceModal';
 import { readPendingPostAd } from '../PostAdMySpace/postAdPersistence';
+import { emitWhenConnected } from '@/utils/socketEmitter';
+import emitter from '@/utils/eventEmitter';
 
 const breakpointColumnsObj = {
   default: 4,
@@ -101,6 +104,93 @@ function normalizeToImageCardItem(row) {
   };
 }
 
+function normalizeAdCreativeHistoryRecord(record) {
+  const results = Array.isArray(record?.results) ? record.results : [];
+  const effectiveStatus = record?.status || 'failed';
+  const requested = Math.max(1, Number(record?.inputs?.numberOfImages) || 1);
+
+  if ((effectiveStatus === 'pending' || effectiveStatus === 'processing') && results.length === 0) {
+    return Array.from({ length: requested }, (_, index) =>
+      normalizeToImageCardItem({
+        id: `${record._id}:pending:${index}`,
+        source: 'adCreative',
+        sourceLabel: 'AdCreative',
+        imageId: record._id,
+        resultIndex: index,
+        url: '',
+        status: effectiveStatus,
+        prompt: record.inputs?.userPrompt || record.inputs?.prompt || '',
+        model: record.inputs?.model,
+        modelLabel: record.inputs?.modelLabel,
+        type: record.inputs?.type,
+        aspectRatio: record.inputs?.aspectRatio,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        timestamp: record.updatedAt || record.createdAt,
+        metadata: {
+          quality: record.inputs?.quality,
+          brandName: record.inputs?.brandName,
+        },
+      }),
+    );
+  }
+
+  return results.map((result, index) =>
+    normalizeToImageCardItem({
+      id: `${record._id}:${index}`,
+      source: 'adCreative',
+      sourceLabel: 'AdCreative',
+      imageId: record._id,
+      resultIndex: index,
+      url: result?.url || result?.generatedImageUrl || '',
+      status: result?.status || effectiveStatus,
+      prompt: result?.prompt || record.inputs?.userPrompt || record.inputs?.prompt || '',
+      model: record.inputs?.model || record.model,
+      modelLabel: record.inputs?.modelLabel,
+      type: record.inputs?.type,
+      aspectRatio: result?.aspectRatio || record.inputs?.aspectRatio,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      timestamp: result?.completedAt || record.completedAt || record.updatedAt || record.createdAt,
+      metadata: {
+        quality: record.inputs?.quality,
+        brandName: record.inputs?.brandName,
+      },
+    }),
+  );
+}
+
+function mergeMatchingAdCreative(existingItems, incomingItems) {
+  if (!incomingItems.length) return existingItems;
+
+  const existingAdCreativeRecordIds = new Set(
+    existingItems
+      .filter((item) => item._source === 'adCreative')
+      .map((item) => item._recordId)
+      .filter(Boolean),
+  );
+  const matchingIncoming = incomingItems.filter((item) =>
+    existingAdCreativeRecordIds.has(item._recordId),
+  );
+  if (!matchingIncoming.length) return existingItems;
+
+  const incomingRecordIds = new Set(matchingIncoming.map((item) => item._recordId));
+  const merged = [
+    ...matchingIncoming,
+    ...existingItems.filter(
+      (item) => item._source !== 'adCreative' || !incomingRecordIds.has(item._recordId),
+    ),
+  ];
+
+  merged.sort((a, b) => {
+    const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+    const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+    return bTime - aTime;
+  });
+
+  return merged;
+}
+
 function AllAdFactoryInfoTooltip({ item }) {
   const [showInfo, setShowInfo] = useState(false);
   const infoTimeout = useRef(null);
@@ -165,6 +255,8 @@ function AllAdFactoryInfoTooltip({ item }) {
 export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
   const dispatch = useDispatch();
   const userId = useSelector((state) => state.socket?.userData?.user_id);
+  const adCreativeHistory = useSelector((state) => state.image.history.items);
+  const adCreativeCurrent = useSelector((state) => state.image.current);
   const [items, setItems] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [skip, setSkip] = useState(0);
@@ -173,6 +265,8 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const containerRef = useRef(null);
+  const joinedRoomsRef = useRef(new Set());
+  const refreshedCurrentRef = useRef('');
   const limit = 20;
 
   const [recreateAdsState, setRecreateAdsState] = useState({
@@ -227,6 +321,100 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
     load(0, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate, endDate]);
+
+  useEffect(() => {
+    const incoming = (adCreativeHistory || []).flatMap(normalizeAdCreativeHistoryRecord);
+    setItems((prev) => mergeMatchingAdCreative(prev, incoming));
+  }, [adCreativeHistory]);
+
+  useEffect(() => {
+    if (!adCreativeCurrent?.sessionId || adCreativeCurrent.status === 'idle') return;
+    const signature = `${adCreativeCurrent.sessionId}:${adCreativeCurrent.status}`;
+    if (refreshedCurrentRef.current === signature) return;
+    refreshedCurrentRef.current = signature;
+    load(0, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adCreativeCurrent?.sessionId, adCreativeCurrent?.status]);
+
+  useEffect(() => {
+    const pendingCampaignIds = new Set(
+      items
+        .filter((item) => (
+          item._source === 'adFactory' &&
+          item.status === 'processing' &&
+          !isStaleGenerating(item, now) &&
+          item.sourceMetadata?.campaignId
+        ))
+        .map((item) => item.sourceMetadata.campaignId),
+    );
+
+    pendingCampaignIds.forEach((campaignId) => {
+      if (!joinedRoomsRef.current.has(campaignId)) {
+        joinedRoomsRef.current.add(campaignId);
+        emitWhenConnected('adFactoryRequest', campaignId).catch(() => {});
+      }
+    });
+  }, [items, now]);
+
+  useEffect(() => {
+    const onImageResult = (data) => {
+      if (data?.type !== 'image' || !data?.campaignId || !Array.isArray(data?.result)) return;
+      setItems((prev) => {
+        const adFactoryItems = prev
+          .filter((item) => item._source === 'adFactory')
+          .map((item) => ({
+            url: item.url,
+            prompt: item.inputs?.prompt || null,
+            model: item.inputs?.model || null,
+            modelLabel: item.inputs?.modelLabel || item.inputs?.model || null,
+            status: item.status === 'completed' ? 'success' : item.status === 'failed' ? 'error' : 'generating',
+            error: item.sourceMetadata?.error || null,
+            aspectRatio: item.inputs?.aspectRatio || null,
+            campaignId: item.sourceMetadata?.campaignId || null,
+            campaignName: item.sourceMetadata?.campaignName || null,
+            jobId: item.sourceMetadata?.jobId || null,
+            origin: item.sourceMetadata?.origin || null,
+            timestamp: item.updatedAt || item.createdAt,
+          }));
+        const mergedAdFactoryItems = mergeCampaignImageResults(adFactoryItems, data.campaignId, data.result)
+          .map((item, index) =>
+            normalizeToImageCardItem({
+              id: `${item.campaignId || 'adFactory'}:${item.jobId || item.url || index}`,
+              source: 'adFactory',
+              sourceLabel: 'AdFactory',
+              url: item.url || '',
+              status: item.status,
+              prompt: item.prompt || '',
+              model: item.model,
+              modelLabel: item.modelLabel,
+              type: 'ad_factory',
+              aspectRatio: item.aspectRatio,
+              createdAt: item.timestamp,
+              updatedAt: item.timestamp,
+              timestamp: item.timestamp,
+              metadata: {
+                campaignId: item.campaignId,
+                campaignName: item.campaignName,
+                jobId: item.jobId,
+                origin: item.origin,
+                error: item.error,
+              },
+            }),
+          );
+        return [
+          ...prev.filter((item) => item._source !== 'adFactory'),
+          ...mergedAdFactoryItems,
+        ].sort((a, b) => {
+          const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+          const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+          return bTime - aTime;
+        });
+      });
+    };
+
+    emitter.on('adfactory:imageResult', onImageResult);
+    return () => emitter.off('adfactory:imageResult', onImageResult);
+  }, []);
 
   const handleScroll = () => {
     const el = containerRef.current;

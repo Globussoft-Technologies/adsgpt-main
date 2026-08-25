@@ -338,9 +338,10 @@ export function Stepper({ value, onChange, min = 1, max = 20, suffix }) {
 //
 // Editing is direct: click a swatch to change it in place, × to drop it, + to
 // add. No text field, so there's no way to type an invalid value at all.
-export function PaletteEditor({ colors, onChange, max = 12 }) {
+export function PaletteEditor({ colors, onChange, max = null }) {
   const list = Array.isArray(colors) ? colors : [];
   const commitTimer = useRef(null);
+  const capped = Number.isFinite(max);
 
   // <input type="color"> fires continuously while the user drags through the
   // picker; committing per event would write a trail of intermediate colours.
@@ -357,8 +358,9 @@ export function PaletteEditor({ colors, onChange, max = 12 }) {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {list.map((hex, i) => (
+    <div className="flex flex-col items-start gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {list.map((hex, i) => (
         <span key={`${hex}-${i}`} className="group relative">
           <input
             type="color"
@@ -366,7 +368,7 @@ export function PaletteEditor({ colors, onChange, max = 12 }) {
             onChange={(e) => replaceAt(i, e.target.value)}
             title={hex}
             aria-label={`Brand colour ${hex}`}
-            className={`h-7 w-7 cursor-pointer bg-transparent p-0 ${THUMB}`}
+            className="h-10 w-10 cursor-pointer rounded-[12px] border border-white/10 bg-transparent p-0 overflow-hidden"
           />
           <button
             type="button"
@@ -377,27 +379,28 @@ export function PaletteEditor({ colors, onChange, max = 12 }) {
             <X className="h-2.5 w-2.5" />
           </button>
         </span>
-      ))}
+        ))}
 
-      {list.length < max && (
-        <label title="Add a colour" className={`grid h-7 w-7 cursor-pointer place-items-center ${THUMB_ADD}`}>
-          <Plus className="h-3.5 w-3.5" />
-          <input
-            type="color"
-            defaultValue="#15DCFF"
-            onChange={(e) => {
-              const hex = e.target.value.toUpperCase();
-              debounced(() => {
-                if (!list.includes(hex)) onChange?.([...list, hex]);
-              });
-            }}
-            className="sr-only"
-          />
-        </label>
-      )}
+        {(!capped || list.length < max) && (
+          <label title="Add a colour" className="grid h-10 w-10 cursor-pointer place-items-center rounded-[12px] border border-dashed border-white/14 bg-[#2B2F37] text-[#AFB6C0] transition-colors hover:border-white/25 hover:text-white">
+            <Plus className="h-4 w-4" />
+            <input
+              type="color"
+              defaultValue="#15DCFF"
+              onChange={(e) => {
+                const hex = e.target.value.toUpperCase();
+                debounced(() => {
+                  if (!list.includes(hex)) onChange?.([...list, hex]);
+                });
+              }}
+              className="sr-only"
+            />
+          </label>
+        )}
+      </div>
 
-      <span className={`ml-1 ${FAINT} ${NUM}`}>
-        {list.length}/{max}
+      <span className={`${FAINT} ${NUM}`}>
+        {list.length} colors
       </span>
     </div>
   );

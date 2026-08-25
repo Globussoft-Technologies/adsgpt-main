@@ -98,10 +98,9 @@ const currentAsOption = (value) => (value ? [{ value, label: humanize(value) }] 
 // which Pinterest needs. Ratios are now filtered to what the CHOSEN platforms
 // can actually render, so "16:9 on TikTok" stops being selectable.
 //
-// Limits mirror v1: max 5 logos, max 5 key visuals, max 8 colours, max 50 ads.
+// Limits mirror v1 where they still make sense: max 5 logos, max 5 key visuals, max 50 ads.
 const MAX_LOGOS = 5;
 const MAX_KEY_VISUALS = 5;
-const MAX_COLOURS = 8;
 // v1's PairsPerCycleSection caps at 50, and so do the brief schema and its
 // validator. Stepper's own default is 20, so leaving this off silently held the
 // control 30 short of what the server would happily accept.
@@ -283,10 +282,6 @@ export default function AdjustPanel({
         <p className={MUTED}>Everything here is editable. Changes save as you make them.</p>
         <span className="flex items-center gap-3">
           {saving && <span className={FAINT}>Saving…</span>}
-          <GhostBtn onClick={onClose}>
-            <Check className="h-3.5 w-3.5" />
-            <span>Done</span>
-          </GhostBtn>
         </span>
       </div>
 
@@ -390,7 +385,7 @@ export default function AdjustPanel({
           </FieldBlock>
         </FieldGrid>
 
-        <div className="mt-5 flex flex-wrap items-start gap-x-9 gap-y-5">
+        <div className="mt-5 flex flex-col gap-5">
           <FieldBlock label="Key visuals" hint="what the ads are built from">
             <ImageStrip
               urls={generation.seedImages}
@@ -401,22 +396,23 @@ export default function AdjustPanel({
               emptyLabel="Nothing found on the page — add one"
             />
           </FieldBlock>
-          <FieldBlock label="Logo">
-            <ImageStrip
-              urls={brand.logoUrls}
-              max={MAX_LOGOS}
-              uploadFile={uploadAsset}
-              onChange={(next) => editBrand('logoUrls', next)}
-              emptyLabel="No logo found on the page"
-            />
-          </FieldBlock>
-          <FieldBlock label="Colours">
-            <PaletteEditor
-              colors={brand.palette}
-              max={MAX_COLOURS}
-              onChange={(next) => editBrand('palette', next)}
-            />
-          </FieldBlock>
+          <FieldGrid cols={4}>
+            <FieldBlock label="Logo">
+              <ImageStrip
+                urls={brand.logoUrls}
+                max={MAX_LOGOS}
+                uploadFile={uploadAsset}
+                onChange={(next) => editBrand('logoUrls', next)}
+                emptyLabel="No logo found on the page"
+              />
+            </FieldBlock>
+            <FieldBlock label="Colours" wide>
+              <PaletteEditor
+                colors={brand.palette}
+                onChange={(next) => editBrand('palette', next)}
+              />
+            </FieldBlock>
+          </FieldGrid>
         </div>
       </Section>
 
