@@ -741,11 +741,20 @@ export const GA4Events = {
   },
 
   adFactoryCampaignStarted: (platforms = ['meta'], params = {}) => {
+    const PREFERRED_PLATFORM_ORDER = ['meta', 'google', 'tiktok'];
     const rawPlatforms = Array.isArray(platforms) ? platforms : [platforms];
-    const cleanList = rawPlatforms
+    const cleanList = [...new Set(rawPlatforms
       .map((p) => String(p || '').toLowerCase().trim())
-      .filter(Boolean);
-    const platformStr = cleanList.length > 0 ? cleanList.sort().join('_') : 'meta';
+      .filter(Boolean))];
+    const sortedPlatforms = cleanList.sort((a, b) => {
+      const idxA = PREFERRED_PLATFORM_ORDER.indexOf(a);
+      const idxB = PREFERRED_PLATFORM_ORDER.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+    const platformStr = sortedPlatforms.length > 0 ? sortedPlatforms.join('_') : 'meta';
     const actionName = `ad_factory_campaign_started_${platformStr}`;
     trackGA4Event('ad_factory', {
       feature: 'ad_factory',
@@ -758,11 +767,20 @@ export const GA4Events = {
   },
 
   adFactoryCampaignStopped: (platforms = ['meta'], params = {}) => {
+    const PREFERRED_PLATFORM_ORDER = ['meta', 'google', 'tiktok'];
     const rawPlatforms = Array.isArray(platforms) ? platforms : [platforms];
-    const cleanList = rawPlatforms
+    const cleanList = [...new Set(rawPlatforms
       .map((p) => String(p || '').toLowerCase().trim())
-      .filter(Boolean);
-    const platformStr = cleanList.length > 0 ? cleanList.sort().join('_') : 'meta';
+      .filter(Boolean))];
+    const sortedPlatforms = cleanList.sort((a, b) => {
+      const idxA = PREFERRED_PLATFORM_ORDER.indexOf(a);
+      const idxB = PREFERRED_PLATFORM_ORDER.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+    const platformStr = sortedPlatforms.length > 0 ? sortedPlatforms.join('_') : 'meta';
     const actionName = `ad_factory_campaign_stopped_${platformStr}`;
     trackGA4Event('ad_factory', {
       feature: 'ad_factory',

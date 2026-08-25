@@ -307,13 +307,15 @@ export default function WorkspaceMembersPage() {
     setSaving(true);
     try {
       if (dialog.type === 'remove') {
-        await removeMember(dialog.member.id);
+        const memberId = dialog.member?.id || dialog.member?._id;
+        await removeMember(memberId);
         toast.success('Member removed from the workspace');
       } else {
-        await revokeInvitation(dialog.invitation.id);
+        const invitationId = dialog.invitation?.id || dialog.invitation?._id;
+        await revokeInvitation(invitationId);
         toast.success('Invitation revoked');
-        GA4Events.workspaceInvitationRevoked({ source: 'workspace_members_page', success: true });
       }
+      GA4Events.workspaceInvitationRevoked({ source: 'workspace_members_page', success: true });
       setDialog(null);
       setEmail('');
       setSelectedFeatures([]);

@@ -343,33 +343,40 @@ export const initSocket = (url) => (dispatch, getState) => {
       dispatch(updateAdCreativeBotConversation(data));
 
       const hasSuccessfulImages = data?.images?.some((img) => {
-        const url = img?.base_image_with_logo || img;
+        const url = typeof img === 'string' ? img : (img?.base_image_with_logo || img?.base_image || img?.data || img);
         const isInvalid =
+          !url ||
           url === 'failed' ||
           url === '400' ||
           url === 'planExpired' ||
           url === 'insufficientCredits';
-        return url && !isInvalid;
+        return !isInvalid;
       });
 
+      const isImageType = data?.type ? data?.type === 'image' : Boolean(data?.images);
+      const effectiveSessionId = data?.sessionId || data?.session_id || sessionId;
+      const responseId = data?.chatId || data?.chat_id || data?.request_payload?.chatId || effectiveSessionId;
+
       if (
-        data?.sessionId &&
-        data?.type === 'image' &&
+        effectiveSessionId &&
+        isImageType &&
         hasSuccessfulImages &&
-        !notifiedSessionIds.has(data?.chatId)
+        responseId &&
+        !notifiedSessionIds.has(responseId)
       ) {
-        notifiedSessionIds.add(data?.chatId);
-        showNotification(data?.sessionId, data?.type, dispatch);
+        notifiedSessionIds.add(responseId);
+        showNotification(effectiveSessionId, 'image', dispatch);
         GA4Events.adCreativeAICreativesGenerated({ source: 'ai_creatives_studio', success: true });
       } else if (
-        data?.sessionId &&
-        data?.type === 'image' &&
+        effectiveSessionId &&
+        isImageType &&
         !hasSuccessfulImages &&
         data?.images?.length > 0 &&
-        !notifiedSessionIds.has(data?.chatId)
+        responseId &&
+        !notifiedSessionIds.has(responseId)
       ) {
-        notifiedSessionIds.add(data?.chatId);
-        const reason = data.images[0]?.base_image_with_logo || data.images[0];
+        notifiedSessionIds.add(responseId);
+        const reason = typeof data.images[0] === 'string' ? data.images[0] : (data.images[0]?.base_image_with_logo || data.images[0]?.base_image || 'generation failed');
         showFailureNotification('image', reason);
         GA4Events.adCreativeAICreativesFailure({ source: 'ai_creatives_studio', success: false });
       }
@@ -500,12 +507,16 @@ export const initSocket = (url) => (dispatch, getState) => {
         showNotificationForMyImage(dispatch);
         if (imgType === 'recreate_ads') {
           GA4Events.adLibraryRecreateGenerated({ source: 'ad_library_recreate_studio', success: true });
+        } else if (imgType === 'product_shot') {
+          GA4Events.adCreativeProductShotGenerated({ source: 'product_shot_studio', success: true });
         }
       } else if (!hasUrl && imageId && !notifiedImageIds.has(imageId)) {
         notifiedImageIds.add(imageId);
         showFailureNotification('image', url);
         if (imgType === 'recreate_ads') {
           GA4Events.adLibraryRecreateFailed({ source: 'ad_library_recreate_studio', success: false });
+        } else if (imgType === 'product_shot') {
+          GA4Events.adCreativeProductShotFailed({ source: 'product_shot_studio', success: false });
         }
       }
     });

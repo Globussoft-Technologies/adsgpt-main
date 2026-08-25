@@ -856,6 +856,9 @@ export const pauseAutomation = createAsyncThunk(
       });
     }
 
+    const activePlatforms = extractPlatformsFromConfig(previous?.config, getState);
+    GA4Events.adFactoryCampaignStopped(activePlatforms, { source: 'ad_factory_automation', success: true });
+
     const entry = {
       ...previous,
       status: AUTOMATION_STATUS.PAUSED,
@@ -934,6 +937,8 @@ export const resumeAutomation = createAsyncThunk(
     // the synchronous schedule mirror above is enough for the user to see
     // the right time immediately.
     dispatch(fetchAutomationStats(campaignId));
+    const activePlatforms = extractPlatformsFromConfig(previous?.config, getState);
+    GA4Events.adFactoryCampaignStarted(activePlatforms, { source: 'ad_factory_automation', success: true });
 
     return { campaignId, entry };
   }
