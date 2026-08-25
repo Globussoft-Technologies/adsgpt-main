@@ -126,12 +126,13 @@ export const trackGA4PageView = (path, customTitle) => {
     /* ignore DOM errors */
   }
 
-  // Authoritative SPA pageview dispatch via gtag event
+  // Authoritative SPA pageview dispatch via single gtag config call
   if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-    window.gtag('event', 'page_view', {
+    window.gtag('config', MEASUREMENT_ID, {
       page_path: normalizedPath,
       page_title: resolvedTitle,
       page_location: window.location.href,
+      send_page_view: true,
       ...(userId ? { user_id: String(userId) } : {}),
     });
   }
@@ -159,6 +160,7 @@ export const trackGA4Event = (eventName, params = {}) => {
     flow_version: params.flow_version || 'v1',
     platform: params.platform || 'web',
     asset_type: params.asset_type || 'none',
+    send_page_view: false,
     ...params,
   });
 
