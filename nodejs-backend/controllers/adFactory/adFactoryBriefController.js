@@ -66,8 +66,8 @@ exports.createBrief = async (req, res) => {
 
     const userId = req.user.user_id;
 
-    // SSRF guard. Runs before the quota check and before any document is
-    // written, so a hostile URL costs nothing and leaves no trace.
+    // SSRF guard. Runs before any document is written, so a hostile URL costs
+    // nothing and leaves no trace.
     let safe;
     try {
       safe = await assertSafeUrl(value.url);
@@ -81,14 +81,6 @@ exports.createBrief = async (req, res) => {
           .json({ success: false, error: err.message, reason: err.reason });
       }
       throw err;
-    }
-
-    if (!(await briefService.isWithinFreeQuota(userId))) {
-      return res.status(429).json({
-        success: false,
-        code: "BRIEF_QUOTA_EXCEEDED",
-        error: `You've used all ${briefService.FREE_BRIEF_QUOTA} page reads on this account. Start from a saved brand, or edit one of your existing briefs.`,
-      });
     }
 
     const { brief, reused } = await briefService.createOrReuseUrlBrief({

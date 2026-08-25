@@ -56,24 +56,6 @@ function emitBriefReady(brief) {
   }
 }
 
-// Free briefs per account before metering kicks in (docs/AD_FACTORY_2.md, D2).
-// Inference is cheap relative to generation, and the entire thesis of 2.0 is
-// value-before-commitment — charging for the first taste contradicts it. The
-// cap exists to bound abuse, not to monetise.
-const FREE_BRIEF_QUOTA = 5;
-
-/**
- * How many briefs has this user created from a URL?
- * Brand-path briefs are excluded — they cost us nothing (no scrape, no LLM).
- */
-async function countInferredBriefs(userId) {
-  return AdFactoryBrief.countDocuments({ userId, "source.type": "url" });
-}
-
-async function isWithinFreeQuota(userId) {
-  return (await countInferredBriefs(userId)) < FREE_BRIEF_QUOTA;
-}
-
 /**
  * Create a brief from a URL, or reuse the existing one for this (user, URL).
  *
@@ -489,8 +471,5 @@ module.exports = {
   adoptCampaign,
   emitBriefReady,
   BRIEF_READY_EVENT,
-  countInferredBriefs,
-  isWithinFreeQuota,
   describeInferenceFailure,
-  FREE_BRIEF_QUOTA,
 };
