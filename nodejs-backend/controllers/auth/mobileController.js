@@ -3943,7 +3943,6 @@ module.exports = {
   // ── V2 User (Step 2.1) ──────────────────────────────────────────────────────
   v2UpdateOnboardingProfile,
   // Exposed for unit testing only
-  _v2EmitOnboardingStatus,
   _v2BuildSuccessResponse,
   _v2ResolveFirebaseUser,
 };
