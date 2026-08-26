@@ -197,11 +197,25 @@ class AdsFactoryAutoController {
       );
       campaignLinked = true;
 
-      const platforms = [];
-      if (value.targets?.meta) platforms.push("meta");
-      if (value.targets?.google) platforms.push("google");
-      if (value.targets?.tiktok) platforms.push("tiktok");
-      const platformStr = platforms.length > 0 ? platforms.sort().join("_") : "meta";
+function formatPlatformString(targets) {
+  const PREFERRED_PLATFORM_ORDER = ['meta', 'google', 'tiktok'];
+  const platforms = [];
+  if (targets?.meta) platforms.push('meta');
+  if (targets?.google) platforms.push('google');
+  if (targets?.tiktok) platforms.push('tiktok');
+
+  const sorted = platforms.sort((a, b) => {
+    const idxA = PREFERRED_PLATFORM_ORDER.indexOf(a);
+    const idxB = PREFERRED_PLATFORM_ORDER.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
+  return sorted.length > 0 ? sorted.join('_') : 'meta';
+}
+
+      const platformStr = formatPlatformString(value.targets);
 
       trackBackendGA4Event("ad_factory", {
         user_id: userId,
@@ -663,10 +677,7 @@ class AdsFactoryAutoController {
       }
 
       const platforms = [];
-      if (job.targets?.meta) platforms.push("meta");
-      if (job.targets?.google) platforms.push("google");
-      if (job.targets?.tiktok) platforms.push("tiktok");
-      const platformStr = platforms.length > 0 ? platforms.sort().join("_") : "meta";
+      const platformStr = formatPlatformString(job.targets);
 
       trackBackendGA4Event("ad_factory", {
         user_id: userId,
@@ -743,11 +754,7 @@ class AdsFactoryAutoController {
         await job.save();
       }
 
-      const platforms = [];
-      if (job.targets?.meta) platforms.push("meta");
-      if (job.targets?.google) platforms.push("google");
-      if (job.targets?.tiktok) platforms.push("tiktok");
-      const platformStr = platforms.length > 0 ? platforms.sort().join("_") : "meta";
+      const platformStr = formatPlatformString(job.targets);
 
       trackBackendGA4Event("ad_factory", {
         user_id: userId,
@@ -797,6 +804,17 @@ class AdsFactoryAutoController {
         { userId, jobId: job._id.toString() },
         { $set: { status: "live" } }
       );
+
+      const platformStr = formatPlatformString(job.targets);
+
+      trackBackendGA4Event("ad_factory", {
+        user_id: userId,
+        feature: "ad_factory",
+        action_name: `ad_factory_campaign_started_${platformStr}`,
+        source: "ad_factory_automation",
+        platforms: platformStr,
+        success: true,
+      });
 
       return res.json({ success: true, data: job });
     } catch (err) {

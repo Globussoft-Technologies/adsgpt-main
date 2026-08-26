@@ -30,14 +30,18 @@ function normalizeImageRecord(raw) {
   const results = Array.isArray(record.results) ? record.results : [];
   const firstResult = results[0] || null;
   const url =
-  firstResult?.generatedImageUrl ??  // Add this first
-  firstResult?.url ?? 
-  firstResult?.s3Url ?? 
-  firstResult?.imageUrl ?? 
-  firstResult?.s3_url ?? 
-  null;
-  // const url =
-  //   firstResult?.url ?? firstResult?.s3Url ?? firstResult?.imageUrl ?? firstResult?.s3_url ?? null;
+    firstResult?.generatedImageUrl ??
+    firstResult?.url ?? 
+    firstResult?.s3Url ?? 
+    firstResult?.imageUrl ?? 
+    firstResult?.s3_url ?? 
+    record?.generatedImageUrl ??
+    record?.url ??
+    record?.s3Url ??
+    record?.imageUrl ??
+    record?.s3_url ??
+    record?.image_url ??
+    null;
   return {
     sessionId: record._id ?? record.sessionId ?? record.imageId ?? record.id ?? null,
     status: record.status ?? null, // 'pending' | 'completed' | 'failed' | etc.
@@ -48,8 +52,8 @@ function normalizeImageRecord(raw) {
 }
 
 function triggerImageRequested(type) {
-  if (type === 'ai_creatives') GA4Events.adCreativeAICreativesRequested({ source: 'ai_creatives_form', success: true });
-  else if (type === 'lifestyle_ad') GA4Events.adCreativeLifestyleAdRequested({ source: 'lifestyle_ad_form', success: true });
+  if (type === 'ai_creatives' || type === 'ai_ads') GA4Events.adCreativeAICreativesRequested({ source: 'ai_creatives_form', success: true });
+  else if (type === 'lifestyle' || type === 'lifestyle_ad') GA4Events.adCreativeLifestyleAdRequested({ source: 'lifestyle_ad_form', success: true });
   else if (type === 'product_shot') GA4Events.adCreativeProductShotRequested({ source: 'product_shot_form', success: true });
   else if (type === 'brand_awareness') GA4Events.adCreativeBrandAwarenessRequested({ source: 'brand_awareness_form', success: true });
   else if (type === 'apps_saas') GA4Events.adCreativeAppsSaasRequested({ source: 'apps_saas_form', success: true });
@@ -57,8 +61,8 @@ function triggerImageRequested(type) {
 }
 
 function triggerImageGenerated(type) {
-  if (type === 'ai_creatives') GA4Events.adCreativeAICreativesGenerated({ source: 'ai_creatives_studio', success: true });
-  else if (type === 'lifestyle_ad') GA4Events.adCreativeLifestyleAdGenerated({ source: 'lifestyle_ad_studio', success: true });
+  if (type === 'ai_creatives' || type === 'ai_ads') GA4Events.adCreativeAICreativesGenerated({ source: 'ai_creatives_studio', success: true });
+  else if (type === 'lifestyle' || type === 'lifestyle_ad') GA4Events.adCreativeLifestyleAdGenerated({ source: 'lifestyle_ad_studio', success: true });
   else if (type === 'product_shot') GA4Events.adCreativeProductShotGenerated({ source: 'product_shot_studio', success: true });
   else if (type === 'brand_awareness') GA4Events.adCreativeBrandAwarenessGenerated({ source: 'brand_awareness_studio', success: true });
   else if (type === 'apps_saas') GA4Events.adCreativeAppsSaasGenerated({ source: 'apps_saas_studio', success: true });
@@ -66,8 +70,8 @@ function triggerImageGenerated(type) {
 }
 
 function triggerImageFailed(type) {
-  if (type === 'ai_creatives') GA4Events.adCreativeAICreativesFailure({ source: 'ai_creatives_studio', success: false });
-  else if (type === 'lifestyle_ad') GA4Events.adCreativeLifestyleAdFailed({ source: 'lifestyle_ad_studio', success: false });
+  if (type === 'ai_creatives' || type === 'ai_ads') GA4Events.adCreativeAICreativesFailure({ source: 'ai_creatives_studio', success: false });
+  else if (type === 'lifestyle' || type === 'lifestyle_ad') GA4Events.adCreativeLifestyleAdFailed({ source: 'lifestyle_ad_studio', success: false });
   else if (type === 'product_shot') GA4Events.adCreativeProductShotFailed({ source: 'product_shot_studio', success: false });
   else if (type === 'brand_awareness') GA4Events.adCreativeBrandAwarenessFailed({ source: 'brand_awareness_studio', success: false });
   else if (type === 'apps_saas') GA4Events.adCreativeAppsSaasFailed({ source: 'apps_saas_studio', success: false });
@@ -90,11 +94,16 @@ export const generateImageAction = (body) => async (dispatch) => {
       throw new Error('Backend did not return a sessionId');
     }
     dispatch(submitSucceeded(normalized.sessionId));
+
+    const statusLower = (normalized.status || '').toLowerCase();
+    const isCompleted = statusLower === 'completed' || statusLower === 'success';
+    const isFailed = statusLower === 'failed' || statusLower === 'error';
+
     // If the backend already came back completed (sync mode), no polling needed.
-    if (normalized.status === 'completed' && normalized.url) {
+    if (isCompleted && normalized.url) {
       dispatch(pollUpdated(normalized));
       triggerImageGenerated(imageType);
-    } else if (normalized.status === 'failed' || (normalized.status === 'completed' && !normalized.url)) {
+    } else if (isFailed || (isCompleted && !normalized.url)) {
       dispatch(pollUpdated(normalized));
       triggerImageFailed(imageType);
     } else {
@@ -127,24 +136,36 @@ export const generateImageAction = (body) => async (dispatch) => {
 // or another tick already finished it, we exit and never schedule the next.
 export const pollImageAction = (sessionId, imageType) => async (dispatch, getState) => {
   const tick = async () => {
-    const cur = getState().image.current;
-    if (cur.sessionId !== sessionId || cur.status !== 'pending') return;
     try {
       const raw = await getImageById(sessionId);
       const normalized = normalizeImageRecord(raw);
-      dispatch(pollUpdated(normalized));
-      if (normalized.status === 'completed' && normalized.url) {
-        triggerImageGenerated(imageType);
-      } else if (normalized.status === 'failed' || (normalized.status === 'completed' && !normalized.url)) {
-        triggerImageFailed(imageType);
+      const cur = getState().image.current;
+      if (cur.sessionId === sessionId) {
+        dispatch(pollUpdated(normalized));
       }
-      const after = getState().image.current;
-      if (after.status === 'pending') {
+
+      const statusLower = (normalized.status || '').toLowerCase();
+      const isCompleted = statusLower === 'completed' || statusLower === 'success';
+      const isFailed = statusLower === 'failed' || statusLower === 'error';
+
+      if (isCompleted && normalized.url) {
+        triggerImageGenerated(imageType);
+        return;
+      } else if (isFailed || (isCompleted && !normalized.url)) {
+        triggerImageFailed(imageType);
+        return;
+      }
+
+      const currentStatus = (cur.sessionId === sessionId ? cur.status : normalized.status) || 'pending';
+      if (currentStatus === 'pending' || currentStatus === 'generating') {
         setTimeout(tick, POLL_INTERVAL_MS);
       }
     } catch (err) {
-      // Treat polling errors as a generation failure so the UI can recover.
-      dispatch(pollUpdated({ status: 'failed', error: err.message }));
+      // Treat polling errors as a generation failure so analytics and UI reflect failure.
+      const cur = getState().image.current;
+      if (cur.sessionId === sessionId) {
+        dispatch(pollUpdated({ status: 'failed', error: err.message }));
+      }
       triggerImageFailed(imageType);
     }
   };

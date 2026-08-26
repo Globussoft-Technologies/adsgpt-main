@@ -24,13 +24,17 @@ const AUTOPILOT_BASE = `${BACKEND_HOST}/adsgpt/ads-factory/autopilot`;
 
 function extractPlatformsFromConfig(config, getState) {
   const platforms = [];
-  if (config?.template?.id || config?.template?.enabled) {
+  const metaEnabled = config?.template?.enabled !== false;
+  const googleEnabled = IS_GOOGLE_AUTOMATION_ENABLED && config?.googleTemplate?.enabled !== false;
+  const tiktokEnabled = config?.tiktokTemplate?.enabled !== false;
+
+  if (metaEnabled && (config?.template?.id || config?.template?.facebookId || config?.template?.facebookConnectionId)) {
     platforms.push('meta');
   }
-  if (config?.googleTemplate?.id || config?.googleTemplate?.enabled) {
+  if (googleEnabled && (config?.googleTemplate?.id || config?.googleTemplate?.dailyBudgetOverride || config?.googleTemplate?.campaignName)) {
     platforms.push('google');
   }
-  if (config?.tiktokTemplate?.id || config?.tiktokTemplate?.enabled) {
+  if (tiktokEnabled && config?.tiktokTemplate?.id) {
     platforms.push('tiktok');
   }
 
