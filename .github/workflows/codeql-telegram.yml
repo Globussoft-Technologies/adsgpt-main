@@ -12,12 +12,15 @@
 #
 # Setup:
 #   Secrets   CODEQL_TELEGRAM_BOT_TOKEN, CODEQL_TELEGRAM_CHAT_ID
-#   Variable  CODEQL_TELEGRAM_ENABLED = true
 #
-# That variable is the kill switch, and it is load-bearing. Every new alert
-# sends a message, so a CodeQL query-pack upgrade can raise hundreds at once —
-# the security-extended bump in codeql.yml is exactly that kind of change. Set
-# it to anything but "true" before touching the query pack, then flip it back.
+# Alerts are ON by default - no variable needs to exist. To silence the channel,
+# set repo variable CODEQL_TELEGRAM_ENABLED to "false"; any other value, or no
+# variable at all, leaves it running.
+#
+# That switch is load-bearing rather than decorative. Every new alert sends its
+# own message, so a CodeQL query-pack upgrade can raise hundreds at once - the
+# security-extended bump in codeql.yml is exactly that kind of change. Set it to
+# "false" before touching the query pack, then remove it again afterwards.
 name: CodeQL alerts to Telegram
 
 on:
@@ -31,7 +34,7 @@ jobs:
   notify:
     # CodeQL also runs on pull_request here. Only alerts that actually landed on
     # main are worth waking anyone up for.
-    if: github.event.ref == 'refs/heads/main' && vars.CODEQL_TELEGRAM_ENABLED == 'true'
+    if: github.event.ref == 'refs/heads/main' && vars.CODEQL_TELEGRAM_ENABLED != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
