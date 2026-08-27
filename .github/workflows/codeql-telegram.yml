@@ -1,0 +1,47 @@
+# Announces every new CodeQL alert on main to Telegram, naming the PR that
+# introduced it.
+#
+# This repo is a mirror and has no PRs of its own. The PR number is read out of
+# the mirror commit message, which the private repo's Jenkinsfile writes as an
+# "Upstream PR: #1234" trailer. Nothing here reads the private repo, so there is
+# no cross-repo token to leak from a public repo's secrets.
+#
+# Attribution walks: flagged line -> git blame -> mirror commit -> trailer.
+# The alert's own commit_sha is NOT usable for this: it is whichever mirror
+# batch CodeQL happened to scan, which names an unrelated PR most of the time.
+#
+# Setup:
+#   Secrets   CODEQL_TELEGRAM_BOT_TOKEN, CODEQL_TELEGRAM_CHAT_ID
+#   Variable  CODEQL_TELEGRAM_ENABLED = true
+#
+# That variable is the kill switch, and it is load-bearing. Every new alert
+# sends a message, so a CodeQL query-pack upgrade can raise hundreds at once —
+# the security-extended bump in codeql.yml is exactly that kind of change. Set
+# it to anything but "true" before touching the query pack, then flip it back.
+name: CodeQL alerts to Telegram
+
+on:
+  code_scanning_alert:
+    types: [created, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    # CodeQL also runs on pull_request here. Only alerts that actually landed on
+    # main are worth waking anyone up for.
+    if: github.event.ref == 'refs/heads/main' && vars.CODEQL_TELEGRAM_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git blame needs real history to find the introducing commit.
+          fetch-depth: 0
+
+      - name: Resolve introducing PR and notify
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.CODEQL_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.CODEQL_TELEGRAM_CHAT_ID }}
+          PRIVATE_REPO_URL: https://github.com/Globussoft-Technologies/adsgpt
+        run: node .github/scripts/codeql-telegram.js
