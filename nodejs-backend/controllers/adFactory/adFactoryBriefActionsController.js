@@ -448,6 +448,22 @@ async function loadCurrentRun(brief, userId) {
   return briefGenerationView(campaign, { since: currentFrom });
 }
 
+/**
+ * Every delivered pair the campaign holds, across every run.
+ *
+ * `campaign.results` is CUMULATIVE — runs are boundaries within it, not
+ * separate documents — so "all of them" is the same view with the boundary at
+ * zero. Only the gallery needs this: it lets the user post one ad from Tuesday
+ * and one from last week in a single press, which the run-scoped read above
+ * cannot express.
+ */
+async function loadAllPairs(brief, userId) {
+  if (!brief.campaignId) return [];
+  const campaign = await Campaign.findOne({ _id: brief.campaignId, userId }).lean();
+  if (!campaign) return [];
+  return briefGenerationView(campaign, { since: 0 }).pairs || [];
+}
+
 exports.publishBrief = async (req, res) => {
   /*
     #swagger.tags = ['Ad Factory 2.0']
@@ -462,22 +478,52 @@ exports.publishBrief = async (req, res) => {
       return res.status(404).json({ success: false, error: "Brief not found" });
     }
 
-    const run = await loadCurrentRun(brief, userId);
-    if (!run || run.pairs.length === 0) {
+    const body = req.body || {};
+
+    // ── Which ads ─────────────────────────────────────────────────────────────
+    //
+    // Default: the run the user is looking at, whole. That is what the preview
+    // screen's "Ship these ads" means and it stays the behaviour when the
+    // client sends no selection.
+    //
+    // With `imageUrls`, the caller has hand-picked ads out of the gallery, and
+    // those can span several runs — so the candidate set is every delivered
+    // pair, filtered to what was asked for. Filtering against the SERVER's own
+    // pair list is the point: a url the campaign does not hold cannot be
+    // smuggled into a Meta ad this way, whatever the client posts.
+    const wanted = Array.isArray(body.imageUrls)
+      ? new Set(body.imageUrls.filter(Boolean).map(String))
+      : null;
+
+    let pairs;
+    if (wanted && wanted.size > 0) {
+      const all = await loadAllPairs(brief, userId);
+      pairs = all.filter((p) => wanted.has(String(p.imageUrl)));
+      if (pairs.length === 0) {
+        return res.status(409).json({
+          success: false,
+          code: "NOTHING_TO_POST",
+          error: "None of those ads are available to post any more.",
+        });
+      }
+    } else {
+      const run = await loadCurrentRun(brief, userId);
+      pairs = run ? run.pairs : [];
+      if (pairs.length === 0) {
       return res.status(409).json({
         success: false,
         code: "NOTHING_TO_POST",
         error: "There are no finished ads to post yet — generate some first.",
       });
+      }
     }
 
-    const body = req.body || {};
     const connection = body.connection || {};
     let plan;
     try {
       plan = briefPublishPlan(brief, connection, {
         mode: body.mode || "auto",
-        pairs: run.pairs,
+        pairs,
         campaignId: body.campaignId,
         adSetId: body.adSetId,
         s3Base: process.env.AWS_IMAGE_VIEW_URL,

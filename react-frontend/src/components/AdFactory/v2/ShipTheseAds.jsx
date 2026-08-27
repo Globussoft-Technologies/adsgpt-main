@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, Rocket } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, Rocket } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 import { Panel, PanelFooter, PanelHeader, PrimaryBtn, GhostBtn, Notice } from './Panel';
@@ -8,14 +8,11 @@ import { FieldBlock, Section, SelectField } from './briefFields';
 import { useMotionPresets } from './_motion';
 import {
   BTN_LINK,
-  CONTROL,
   FAINT,
   MUTED,
   NUM,
-  PILL,
-  PILL_ON,
   RULE_BORDER,
-  VALUE,
+  SECTION,
 } from './_tokens';
 import { getAdSets, getCampaigns } from '@/apis/metaAds/metaAdsApi';
 
@@ -29,7 +26,7 @@ import { getAdSets, getCampaigns } from '@/apis/metaAds/metaAdsApi';
 // recurring job. That is a strange thing to demand of someone who just wants
 // the three ads on their screen.
 //
-// This posts the run being viewed, once, and creates nothing. No job, no cron,
+// This posts the ads it is given, once, and creates nothing. No job, no cron,
 // no next run.
 //
 // ─── The two destinations ────────────────────────────────────────────────────
@@ -37,8 +34,6 @@ import { getAdSets, getCampaigns } from '@/apis/metaAds/metaAdsApi';
 //   Built for you   We create the campaign and ad set from the brief's own
 //                   objective and daily budget, the same synthesis activation
 //                   uses. Nothing to choose beyond the ad account and Page.
-//                   Default, because it is Quick setup's whole thesis: Ads
-//                   Manager is where you go afterwards, not a prerequisite.
 //
 //   Existing        The ads join a campaign and ad set the user already runs
 //                   and inherit that ad set's budget, targeting and schedule.
@@ -47,9 +42,23 @@ import { getAdSets, getCampaigns } from '@/apis/metaAds/metaAdsApi';
 //                   -you path would give them a second campaign competing with
 //                   the first for the same audience.
 //
-// Behind a disclosure rather than side by side: the second is the minority
-// case, and two ad-set dropdowns on screen for everyone would put the thing
-// Quick setup exists to avoid back in front of every user.
+// ─── Why this file exports parts ─────────────────────────────────────────────
+//
+// The gallery posts a hand-picked selection from a 360px column beside the
+// grid, and this component's own layout is a full-width two-column card — drop
+// it in that column and every dropdown truncates to "Nothing to…", which is
+// exactly what it looked like when it briefly lived in the page's right rail.
+//
+// Rather than a second posting form (a second thing to keep in step with Meta,
+// looking different for no reason), the PARTS are exported and the layouts are
+// separate compositions of them:
+//
+//   usePublishTarget      campaign + ad set state, their fetches, readiness
+//   PublishTargetFields   the fields, in one column or two
+//   PublishResult         "N ads are live", with the Ads Manager link
+//
+// The default export composes all three exactly as before, so nothing that
+// already renders <ShipTheseAds/> knows any of this happened.
 // ----------------------------------------------------------------------------
 
 const ADS_MANAGER = 'https://adsmanager.facebook.com/adsmanager/manage/ads';
@@ -58,24 +67,22 @@ const ADS_MANAGER = 'https://adsmanager.facebook.com/adsmanager/manage/ads';
 // on which picker produced it. Ads Manager wants it bare.
 const bareAccount = (id) => String(id || '').replace(/^act_/, '');
 
-export default function ShipTheseAds({
-  adCount = 0,
-  connection,
-  onConnectionChange,
-  objectiveLabel,
-  budget,
-  currencySymbol = '₹',
-  onPublish,
-  publishing = false,
-  result = null,
-  error = null,
-  onDismissResult,
-  onClose,
-}) {
-  const M = useMotionPresets();
+// ─── The Meta side, once ─────────────────────────────────────────────────────
 
+/**
+ * Everything "which campaign" needs: the two ids, the two lists behind them,
+ * and whether the pair is complete enough to post.
+ *
+ * Owned by a hook rather than a component so the fields can be laid out two
+ * different ways without the fetches being written twice — and so the POST
+ * button can live anywhere, including a footer that is not this component's.
+ */
+export function usePublishTarget({ connection, publishing = false }) {
+  // 'auto' is still reachable in the payload but has no control: the tab that
+  // switched it stays commented out in the fields below.
   const [mode, setMode] = useState('existing');
-  void setMode; // kept because the tab switch block stays commented out below
+  void setMode;
+
   const [campaignId, setCampaignId] = useState('');
   const [adSetId, setAdSetId] = useState('');
 
@@ -169,50 +176,270 @@ export default function ShipTheseAds({
   );
 
   const connected = isConnectionComplete(connection);
-  const readyExisting = mode !== 'existing' || (campaignId && adSetId);
-  const canPost = connected && readyExisting && adCount > 0 && !publishing;
+  const targeted = mode !== 'existing' || Boolean(campaignId && adSetId);
 
+  return {
+    mode,
+    campaignId,
+    adSetId,
+    setAdSetId,
+    pickCampaign,
+    campaignOptions,
+    adSetOptions,
+    loadingCampaigns,
+    loadingAdSets,
+    listError,
+    adAccountId,
+    connected,
+    targeted,
+    // Everything the server needs to be told about WHERE, in the shape
+    // `onPublish` has always taken.
+    publishArgs: { mode, ...(mode === 'existing' ? { campaignId, adSetId } : {}) },
+    /** Whether pressing Post now would be a real request. */
+    canPublish: (adCount) => connected && targeted && adCount > 0 && !publishing,
+  };
+}
+
+// ─── The fields ──────────────────────────────────────────────────────────────
+
+// A band of the form. In a card it is a padded `Section`; embedded in a column
+// it is a heading and a hairline, because a bordered box inside a bordered
+// panel inside a modal is three frames around two dropdowns.
+function Band({ title, stacked, first, children }) {
+  if (!stacked) return <Section title={title}>{children}</Section>;
+  return (
+    <section className={first ? '' : `border-t pt-5 ${RULE_BORDER}`}>
+      <h4 className={`mb-3 ${SECTION}`}>{title}</h4>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * "Where these publish" + "Which campaign".
+ *
+ * `stacked` is the only difference between the two layouts: side by side in the
+ * card, one under the other in a column. Every control inside already stacks —
+ * LaunchConnection and QuickTemplateSetup are single-column with full-width
+ * inputs — so nothing needs a narrow variant of its own.
+ */
+export function PublishTargetFields({
+  target,
+  connection,
+  onConnectionChange,
+  publishing = false,
+  stacked = false,
+}) {
+  const M = useMotionPresets();
+  const {
+    campaignId,
+    adSetId,
+    setAdSetId,
+    pickCampaign,
+    campaignOptions,
+    adSetOptions,
+    loadingCampaigns,
+    loadingAdSets,
+    listError,
+    adAccountId,
+  } = target;
+
+  const where = (
+    <Band title="Where these publish" stacked={stacked} first>
+      <LaunchConnection value={connection} onChange={onConnectionChange} disabled={publishing} />
+    </Band>
+  );
+
+  const which = (
+    <Band title="Which campaign" stacked={stacked}>
+      <div className="flex flex-col gap-4">
+        {/*
+          Hidden per request: keep the tab options commented out and show
+          only the "One I already run" form below.
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => setMode('auto')} className={PILL}>
+              Built for you
+            </button>
+            <button type="button" onClick={() => setMode('existing')} className={PILL_ON}>
+              One I already run
+            </button>
+          </div>
+        */}
+
+        <AnimatePresence initial={false} mode="wait">
+          <motion.div key="existing" {...M.expand} className="flex flex-col gap-4">
+            <FieldBlock label="Campaign">
+              <SelectField
+                value={campaignId}
+                options={campaignOptions}
+                onChange={pickCampaign}
+                disabled={publishing || loadingCampaigns || !adAccountId}
+                placeholder={
+                  !adAccountId
+                    ? 'Pick an ad account first'
+                    : loadingCampaigns
+                      ? 'Loading campaigns…'
+                      : 'Choose a campaign'
+                }
+              />
+            </FieldBlock>
+            <FieldBlock label="Ad set">
+              <SelectField
+                value={adSetId}
+                options={adSetOptions}
+                onChange={setAdSetId}
+                disabled={publishing || loadingAdSets || !campaignId}
+                placeholder={
+                  !campaignId
+                    ? 'Pick a campaign first'
+                    : loadingAdSets
+                      ? 'Loading ad sets…'
+                      : 'Choose an ad set'
+                }
+              />
+            </FieldBlock>
+            <p className={MUTED}>
+              Budget, targeting and schedule come from the ad set you pick — this brief&apos;s daily
+              budget is not used.
+            </p>
+            {listError && <p className={FAINT}>{listError}</p>}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </Band>
+  );
+
+  if (stacked) {
+    return (
+      <div className="flex flex-col gap-5">
+        {where}
+        {which}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2">
+      {where}
+      <div className={`border-t lg:border-t-0 lg:border-l ${RULE_BORDER}`}>{which}</div>
+    </div>
+  );
+}
+
+// ─── Errors and results ──────────────────────────────────────────────────────
+
+/**
+ * A half-finished launch leaves real objects in the user's ad account. Saying
+ * which step failed is the difference between "try again" and "you now have an
+ * empty campaign to delete".
+ */
+export function PublishError({ error }) {
+  if (!error) return null;
+  return (
+    <Notice tone="error" icon={AlertTriangle}>
+      <span className="flex flex-col gap-1">
+        <span>{error.message}</span>
+        {error.step === 'adset' && error.campaignId && (
+          <span className={FAINT}>
+            The campaign was created but the ad set wasn&apos;t — you may want to remove campaign{' '}
+            {error.campaignId} in Ads Manager before trying again.
+          </span>
+        )}
+        {error.step === 'ads' && (
+          <span className={FAINT}>
+            The campaign and ad set were created but no ads went into them.
+          </span>
+        )}
+      </span>
+    </Notice>
+  );
+}
+
+/**
+ * Done.
+ *
+ * A button that stops spinning is not evidence. This says what went live and
+ * links to it, because the very next question is "where is it".
+ */
+export function PublishResult({ result, adCount, adAccountId, onDismiss, stacked = false }) {
+  if (!result) return null;
+  const account = bareAccount(result.adAccountId || adAccountId);
+  const link = `${ADS_MANAGER}?act=${account}&selected_campaign_ids=${result.campaignId}`;
+  const count = result.requested ?? adCount;
+
+  return (
+    <div
+      className={
+        stacked
+          ? 'flex flex-col items-start gap-3'
+          : 'flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-5 2xl:px-6'
+      }
+    >
+      <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="text-sm font-semibold tracking-[-0.011em] text-[#0A0A0A] dark:text-[#ECEFF3]">
+          <span className={NUM}>{count}</span> {count === 1 ? 'ad is' : 'ads are'} live
+        </span>
+        <span className={MUTED}>
+          {result.mode === 'auto'
+            ? 'In a new campaign we built for you.'
+            : 'In the campaign you chose.'}{' '}
+          Nothing is scheduled — press this again whenever you want more.
+        </span>
+      </div>
+      {!stacked && <span className="grow" />}
+      <span className="flex flex-wrap items-center gap-3">
+        {account && result.campaignId && (
+          <a href={link} target="_blank" rel="noreferrer" className={BTN_LINK}>
+            <span className="inline-flex items-center gap-1.5">
+              Open in Ads Manager
+              <ExternalLink className="h-3.5 w-3.5" />
+            </span>
+          </a>
+        )}
+        <GhostBtn onClick={onDismiss}>Done</GhostBtn>
+      </span>
+    </div>
+  );
+}
+
+// ─── The card ────────────────────────────────────────────────────────────────
+
+export default function ShipTheseAds({
+  adCount = 0,
+  connection,
+  onConnectionChange,
+  objectiveLabel,
+  budget,
+  currencySymbol = '₹',
+  onPublish,
+  publishing = false,
+  result = null,
+  error = null,
+  onDismissResult,
+  onClose,
+}) {
+  const target = usePublishTarget({ connection, publishing });
+
+  // Kept for the "Built for you" tab, which is commented out in the fields but
+  // still the thing this line would describe if it comes back.
   const campaignHint = [
     objectiveLabel,
     budget ? `${currencySymbol}${Number(budget).toLocaleString('en-IN')}/day` : null,
   ]
     .filter(Boolean)
     .join(' · ');
+  void campaignHint;
 
-  // ── Done ──────────────────────────────────────────────────────────────────
-  //
-  // A button that stops spinning is not evidence. This says what went live and
-  // links to it, because the very next question is "where is it".
   if (result) {
-    const account = bareAccount(result.adAccountId || adAccountId);
-    const link = `${ADS_MANAGER}?act=${account}&selected_campaign_ids=${result.campaignId}`;
     return (
       <Panel>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-5 2xl:px-6">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-sm font-semibold tracking-[-0.011em] text-[#0A0A0A] dark:text-[#ECEFF3]">
-              <span className={NUM}>{result.requested ?? adCount}</span>{' '}
-              {(result.requested ?? adCount) === 1 ? 'ad is' : 'ads are'} live
-            </span>
-            <span className={MUTED}>
-              {result.mode === 'auto'
-                ? 'In a new campaign we built for you.'
-                : 'In the campaign you chose.'}{' '}
-              Nothing is scheduled — press this again whenever you want more.
-            </span>
-          </div>
-          <span className="grow" />
-          {account && result.campaignId && (
-            <a href={link} target="_blank" rel="noreferrer" className={BTN_LINK}>
-              <span className="inline-flex items-center gap-1.5">
-                Open in Ads Manager
-                <ExternalLink className="h-3.5 w-3.5" />
-              </span>
-            </a>
-          )}
-          <GhostBtn onClick={onDismissResult}>Done</GhostBtn>
-        </div>
+        <PublishResult
+          result={result}
+          adCount={adCount}
+          adAccountId={target.adAccountId}
+          onDismiss={onDismissResult}
+        />
       </Panel>
     );
   }
@@ -227,110 +454,16 @@ export default function ShipTheseAds({
 
       {error && (
         <div className={`border-b px-5 py-3 ${RULE_BORDER} 2xl:px-6`}>
-          <Notice tone="error" icon={AlertTriangle}>
-            <span className="flex flex-col gap-1">
-              <span>{error.message}</span>
-              {/* A half-finished launch leaves real objects in the user's ad
-                  account. Saying which step failed is the difference between
-                  "try again" and "you now have an empty campaign to delete". */}
-              {error.step === 'adset' && error.campaignId && (
-                <span className={FAINT}>
-                  The campaign was created but the ad set wasn&apos;t — you may want to remove
-                  campaign {error.campaignId} in Ads Manager before trying again.
-                </span>
-              )}
-              {error.step === 'ads' && (
-                <span className={FAINT}>
-                  The campaign and ad set were created but no ads went into them.
-                </span>
-              )}
-            </span>
-          </Notice>
+          <PublishError error={error} />
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2">
-        {/* ── Where ── the same pickers the schedule card uses. */}
-        <Section title="Where these publish">
-          <LaunchConnection
-            value={connection}
-            onChange={onConnectionChange}
-            disabled={publishing}
-          />
-        </Section>
-
-        {/* ── Which campaign ── */}
-        <div className={`border-t lg:border-t-0 lg:border-l ${RULE_BORDER}`}>
-          <Section title="Which campaign">
-            <div className="flex flex-col gap-4">
-              {/*
-                Hidden per request: keep the tab options commented out and show
-                only the "One I already run" form below.
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setMode('auto')}
-                    aria-pressed={mode === 'auto'}
-                    disabled={publishing}
-                    className={mode === 'auto' ? PILL_ON : PILL}
-                  >
-                    Built for you
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode('existing')}
-                    aria-pressed={mode === 'existing'}
-                    disabled={publishing}
-                    className={mode === 'existing' ? PILL_ON : PILL}
-                  >
-                    One I already run
-                  </button>
-                </div>
-              */}
-
-              <AnimatePresence initial={false} mode="wait">
-                <motion.div key="existing" {...M.expand} className="flex flex-col gap-4">
-                  <FieldBlock label="Campaign">
-                    <SelectField
-                      value={campaignId}
-                      options={campaignOptions}
-                      onChange={pickCampaign}
-                      disabled={publishing || loadingCampaigns || !adAccountId}
-                      placeholder={
-                        !adAccountId
-                          ? 'Pick an ad account first'
-                          : loadingCampaigns
-                            ? 'Loading campaigns…'
-                            : 'Choose a campaign'
-                      }
-                    />
-                  </FieldBlock>
-                  <FieldBlock label="Ad set">
-                    <SelectField
-                      value={adSetId}
-                      options={adSetOptions}
-                      onChange={setAdSetId}
-                      disabled={publishing || loadingAdSets || !campaignId}
-                      placeholder={
-                        !campaignId
-                          ? 'Pick a campaign first'
-                          : loadingAdSets
-                            ? 'Loading ad sets…'
-                            : 'Choose an ad set'
-                      }
-                    />
-                  </FieldBlock>
-                  <p className={MUTED}>
-                    Budget, targeting and schedule come from the ad set you pick — this brief&apos;s
-                    daily budget is not used.
-                  </p>
-                  {listError && <p className={FAINT}>{listError}</p>}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </Section>
-        </div>
-      </div>
+      <PublishTargetFields
+        target={target}
+        connection={connection}
+        onConnectionChange={onConnectionChange}
+        publishing={publishing}
+      />
 
       <PanelFooter>
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
@@ -340,25 +473,18 @@ export default function ShipTheseAds({
           </p>
           <PrimaryBtn
             icon={publishing ? undefined : Rocket}
-            onClick={() =>
-              onPublish?.({
-                mode,
-                ...(mode === 'existing' ? { campaignId, adSetId } : {}),
-              })
-            }
+            onClick={() => onPublish?.(target.publishArgs)}
             busy={publishing}
-            disabled={!canPost}
+            disabled={!target.canPublish(adCount)}
           >
-            {publishing ? (
-              'Posting…'
-            ) : connected ? (
-              `Post ${adCount} ${adCount === 1 ? 'ad' : 'ads'}`
-            ) : (
-              'Connect Meta to post'
-            )}
+            {publishing
+              ? 'Posting…'
+              : target.connected
+                ? `Post ${adCount} ${adCount === 1 ? 'ad' : 'ads'}`
+                : 'Connect Meta to post'}
           </PrimaryBtn>
         </div>
       </PanelFooter>
-    </Panel >
+    </Panel>
   );
 }

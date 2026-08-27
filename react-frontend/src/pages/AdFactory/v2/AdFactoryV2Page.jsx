@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Images, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +16,9 @@ import SourceInput from '@/components/AdFactory/v2/SourceInput';
 import Inferring from '@/components/AdFactory/v2/Inferring';
 import BriefSummary from '@/components/AdFactory/v2/BriefSummary';
 import AdjustPanel from '@/components/AdFactory/v2/AdjustPanel';
+import OutputPanel from '@/components/AdFactory/v2/OutputPanel';
 import CreativePreview from '@/components/AdFactory/v2/CreativePreview';
+import RunGallery from '@/components/AdFactory/v2/RunGallery';
 import BriefFailed from '@/components/AdFactory/v2/BriefFailed';
 import BriefList from '@/components/AdFactory/v2/BriefList';
 import RunPicker, { CURRENT } from '@/components/AdFactory/v2/RunPicker';
@@ -24,22 +26,17 @@ import RunTimeline from '@/components/AdFactory/v2/RunTimeline';
 import SchedulePanel from '@/components/AdFactory/v2/SchedulePanel';
 import KeepTheseComing from '@/components/AdFactory/v2/KeepTheseComing';
 import ShipTheseAds from '@/components/AdFactory/v2/ShipTheseAds';
-import {
-  emptyConnection,
-  isConnectionComplete,
-} from '@/components/AdFactory/v2/LaunchConnection';
+import { emptyConnection, isConnectionComplete } from '@/components/AdFactory/v2/LaunchConnection';
 import { Notice, PrimaryBtn } from '@/components/AdFactory/v2/Panel';
 import {
+  BTN_GHOST,
   BTN_LINK,
   CARD,
-  CONTROL_H,
   FAINT,
-  FOCUS_WITHIN,
-  LABEL,
   MUTED,
   NUM,
-  PLACEHOLDER,
-  VALUE,
+  RULE_BORDER,
+  SECTION,
 } from '@/components/AdFactory/v2/_tokens';
 import AdFactoryBgEffect from '@/components/AdFactory/NodeForms/AdFactoryBgEffect';
 import { useMotionPresets } from '@/components/AdFactory/v2/_motion';
@@ -122,6 +119,45 @@ import { getSocket } from '@/store/reducers/socket/socketSlice';
 // reconnected mid-read, not the mechanism.
 // ----------------------------------------------------------------------------
 
+// One row of the This-run breakdown: what it is on the left, what it costs on
+// the right, both on the same baseline so the numbers form a column.
+function CostLine({ label, value, strong = false }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className={strong ? MUTED : FAINT}>{label}</span>
+      <span
+        className={`${NUM} ${
+          strong
+            ? 'text-[13px] font-semibold text-[#211A12] dark:text-[#ECEFF3]'
+            : 'text-[12px] font-medium text-[#6D6255] dark:text-[#AFB6C0]'
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// ─── Two controls the gallery replaced ───────────────────────────────────────
+//
+// Off rather than deleted: flip either to true and it returns exactly as it
+// was. Both are switched off for the same reason — "See all generations" does
+// the same job in one place, and having a second, weaker version of it on the
+// page is how a screen ends up with four controls for two decisions.
+//
+// SHOW_RUN_PICKER — the "Latest run · 3 ads" dropdown.
+//   It swapped WHICH run the page showed, one at a time. The gallery lists
+//   every run at once, grouped and labelled, so the thing this chose between
+//   is now just scrolling. With it off `viewRun` never leaves CURRENT, so
+//   `isViewingPast` stays false and the read-only run branches go quiet.
+//
+// SHOW_INLINE_SHIP — the full-width "Ship these ads" card.
+//   It posts the WHOLE current run. The gallery posts any selection, from any
+//   run, through the same form and the same fields — a superset — and it asks
+//   for the ad set beside the ads rather than a screen away from them.
+const SHOW_RUN_PICKER = false;
+const SHOW_INLINE_SHIP = false;
+
 const BRIEF_READY_EVENT = 'adFactoryBriefReady';
 const INFER_POLL_MS = 3000;
 // Generation runs for minutes, not seconds — polling it as eagerly as inference
@@ -143,7 +179,6 @@ export default function AdFactoryV2Page() {
   // The manual path. Mutually exclusive with the schedule card by design —
   // both answer "what happens to these ads next", and two open cards asking
   // that at once is the duplication we just spent a pass removing.
-  const [shipOn, setShipOn] = useState(false);
   // NOTE: the cadence is NOT local state. It used to be — `frequency` lived in
   // a useState here — which meant the dropdown changed the UI and nothing else:
   // `activateBrief` builds its payload server-side from the STORED brief, so
@@ -159,10 +194,16 @@ export default function AdFactoryV2Page() {
   // Which batch the cards are showing. CURRENT = the live run.
   const [viewRun, setViewRun] = useState(CURRENT);
   const [deletingBrief, setDeletingBrief] = useState(null);
+  // Every ad this brief has ever made, on top of the page — and the one place
+  // a selection spanning several runs can be posted in a single press.
+  const [galleryOpen, setGalleryOpen] = useState(false);
   // Whether the default has been resolved for the brief now loaded. Without
   // this the effect below would re-open the panel every time the brief object
   // changes identity, fighting the user each time they closed it.
   const adjustDefaulted = useRef(false);
+  // Set when the user presses Generate, cleared the moment that run's first ad
+  // lands. See the effect that opens the gallery on it.
+  const awaitingRun = useRef(false);
 
   const brief = useSelector(selectBrief);
   const briefId = useSelector(selectBriefId);
@@ -212,13 +253,90 @@ export default function AdFactoryV2Page() {
     if (viewRun === CURRENT) return run;
     const past = (history || []).find((h) => String(h.version) === String(viewRun));
     if (!past) return run;
-    return { status: 'success', pairs: past.pairs || [], pending: 0, failed: 0, requested: past.adCount };
+    return {
+      status: 'success',
+      pairs: past.pairs || [],
+      pending: 0,
+      failed: 0,
+      requested: past.adCount,
+    };
   }, [viewRun, run, history]);
 
   // Starting a new run always snaps back to it; watching a two-minute
   // generation from inside last week's batch is not what anyone means by
   // pressing Regenerate.
   const isViewingPast = viewRun !== CURRENT;
+
+  // ── The gallery ───────────────────────────────────────────────────────────
+  // Every run this brief has produced, newest first, in the shape RunGallery
+  // renders. The live run is not in `history` — that array is snapshots of
+  // FINISHED runs, written before each new generate — so it is prepended
+  // rather than looked up, and only when it actually has ads in it.
+  const galleryRuns = useMemo(() => {
+    const past = (history || [])
+      .map((h) => ({
+        key: `run-${h.version}`,
+        title: h.partial ? 'Earlier ads' : `Run ${h.version}`,
+        at: h.at,
+        pairs: h.pairs || [],
+      }))
+      .reverse();
+
+    // Slots this run asked for that haven't landed yet. Carried into the
+    // gallery so a generation in flight shows as placeholders filling in one
+    // by one, rather than the grid sitting empty until the last one arrives.
+    //
+    // Read straight off `pending` rather than gating on `status === 'running'`:
+    // the count is derived server-side from the run's own pre-allocated slots
+    // and falls to zero when the run ends, so it is the more reliable of the
+    // two — and CreativePreview has always drawn its skeletons from it alone.
+    const pending = run?.pending || 0;
+
+    const live =
+      run?.pairs?.length || pending
+        ? [
+            {
+              key: 'current',
+              title: 'Latest run',
+              at: run?.at || null,
+              pairs: run?.pairs || [],
+              pending,
+            },
+          ]
+        : [];
+
+    return [...live, ...past];
+  }, [run, history]);
+
+  const galleryTotal = useMemo(
+    () => galleryRuns.reduce((sum, r) => sum + (r.pairs?.length || 0), 0),
+    [galleryRuns]
+  );
+
+  // Placeholders count as something to look at — during the first run of a new
+  // brief there are no finished ads yet, and a disabled button is the wrong
+  // answer to "what is happening".
+  const galleryPending = useMemo(
+    () => galleryRuns.reduce((sum, r) => sum + (r.pending || 0), 0),
+    [galleryRuns]
+  );
+
+  // What the account has left, the same arithmetic every other credit-spending
+  // surface in the app does (`totalCredits - creditsUsed`, off the socket).
+  // `null` when the socket has not delivered a balance yet — showing a bare 0
+  // would read as "you are out of credits".
+  const credits = useSelector((s) => s.socket?.credits);
+  const availableCredits = useMemo(() => {
+    const total = Number(credits?.totalCredits);
+    const used = Number(credits?.creditsUsed);
+    if (!Number.isFinite(total)) return null;
+    return Math.max(0, total - (Number.isFinite(used) ? used : 0));
+  }, [credits]);
+
+  const balanceAfterRun =
+    availableCredits != null && estimate?.total != null
+      ? Math.max(0, availableCredits - estimate.total)
+      : null;
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -284,6 +402,27 @@ export default function AdFactoryV2Page() {
     return () => clearInterval(id);
   }, [dispatch, run?.status, briefId]);
 
+  // ── Take me to the ads ────────────────────────────────────────────────────
+  //
+  // The chain, end to end: Python finishes an image → our backend emits
+  // `adFactoryResponse` → socketSlice relays it onto the app bus as
+  // `adfactory:imageResult` → the effect above refetches the brief → `run.pairs`
+  // grows → this opens the gallery on it. The gallery renders from that same
+  // prop, so everything still generating fills in behind the first arrival
+  // without anything further to do here; the 15s poll is only the net for a tab
+  // that missed the emit.
+  //
+  // Once per press, and only for a press: `awaitingRun` is armed in
+  // `handleGenerate` and cleared here, so closing the gallery while the rest of
+  // the batch lands does not yank it open again, and a scheduled cycle
+  // delivering in the background never interrupts what the user is doing.
+  useEffect(() => {
+    if (!awaitingRun.current) return;
+    if ((run?.pairs?.length || 0) === 0) return;
+    awaitingRun.current = false;
+    setGalleryOpen(true);
+  }, [run?.pairs?.length]);
+
   // The socket event carries only a status, so pull the full document once it
   // lands (or once a reused brief turns out to be already finished).
   useEffect(() => {
@@ -331,22 +470,15 @@ export default function AdFactoryV2Page() {
   // `pendingBudget` is the in-flight keystrokes; `brief.delivery.budget.daily`
   // is what is saved. The typed value wins while it exists so the input doesn't
   // fight the user mid-edit.
-  const budget = useMemo(
-    () => {
-      if (pendingBudget !== '' && pendingBudget != null) return pendingBudget;
-      const saved = brief?.delivery?.budget?.daily;
-      const savedNumber = Number(saved);
-      if (
-        Number.isFinite(savedNumber)
-        && savedNumber > 0
-        && savedNumber < MIN_DAILY_BUDGET_INR
-      ) {
-        return MIN_DAILY_BUDGET_INR;
-      }
-      return saved ?? '';
-    },
-    [brief, pendingBudget],
-  );
+  const budget = useMemo(() => {
+    if (pendingBudget !== '' && pendingBudget != null) return pendingBudget;
+    const saved = brief?.delivery?.budget?.daily;
+    const savedNumber = Number(saved);
+    if (Number.isFinite(savedNumber) && savedNumber > 0 && savedNumber < MIN_DAILY_BUDGET_INR) {
+      return MIN_DAILY_BUDGET_INR;
+    }
+    return saved ?? '';
+  }, [brief, pendingBudget]);
 
   // Read the SAVED budget as a primitive, not off the whole brief. `brief` gets
   // a new identity on every response, so a callback that closes over the object
@@ -372,13 +504,13 @@ export default function AdFactoryV2Page() {
         section: 'delivery',
         field: 'budget',
         value: { daily, currency: 'INR' },
-      }),
+      })
     );
     return dispatch(
       saveBriefEdits({
         briefId,
         patch: { delivery: { budget: { daily, currency: 'INR' } } },
-      }),
+      })
     );
   }, [dispatch, briefId, pendingBudget, savedBudget]);
 
@@ -400,7 +532,7 @@ export default function AdFactoryV2Page() {
       dispatch(clearBriefError());
       dispatch(startBriefFromUrl({ url }));
     },
-    [dispatch],
+    [dispatch]
   );
 
   const handleBrand = useCallback(
@@ -408,7 +540,7 @@ export default function AdFactoryV2Page() {
       dispatch(clearBriefError());
       dispatch(startBriefFromBrand(brandId));
     },
-    [dispatch],
+    [dispatch]
   );
 
   const handleEdit = useCallback(
@@ -418,7 +550,7 @@ export default function AdFactoryV2Page() {
         dispatch(saveBriefEdits({ briefId, patch: { [section]: { [field]: value } } }));
       }
     },
-    [dispatch, briefId],
+    [dispatch, briefId]
   );
 
   /**
@@ -444,11 +576,15 @@ export default function AdFactoryV2Page() {
         dispatch(saveBriefEdits({ briefId, patch: { [section]: fields } }));
       }
     },
-    [dispatch, briefId],
+    [dispatch, briefId]
   );
 
   const handleGenerate = useCallback(async () => {
     if (!briefId) return;
+    // Armed here and disarmed by the effect below, so the gallery opens itself
+    // only for a run THIS user just started — never for a scheduled cycle
+    // landing in the background while they are editing the brief.
+    awaitingRun.current = true;
     // Write the budget first: it is the one field the user can still be typing
     // when they press Generate, and the payload is built server-side from the
     // stored brief.
@@ -515,17 +651,14 @@ export default function AdFactoryV2Page() {
       next.set('briefId', id);
       setSearchParams(next);
     },
-    [searchParams, setSearchParams],
+    [searchParams, setSearchParams]
   );
 
   // Deleting takes the campaign with it, so it is worth one question. The
   // server refuses outright if an automation is still delivering.
-  const handleDeleteBrief = useCallback(
-    (id, label) => {
-      setDeletingBrief({ id, label });
-    },
-    [],
-  );
+  const handleDeleteBrief = useCallback((id, label) => {
+    setDeletingBrief({ id, label });
+  }, []);
 
   // "first run Tue 9:00 AM" — the next occurrence of the chosen hour. Derived
   // rather than fetched: the job doesn't exist yet, so there is no nextRunAt to
@@ -546,7 +679,6 @@ export default function AdFactoryV2Page() {
   // moving to it just looks like the button did nothing.
   const scheduleRef = useRef(null);
   const handleWantSchedule = useCallback(() => {
-    setShipOn(false);
     setScheduleOn(true);
     requestAnimationFrame(() => {
       scheduleRef.current?.scrollIntoView({
@@ -556,26 +688,15 @@ export default function AdFactoryV2Page() {
     });
   }, [M.reduce]);
 
-  // Opening one closes the other. Scrolls for the same reason the schedule
-  // card does: summoning something below the fold looks like nothing happened.
-  const shipRef = useRef(null);
-  const handleWantShip = useCallback(() => {
-    setScheduleOn(false);
-    setShipOn(true);
-    requestAnimationFrame(() => {
-      shipRef.current?.scrollIntoView({
-        behavior: M.reduce ? 'auto' : 'smooth',
-        block: 'center',
-      });
-    });
-  }, [M.reduce]);
-
+  // `imageUrls` arrives only from the gallery, where the user hand-picked ads
+  // that can span several runs. Omitted — which is what "Ship these ads" on the
+  // preview screen sends — the server posts the whole run being viewed.
   const handlePublish = useCallback(
-    ({ mode, campaignId, adSetId }) => {
+    ({ mode, campaignId, adSetId, imageUrls }) => {
       if (!briefId) return;
-      dispatch(publishNow({ briefId, connection, mode, campaignId, adSetId }));
+      dispatch(publishNow({ briefId, connection, mode, campaignId, adSetId, imageUrls }));
     },
-    [dispatch, briefId, connection],
+    [dispatch, briefId, connection]
   );
 
   const handlePause = useCallback(
@@ -583,7 +704,7 @@ export default function AdFactoryV2Page() {
       if (!brief?.jobId) return;
       dispatch(setAutomationPaused({ jobId: brief.jobId, paused }));
     },
-    [dispatch, brief?.jobId],
+    [dispatch, brief?.jobId]
   );
 
   const handleStop = useCallback(() => {
@@ -629,12 +750,14 @@ export default function AdFactoryV2Page() {
 
       if (pairsPerCycle != null) {
         patch.pairsPerCycle = pairsPerCycle;
-        dispatch(applyLocalEdit({ section: 'delivery', field: 'pairsPerCycle', value: pairsPerCycle }));
+        dispatch(
+          applyLocalEdit({ section: 'delivery', field: 'pairsPerCycle', value: pairsPerCycle })
+        );
       }
 
       dispatch(saveBriefEdits({ briefId, patch: { delivery: patch } }));
     },
-    [dispatch, briefId, brief?.delivery?.frequency],
+    [dispatch, briefId, brief?.delivery?.frequency]
   );
 
   const handleScheduleUpdate = useCallback(
@@ -660,7 +783,9 @@ export default function AdFactoryV2Page() {
 
       if (pairsPerCycle != null) {
         patch.delivery = { ...(patch.delivery || {}), pairsPerCycle };
-        dispatch(applyLocalEdit({ section: 'delivery', field: 'pairsPerCycle', value: pairsPerCycle }));
+        dispatch(
+          applyLocalEdit({ section: 'delivery', field: 'pairsPerCycle', value: pairsPerCycle })
+        );
       }
 
       patch.alertEmails = emails;
@@ -670,7 +795,7 @@ export default function AdFactoryV2Page() {
         dispatch(fetchTimeline(briefId));
       }
     },
-    [dispatch, briefId, brief?.delivery?.frequency],
+    [dispatch, briefId, brief?.delivery?.frequency]
   );
 
   // Read straight off the brief, with the same defaults the schema uses, so the
@@ -693,7 +818,7 @@ export default function AdFactoryV2Page() {
       brief?.delivery?.frequency?.startDate,
       brief?.delivery?.frequency?.endDate,
       brief?.delivery?.pairsPerCycle,
-    ],
+    ]
   );
 
   const handleActivate = useCallback(async () => {
@@ -718,7 +843,7 @@ export default function AdFactoryV2Page() {
           startDate: cadence.startDate,
           endDate: cadence.endDate,
         },
-      }),
+      })
     );
     if (activateAutomation.fulfilled.match(result)) {
       setScheduleOn(false);
@@ -733,7 +858,7 @@ export default function AdFactoryV2Page() {
       dispatch(applyLocalEdit({ field: 'alertEmails', value: emails }));
       dispatch(saveBriefEdits({ briefId, patch: { alertEmails: emails } }));
     },
-    [dispatch, briefId],
+    [dispatch, briefId]
   );
 
   const handleRunNow = useCallback(() => {
@@ -750,16 +875,98 @@ export default function AdFactoryV2Page() {
     }
   }, [brief]);
 
-  const budgetNumber = Number(budget);
-  const budgetTooLow =
-    Number.isFinite(budgetNumber) && budgetNumber > 0 && budgetNumber < MIN_DAILY_BUDGET_INR;
-  const canGenerate = Number.isFinite(budgetNumber) && budgetNumber >= MIN_DAILY_BUDGET_INR;
+  // Generating spends CREDITS, not budget — no code path reads the budget
+  // during generation. It used to gate this button anyway, which meant a brief
+  // with no budget could not make a single ad even though nothing it was about
+  // to do needed one. The budget is asked for where it IS required: the
+  // schedule card, whose synthesised template expresses it as an ad set budget.
+  const canGenerate = Boolean(briefId) && !generating;
+
+  // How many ads one press makes. The same number the Output card's stepper
+  // sets, so the button can name what it is about to do.
+  const adsPerRun = brief?.generation?.imageCount ?? 3;
+
+  const generateLabel = generating
+    ? 'Generating…'
+    : `${hasCreatives ? 'Regenerate' : 'Generate'} ${adsPerRun} ${adsPerRun === 1 ? 'ad' : 'ads'}`;
+
+  // The rail: what we make (Output) directly above what it costs and the button
+  // that spends it. Rendered before the first run too — the wireframe's whole
+  // point is that the price of the press is on screen while you are still
+  // deciding what to press it with.
+  const sidebar = (
+    <aside className="flex flex-col gap-3 lg:sticky lg:top-3 lg:self-start">
+      <OutputPanel brief={brief} onEditField={handleEdit} onEditFields={handleEditMany} />
+
+      <div className={`${CARD} px-4 py-4`}>
+        <h3 className={`mb-3 ${SECTION}`}>This run</h3>
+
+        <div className="flex items-baseline gap-2">
+          <span
+            className={`text-[24px] leading-none font-semibold text-[#211A12] dark:text-[#ECEFF3] ${NUM}`}
+          >
+            {estimate?.total ?? '—'}
+          </span>
+          <span className={MUTED}>credits</span>
+        </div>
+
+        {/* The two lines the total is made of. Priced by the same projection
+            the charge freeze uses, so the quote and the invoice cannot
+            disagree — see briefCreditEstimate on the server. */}
+        {estimate?.counts && (
+          <div className="mt-3 flex flex-col gap-1.5">
+            <CostLine
+              label={`${estimate.counts.image} ${estimate.counts.image === 1 ? 'image' : 'images'}`}
+              value={estimate.image}
+            />
+            <CostLine
+              label={`${estimate.counts.text} ${estimate.counts.text === 1 ? 'copy' : 'copies'}`}
+              value={estimate.text}
+            />
+            {balanceAfterRun != null && (
+              <div className={`mt-1.5 border-t pt-2 ${RULE_BORDER}`}>
+                <CostLine label="Balance after run" value={balanceAfterRun} strong />
+              </div>
+            )}
+          </div>
+        )}
+
+        <PrimaryBtn
+          onClick={handleGenerate}
+          disabled={!canGenerate || isViewingPast}
+          busy={saving || generating}
+          className="mt-4 w-full"
+        >
+          {generateLabel}
+        </PrimaryBtn>
+        <p className={`mt-2 text-center ${FAINT}`}>Nothing spends until you start deliveries.</p>
+
+        {/* Every ad this brief has made, not just the batch on screen. The
+            page shows one run at a time by design; this is the way to the
+            rest of them, and the only place a single ad can be posted on its
+            own. */}
+        <button
+          type="button"
+          onClick={() => setGalleryOpen(true)}
+          disabled={galleryTotal === 0 && galleryPending === 0}
+          className={`mt-3 w-full justify-center ${BTN_GHOST}`}
+        >
+          <Images className="h-3.5 w-3.5" />
+          {galleryTotal === 0 && galleryPending === 0
+            ? 'No generations yet'
+            : galleryPending > 0
+              ? `See all generations (${galleryTotal} + ${galleryPending} coming)`
+              : `See all generations (${galleryTotal})`}
+        </button>
+      </div>
+    </aside>
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────
   // No header here: the page title comes from TopHeader and the mode switch is
   // owned by AdFactoryPage, so both modes share exactly one of each.
   return (
-    <div className="relative isolate flex h-full w-full flex-col gap-5 overflow-y-auto pt-2 pb-10">
+    <div className="relative isolate flex h-full w-full flex-col gap-3 overflow-y-auto bg-[#F3EEE6] pt-0 pb-8 text-[#2C241B] dark:bg-[#0f0f0f] dark:text-[#ECEFF3]">
       {/* The same background Full control uses — one Ad Factory, one backdrop.
           Mounted per-surface, which is the pattern every v1 screen already
           follows (NoCompaignScreen, StartForm, NodeModal all mount their own).
@@ -784,7 +991,7 @@ export default function AdFactoryV2Page() {
           the glow would paint behind `.layout_container`'s light-mode
           background — visible in dark, gone in light. Isolating scopes it to
           this page, so both themes keep the backdrop they had. */}
-      <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden>
+      <div className="pointer-events-none fixed inset-0 -z-10 hidden dark:block" aria-hidden>
         <AdFactoryBgEffect />
       </div>
 
@@ -796,10 +1003,7 @@ export default function AdFactoryV2Page() {
               {errorCode === 'NO_BASE_PLAN' ? (
                 // The trial user's first real moment. An upgrade path, not a
                 // dead end.
-                <a
-                  href="/pricing"
-                  className={BTN_LINK}
-                >
+                <a href="/pricing" className={BTN_LINK}>
                   See plans
                 </a>
               ) : (
@@ -825,7 +1029,7 @@ export default function AdFactoryV2Page() {
           <button
             type="button"
             onClick={handleStartOver}
-            className="inline-flex items-center gap-1.5 text-13 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
+            className="text-13 inline-flex items-center gap-1.5 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             All briefs
@@ -889,166 +1093,96 @@ export default function AdFactoryV2Page() {
             </Notice>
           )}
 
-          <BriefSummary
-            brief={brief}
-            budget={budget}
-            onAdjust={() => setAdjustOpen((v) => !v)}
-            adjusting={adjustOpen}
-            busy={saving}
-          />
+          {/* Two columns from the first paint, not only once ads exist. The
+              rail holds Output and the price of the press, and both of those
+              are decisions made BEFORE the first generate — a layout that
+              appears afterwards would move the whole page under the user at the
+              exact moment their ads arrive. */}
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="flex min-w-0 flex-col gap-3">
+              <BriefSummary
+                brief={brief}
+                budget={budget}
+                onAdjust={() => setAdjustOpen((v) => !v)}
+                adjusting={adjustOpen}
+                busy={saving}
+              />
 
-          {/* Expanded in place, right under the summary it belongs to, so the
+              {/* Expanded in place, right under the summary it belongs to, so the
               fields sit where the chips they correspond to are.
 
               The height animation is not decoration: this pushes everything
               below it down by several hundred pixels, and a jump that large
               with no transition reads as the page breaking rather than
               responding. */}
-          <AnimatePresence initial={false}>
-            {adjustOpen && (
-              <motion.div key="adjust" {...M.expand}>
-                <AdjustPanel
-                  brief={brief}
-                  open
-                  onClose={() => setAdjustOpen(false)}
-                  onEditField={handleEdit}
-                  onEditFields={handleEditMany}
-                  saving={saving}
-                  estimate={estimate}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Before the first run: the budget and one button. This is the only
-              thing standing between a read page and ads, and it is input 2 of
-              2 — normally already answered on the wait screen.
-
-              One bar, one row, controls aligned on a baseline: what it costs
-              per day, what this press costs once, and the press. It used to be
-              a two-column card with a stacked caption under the input and an
-              uppercase micro-label over every value, which put four
-              differently-sized pieces of type around a single button. */}
-          {!generating && !hasCreatives && (
-            <div className={`flex flex-wrap items-end gap-x-8 gap-y-4 ${CARD} px-5 py-4`}>
-              <div className="flex flex-col gap-2">
-                <span className={LABEL}>Daily budget</span>
-                <div
-                  className={`flex ${CONTROL_H} w-40 items-center gap-1.5 rounded-lg border bg-white px-3 ${FOCUS_WITHIN} dark:bg-[#1E232A] ${canGenerate
-                    ? 'border-[#E5E7EB] dark:border-[#2E353E]'
-                    : 'border-[#F59E0B]/45 dark:border-[#F59E0B]/35'
-                    }`}
-                >
-                  <span className={FAINT}>₹</span>
-                  <input
-                    type="number"
-                    min={MIN_DAILY_BUDGET_INR}
-                    inputMode="numeric"
-                    value={budget ?? ''}
-                    onChange={(e) => dispatch(setPendingBudget(e.target.value))}
-                    onBlur={persistBudget}
-                    placeholder="800"
-                    className={`w-full min-w-0 bg-transparent outline-none ${VALUE} ${PLACEHOLDER} ${NUM}`}
-                  />
-                  <span className={`shrink-0 ${FAINT}`}>/day</span>
-                </div>
-                {budgetTooLow && (
-                  <span className="text-[11px] font-medium text-[#F59E0B]">
-                    Minimum ₹{MIN_DAILY_BUDGET_INR}/day
-                  </span>
+              <AnimatePresence initial={false}>
+                {adjustOpen && (
+                  <motion.div key="adjust" {...M.expand}>
+                    <AdjustPanel
+                      brief={brief}
+                      open
+                      onClose={() => setAdjustOpen(false)}
+                      onEditField={handleEdit}
+                      onEditFields={handleEditMany}
+                      saving={saving}
+                    />
+                  </motion.div>
                 )}
-              </div>
+              </AnimatePresence>
 
-              {/* What this click costs, BEFORE it is clicked.
-                  The estimate has been served with the brief all along and was
-                  only rendered once generation had already started — which is
-                  the one moment it is too late to be useful. Priced by the same
-                  projection the freeze uses, so the quote and the charge cannot
-                  disagree; `null` means unpriceable, and we say nothing rather
-                  than imply it is free. */}
-              {estimate?.total != null && (
-                <div className="flex flex-col gap-2">
-                  <span className={LABEL}>This run costs</span>
-                  <span className={`flex ${CONTROL_H} items-baseline gap-2`}>
-                    <span
-                      className={`text-[17px] font-semibold tracking-[-0.017em] text-[#111827] dark:text-[#ECEFF3] ${NUM}`}
-                    >
-                      {estimate.total}
-                    </span>
-                    <span className={MUTED}>
-                      credits
-                      {estimate.counts
-                        ? ` · ${estimate.counts.image} images + ${estimate.counts.text} copies`
-                        : ''}
-                    </span>
-                  </span>
-                </div>
+              {/* The budget bar that used to sit here is gone. It paired a
+                  field generation never reads with the button that generates,
+                  and it duplicated the cost line the rail now owns. The budget
+                  is asked for in the schedule card, which is the one thing that
+                  requires it. */}
+
+              {SHOW_RUN_PICKER && (
+                <RunPicker
+                  history={history}
+                  value={viewRun}
+                  onChange={setViewRun}
+                  currentCount={run?.pairs?.length || 0}
+                  currentPending={isViewingPast ? 0 : run?.pending || 0}
+                />
               )}
 
-              <span className="grow" />
-
-              <div className="flex flex-col items-end gap-2">
-                <span className={FAINT}>Nothing spends until you start deliveries.</span>
-                <PrimaryBtn onClick={handleGenerate} disabled={!canGenerate} busy={saving}>
-                  Generate ads
-                </PrimaryBtn>
-              </div>
-            </div>
-          )}
-
-          <RunPicker
-            history={history}
-            value={viewRun}
-            onChange={setViewRun}
-            currentCount={run?.pairs?.length || 0}
-            currentPending={isViewingPast ? 0 : run?.pending || 0}
-          />
-
-          <CreativePreview
-            run={viewedRun}
-            callToAction={ctaLabel}
-            ratio={brief.delivery?.ratios?.[0] || '4:5'}
-            onRegenerate={handleGenerate}
-            onContinue={handleWantSchedule}
-            onShip={isViewingPast ? undefined : handleWantShip}
-            shipping={publishing}
-            regenerating={generating}
-            creditsHeld={isViewingPast ? null : estimate?.total ?? null}
-            estimate={isViewingPast ? null : estimate?.total ?? null}
-            readOnly={isViewingPast}
-          />
-
-          {/* The manual half — post the ads on screen, once. Rendered only
-              when asked for, from the preview strip's own button, and never
-              alongside the schedule card. */}
-          {hasCreatives && shipOn && (
-            <div ref={shipRef}>
-              <ShipTheseAds
-                adCount={run?.pairs?.length || 0}
-                connection={connection}
-                onConnectionChange={setConnection}
-                objectiveLabel={objectiveLabel}
-                budget={budget}
-                onPublish={handlePublish}
-                publishing={publishing}
-                result={publishResult}
-                error={publishError}
-                onDismissResult={() => {
-                  setShipOn(false);
-                  dispatch(clearPublishState());
-                }}
-                onClose={() => {
-                  setShipOn(false);
-                  dispatch(clearPublishState());
-                }}
+              <CreativePreview
+                run={viewedRun}
+                callToAction={ctaLabel}
+                ratio={brief.delivery?.ratios?.[0] || '4:5'}
+                onRegenerate={handleGenerate}
+                onContinue={handleWantSchedule}
+                shipping={publishing}
+                regenerating={generating}
+                creditsHeld={isViewingPast ? null : (estimate?.total ?? null)}
+                estimate={isViewingPast ? null : (estimate?.total ?? null)}
+                readOnly={isViewingPast}
               />
-            </div>
-          )}
 
-          {/* ── 4 ── Only once there is something to schedule. Asking "keep
+              {/* Posting the WHOLE current run into one ad set — off by
+                  default, see SHOW_INLINE_SHIP at the top of this file. The
+                  gallery does this and more, beside the ads rather than a
+                  screen away from them. */}
+              {SHOW_INLINE_SHIP && hasCreatives && !isViewingPast && (
+                <ShipTheseAds
+                  adCount={run?.pairs?.length || 0}
+                  connection={connection}
+                  onConnectionChange={setConnection}
+                  objectiveLabel={objectiveLabel}
+                  budget={budget}
+                  onPublish={handlePublish}
+                  publishing={publishing}
+                  result={publishResult}
+                  error={publishError}
+                  onDismissResult={() => dispatch(clearPublishState())}
+                  onClose={() => dispatch(clearPublishState())}
+                />
+              )}
+
+              {/* ── 4 ── Only once there is something to schedule. Asking "keep
               these coming" before any ad exists asks the user to commit to
               something they haven't seen. */}
-          {/* Only once asked for. The preview strip's "Keep these coming →" is
+              {/* Only once asked for. The preview strip's "Keep these coming →" is
               the way in; rendering this card alongside it put two controls with
               the SAME NAME on screen at once, the button merely flipping the
               toggle sitting underneath it.
@@ -1058,176 +1192,239 @@ export default function AdFactoryV2Page() {
               together. On one page only one of them can be the control — the
               button leads here, and the toggle in this card's header is how you
               leave again. */}
-          {/* ONE card. The account pickers used to be a second panel below
+              {/* ONE card. The account pickers used to be a second panel below
               this one, while this one carried a read-only checklist of the
               same two values — so the page asked and answered the same
               question in two different boxes, in the wrong order. The pickers
               live inside "Where these publish" now, and the derived
               adAccountLabel/pageLabel object that fed the checklist is gone
               with it: the connection state goes straight in. */}
-          {hasCreatives && scheduleOn && (
-            <div ref={scheduleRef}>
-              <KeepTheseComing
-                enabled={scheduleOn}
-                onToggle={setScheduleOn}
-                frequency={cadence.frequency}
-                custom={cadence.custom}
-                startDate={cadence.startDate}
-                endDate={cadence.endDate}
-                alertEmails={brief.alertEmails}
-                onAlertEmailsChange={handleAlertEmailsChange}
-                onCadenceChange={handleCadenceChange}
-                onActivate={handleActivate}
-                activating={activating}
-                isMetaConnected={isConnectionComplete(connection)}
-                connection={connection}
-                onConnectionChange={setConnection}
-                pairsPerCycle={cadence.pairsPerCycle}
-                budget={budget}
-                hour={cadence.hour}
-                timezone={cadence.timezone}
-                objectiveLabel={objectiveLabel}
-                creditsPerCycle={estimate?.total ?? null}
-                firstRunLabel={nextRunLabel}
-                activationError={activationError}
-                status={brief?.status === 'live' || brief?.jobId ? (timeline?.summary?.status || (brief?.status === 'paused' ? 'paused' : 'active')) : brief?.status}
-                onPause={() => handlePause(true)}
-                onResume={() => handlePause(false)}
-                onStop={handleStop}
-                busy={pausing}
-              />
+              {hasCreatives && scheduleOn && (
+                <div ref={scheduleRef}>
+                  <KeepTheseComing
+                    enabled={scheduleOn}
+                    onToggle={setScheduleOn}
+                    frequency={cadence.frequency}
+                    custom={cadence.custom}
+                    startDate={cadence.startDate}
+                    endDate={cadence.endDate}
+                    alertEmails={brief.alertEmails}
+                    onAlertEmailsChange={handleAlertEmailsChange}
+                    onCadenceChange={handleCadenceChange}
+                    onActivate={handleActivate}
+                    activating={activating}
+                    isMetaConnected={isConnectionComplete(connection)}
+                    connection={connection}
+                    onConnectionChange={setConnection}
+                    pairsPerCycle={cadence.pairsPerCycle}
+                    budget={budget}
+                    onBudgetChange={(v) => dispatch(setPendingBudget(v))}
+                    onBudgetCommit={persistBudget}
+                    minBudget={MIN_DAILY_BUDGET_INR}
+                    hour={cadence.hour}
+                    timezone={cadence.timezone}
+                    objectiveLabel={objectiveLabel}
+                    creditsPerCycle={estimate?.total ?? null}
+                    firstRunLabel={nextRunLabel}
+                    activationError={activationError}
+                    status={
+                      brief?.status === 'live' || brief?.jobId
+                        ? timeline?.summary?.status ||
+                          (brief?.status === 'paused' ? 'paused' : 'active')
+                        : brief?.status
+                    }
+                    onPause={() => handlePause(true)}
+                    onResume={() => handlePause(false)}
+                    onStop={handleStop}
+                    busy={pausing}
+                  />
+                </div>
+              )}
             </div>
-          )}
+            {sidebar}
+          </div>
         </div>
       )}
 
       {/* ── 5 ── Deliveries are the page once a brief is live. */}
       {step === STEP.DELIVERIES && brief && (
-        <div className="mx-auto flex w-full max-w-375 flex-col gap-4 px-4 2xl:px-8">
-          <BriefSummary
-            brief={brief}
-            budget={budget}
-            onAdjust={() => setAdjustOpen((v) => !v)}
-            adjusting={adjustOpen}
-            busy={saving}
-          />
-          <AnimatePresence initial={false}>
-            {adjustOpen && (
-              <motion.div key="adjust" {...M.expand}>
-                <AdjustPanel
-                  brief={brief}
-                  open
-                  onClose={() => setAdjustOpen(false)}
-                  onEditField={handleEdit}
-                  onEditFields={handleEditMany}
-                  saving={saving}
-                  estimate={estimate}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          {hasCreatives && (
-            <>
-              <RunPicker
-                history={history}
-                value={viewRun}
-                onChange={setViewRun}
-                currentCount={run?.pairs?.length || 0}
-                currentPending={isViewingPast ? 0 : run?.pending || 0}
+        <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 px-3 py-3 sm:px-4 2xl:px-5">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="flex min-w-0 flex-col gap-3">
+              <BriefSummary
+                brief={brief}
+                budget={budget}
+                onAdjust={() => setAdjustOpen((v) => !v)}
+                adjusting={adjustOpen}
+                busy={saving}
               />
-              <CreativePreview
-                run={viewedRun}
-                callToAction={ctaLabel}
-                ratio={brief.delivery?.ratios?.[0] || '4:5'}
-                onRegenerate={handleGenerate}
-                onContinue={handleWantSchedule}
-                shipping={publishing}
-                regenerating={generating}
-                creditsHeld={isViewingPast ? null : estimate?.total ?? null}
-                estimate={isViewingPast ? null : estimate?.total ?? null}
-                readOnly={isViewingPast}
-                showActions={false}
-              />
-            </>
-          )}
-          {/* The cadence and the three lifecycle controls. Until this existed
+              <AnimatePresence initial={false}>
+                {adjustOpen && (
+                  <motion.div key="adjust" {...M.expand}>
+                    <AdjustPanel
+                      brief={brief}
+                      open
+                      onClose={() => setAdjustOpen(false)}
+                      onEditField={handleEdit}
+                      onEditFields={handleEditMany}
+                      saving={saving}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              {hasCreatives && (
+                <>
+                  {SHOW_RUN_PICKER && (
+                    <RunPicker
+                      history={history}
+                      value={viewRun}
+                      onChange={setViewRun}
+                      currentCount={run?.pairs?.length || 0}
+                      currentPending={isViewingPast ? 0 : run?.pending || 0}
+                    />
+                  )}
+                  <CreativePreview
+                    run={viewedRun}
+                    callToAction={ctaLabel}
+                    ratio={brief.delivery?.ratios?.[0] || '4:5'}
+                    onRegenerate={handleGenerate}
+                    onContinue={handleWantSchedule}
+                    shipping={publishing}
+                    regenerating={generating}
+                    creditsHeld={isViewingPast ? null : (estimate?.total ?? null)}
+                    estimate={isViewingPast ? null : (estimate?.total ?? null)}
+                    readOnly={isViewingPast}
+                    showActions={false}
+                  />
+                  {/* A live brief can still post a run by hand. Off by
+                      default with SHOW_INLINE_SHIP — "See all generations" in
+                      the rail is the way to it, on this screen too. */}
+                  {SHOW_INLINE_SHIP && !isViewingPast && (
+                    <ShipTheseAds
+                      adCount={run?.pairs?.length || 0}
+                      connection={connection}
+                      onConnectionChange={setConnection}
+                      objectiveLabel={objectiveLabel}
+                      budget={budget}
+                      onPublish={handlePublish}
+                      publishing={publishing}
+                      result={publishResult}
+                      error={publishError}
+                      onDismissResult={() => dispatch(clearPublishState())}
+                      onClose={() => dispatch(clearPublishState())}
+                    />
+                  )}
+                </>
+              )}
+              {/* The cadence and the three lifecycle controls. Until this existed
               a live brief could only be paused: the setup card renders before
               activation only, so there was no way to change the time, the
               frequency, or to stop. */}
-          {scheduleOn && (
-            <div ref={scheduleRef}>
-              <KeepTheseComing
-                enabled={scheduleOn}
-                onToggle={setScheduleOn}
+              {scheduleOn && (
+                <div ref={scheduleRef}>
+                  <KeepTheseComing
+                    enabled={scheduleOn}
+                    onToggle={setScheduleOn}
+                    frequency={cadence.frequency}
+                    custom={cadence.custom}
+                    startDate={cadence.startDate}
+                    endDate={cadence.endDate}
+                    alertEmails={brief.alertEmails}
+                    onAlertEmailsChange={handleAlertEmailsChange}
+                    onCadenceChange={handleCadenceChange}
+                    onActivate={handleActivate}
+                    activating={activating}
+                    isMetaConnected={isConnectionComplete(connection)}
+                    connection={connection}
+                    onConnectionChange={setConnection}
+                    pairsPerCycle={cadence.pairsPerCycle}
+                    budget={budget}
+                    onBudgetChange={(v) => dispatch(setPendingBudget(v))}
+                    onBudgetCommit={persistBudget}
+                    minBudget={MIN_DAILY_BUDGET_INR}
+                    hour={cadence.hour}
+                    timezone={cadence.timezone}
+                    objectiveLabel={objectiveLabel}
+                    creditsPerCycle={estimate?.total ?? null}
+                    firstRunLabel={nextRunLabel}
+                    activationError={activationError}
+                    busy={pausing}
+                  />
+                </div>
+              )}
+              <SchedulePanel
+                status={timeline?.summary?.status}
                 frequency={cadence.frequency}
+                hour={cadence.hour}
+                timezone={cadence.timezone}
+                pairsPerCycle={cadence.pairsPerCycle}
                 custom={cadence.custom}
                 startDate={cadence.startDate}
                 endDate={cadence.endDate}
                 alertEmails={brief.alertEmails}
                 onAlertEmailsChange={handleAlertEmailsChange}
+                nextRunAt={timeline?.summary?.nextRunAt}
                 onCadenceChange={handleCadenceChange}
-                onActivate={handleActivate}
-                activating={activating}
-                isMetaConnected={isConnectionComplete(connection)}
-                connection={connection}
-                onConnectionChange={setConnection}
-                pairsPerCycle={cadence.pairsPerCycle}
-                budget={budget}
-                hour={cadence.hour}
-                timezone={cadence.timezone}
-                objectiveLabel={objectiveLabel}
-                creditsPerCycle={estimate?.total ?? null}
-                firstRunLabel={nextRunLabel}
-                activationError={activationError}
+                onScheduleUpdate={handleScheduleUpdate}
+                onPause={() => handlePause(true)}
+                onResume={() => handlePause(false)}
+                onStop={handleStop}
+                onRestartSetup={handleWantSchedule}
+                restartSetupOpen={scheduleOn}
+                onRunNow={handleRunNow}
+                runningNow={runningNow}
+                runNowQueued={runNowQueued}
                 busy={pausing}
+                saving={saving}
+                // Only when the server tried and the job refused — `applied: true`
+                // and `null` both mean the screen is telling the truth.
+                syncWarning={jobSync && jobSync.applied === false ? jobSync.reason : ''}
+              />
+              <RunTimeline
+                summary={timeline?.summary}
+                rows={timeline?.rows}
+                loading={timeline?.loading}
+                onRetry={handleGenerate}
+                brandName={brief.brand?.name}
+                pairsPerCycle={cadence.pairsPerCycle}
               />
             </div>
-          )}
-          <SchedulePanel
-            status={timeline?.summary?.status}
-            frequency={cadence.frequency}
-            hour={cadence.hour}
-            timezone={cadence.timezone}
-            pairsPerCycle={cadence.pairsPerCycle}
-            custom={cadence.custom}
-            startDate={cadence.startDate}
-            endDate={cadence.endDate}
-            alertEmails={brief.alertEmails}
-            onAlertEmailsChange={handleAlertEmailsChange}
-            nextRunAt={timeline?.summary?.nextRunAt}
-            onCadenceChange={handleCadenceChange}
-            onScheduleUpdate={handleScheduleUpdate}
-            onPause={() => handlePause(true)}
-            onResume={() => handlePause(false)}
-            onStop={handleStop}
-            onRestartSetup={handleWantSchedule}
-            restartSetupOpen={scheduleOn}
-            onRunNow={handleRunNow}
-            runningNow={runningNow}
-            runNowQueued={runNowQueued}
-            busy={pausing}
-            saving={saving}
-            // Only when the server tried and the job refused — `applied: true`
-            // and `null` both mean the screen is telling the truth.
-            syncWarning={jobSync && jobSync.applied === false ? jobSync.reason : ''}
-          />
-          <RunTimeline
-            summary={timeline?.summary}
-            rows={timeline?.rows}
-            loading={timeline?.loading}
-            onRetry={handleGenerate}
-            brandName={brief.brand?.name}
-            pairsPerCycle={cadence.pairsPerCycle}
-          />
+            {sidebar}
+          </div>
         </div>
       )}
 
+      {/* Every ad this brief has made, across every run, with any selection of
+          them postable in one press through the SAME "Ship these ads" form the
+          preview screen uses. Mounted at the page root rather than inside a
+          step, so the rail's button works from the brief screen and deliveries
+          alike. */}
+      <RunGallery
+        open={galleryOpen}
+        onOpenChange={setGalleryOpen}
+        runs={galleryRuns}
+        ratio={brief?.delivery?.ratios?.[0] || '4:5'}
+        callToAction={ctaLabel}
+        brandName={brief?.brand?.name}
+        linkUrl={brief?.offer?.cta?.url || brief?.source?.url || ''}
+        connection={connection}
+        onConnectionChange={setConnection}
+        onPublish={handlePublish}
+        publishing={publishing}
+        publishResult={publishResult}
+        publishError={publishError}
+        onDismissResult={() => dispatch(clearPublishState())}
+      />
+
       <Dialog open={!!deletingBrief} onOpenChange={(open) => !open && setDeletingBrief(null)}>
-        <DialogContent className="max-w-sm border border-[#E5E7EB] bg-white text-gray-900 shadow-lg dark:border-[#2E353E] dark:bg-[#14181D] dark:text-white animate-in zoom-in-95 duration-150">
+        <DialogContent className="animate-in zoom-in-95 max-w-sm border border-[#E5E7EB] bg-white text-gray-900 shadow-lg duration-150 dark:border-[#2E353E] dark:bg-[#14181D] dark:text-white">
           <DialogHeader>
-            <DialogTitle className="text-lg font-semibold tracking-tight">Delete brief?</DialogTitle>
+            <DialogTitle className="text-lg font-semibold tracking-tight">
+              Delete brief?
+            </DialogTitle>
             <DialogDescription className="text-sm text-gray-500 dark:text-[#8B939E]">
-              Are you sure you want to delete “{deletingBrief?.label}”? This removes the brief and its ads setup.
+              Are you sure you want to delete “{deletingBrief?.label}”? This removes the brief and
+              its ads setup.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4 flex justify-end gap-2 text-sm font-medium">
@@ -1246,7 +1443,7 @@ export default function AdFactoryV2Page() {
                   setDeletingBrief(null);
                 }
               }}
-              className="rounded-md bg-red-650 px-4 py-2 text-white hover:bg-red-700 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+              className="bg-red-650 rounded-md px-4 py-2 text-white hover:bg-red-700 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
             >
               Delete
             </button>

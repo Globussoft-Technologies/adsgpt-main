@@ -8,6 +8,29 @@ import { CARD, FAINT, MUTED, NUM, RULE_BORDER, SECTION } from './_tokens';
 
 const S3 = import.meta.env.VITE_S3_BASE_URL || '';
 
+// ─── What this card still does, and what moved ───────────────────────────────
+//
+// Both of these are OFF because the right rail and the gallery now own the same
+// jobs, better — not because the code was wrong. Flip either to true and the
+// old behaviour comes back exactly as it was; nothing below was deleted.
+//
+// SHOW_INLINE_LIST — the collapsible "Show list" grid of ad cards.
+//   Superseded by "See all generations", which shows every run at once rather
+//   than one at a time, previews each ad in Ad Factory's phone frame, and is
+//   the only place a selection can be posted. Kept collapsed by default, this
+//   header was a control whose entire function was "open the worse version of
+//   the gallery".
+//
+// SHOW_REGENERATE — the "Regenerate all · ~N credits" button.
+//   The rail's Generate button is the same action, sitting on the card that
+//   prices it, next to the stepper that sets how many. Two buttons doing one
+//   thing, one of them quoting a number the other one owns.
+//
+// What is left is the part neither of those covers: how many ads are ready,
+// how many credits are held against them, and the way through to the schedule.
+const SHOW_INLINE_LIST = false;
+const SHOW_REGENERATE = false;
+
 const aspectOf = (ratio) => {
   const [w, h] = String(ratio || '')
     .split(':')
@@ -56,39 +79,37 @@ export default function CreativePreview({
 
   return (
     <section className="flex flex-col gap-3">
-      <button
-        type="button"
-        onClick={() => setCollapsed((value) => !value)}
-        className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${RULE_BORDER} bg-[#111318] hover:bg-[#161A21]`}
-      >
-        <div className="min-w-0">
-          <h3 className={`text-[15px] tracking-[-0.013em] ${SECTION}`}>{title}</h3>
-          {running && (
-            <span className={MUTED}>
-              This takes a couple of minutes - you can leave and come back.
-            </span>
-          )}
-        </div>
-        <span className="inline-flex shrink-0 items-center gap-2 text-sm text-[#AFB6C0]">
-          <span>{collapsed ? 'Show list' : 'Hide list'}</span>
-          <ChevronDown
-            className={`h-4 w-4 transition-transform ${collapsed ? '' : 'rotate-180'}`}
-          />
-        </span>
-      </button>
+      {SHOW_INLINE_LIST && (
+        <button
+          type="button"
+          onClick={() => setCollapsed((value) => !value)}
+          className={`flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${RULE_BORDER} bg-[#FFFDF8] hover:bg-[#F7F1E8] dark:bg-[#111318] dark:hover:bg-[#161A21]`}
+        >
+          <div className="min-w-0">
+            <h3 className={`text-15 tracking-[-0.013em] ${SECTION}`}>{title}</h3>
+            {running && (
+              <span className={MUTED}>
+                This takes a couple of minutes - you can leave and come back.
+              </span>
+            )}
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-2 text-[12px] text-[#7A6F62] dark:text-[#AFB6C0]">
+            <span>{collapsed ? 'Show list' : 'Hide list'}</span>
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${collapsed ? '' : 'rotate-180'}`}
+            />
+          </span>
+        </button>
+      )}
 
-      {!collapsed && (
+      {SHOW_INLINE_LIST && !collapsed && (
         <motion.div
           layout={!M.reduce}
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
         >
           <AnimatePresence mode="popLayout" initial={false}>
             {pairs.map((pair, i) => (
-              <motion.div
-                key={pair.imageUrl || `pair-${i}`}
-                layout={!M.reduce}
-                {...M.fadeUp}
-              >
+              <motion.div key={pair.imageUrl || `pair-${i}`} layout={!M.reduce} {...M.fadeUp}>
                 <Card
                   pair={pair}
                   ratio={ratio}
@@ -112,7 +133,7 @@ export default function CreativePreview({
       )}
 
       {failed > 0 && (
-        <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/8 px-3.5 py-3 text-13 text-[#92400E] dark:text-[#E8A33D]">
+        <div className="text-13 flex flex-wrap items-center gap-2.5 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/8 px-3.5 py-3 text-[#92400E] dark:text-[#E8A33D]">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span className="flex-1">
             {failed} didn&apos;t come out this time.
@@ -121,38 +142,52 @@ export default function CreativePreview({
         </div>
       )}
 
-      <div className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-3 ${CARD} px-5 py-3.5`}>
-        <p className={MUTED}>
-          {running ? (
-            <>
-              <b className={`font-semibold text-[#111827] dark:text-[#ECEFF3] ${NUM}`}>{ready}</b>{' '}
-              of <span className={NUM}>{ready + pending}</span> ready
-            </>
-          ) : (
-            <>
-              <b className={`font-semibold text-[#111827] dark:text-[#ECEFF3] ${NUM}`}>{ready}</b>{' '}
-              {ready === 1 ? 'ad' : 'ads'} ready
-            </>
+      <div
+        className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-3 ${CARD} px-5 py-3.5`}
+      >
+        {/* With the list header off, this is the only place the run reports
+            itself — so the reassurance that used to sit up there comes down
+            here rather than disappearing with it. */}
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <p className={MUTED}>
+            {running ? (
+              <>
+                <b className={`font-semibold text-[#111827] dark:text-[#ECEFF3] ${NUM}`}>{ready}</b>{' '}
+                of <span className={NUM}>{ready + pending}</span> ready
+              </>
+            ) : (
+              <>
+                <b className={`font-semibold text-[#111827] dark:text-[#ECEFF3] ${NUM}`}>{ready}</b>{' '}
+                {ready === 1 ? 'ad' : 'ads'} ready
+              </>
+            )}
+            {creditsHeld != null && (
+              <>
+                {' · '}
+                <span className={NUM}>{creditsHeld}</span> credits held, settled on what lands
+              </>
+            )}
+          </p>
+          {running && (
+            <span className={FAINT}>
+              This takes a couple of minutes - you can leave and come back.
+            </span>
           )}
-          {creditsHeld != null && (
-            <>
-              {' · '}
-              <span className={NUM}>{creditsHeld}</span> credits held, settled on what lands
-            </>
-          )}
-        </p>
+        </div>
 
         {showActions && !running && ready > 0 && (
           <div className="flex flex-wrap items-center gap-2.5">
-            <GhostBtn onClick={onRegenerate} disabled={regenerating}>
-              <RefreshCw className={`h-3.5 w-3.5 ${regenerating ? 'animate-spin' : ''}`} />
-              <span>
-                Regenerate all
-                {estimate != null && (
-                  <span className={`ml-1 font-normal ${FAINT}`}>~{estimate} credits</span>
-                )}
-              </span>
-            </GhostBtn>
+            {SHOW_REGENERATE && (
+              <GhostBtn onClick={onRegenerate} disabled={regenerating}>
+                <RefreshCw className={`h-3.5 w-3.5 ${regenerating ? 'animate-spin' : ''}`} />
+                <span>
+                  Regenerate all
+                  {estimate != null && (
+                    <span className={`ml-1 font-normal ${FAINT}`}>~{estimate} credits</span>
+                  )}
+                </span>
+              </GhostBtn>
+            )}
             {onShip && (
               <GhostBtn onClick={onShip} disabled={shipping}>
                 <Rocket className="h-3.5 w-3.5" />
@@ -175,7 +210,7 @@ function Card({ pair, ratio, callToAction, onRegenerate }) {
     <article className={`flex flex-col overflow-hidden ${CARD}`}>
       <div className="group flex flex-col text-left">
         <div
-          className="relative bg-[#F9FAFB] dark:bg-[#22272F]"
+          className="relative bg-[#F7F1E8] dark:bg-[#22272F]"
           style={{ aspectRatio: aspectOf(ratio) }}
         >
           <img
@@ -193,12 +228,12 @@ function Card({ pair, ratio, callToAction, onRegenerate }) {
             </b>
           )}
           {copy.primaryText && (
-            <p className="line-clamp-3 text-13 leading-relaxed text-[#6B7280] dark:text-[#AFB6C0]">
+            <p className="text-13 line-clamp-3 leading-relaxed text-[#6B7280] dark:text-[#AFB6C0]">
               {copy.primaryText}
             </p>
           )}
           <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-            <span className="inline-flex rounded-md bg-[#111827] px-2.5 py-1 text-10 font-semibold text-white dark:bg-[#ECEFF3] dark:text-[#0A0A0A]">
+            <span className="text-10 inline-flex rounded-md bg-[#B87215] px-2.5 py-1 font-semibold text-white dark:bg-[#ECEFF3] dark:text-[#0A0A0A]">
               {callToAction}
             </span>
             {onRegenerate && (
@@ -221,7 +256,7 @@ function SkeletonCard({ ratio }) {
   return (
     <article className={`flex flex-col overflow-hidden ${CARD}`}>
       <div
-        className="relative animate-pulse bg-[#F3F4F6] dark:bg-[#191E24]"
+        className="relative animate-pulse bg-[#F7F1E8] dark:bg-[#191E24]"
         style={{ aspectRatio: aspectOf(ratio) }}
       >
         <RatioBadge ratio={ratio} />

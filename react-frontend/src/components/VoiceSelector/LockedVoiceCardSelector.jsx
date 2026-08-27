@@ -20,10 +20,13 @@ import {
   prettify,
 } from '@/apis/voiceSelector/voiceSelectorApi';
 import ChipDropdown from './ChipDropdown';
+import { PROVIDER_RECOMMENDATION } from './VoiceSelector';
 
+// Recommendation text is shared with VoiceSelector so both pickers say the
+// same thing about the same two providers.
 const PROVIDERS = [
-  { id: 'elevenlabs', label: 'ElevenLabs' },
-  { id: 'sarvam', label: 'Sarvam' },
+  { id: 'elevenlabs', label: 'ElevenLabs', hint: 'Best for global languages' },
+  { id: 'sarvam', label: 'Sarvam', hint: 'Best for Indian languages' },
 ];
 
 const normalizeLanguage = (language, provider) => {
@@ -263,6 +266,7 @@ export default function LockedVoiceCardSelector({
         {/* <p className="mt-0.5 text-[11px] text-white/40">
           Choose a narrator for this locked script language.
         </p> */}
+        <p className="mt-0.5 text-[11px] text-white/40">{PROVIDER_RECOMMENDATION}</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -279,19 +283,20 @@ export default function LockedVoiceCardSelector({
             </span>
           </button>
           {providerOpen && (
-            <div className="absolute left-0 top-full z-50 mt-2 w-40 overflow-hidden rounded-xl border border-white/10 bg-[#1A1A1A] py-1 shadow-2xl">
+            <div className="absolute left-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-xl border border-white/10 bg-[#1A1A1A] py-1 shadow-2xl">
               {PROVIDERS.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => changeProvider(item.id)}
-                  className={`flex w-full px-3 py-2 text-left text-sm transition ${
+                  className={`flex w-full flex-col items-start px-3 py-2 text-left text-sm transition ${
                     item.id === provider
                       ? 'bg-white/10 text-white'
                       : 'text-white/70 hover:bg-white/5 hover:text-white'
                   }`}
                 >
                   {item.label}
+                  <span className="text-[10px] text-white/45">{item.hint}</span>
                 </button>
               ))}
             </div>

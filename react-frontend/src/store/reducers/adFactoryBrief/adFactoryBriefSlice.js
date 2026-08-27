@@ -247,9 +247,9 @@ export const runNow = createAsyncThunk(
 // UI show "starting deliveries…" over a one-off post.
 export const publishNow = createAsyncThunk(
   'adFactoryBrief/publish',
-  async ({ briefId, connection, mode, campaignId, adSetId }, { rejectWithValue }) => {
+  async ({ briefId, connection, mode, campaignId, adSetId, imageUrls }, { rejectWithValue }) => {
     try {
-      return await publishBrief(briefId, { connection, mode, campaignId, adSetId });
+      return await publishBrief(briefId, { connection, mode, campaignId, adSetId, imageUrls });
     } catch (err) {
       // The server reports WHICH step failed (`step: 'campaign' | 'adset' |
       // 'ads'`) because a half-finished launch leaves real objects in the

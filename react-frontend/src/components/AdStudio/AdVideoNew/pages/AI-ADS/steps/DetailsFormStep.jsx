@@ -26,15 +26,23 @@ import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import VoiceSelector from '@/components/VoiceSelector/VoiceSelector';
 import { estimateAdVideoCredits } from '@/utils/creditEstimator';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+import { analyzeLogoTransparency, LOGO_BACKGROUND_ERROR } from '@/utils/logoTransparency';
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
 const IMAGE_TYPE_ERROR = 'Only .jpg, .jpeg, .png, and .webp image are allowed.';
-const LOGO_TYPE_ERROR = 'Only .jpg, .jpeg, .png, and .webp logo are allowed.';
+// The logo field takes any image format the browser can decode — SVG and AVIF
+// logos are usually the cut-out ones, so restricting the list here rejected
+// exactly the files the transparency check is meant to accept.
+const LOGO_TYPE_ERROR = 'Only image files are allowed for the logo.';
+const LOGO_ACCEPT = 'image/*';
 
 const isImageFile = (file) =>
   ALLOWED_IMAGE_TYPES.includes(file.type) ||
   ALLOWED_IMAGE_EXTENSIONS.test(file.name || '');
+
+const isAnyImageFile = (file) =>
+  (file?.type || '').startsWith('image/') || /\.[a-z0-9]+$/i.test(file?.name || '');
 
 // Reusable Input Component
 const CustomInput = ({ label, value, onChange, placeholder, required = false, error, disabled }) => (
@@ -58,7 +66,7 @@ const CustomInput = ({ label, value, onChange, placeholder, required = false, er
 );
 
 // File Upload
-const FileUpload = ({ label, required = false, fileName, onClear, onChange, id, error, disabled }) => (
+const FileUpload = ({ label, required = false, fileName, onClear, onChange, id, error, disabled, accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp' }) => (
   <div className="flex w-full min-w-0 flex-col">
     {label && (
       <label className="mb-1.5 text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:text-sm">
@@ -77,7 +85,7 @@ const FileUpload = ({ label, required = false, fileName, onClear, onChange, id, 
           id={id}
           type="file"
           className="hidden"
-          accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+          accept={accept}
           onChange={onChange}
           multiple={label === 'Images'}
           disabled={disabled}
@@ -258,6 +266,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     return [];
   });
   const [uploadedLogo, setUploadedLogo] = useState(null);
+  const [checkingLogo, setCheckingLogo] = useState(false);
 
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
   const openLightbox = (images, index) => setLightbox({ open: true, images, index });
@@ -425,15 +434,29 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     setUploadedImages((prev) => [...prev, ...newPreviews]);
   };
 
-  const handleLogoUpload = (e) => {
+  const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    if (!isImageFile(file)) {
+    if (!isAnyImageFile(file)) {
       setErrors((prev) => ({ ...prev, logo: LOGO_TYPE_ERROR }));
       return;
     }
+    // A logo carrying its own background shows up as a solid box once it's
+    // composited onto the generated ad, so keep it out of the flow entirely.
     setErrors((prev) => ({ ...prev, logo: '' }));
+    setCheckingLogo(true);
+    let check = { transparent: true };
+    try {
+      check = await analyzeLogoTransparency(file);
+    } finally {
+      setCheckingLogo(false);
+    }
+    if (import.meta.env?.DEV) console.debug('[logoTransparency]', file?.name, check);
+    if (!check.transparent) {
+      setErrors((prev) => ({ ...prev, logo: LOGO_BACKGROUND_ERROR }));
+      return;
+    }
     setUrlLogo(null);
     setUploadedLogo({
       file,
@@ -450,13 +473,13 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     setUploadedLogo(null);
   };
 
-  const extractImageFiles = (clipboardData) => {
+  const extractImageFiles = (clipboardData, accepts = isImageFile) => {
     const items = clipboardData?.items || [];
     const files = [];
     for (const item of items) {
       if (item.kind === 'file') {
         const file = item.getAsFile();
-        if (file && isImageFile(file)) files.push(file);
+        if (file && accepts(file)) files.push(file);
       }
     }
     return files;
@@ -470,7 +493,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
   };
 
   const handleLogoPaste = (e) => {
-    const files = extractImageFiles(e.clipboardData);
+    const files = extractImageFiles(e.clipboardData, isAnyImageFile);
     if (!files.length) return;
     e.preventDefault();
     handleLogoUpload({ target: { files: [files[0]], value: '' } });
@@ -800,11 +823,12 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                 <FileUpload
                   id="logo-upload"
                   label={isBrand ? 'Brand Logo' : 'Product Logo'}
-                  fileName=""
+                  fileName={checkingLogo ? 'Checking logo…' : ''}
+                  accept={LOGO_ACCEPT}
                   onChange={handleLogoUpload}
                   onClear={() => { removeLogo(); setUrlLogo(null); }}
                   error={errors.logo}
-                  disabled={submitting}
+                  disabled={submitting || checkingLogo}
                 />
               ) : (
                 <>
@@ -835,7 +859,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                         </button>
                       </div>
                       <label
-                        htmlFor={submitting ? undefined : 'logo-upload-replace'}
+                        htmlFor={submitting || checkingLogo ? undefined : 'logo-upload-replace'}
                         title="Replace logo"
                         className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-dashed border-black/20 bg-black/[0.025] text-gray-500 transition dark:border-white/20 dark:bg-white/[0.035] dark:text-white/50 ${
                           submitting
@@ -848,9 +872,9 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                           id="logo-upload-replace"
                           type="file"
                           className="hidden"
-                          accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                          accept={LOGO_ACCEPT}
                           onChange={handleLogoUpload}
-                          disabled={submitting}
+                          disabled={submitting || checkingLogo}
                         />
                       </label>
                     </div>

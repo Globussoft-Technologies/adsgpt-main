@@ -70,7 +70,7 @@ export default function Inferring({ host, startedAt, onStartOver }) {
             aria-label="Reading your page"
           >
             <div
-              className="h-full rounded-full bg-[#02C8C4] transition-[width] duration-1000 ease-linear dark:bg-[#15DCFF]"
+              className="h-full rounded-full bg-[#B87215] transition-[width] duration-1000 ease-linear dark:bg-[#15DCFF]"
               style={{ width: `${pct}%` }}
             />
           </div>

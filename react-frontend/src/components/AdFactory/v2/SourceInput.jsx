@@ -83,7 +83,7 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
       >
         {/* An eyebrow, not a badge. A tinted pill with a letterspaced caps
             label inside it is two treatments doing one job. */}
-        <span className="inline-flex items-center gap-2 text-13 font-medium text-[#0B7A78] dark:text-[#15DCFF]">
+        <span className="inline-flex items-center gap-2 text-13 font-medium text-[#8A4E0D] dark:text-[#15DCFF]">
           <Sparkles className="h-3.5 w-3.5" />
           Quick setup
         </span>
@@ -93,7 +93,7 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
             statement. On one wide line the same words read as a caption. */}
         <h2 className="mt-5 max-w-[15ch] text-4xl leading-[1.06] font-semibold tracking-[-0.028em] text-balance text-[#0A0A0A] 2xl:text-5xl dark:text-[#ECEFF3]">
           Turn any page into a{' '}
-          <span className="text-[#0B7A78] dark:text-[#15DCFF]">running campaign.</span>
+          <span className="text-[#8A4E0D] dark:text-[#15DCFF]">running campaign.</span>
         </h2>
 
         <p className="mt-5 max-w-[46ch] text-base leading-relaxed text-balance text-[#6B7280] dark:text-[#AFB6C0]">
@@ -104,7 +104,7 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
         {/* A filled well, darker than the page — the same treatment every
             control on this surface gets (see briefFields INPUT). */}
         <div
-          className={`mt-8 flex w-full max-w-xl items-center gap-2.5 rounded-xl border bg-white p-1.5 pl-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors focus-within:border-[#02C8C4] dark:bg-[#14181D] dark:shadow-none dark:focus-within:border-[#15DCFF] ${
+          className={`mt-8 flex w-full max-w-xl items-center gap-2.5 rounded-xl border bg-white p-1.5 pl-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors focus-within:border-[#C17A1C] dark:bg-[#14181D] dark:shadow-none dark:focus-within:border-[#15DCFF] ${
             invalid
               ? 'border-red-400/60 dark:border-red-500/40'
               : 'border-[#E5E7EB] dark:border-[#2E353E]'

@@ -7,9 +7,34 @@ import { Panel, PanelFooter, PanelHeader, PrimaryBtn, GhostBtn, Notice } from '.
 import CadencePills from './CadencePills';
 import AlertEmails from './AlertEmails';
 import LaunchConnection from './LaunchConnection';
-import { Section, SectionRule } from './briefFields';
+import { FieldBlock, Section, SectionRule } from './briefFields';
 import { useMotionPresets } from './_motion';
-import { MUTED, NUM, RULE_BORDER } from './_tokens';
+import {
+  CONTROL_H,
+  FAINT,
+  FOCUS_WITHIN,
+  MUTED,
+  NUM,
+  PLACEHOLDER,
+  RULE_BORDER,
+  VALUE,
+} from './_tokens';
+
+// ----------------------------------------------------------------------------
+// Why the daily budget lives HERE and nowhere else.
+//
+// It used to sit beside Generate, which was the wrong button entirely:
+// generating spends CREDITS, and no code path anywhere reads the budget during
+// generation. What actually needs it is the schedule —
+// `briefToJobPayload` throws "Set a daily budget" unless
+// `delivery.budget.daily` is a positive number, because the synthesised
+// template expresses the money as an AD SET budget on the campaign it creates
+// for you. (The manual "post into an existing ad set" path never reads it: that
+// ad set brings its own budget, targeting and schedule.)
+//
+// So it is asked for at the one moment it is required, and "Start deliveries"
+// is disabled without it rather than letting the server refuse after the click.
+// ----------------------------------------------------------------------------
 
 export default function KeepTheseComing({
   enabled,
@@ -29,6 +54,11 @@ export default function KeepTheseComing({
   pairsPerCycle = 3,
   hour = 9,
   timezone,
+  budget,
+  onBudgetChange,
+  onBudgetCommit,
+  minBudget = 100,
+  currencySymbol = '₹',
   creditsPerCycle,
   firstRunLabel,
   activationError = null,
@@ -42,6 +72,10 @@ export default function KeepTheseComing({
   const isLive = status === 'active' || status === 'live';
   const isPaused = status === 'paused';
   const isRunning = isLive || isPaused;
+
+  const budgetNumber = Number(budget);
+  const budgetOk = Number.isFinite(budgetNumber) && budgetNumber >= minBudget;
+  const budgetTooLow = Number.isFinite(budgetNumber) && budgetNumber > 0 && !budgetOk;
 
   return (
     <Panel>
@@ -94,6 +128,43 @@ export default function KeepTheseComing({
                     onChange={onCadenceChange}
                     disabled={activating || busy}
                   />
+                </Section>
+
+                <SectionRule />
+
+                <Section title="Daily budget">
+                  <FieldBlock
+                    label="What each ad set spends per day"
+                    hint="the campaign we create for you"
+                  >
+                    <div
+                      className={`flex ${CONTROL_H} w-44 items-center gap-1.5 rounded-md border bg-[#FFFDF8] px-3 ${FOCUS_WITHIN} dark:bg-[#1E232A] ${
+                        budgetOk
+                          ? 'border-[#D9CCB6] dark:border-[#2E353E]'
+                          : 'border-[#F59E0B]/45 dark:border-[#F59E0B]/35'
+                      }`}
+                    >
+                      <span className={FAINT}>{currencySymbol}</span>
+                      <input
+                        type="number"
+                        min={minBudget}
+                        inputMode="numeric"
+                        value={budget ?? ''}
+                        disabled={activating || busy}
+                        onChange={(e) => onBudgetChange?.(e.target.value)}
+                        onBlur={() => onBudgetCommit?.()}
+                        placeholder="800"
+                        className={`w-full min-w-0 bg-transparent outline-none ${VALUE} ${PLACEHOLDER} ${NUM}`}
+                      />
+                      <span className={`shrink-0 ${FAINT}`}>/day</span>
+                    </div>
+                    {budgetTooLow && (
+                      <span className="text-[11px] font-medium text-[#B45309] dark:text-[#E8A33D]">
+                        Minimum {currencySymbol}
+                        {minBudget}/day
+                      </span>
+                    )}
+                  </FieldBlock>
                 </Section>
 
                 <SectionRule />
@@ -167,9 +238,20 @@ export default function KeepTheseComing({
                     </PrimaryBtn>
                   )}
 
+                  {/* Both preconditions the server enforces, stated on the
+                      button rather than discovered after the click. Meta first:
+                      it is the bigger job of the two. */}
                   {!isRunning && (
-                    <PrimaryBtn onClick={onActivate} busy={activating} disabled={!isMetaConnected}>
-                      {isMetaConnected ? 'Start deliveries' : 'Connect Meta to start'}
+                    <PrimaryBtn
+                      onClick={onActivate}
+                      busy={activating}
+                      disabled={!isMetaConnected || !budgetOk}
+                    >
+                      {!isMetaConnected
+                        ? 'Connect Meta to start'
+                        : !budgetOk
+                          ? 'Set a daily budget to start'
+                          : 'Start deliveries'}
                     </PrimaryBtn>
                   )}
                 </div>

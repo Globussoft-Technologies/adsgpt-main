@@ -68,9 +68,9 @@ export default function BriefSummary({
           m &&
           m.source !== 'user' &&
           typeof m.confidence === 'number' &&
-          m.confidence <= LOW_CONFIDENCE,
+          m.confidence <= LOW_CONFIDENCE
       ).length,
-    [provenance],
+    [provenance]
   );
 
   // The audience list can be long; the line shows the first and counts the
@@ -108,14 +108,14 @@ export default function BriefSummary({
     .join(' · ');
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 rounded-lg border border-[#DED2BD] bg-[#FFFDF8] px-4 py-3 shadow-none dark:border-[#252B33] dark:bg-[#14181D]">
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
           {brand.logoUrls?.[0] && (
             <img
               src={brand.logoUrls[0]}
               alt=""
-              className="size-7 shrink-0 rounded-md border border-[#E5E7EB] bg-white object-contain dark:border-[#2E353E] dark:bg-[#1E232A]"
+              className="size-7 shrink-0 rounded-md border border-[#DED2BD] bg-[#F7F1E8] object-contain dark:border-[#2E353E] dark:bg-[#1E232A]"
             />
           )}
           <h1 className={`min-w-0 truncate ${TITLE}`}>{brand.name || 'Your brand'}</h1>
@@ -166,7 +166,13 @@ export default function BriefSummary({
           so the control has to say which way it will go. */}
       <span className="flex shrink-0 items-center gap-3">
         {busy && <span className={FAINT}>Saving…</span>}
-        <button type="button" onClick={onAdjust} disabled={busy} aria-expanded={adjusting} className={BTN_GHOST}>
+        <button
+          type="button"
+          onClick={onAdjust}
+          disabled={busy}
+          aria-expanded={adjusting}
+          className={BTN_GHOST}
+        >
           {adjusting ? <ChevronUp className="h-3.5 w-3.5" /> : <Sliders className="h-3.5 w-3.5" />}
           {adjusting ? 'Done' : 'Adjust'}
         </button>

@@ -19,10 +19,16 @@ import ChipDropdown from './ChipDropdown';
 const EL_FIELDS = ['language', 'gender', 'accent', 'age', 'voice'];
 const SARVAM_FIELDS = ['language', 'gender', 'voice'];
 
+// Each provider's catalog is strongest in a different place, and the choice is
+// invisible from the labels alone — so the recommendation travels with them.
 const PROVIDERS = [
-  { id: 'elevenlabs', label: 'ElevenLabs' },
-  { id: 'sarvam', label: 'Sarvam' },
+  { id: 'elevenlabs', label: 'ElevenLabs', hint: 'Best for global languages' },
+  { id: 'sarvam', label: 'Sarvam', hint: 'Recommended for Indian languages only' },
 ];
+
+export const PROVIDER_RECOMMENDATION =
+  'Sarvam is tuned best for Indian languages';
+
 const DEFAULT_PROVIDER = 'elevenlabs';
 
 // Sentinel language code for the "Other" option. Picking it swaps the cascade
@@ -388,6 +394,13 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
         >
           Pick the AI voice for the audio narration in your video
         </p>
+        <p
+          className={`text-[10px] text-gray-500 dark:text-white/40 sm:text-[11px] ${
+            compactHeader ? '' : 'mt-0.5'
+          }`}
+        >
+          {PROVIDER_RECOMMENDATION}
+        </p>
       </div>
 
       <div className="relative flex items-start justify-between gap-3">
@@ -410,19 +423,20 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
             </span>
           </button>
           {providerOpen && (
-            <div className="absolute left-0 top-full z-50 mt-2 w-40 overflow-hidden rounded-xl border border-black/10 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]">
+            <div className="absolute left-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-xl border border-black/10 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]">
               {PROVIDERS.map((p) => (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => handleProviderChange(p.id)}
-                  className={`flex w-full items-center px-3 py-2 text-left text-13 transition ${
+                  className={`flex w-full flex-col items-start px-3 py-2 text-left text-13 transition ${
                     p.id === provider
                       ? 'bg-black/5 text-gray-900 dark:bg-white/10 dark:text-white'
                       : 'text-gray-700 hover:bg-black/5 dark:text-white/80 dark:hover:bg-white/5'
                   }`}
                 >
                   {p.label}
+                  <span className="text-[10px] text-gray-500 dark:text-white/45">{p.hint}</span>
                 </button>
               ))}
             </div>

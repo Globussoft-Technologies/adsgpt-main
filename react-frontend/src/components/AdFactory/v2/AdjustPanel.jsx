@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { AlertCircle, Check } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 import { getWizardSchema } from '@/apis/adFactory/briefApi';
-import { GhostBtn, Notice, Panel } from './Panel';
+import { Notice } from './Panel';
 import {
   ChipList,
   EditableText,
@@ -11,23 +11,12 @@ import {
   FieldGrid,
   ImageStrip,
   PaletteEditor,
-  PillGroup,
   Section,
   SectionRule,
   SelectField,
-  Stepper,
-  TogglePill,
 } from './briefFields';
 import CompetitorVisualsPicker from './CompetitorVisualsPicker';
-import { FAINT, FLAG_BADGE, MUTED, RULE_BORDER } from './_tokens';
-import {
-  AD_PLATFORMS,
-  MAX_PLATFORMS,
-  MAX_RATIOS,
-  platform,
-  pruneRatios,
-  ratiosFor,
-} from '@/components/AdFactory/adPlatforms';
+import { FAINT, FLAG_BADGE, MUTED } from './_tokens';
 import { uploadToS3 } from '@/utils/imageUpload';
 
 const S3_BASE = import.meta.env.VITE_S3_BASE_URL || '';
@@ -50,7 +39,7 @@ const S3_BASE = import.meta.env.VITE_S3_BASE_URL || '';
 //
 // ─── Organisation ────────────────────────────────────────────────────────────
 //
-// ONE card, five bands, divided by hairlines. Not five cards, and not two
+// ONE card, four bands, divided by hairlines. Not four cards, and not two
 // collapsibles hanging off a grid — a brief is one document with parts, and
 // stacking bordered panels inside a bordered panel is most of what made this
 // screen feel cluttered. The bands, in the order a brief is actually argued:
@@ -59,7 +48,10 @@ const S3_BASE = import.meta.env.VITE_S3_BASE_URL || '';
 //   Brand           who is speaking, and what they look like
 //   Message         what these ads have to say
 //   Audience & voice  who they say it to, and how
-//   Output          what we make, for where, how many
+//
+// A fifth band, Output, used to close the document. It is `OutputPanel` in the
+// right rail now: every control in it changes what one press of Generate costs,
+// so it belongs next to the card that prices it, not four bands below the fold.
 //
 // ─── Where the guesses live ──────────────────────────────────────────────────
 //
@@ -92,19 +84,9 @@ const humanize = (value) =>
 
 const currentAsOption = (value) => (value ? [{ value, label: humanize(value) }] : []);
 
-// Platforms and ratios come from the shared matrix, not a local copy. The copy
-// that used to live here listed two of the nine platforms v1 supports, offered
-// `1.91:1` — which no platform in the matrix accepts — and was missing `2:3`,
-// which Pinterest needs. Ratios are now filtered to what the CHOSEN platforms
-// can actually render, so "16:9 on TikTok" stops being selectable.
-//
-// Limits mirror v1 where they still make sense: max 5 logos, max 5 key visuals, max 50 ads.
+// Limits mirror v1 where they still make sense: max 5 logos, max 5 key visuals.
 const MAX_LOGOS = 5;
 const MAX_KEY_VISUALS = 5;
-// v1's PairsPerCycleSection caps at 50, and so do the brief schema and its
-// validator. Stepper's own default is 20, so leaving this off silently held the
-// control 30 short of what the server would happily accept.
-const MAX_ADS_PER_GENERATE = 50;
 
 // Which provenance paths belong to which band, so a band can count its own
 // guesses without anyone maintaining a second list by hand.
@@ -122,15 +104,11 @@ export default function AdjustPanel({
   onEditField,
   onEditFields,
   saving = false,
-  estimate = null,
 }) {
   const brand = brief?.brand || {};
   const offer = brief?.offer || {};
-  const delivery = brief?.delivery || {};
   const generation = brief?.generation || {};
 
-  // Ratios follow the platform choice rather than a fixed list, so a size the
-  // selected platforms cannot render is never offered.
   // Uploads go through the same S3 helper v1's asset and logo pickers use, so
   // a file added here is indistinguishable from one added on the canvas.
   const userId = useSelector((st) => st.auth?.userData?.user_id || st.user?.userData?.user_id);
@@ -139,19 +117,9 @@ export default function AdjustPanel({
       const key = await uploadToS3(file, userId, true);
       return key ? `${S3_BASE}${key}` : '';
     },
-    [userId],
+    [userId]
   );
 
-  const selectedPlatforms = delivery.platforms?.length ? delivery.platforms : ['meta'];
-  const allowedRatios = ratiosFor(selectedPlatforms);
-  const platformNames = selectedPlatforms.map((id) => platform(id)?.label || id).join(', ');
-  // Chosen platforms we can generate for but not post to.
-  const downloadOnly = selectedPlatforms
-    .filter((id) => {
-      const p = platform(id);
-      return p && !p.isLaunchable && p.label !== 'X';
-    })
-    .map((id) => platform(id).label);
   const provenance = brief?.provenance || {};
 
   const [schema, setSchema] = useState(null);
@@ -190,13 +158,13 @@ export default function AdjustPanel({
       if (!m || m.source === 'user') return false;
       return typeof m.confidence === 'number' && m.confidence <= LOW_CONFIDENCE;
     },
-    [provenance],
+    [provenance]
   );
 
   // How many of a band's own fields we guessed and are unsure about.
   const guessCount = useCallback(
     (band) => (BAND_PATHS[band] || []).filter((p) => isLow(p)).length,
-    [isLow],
+    [isLow]
   );
 
   const objectiveOptions = useMemo(() => {
@@ -244,17 +212,6 @@ export default function AdjustPanel({
     });
   };
 
-  // An ad needs an image, so the image count is what "ads per run" means. A
-  // campaign adopted from Full control may carry mismatched counts; this shows
-  // the honest number and only normalises the two when the user actually
-  // changes it, rather than silently rewriting their data on open.
-  const adsPerRun = generation.imageCount ?? 3;
-
-  const toggleIn = (list, value) => {
-    const cur = Array.isArray(list) ? list : [];
-    return cur.includes(value) ? cur.filter((x) => x !== value) : [...cur, value];
-  };
-
   if (!open) return null;
 
   // The badge a band wears when it holds a guess we're unsure about. Amber
@@ -271,22 +228,20 @@ export default function AdjustPanel({
   };
 
   return (
-    <Panel>
+    <div className="flex flex-col gap-3">
       {/* Not a title bar — the brand name above is the page's title, and a
           second heading here only competed with it. This states the one thing
           the user needs to know about the whole card (it saves itself) and
           gives them the way out. */}
-      <div
-        className={`flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3 ${RULE_BORDER} 2xl:px-6`}
-      >
-        <p className={MUTED}>Everything here is editable. Changes save as you make them.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <p className={MUTED}>Everything here is editable. Changes save as you type.</p>
         <span className="flex items-center gap-3">
           {saving && <span className={FAINT}>Saving…</span>}
         </span>
       </div>
 
       {schemaFailed && (
-        <div className={`border-b px-5 py-3 ${RULE_BORDER} 2xl:px-6`}>
+        <div>
           <Notice tone="warn" icon={AlertCircle}>
             <span className="flex flex-wrap items-center gap-2">
               <span>
@@ -314,9 +269,7 @@ export default function AdjustPanel({
             <SelectField
               value={offer.primaryObjective}
               options={
-                objectiveOptions.length
-                  ? objectiveOptions
-                  : currentAsOption(offer.primaryObjective)
+                objectiveOptions.length ? objectiveOptions : currentAsOption(offer.primaryObjective)
               }
               flagged={isLow('offer.primaryObjective')}
               onChange={changeObjective}
@@ -507,138 +460,10 @@ export default function AdjustPanel({
         </FieldGrid>
       </Section>
 
-      <SectionRule />
-
-      {/* ── Output ── what we make, at what sizes, how many, with which model. */}
-      <Section title="Output">
-        <div className="flex flex-col gap-5">
-          <FieldBlock
-            label="Platforms"
-            hint="what we size the creatives for"
-            full
-          >
-            <PillGroup>
-              {AD_PLATFORMS.map((p) => (
-                <TogglePill
-                  key={p.id}
-                  on={selectedPlatforms.includes(p.id)}
-                  onClick={() => {
-                    const next = toggleIn(selectedPlatforms, p.id);
-                    if (next.length === 0) return; // at least one must stay on
-                    if (next.length > MAX_PLATFORMS) return;
-                    // A ratio the new selection cannot render has to go with
-                    // it — leaving 16:9 ticked after Meta is swapped for
-                    // TikTok would send a size nothing renders at. Both in one
-                    // request: as two they raced, and whichever lost was
-                    // written back stale.
-                    const kept = pruneRatios(delivery.ratios, next);
-                    onEditFields?.('delivery', {
-                      platforms: next,
-                      ...(kept.length !== (delivery.ratios || []).length ? { ratios: kept } : {}),
-                    });
-                  }}
-                >
-                  {p.label}
-                </TogglePill>
-              ))}
-            </PillGroup>
-            {/* A per-pill "download" tag next to eight of the nine platforms
-                read as a button, not a caveat — the first question it got was
-                "what is this download". The point is narrow enough to say once,
-                in a sentence, and only when the selection actually raises it. */}
-            {downloadOnly.length > 0 && (
-              <p className={FAINT}>
-                We&apos;ll make the {downloadOnly.join(', ')} sizes for you to download.
-              </p>
-            )}
-          </FieldBlock>
-
-          <FieldGrid cols={4}>
-            <FieldBlock
-              label="Creative ratios"
-              // "up to 5" was stated unconditionally, and Meta only offers four
-              // sizes — so on the default selection it advertised a limit that
-              // could never be reached. It appears only when the available list
-              // is actually longer than the cap. The verb also has to agree:
-              // one platform "accepts", several "accept".
-              hint={
-                allowedRatios.length > MAX_RATIOS
-                  ? `${platformNames} — pick up to ${MAX_RATIOS}`
-                  : `the sizes ${platformNames} ${
-                      selectedPlatforms.length === 1 ? 'accepts' : 'accept'
-                    }`
-              }
-              wide
-            >
-              <PillGroup>
-                {allowedRatios.map((r) => {
-                  const on = (delivery.ratios || []).includes(r);
-                  return (
-                    <TogglePill
-                      key={r}
-                      on={on}
-                      disabled={!on && (delivery.ratios || []).length >= MAX_RATIOS}
-                      onClick={() =>
-                        onEditField?.('delivery', 'ratios', toggleIn(delivery.ratios, r))
-                      }
-                    >
-                      {r}
-                    </TogglePill>
-                  );
-                })}
-              </PillGroup>
-            </FieldBlock>
-
-            {/* ONE number, because an ad IS an image plus a copy. Two
-                independent counts could only ever disagree, and the pairing
-                downstream is by index — 3 images against 2 copies makes a third
-                card with no words on it, which is not a thing anyone asked for.
-
-                The brief still stores imageCount and textCount separately:
-                Python is told both, Full control may legitimately set them
-                apart, and collapsing the SCHEMA would lose that. Only this
-                control is merged, and it writes both. */}
-            {/* NOT the same number as the schedule's "ads each run", which is
-                `delivery.pairsPerCycle`. This one is how many ads a press of
-                Generate makes; that one is how many each scheduled cycle makes.
-                Both were labelled "per run", on different screens, showing
-                different values. */}
-            <FieldBlock
-              label="Ads per generate"
-              // The number of ads IS the price, so the price belongs on the
-              // control that sets it — not only beside the button, by which
-              // point the decision is already made.
-              hint={
-                estimate?.total != null
-                  ? `~${estimate.total} credits each time`
-                  : 'one image + one copy each'
-              }
-            >
-              <Stepper
-                value={adsPerRun}
-                max={MAX_ADS_PER_GENERATE}
-                // BOTH counts in one request. Two `onEditField` calls sent two
-                // PATCHes that raced, and the loser's value was written back
-                // over the winner's.
-                onChange={(n) => onEditFields?.('generation', { imageCount: n, textCount: n })}
-                suffix="ads"
-              />
-            </FieldBlock>
-
-            <FieldBlock label="Image model">
-              <SelectField
-                value={generation.imageModel || 'auto'}
-                options={[
-                  { value: 'auto', label: 'Choose for me' },
-                  { value: 'google', label: 'Google' },
-                  { value: 'openai', label: 'OpenAI' },
-                ]}
-                onChange={(v) => onEditField?.('generation', 'imageModel', v)}
-              />
-            </FieldBlock>
-          </FieldGrid>
-        </div>
-      </Section>
+      {/* ── Output ── lives in the right rail now (OutputPanel). Every control
+          in it changes what one press of Generate costs, so it belongs beside
+          the card that prices it and the button that spends it — not at the
+          bottom of a document you scroll four bands to reach. */}
 
       <CompetitorVisualsPicker
         open={competitorVisualsOpen}
@@ -647,6 +472,6 @@ export default function AdjustPanel({
         max={MAX_KEY_VISUALS}
         onSave={(next) => onEditField?.('generation', 'seedImages', next)}
       />
-    </Panel>
+    </div>
   );
 }

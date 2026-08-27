@@ -283,7 +283,7 @@ export default function CadencePills({
                           aria-pressed={active}
                           aria-label={day}
                           className={`size-6 rounded-md text-10 font-semibold transition-colors disabled:opacity-60 ${active
-                            ? 'bg-[#02C8C4] text-[#062024] dark:bg-[#15DCFF]'
+                            ? 'bg-[#B87215] text-white dark:bg-[#15DCFF] dark:text-[#062024]'
                             : 'bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB] dark:bg-[#22272F] dark:text-[#AFB6C0] dark:hover:bg-[#2E353E]'
                             }`}
                         >
@@ -500,7 +500,7 @@ function TimezonePicker({ value, onChange, disabled }) {
                     {offsetLabel(zone)}
                   </span>
                   {zone === value && (
-                    <Check className="h-3.5 w-3.5 shrink-0 text-[#02C8C4] dark:text-[#15DCFF]" />
+                    <Check className="h-3.5 w-3.5 shrink-0 text-[#C17A1C] dark:text-[#15DCFF]" />
                   )}
                 </CommandItem>
               ))}

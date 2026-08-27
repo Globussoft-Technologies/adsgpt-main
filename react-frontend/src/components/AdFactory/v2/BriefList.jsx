@@ -28,7 +28,9 @@ const STATUS = {
   paused: { label: 'Paused', cls: 'bg-[#F59E0B]/12 text-[#B45309] dark:text-[#E8A33D]' },
   previewing: {
     label: 'Ads ready',
-    cls: 'bg-[#02C8C4]/12 text-[#0B7A78] dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]',
+    // Amber on light, cyan on dark — the same pair PILL_ON wears. It was still
+    // on the old teal, which is the accent this surface moved off.
+    cls: 'bg-[#F7E8CD] text-[#8A4E0D] dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]',
   },
   draft: { label: 'Draft', cls: NEUTRAL },
   needs_input: { label: 'Needs input', cls: 'bg-[#F59E0B]/12 text-[#B45309] dark:text-[#E8A33D]' },

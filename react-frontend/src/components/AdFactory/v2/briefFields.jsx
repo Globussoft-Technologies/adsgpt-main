@@ -67,9 +67,9 @@ const flaggedBorder = (flagged) => (flagged ? FLAG_BORDER : '');
 // like six stacked panels; a brief is one document with parts.
 export function Section({ title, badge, children, className = '' }) {
   return (
-    <section className={`${SECTION_PAD} ${className}`}>
+    <section className={`${CARD} ${SECTION_PAD} ${className}`}>
       {(title || badge) && (
-        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           {title && <h3 className={SECTION}>{title}</h3>}
           {badge}
         </div>
@@ -81,7 +81,7 @@ export function Section({ title, badge, children, className = '' }) {
 
 // The rule between two sections.
 export function SectionRule() {
-  return <div className={`border-t ${RULE_BORDER}`} />;
+  return null;
 }
 
 // The grid a section's fields sit on. Four columns at the widest so a row of
@@ -92,7 +92,7 @@ export function FieldGrid({ cols = 4, children }) {
     3: 'sm:grid-cols-2 xl:grid-cols-3',
     4: 'sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4',
   }[cols];
-  return <div className={`grid grid-cols-1 gap-x-5 gap-y-4 ${at}`}>{children}</div>;
+  return <div className={`grid grid-cols-1 gap-x-4 gap-y-3 ${at}`}>{children}</div>;
 }
 
 // ─── Field shell ─────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ export function FieldGrid({ cols = 4, children }) {
 export function FieldBlock({ label, hint, tooltip, wide, full, children }) {
   const span = full ? 'sm:col-span-2 xl:col-span-3 2xl:col-span-4' : wide ? 'sm:col-span-2' : '';
   return (
-    <div className={`flex min-w-0 flex-col gap-2 ${span}`}>
+    <div className={`flex min-w-0 flex-col gap-1.5 ${span}`}>
       {/* Label, tip and hint on ONE line. The hint used to sit BELOW the
           control, which put a third piece of type under every field and pushed
           the next row down by a line it did not need. Beside the label it reads
@@ -122,12 +122,33 @@ export function FieldBlock({ label, hint, tooltip, wide, full, children }) {
 export function EditableText({ value, placeholder, flagged, onSave, multiline, rows = 3 }) {
   const [draft, setDraft] = useState(value ?? '');
   const dirty = useRef(false);
+  const area = useRef(null);
 
   // Re-seed when the server sends a newer value — but never mid-edit, which
   // would yank half-typed text out from under the user.
   useEffect(() => {
     if (!dirty.current) setDraft(value ?? '');
   }, [value]);
+
+  // Grow to fit what is in it.
+  //
+  // `rows` was a fixed height, not a minimum, so anything longer than two lines
+  // was clipped — and clipped MID-LINE, because a scroll container cuts at
+  // whatever pixel the box ends at rather than at a line boundary. Half a row
+  // of letter-tops under the last full line is what "cropping the last line"
+  // looked like, and the inferred description is three or four lines in
+  // basically every brief.
+  //
+  // Height is measured, not calculated: reset to `auto` first so scrollHeight
+  // reports the content's real height rather than the height we last set. Runs
+  // on every draft change (typing, and the server re-seed above) and once on
+  // mount, since the value usually arrives before this ever gets focus.
+  useEffect(() => {
+    const el = area.current;
+    if (!multiline || !el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft, multiline]);
 
   const commit = () => {
     dirty.current = false;
@@ -142,12 +163,16 @@ export function EditableText({ value, placeholder, flagged, onSave, multiline, r
   if (multiline) {
     return (
       <textarea
+        ref={area}
         value={draft}
         rows={rows}
         placeholder={placeholder}
         onChange={onChange}
         onBlur={commit}
-        className={`${TEXTAREA} ${flaggedBorder(flagged)}`}
+        // `resize-none` and `overflow-hidden` are what make the autosize above
+        // the single source of truth for the height: a drag handle would fight
+        // it on the next keystroke, and a scrollbar is the thing being fixed.
+        className={`${TEXTAREA} resize-none overflow-hidden ${flaggedBorder(flagged)}`}
       />
     );
   }
@@ -253,7 +278,7 @@ export function SelectField({
     <Select value={value || ''} onValueChange={(v) => onChange?.(v)} disabled={disabled || empty}>
       <SelectTrigger
         className={`${CONTROL_H}! w-full ${CONTROL} px-3 shadow-none ${VALUE} ${flaggedBorder(
-          flagged,
+          flagged
         )} ${disabled || empty ? 'cursor-not-allowed opacity-60' : ''}`}
       >
         <SelectValue placeholder={empty ? 'Nothing to choose from' : placeholder} />
@@ -361,28 +386,31 @@ export function PaletteEditor({ colors, onChange, max = null }) {
     <div className="flex flex-col items-start gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {list.map((hex, i) => (
-        <span key={`${hex}-${i}`} className="group relative">
-          <input
-            type="color"
-            value={/^#[0-9a-f]{6}$/i.test(hex) ? hex : '#000000'}
-            onChange={(e) => replaceAt(i, e.target.value)}
-            title={hex}
-            aria-label={`Brand colour ${hex}`}
-            className="h-10 w-10 cursor-pointer rounded-[12px] border border-white/10 bg-transparent p-0 overflow-hidden"
-          />
-          <button
-            type="button"
-            onClick={() => onChange?.(list.filter((_, idx) => idx !== i))}
-            aria-label={`Remove ${hex}`}
-            className="absolute -top-1.5 -right-1.5 hidden h-4 w-4 place-items-center rounded-full bg-[#111827] text-white group-hover:grid dark:bg-[#ECEFF3] dark:text-[#0A0A0A]"
-          >
-            <X className="h-2.5 w-2.5" />
-          </button>
-        </span>
+          <span key={`${hex}-${i}`} className="group relative">
+            <input
+              type="color"
+              value={/^#[0-9a-f]{6}$/i.test(hex) ? hex : '#000000'}
+              onChange={(e) => replaceAt(i, e.target.value)}
+              title={hex}
+              aria-label={`Brand colour ${hex}`}
+              className="h-9 w-9 cursor-pointer overflow-hidden rounded-md border border-[#DED2BD] bg-transparent p-0 dark:border-white/10"
+            />
+            <button
+              type="button"
+              onClick={() => onChange?.(list.filter((_, idx) => idx !== i))}
+              aria-label={`Remove ${hex}`}
+              className="absolute -top-1.5 -right-1.5 hidden h-4 w-4 place-items-center rounded-full bg-[#111827] text-white group-hover:grid dark:bg-[#ECEFF3] dark:text-[#0A0A0A]"
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </span>
         ))}
 
         {(!capped || list.length < max) && (
-          <label title="Add a colour" className="grid h-10 w-10 cursor-pointer place-items-center rounded-[12px] border border-dashed border-white/14 bg-[#2B2F37] text-[#AFB6C0] transition-colors hover:border-white/25 hover:text-white">
+          <label
+            title="Add a colour"
+            className="grid h-9 w-9 cursor-pointer place-items-center rounded-md border border-dashed border-[#CDBB9E] bg-[#F7F1E8] text-[#9C8F7D] transition-colors hover:border-[#C17A1C]/60 hover:text-[#8A4E0D] dark:border-white/14 dark:bg-[#2B2F37] dark:text-[#AFB6C0] dark:hover:border-white/25 dark:hover:text-white"
+          >
             <Plus className="h-4 w-4" />
             <input
               type="color"
@@ -399,9 +427,7 @@ export function PaletteEditor({ colors, onChange, max = null }) {
         )}
       </div>
 
-      <span className={`${FAINT} ${NUM}`}>
-        {list.length} colors
-      </span>
+      <span className={`${FAINT} ${NUM}`}>{list.length} colours</span>
     </div>
   );
 }
@@ -534,7 +560,7 @@ export function ImageStrip({
               src={url}
               alt=""
               loading="lazy"
-              className={`h-11 w-11 ${THUMB}`}
+              className={`h-10 w-10 ${THUMB}`}
               onError={(e) => {
                 e.currentTarget.style.opacity = '0.25';
               }}
@@ -555,7 +581,7 @@ export function ImageStrip({
         {!full && uploadFile && (
           <label
             title="Upload from device"
-            className={`grid h-11 w-11 cursor-pointer place-items-center ${THUMB_ADD}`}
+            className={`grid h-10 w-10 cursor-pointer place-items-center ${THUMB_ADD}`}
           >
             {busy ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -580,7 +606,7 @@ export function ImageStrip({
           <button
             type="button"
             onClick={onAddCompetitors}
-            className="inline-flex h-11 items-center gap-2 rounded-[7px] border border-[#02C8C4]/30 bg-[#02C8C4]/8 px-2 text-13 font-medium text-[#0B7A78] transition-colors hover:border-[#02C8C4]/55 hover:bg-[#02C8C4]/12 dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/8 dark:text-[#15DCFF] dark:hover:border-[#15DCFF]/45 dark:hover:bg-[#15DCFF]/12"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-[#C17A1C]/30 bg-[#F7E8CD] px-2 text-[11px] font-medium text-[#8A4E0D] transition-colors hover:border-[#C17A1C]/55 hover:bg-[#F4DEB8] dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/8 dark:text-[#15DCFF] dark:hover:border-[#15DCFF]/45 dark:hover:bg-[#15DCFF]/12"
           >
             <Search className="h-3.5 w-3.5" />
             <span>Competitor visuals</span>
@@ -588,7 +614,6 @@ export function ImageStrip({
         )}
 
         {list.length === 0 && !uploadFile && <p className={FAINT}>{emptyLabel}</p>}
-
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -618,7 +643,7 @@ export function ImageStrip({
           <button
             type="button"
             onClick={addUrl}
-            className={`shrink-0 ${CONTROL_H} rounded-lg bg-[#02C8C4] px-3.5 text-13 font-semibold text-[#062024] dark:bg-[#15DCFF]`}
+            className={`shrink-0 ${CONTROL_H} rounded-md bg-[#B87215] px-3.5 text-[11px] font-semibold text-white dark:bg-[#15DCFF] dark:text-[#062024]`}
           >
             Add
           </button>

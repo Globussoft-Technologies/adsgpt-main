@@ -4,8 +4,14 @@ import { EllipsisVertical } from 'lucide-react';
 import { X } from 'lucide-react';
 import { useSelector } from 'react-redux';
 
-const MobilePreview = ({ image, text, cta, ctaLink }) => {
+// `brandName` is an optional override for callers outside Full control's
+// canvas. Quick setup keeps the brand on its own brief document and never
+// populates `adFactoryNew.brandInfo`, so without this the preview renders a
+// blank avatar and a nameless post — for a brief whose brand name is right
+// there. v1's callers pass nothing and keep reading the slice exactly as before.
+const MobilePreview = ({ image, text, cta, ctaLink, brandName }) => {
   const { brandInfo } = useSelector((state) => state?.adFactoryNew);
+  const name = brandName || brandInfo?.brandName || '';
   return (
     <div className="flex justify-center">
       {/* Phone container */}
@@ -20,11 +26,11 @@ const MobilePreview = ({ image, text, cta, ctaLink }) => {
           {/* Header */}
           <div className="flex items-start gap-2 pt-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#167beb] text-xs font-bold text-white">
-              {brandInfo?.brandName?.slice(0, 1)?.toUpperCase()}
+              {name?.slice(0, 1)?.toUpperCase()}
             </div>
 
             <div className="flex-1">
-              <div className="leading-tight font-semibold">{brandInfo?.brandName}</div>
+              <div className="leading-tight font-semibold">{name}</div>
               {/* <div className="text-[10px] text-gray-500">@adsgpt_ai</div> */}
             </div>
 

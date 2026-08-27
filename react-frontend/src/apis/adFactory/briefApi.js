@@ -118,19 +118,28 @@ export const activateBrief = async (briefId, connection, cadence = null) => {
   return data;
 };
 
-// The MANUAL half — v1's "Post Ad". Ships the ads from the run being viewed,
-// once, and creates no job.
+// The MANUAL half — v1's "Post Ad". Ships ads once and creates no job.
 //
 //   mode 'auto'      we build the campaign + ad set from the brief
 //   mode 'existing'  they go into ones the user already runs, and inherit that
 //                    ad set's budget and targeting
-export const publishBrief = async (briefId, { connection, mode = 'auto', campaignId, adSetId }) => {
+//
+// `imageUrls` is the gallery's hand-picked selection, which can span several
+// runs. Omitted, the server posts the whole run being viewed — the preview
+// screen's behaviour, unchanged. The server filters the urls against the
+// campaign's own pairs either way, so this narrows what goes out; it cannot
+// introduce anything.
+export const publishBrief = async (
+  briefId,
+  { connection, mode = 'auto', campaignId, adSetId, imageUrls },
+) => {
   const { data } = await axios.post(
     `${BRIEFS}/${briefId}/publish`,
     {
       connection,
       mode,
       ...(mode === 'existing' ? { campaignId, adSetId } : {}),
+      ...(imageUrls?.length ? { imageUrls } : {}),
     },
     { headers: authHeaders() },
   );
