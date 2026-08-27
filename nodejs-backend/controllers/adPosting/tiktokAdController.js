@@ -2,6 +2,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const TiktokUsers = require("../../Module/adPosting/tiktokUsers");
 const logger = require("../../utils/logger");
+const { trackBackendGA4Event } = require("../../utils/ga4");
 const { redisClient } = require("../../db/redis");
 const {
   getValidAccessToken,
@@ -1206,6 +1207,19 @@ class TiktokAdController {
       });
 
       await invalidateUserTiktokCache(userId).catch(() => {});
+
+      if (level === "campaign") {
+        const isStart = status === "ACTIVE";
+        trackBackendGA4Event("ad_factory", {
+          user_id: userId,
+          feature: "ad_factory",
+          action_name: isStart ? "ad_factory_campaign_started_tiktok" : "ad_factory_campaign_stopped_tiktok",
+          source: "ads_manager",
+          platforms: "tiktok",
+          success: true,
+        });
+      }
+
       return res.json({
         success: true,
         level,

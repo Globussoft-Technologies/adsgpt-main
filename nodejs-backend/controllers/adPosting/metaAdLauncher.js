@@ -13,6 +13,7 @@ const {
   metaCacheScope,
 } = require("../../utils/metaConnection");
 const logger = require("../../utils/logger");
+const { trackBackendGA4Event } = require("../../utils/ga4");
 const {
   formatBudget,
   getAdFields,
@@ -1785,6 +1786,18 @@ class MetaAdLauncher {
       await object.update([StatusField.status], {
         [StatusField.status]: status,
       });
+
+      if (level === "campaign") {
+        const isStart = status === "ACTIVE";
+        trackBackendGA4Event("ad_factory", {
+          user_id: req.user.user_id,
+          feature: "ad_factory",
+          action_name: isStart ? "ad_factory_campaign_started_meta" : "ad_factory_campaign_stopped_meta",
+          source: "ads_manager",
+          platforms: "meta",
+          success: true,
+        });
+      }
 
       // Invalidate cached GET responses that embed status, so the next
       // read reflects the change instead of the 2h-TTL stale payload.

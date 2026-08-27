@@ -199,12 +199,18 @@ class AdsFactoryAutoController {
 
 function formatPlatformString(targets) {
   const PREFERRED_PLATFORM_ORDER = ['meta', 'google', 'tiktok'];
-  const platforms = [];
-  if (targets?.meta) platforms.push('meta');
-  if (targets?.google) platforms.push('google');
-  if (targets?.tiktok) platforms.push('tiktok');
-
-  const sorted = platforms.sort((a, b) => {
+  let rawList = [];
+  if (Array.isArray(targets)) {
+    rawList = targets;
+  } else if (targets && typeof targets === 'object') {
+    if (targets.meta) rawList.push('meta');
+    if (targets.google) rawList.push('google');
+    if (targets.tiktok) rawList.push('tiktok');
+  }
+  const cleanList = [...new Set(rawList
+    .map((p) => String(p || '').toLowerCase().trim())
+    .filter(Boolean))];
+  const sorted = cleanList.sort((a, b) => {
     const idxA = PREFERRED_PLATFORM_ORDER.indexOf(a);
     const idxB = PREFERRED_PLATFORM_ORDER.indexOf(b);
     if (idxA !== -1 && idxB !== -1) return idxA - idxB;

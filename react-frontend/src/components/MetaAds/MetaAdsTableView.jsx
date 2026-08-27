@@ -38,6 +38,7 @@ import {
   releaseManagedCampaign,
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
+import { GA4Events } from '@/utils/ga4';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { StatusBadge, Spinner, EmptyState } from './MetaAdsAtoms';
 import {
@@ -643,6 +644,11 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
     try {
       const res = await updateAdStatus('campaign', c.id, next);
       setStatuses((p) => ({ ...p, [c.id]: next }));
+      if (next === 'ACTIVE') {
+        GA4Events.adFactoryCampaignStarted(['meta'], { source: 'ads_manager', campaignId: c.id });
+      } else {
+        GA4Events.adFactoryCampaignStopped(['meta'], { source: 'ads_manager', campaignId: c.id });
+      }
       globalToast.success(res?.message);
     } catch { globalToast.error('Failed to update campaign status'); }
     finally  { setToggling((p) => ({ ...p, [c.id]: false })); }

@@ -21,6 +21,7 @@ const GooglePostedAd = require("../../Module/adPosting/googlePostedAds");
 const Campaign = require("../../Module/adFactory/adFactory");
 const { encrypt, decrypt } = require("../../utils/crypto");
 const logger = require("../../utils/logger");
+const { trackBackendGA4Event } = require("../../utils/ga4");
 const {
   formatBudget,
   formatStatus,
@@ -2787,6 +2788,16 @@ class GoogleAdController {
           },
           { headers: adHeaders }
         );
+
+        const isStart = status === "ENABLED";
+        trackBackendGA4Event("ad_factory", {
+          user_id: userId,
+          feature: "ad_factory",
+          action_name: isStart ? "ad_factory_campaign_started_google" : "ad_factory_campaign_stopped_google",
+          source: "ads_manager",
+          platforms: "google",
+          success: true,
+        });
       } else if (level === "adgroup") {
         const entityType = value.entityType || req.body.entityType || "";
         const isAssetGroup = entityType === "ASSET_GROUP" || value.isPmax === true || req.body.isPmax === true;

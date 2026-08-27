@@ -59,6 +59,7 @@ import {
   getTiktokAdReviewInfo,
 } from '@/apis/tikTokAds/tikTokAdsApi';
 import toast from 'react-hot-toast';
+import { GA4Events } from '@/utils/ga4';
 import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
 import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
 import ThemeToggle from '@/components/layout/header/ThemeToggle';
@@ -1060,6 +1061,13 @@ const TikTokAdsDashboard = () => {
         ids: [row.id],
         status: next,
       });
+      if (level === 'campaign') {
+        if (next === 'ACTIVE') {
+          GA4Events.adFactoryCampaignStarted(['tiktok'], { source: 'ads_manager', campaignId: row.id });
+        } else {
+          GA4Events.adFactoryCampaignStopped(['tiktok'], { source: 'ads_manager', campaignId: row.id });
+        }
+      }
       toast.success(`${level} ${next === 'ACTIVE' ? 'activated' : 'paused'}`);
     } catch (err) {
       updateRowStatus(row.id, row.status); // revert

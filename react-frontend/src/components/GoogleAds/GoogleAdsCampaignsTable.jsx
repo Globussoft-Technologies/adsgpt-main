@@ -32,6 +32,7 @@ import {
   removeAssetFromAssetGroup,
 } from '@/apis/googleAds/googleAdsApi';
 import { globalToast } from '@/utils/globalToast';
+import { GA4Events } from '@/utils/ga4';
 import { Spinner, EmptyState } from '@/components/MetaAds/MetaAdsAtoms';
 import {
   adCopyText,
@@ -387,6 +388,11 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
     try {
       await updateGoogleAdStatus({ level: 'campaign', id, adAccountId, status: next });
       setStatuses((p) => ({ ...p, [id]: next }));
+      if (next === 'ENABLED') {
+        GA4Events.adFactoryCampaignStarted(['google'], { source: 'ads_manager', campaignId: id });
+      } else {
+        GA4Events.adFactoryCampaignStopped(['google'], { source: 'ads_manager', campaignId: id });
+      }
       // Don't guess primaryStatus here — Google can take a moment to settle
       // the real derived status after a toggle. Clear any stale override
       // and let the refetch below supply the truth.
