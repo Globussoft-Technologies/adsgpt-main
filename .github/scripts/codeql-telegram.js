@@ -12,7 +12,9 @@
 // the mirror commit that actually touched it, then read the "Upstream PR:"
 // trailer the Jenkins mirror job writes into every mirror commit message.
 
-const { execFileSync } = require("node:child_process");
+const {
+  SEVERITY_ICON, escape, severityOf, fetchOpenAlerts, blameLine, send,
+} = require("./codeql-telegram-lib.js");
 
 const {
   GH_TOKEN, REPO, SINCE, RUN_URL,
@@ -23,71 +25,11 @@ const {
 // A query-pack upgrade is the case this exists for.
 const BATCH_THRESHOLD = 8;
 
-const git = (...args) =>
-  execFileSync("git", args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }).trim();
-
-const escape = (v) =>
-  String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-const SEVERITY_ICON = {
-  critical: "\u{1F7E5}", high: "\u{1F7E7}", medium: "\u{1F7E8}", low: "\u{2B1C}",
-};
-
-async function fetchOpenAlerts() {
-  const out = [];
-  for (let page = 1; page <= 20; page++) {
-    const res = await fetch(
-      `https://api.github.com/repos/${REPO}/code-scanning/alerts?state=open&per_page=100&page=${page}`,
-      { headers: { Authorization: `Bearer ${GH_TOKEN}`, Accept: "application/vnd.github+json" } },
-    );
-    if (!res.ok) throw new Error(`alerts API ${res.status}: ${await res.text()}`);
-    const batch = await res.json();
-    out.push(...batch);
-    if (batch.length < 100) break;
-  }
-  return out;
-}
-
-// The mirror commit that last touched the flagged line. Almost always the one
-// that introduced the alert; the exception is an alert that appears because a
-// sanitizer was removed elsewhere, which is why the wording says "likely".
-function introducingCommit(path, line, sha) {
-  if (!path || !line) return null;
-  try {
-    const out = git("blame", "-L", `${line},${line}`, "--porcelain", sha, "--", path);
-    return out.split(/\s+/)[0] || null;
-  } catch {
-    return null;
-  }
-}
-
-// "Upstream PR:      #1301 (Jaydev Jana), #1306 (Chethan S)"
-//   -> [{ num: "1301", name: "Jaydev Jana" }, { num: "1306", name: "Chethan S" }]
-//
-// The name is optional: trailers written before Jenkins started recording the
-// author carry the number alone, so fall back to numbers-only parsing.
-function upstreamPrs(sha) {
-  if (!sha) return [];
-  let body;
-  try {
-    body = git("log", "-1", "--format=%B", sha);
-  } catch {
-    return [];
-  }
-  const line = body.match(/^Upstream PR:\s*(.+)$/m);
-  if (!line) return [];
-  const named = [...line[1].matchAll(/#(\d+)\s*\(([^)]*)\)/g)]
-    .map((m) => ({ num: m[1], name: m[2].trim() || null }));
-  if (named.length) return named;
-  return [...line[1].matchAll(/#(\d+)/g)].map((m) => ({ num: m[1], name: null }));
-}
-
 function renderAlert(alert) {
   const inst = alert.most_recent_instance || {};
   const loc = inst.location || {};
-  const severity = alert.rule?.security_severity_level || alert.rule?.severity || "unknown";
-  const mirrorSha = introducingCommit(loc.path, loc.start_line, inst.commit_sha || "HEAD");
-  const prs = upstreamPrs(mirrorSha);
+  const severity = severityOf(alert);
+  const attribution = blameLine(alert, PRIVATE_REPO_URL);
 
   const lines = [
     `${SEVERITY_ICON[severity] || SEVERITY_ICON.low} <b>New CodeQL alert</b> · ${escape(severity)}`,
@@ -97,21 +39,9 @@ function renderAlert(alert) {
     "",
   ];
 
-  if (prs.length) {
-    const links = prs
-      .map((p) => `<a href="${PRIVATE_REPO_URL}/pull/${p.num}">#${p.num}</a>`)
-      .join(", ");
-    // Distinct authors, in order. A batch can carry several PRs from one person.
-    const who = [...new Set(prs.map((p) => p.name).filter(Boolean))];
-    lines.push(
-      `Likely introduced by PR ${links}` +
-      (who.length ? ` — <b>${escape(who.join(", "))}</b>` : ""),
-    );
-  } else {
-    // No trailer means the line predates the Jenkinsfile change, or the mirror
-    // batch carried no detectable PR. The SHA still gives a thread to pull.
-    lines.push(`Could not resolve the PR — mirror commit <code>${escape((mirrorSha || "unknown").slice(0, 8))}</code>`);
-  }
+  lines.push(attribution.who.length
+    ? `Likely introduced by ${attribution.text}`
+    : `Could not resolve the PR — ${attribution.text}`);
   lines.push("", `<a href="${alert.html_url}">Open alert #${alert.number}</a>`);
   return lines.join("\n");
 }
@@ -142,17 +72,6 @@ function renderSummary(alerts) {
   ].filter(Boolean).join("\n");
 }
 
-async function send(text) {
-  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: TELEGRAM_CHAT_ID, text, parse_mode: "HTML", disable_web_page_preview: true,
-    }),
-  });
-  if (!res.ok) throw new Error(`Telegram ${res.status}: ${await res.text()}`);
-}
-
 async function main() {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     console.error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must both be set.");
@@ -164,19 +83,19 @@ async function main() {
     process.exit(1);
   }
 
-  const all = await fetchOpenAlerts();
+  const all = await fetchOpenAlerts({ repo: REPO, token: GH_TOKEN });
   const fresh = all.filter((a) => Date.parse(a.created_at) >= cutoff);
   console.log(`${all.length} open alerts, ${fresh.length} created at or after ${SINCE}`);
 
   if (fresh.length === 0) return;                    // the quiet, common case
   if (fresh.length > BATCH_THRESHOLD) {
-    await send(renderSummary(fresh));
+    await send(renderSummary(fresh), { token: TELEGRAM_BOT_TOKEN, chatId: TELEGRAM_CHAT_ID });
     return;
   }
   for (const alert of fresh) {
     const text = renderAlert(alert);
     console.log(text);
-    await send(text);
+    await send(text, { token: TELEGRAM_BOT_TOKEN, chatId: TELEGRAM_CHAT_ID });
   }
 }
 

@@ -1,0 +1,47 @@
+# Daily digest of every open CodeQL alert, posted to Telegram at 10:00 IST.
+#
+# Companion to codeql-telegram.yml, which reports what each individual scan
+# raised. This one answers the other question: what is still outstanding.
+#
+# 10:00 IST is 04:30 UTC - cron in GitHub Actions is UTC only and does not
+# observe any timezone, but IST has no DST so this stays correct year-round.
+#
+# Scheduled runs are best-effort: GitHub queues them and can delay a run by
+# 10-30 minutes when the platform is busy, occasionally dropping one entirely.
+# Treat this as a morning summary, not a guaranteed 10:00 delivery. Use the
+# workflow_dispatch trigger to run it on demand.
+#
+# Setup:
+#   Secrets   CODEQL_TELEGRAM_BOT_TOKEN, CODEQL_TELEGRAM_CHAT_ID
+#
+# Silenced by setting repo variable CODEQL_TELEGRAM_ENABLED to "false", the same
+# switch the per-scan workflow honours.
+name: CodeQL daily digest to Telegram
+
+on:
+  schedule:
+    - cron: '30 4 * * *'   # 04:30 UTC = 10:00 IST
+  workflow_dispatch:        # manual run, for testing or an ad-hoc check
+
+permissions:
+  contents: read
+  security-events: read
+
+jobs:
+  digest:
+    if: vars.CODEQL_TELEGRAM_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git blame needs real history to attribute each alert to a PR.
+          fetch-depth: 0
+
+      - name: Post open-alert digest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.CODEQL_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.CODEQL_TELEGRAM_CHAT_ID }}
+          PRIVATE_REPO_URL: https://github.com/Globussoft-Technologies/adsgpt
+        run: node .github/scripts/codeql-telegram-digest.js
