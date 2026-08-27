@@ -245,6 +245,36 @@ class MetaRateLimiter {
     return delay;
   }
 
+  /**
+   * Every live bucket that applies to this context, worst first.
+   *
+   * `worstFor` alone hid the thing we most needed: when every meter reads 1%,
+   * it names whichever bucket happens to win the tie and says nothing about
+   * which buckets were even PRESENT. An app-level failure with all per-account
+   * meters idle is exactly the case where "which headers did Meta actually
+   * return" is the whole question — a missing `x-app-usage` looks identical to
+   * a healthy one if you only print the maximum.
+   */
+  allFor(context = {}) {
+    const now = Date.now();
+    const out = [];
+    for (const b of this.buckets.values()) {
+      if (now - b.updatedAt > BUCKET_TTL_MS) continue;
+      if (!this._applies(b, context)) continue;
+      out.push({
+        kind: b.kind,
+        key: b.key,
+        usage: Math.max(b.callCount, b.cpuTime, b.totalTime),
+        callCount: b.callCount,
+        cpuTime: b.cpuTime,
+        totalTime: b.totalTime,
+        blockedMs: Math.max(0, b.regainMs - (now - b.updatedAt)),
+        tier: b.tier,
+      });
+    }
+    return out.sort((a, b) => b.usage - a.usage);
+  }
+
   /** Worst live bucket for a context — for logging and skip decisions. */
   worstFor(context = {}) {
     const now = Date.now();
@@ -335,6 +365,39 @@ function formatWorst(worst) {
   return parts.join(" · ");
 }
 
+/**
+ * Every bucket on one line, plus an explicit note for the ones Meta did NOT
+ * return.
+ *
+ * The absence matters as much as the values. "Application request limit
+ * reached" is an APP-LEVEL failure (error code 4), so if `x-app-usage` never
+ * arrives on Marketing API responses we are blind to the only meter that
+ * could have predicted it — and that blindness must be visible in the log
+ * rather than inferred from a suspiciously tidy set of 1%s.
+ */
+const EXPECTED_KINDS = ["app", "buc", "insights", "acc"];
+
+function formatAll(buckets) {
+  if (!buckets || buckets.length === 0) return "no usage headers seen";
+  const shown = buckets
+    .map((b) => {
+      const meters = [];
+      if (b.cpuTime) meters.push(`cpu ${b.cpuTime}%`);
+      if (b.callCount) meters.push(`calls ${b.callCount}%`);
+      if (b.totalTime) meters.push(`time ${b.totalTime}%`);
+      const detail = meters.length ? ` (${meters.join(" ")})` : "";
+      const blocked =
+        b.blockedMs > 0 ? ` BLOCKED ${Math.ceil(b.blockedMs / 60000)}min` : "";
+      // `insights:...:app` vs `:acc:<id>` is a meaningful distinction.
+      const scope = b.key.endsWith(":app") ? ":app" : "";
+      return `${b.kind}${scope} ${b.usage}%${detail}${blocked}`;
+    })
+    .join(" | ");
+  const seen = new Set(buckets.map((b) => b.kind));
+  const missing = EXPECTED_KINDS.filter((k) => !seen.has(k));
+  return shown + (missing.length ? ` | absent: ${missing.join(",")}` : "");
+}
+
 module.exports = {
   MetaRateLimiter,
   sharedRateLimiter,
@@ -342,6 +405,7 @@ module.exports = {
   staircaseDelay,
   bucketKey,
   formatWorst,
+  formatAll,
   DAY_MS,
   BUCKET_TTL_MS,
 };

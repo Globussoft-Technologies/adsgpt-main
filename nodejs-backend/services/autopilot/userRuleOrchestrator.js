@@ -119,6 +119,7 @@ const {
   sharedRateLimiter,
   hashToken,
   formatWorst,
+  formatAll,
 } = require("./metaRateLimiter");
 
 let _bizSdk;
@@ -1755,10 +1756,10 @@ async function runUserRuleCycle({
             // thing that was previously invisible: an insights-heavy workload
             // usually exhausts `x-fb-ads-insights-throttle` or BUC cputime
             // long before the call-count bucket the App Dashboard graphs.
-            if (audit.rateLimit) {
+            if (audit.rateLimitAll) {
               acctSummary.rateLimit = audit.rateLimit;
               logger.info(
-                `[autopilot v4] ${acctKey} rate-limit ${formatWorst(audit.rateLimit)}`,
+                `[autopilot v4] ${acctKey} rate-limit ${formatAll(audit.rateLimitAll)}`,
               );
             }
 

@@ -407,7 +407,6 @@ function buildNormalisers({
     const engagement = getActionValue(i.actions, "post_engagement");
     const installs = getInstallCount(i.actions);
     const cpi = getCpi(i.cost_per_action_type);
-    console.log(`Ad ${i.ad_id} name="${i.ad_name}" cpi=${cpi} spend=${spend} installs=${installs}`);
     const engagement_rate =
       impressions > 0 ? (engagement / impressions) * 100 : 0;
 
@@ -879,6 +878,9 @@ async function runAuditForAccount({
     // Worst live rate-limit bucket for this account after the fetch, so the
     // caller can log the real numbers rather than infer them.
     rateLimit: sharedRateLimiter.worstFor(rateLimitContext),
+    // Every bucket, so the caller can log which meters Meta actually returned
+    // — an absent one is as informative as a high one.
+    rateLimitAll: sharedRateLimiter.allFor(rateLimitContext),
   };
 }
 
