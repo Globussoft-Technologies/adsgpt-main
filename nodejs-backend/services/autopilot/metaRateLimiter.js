@@ -75,6 +75,12 @@ class MetaRateLimiter {
   constructor() {
     /** @type {Map<string, Object>} */
     this.buckets = new Map();
+    // Ad-account ids we have actually made requests for. Used to decide
+    // whether a BUC bucket's scope id is "another account" (so it must not
+    // apply here) or something unrecognised like a business id (so it should
+    // apply broadly, erring toward more throttling rather than less).
+    /** @type {Set<string>} */
+    this._knownAccountIds = new Set();
   }
 
   /**
@@ -91,6 +97,7 @@ class MetaRateLimiter {
     const accountId = context.accountId
       ? String(context.accountId).replace(/^act_/, "")
       : null;
+    if (accountId) this._knownAccountIds.add(accountId);
 
     // ── x-app-usage ────────────────────────────────────────
     const app = safeParse(get("x-app-usage"));
@@ -334,7 +341,28 @@ class MetaRateLimiter {
         bucketKey("local_retry", tokenHash, scope) + ":",
       );
     }
-    // app + buc are token-scoped and apply broadly.
+    if (bucket.kind === "buc") {
+      // BUC buckets are keyed `buc:<token>:<id>:<type>`, where `<id>` is
+      // whatever Meta put in the header — for ad-account calls that is the ad
+      // account id. Treating them as token-wide (which the upstream MCP does)
+      // means one account's usage throttles every sibling, and every account's
+      // log line repeats every bucket seen so far. Both are wrong, and the
+      // second is how it was noticed.
+      //
+      // But we cannot assume the key IS an ad account id — Meta documents it
+      // as a business id, and if it ever is one, scoping strictly would match
+      // nothing and silently disable BUC throttling altogether. So: when the
+      // bucket names THIS account, it applies; when it names some OTHER
+      // account we know about, it does not; when it names something we can't
+      // place, fall back to applying broadly, which is the safe direction.
+      if (!accountId) return true;
+      const parts = bucket.key.split(":");
+      const scopeId = parts.length >= 4 ? parts[2] : null;
+      if (!scopeId) return true;
+      if (scopeId === accountId) return true;
+      return !this._knownAccountIds.has(scopeId);
+    }
+    // app is genuinely token-wide.
     return true;
   }
 }

@@ -1395,10 +1395,23 @@ function AttachmentPicker({ attachments, onChange }) {
   // Campaign level or ad-set level. ABO campaigns hold several ad sets, usually
   // geo-split, whose economics differ enough that one campaign-wide threshold
   // is wrong for all of them — so a rule has to be able to target one ad set.
-  // Derived from what's already attached when editing an existing rule.
-  const [attachLevel, setAttachLevel] = useState(() =>
-    (attachments || []).some((a) => a.adsetId) ? 'adset' : 'campaign',
-  );
+  //
+  // DERIVED, not snapshotted. A `useState` initializer runs only on the first
+  // render, and on this screen that render happens BEFORE the parent's
+  // `useEffect` loads the rule being edited — so the initializer would read an
+  // empty/stale attachment list, settle on 'campaign', and never recover. The
+  // visible symptom was an edited rule showing none of its ad sets selected and
+  // no counts, because campaign-mode matching requires `!a.adsetId` and every
+  // saved attachment had one.
+  //
+  // The override exists for the one case the data can't express: the user has
+  // picked "Specific ad sets" but hasn't ticked any yet, so there is nothing to
+  // derive from.
+  const [levelOverride, setLevelOverride] = useState(null);
+  const derivedLevel = (attachments || []).some((a) => a.adsetId)
+    ? 'adset'
+    : 'campaign';
+  const attachLevel = levelOverride ?? derivedLevel;
   const [adsetsByCampaign, setAdsetsByCampaign] = useState({});
   const [loadingCampaign, setLoadingCampaign] = useState(null);
   const [openCampaign, setOpenCampaign] = useState(null);
@@ -1416,6 +1429,32 @@ function AttachmentPicker({ attachments, onChange }) {
       setLoadingCampaign(null);
     }
   };
+
+  // Reveal what's already attached when editing. Without this the picker opens
+  // fully collapsed, so a rule with six ad sets across two campaigns looks
+  // identical to a rule with nothing selected — you have to click into the
+  // account, then into each campaign, before any tick marks appear.
+  // Runs once per mount; `didAutoOpen` stops it from fighting the user
+  // afterwards if they collapse something deliberately.
+  const didAutoOpen = useRef(false);
+  useEffect(() => {
+    if (didAutoOpen.current) return;
+    if (!attachments || attachments.length === 0) return;
+    if (accounts.length === 0) return;
+    const firstAcct = attachments[0].adAccountId;
+    if (!accounts.some((a) => `act_${a.id}` === firstAcct)) return;
+    didAutoOpen.current = true;
+    setOpenAccount(firstAcct);
+    ensureCampaigns(firstAcct);
+    const firstWithAdset = attachments.find(
+      (a) => a.adAccountId === firstAcct && a.adsetId,
+    );
+    if (firstWithAdset) {
+      setOpenCampaign(String(firstWithAdset.campaignId));
+      ensureAdsets(firstAcct, String(firstWithAdset.campaignId));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attachments, accounts]);
 
   const toggleCampaignOpen = (acctKey, campaignId) => {
     if (openCampaign === campaignId) {
@@ -1445,7 +1484,7 @@ function AttachmentPicker({ attachments, onChange }) {
   // silently widen the rule's blast radius.
   const changeLevel = (next) => {
     if (next === attachLevel) return;
-    setAttachLevel(next);
+    setLevelOverride(next);
     setOpenCampaign(null);
     if (attachments.length > 0) onChange([]);
   };
