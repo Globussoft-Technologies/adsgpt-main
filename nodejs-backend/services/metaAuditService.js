@@ -29,6 +29,7 @@ const {
   getAdFields,
   getAdSetFields,
   getInsightsFields,
+  getAutopilotInsightsFields,
   getCampaignFields,
 } = require("../utils/metaHelpers");
 const { getEffectiveSettings } = require("../config/autopilotConfig");
@@ -483,6 +484,21 @@ async function runAuditForAccount({
     // unscoped HTTP audit path leaves this undefined and still pulls the
     // full account (unchanged behavior).
     campaignIds,
+    // Autopilot v4 only. Request the 16 raw fields its normalisers actually
+    // read instead of the ~37 the shared list carries — see
+    // `getAutopilotInsightsFields`. Everything omitted was being fetched,
+    // parsed and discarded, and the omitted set is where the server-side cost
+    // lives (video breakdowns, action-value aggregation). Business Use Case
+    // rate limits meter `total_cputime`, so paying for unread fields is how a
+    // handful of calls exhausts an account. Default false keeps the HTTP audit
+    // path and every v3 service byte-identical.
+    slimInsights = false,
+    // Autopilot v4 only. The three `*-insights-prev` queries cost the same as
+    // the current-period ones and exist solely to populate `prev_*` fields. If
+    // no rule in this batch references a `prev_*` field, they are pure waste —
+    // which is the common case, since most rules compare against absolute
+    // thresholds rather than the previous period.
+    needsPrevious = true,
   } = options;
   const scopeIds =
     Array.isArray(campaignIds) && campaignIds.length > 0
@@ -564,6 +580,13 @@ async function runAuditForAccount({
   // scoping is in effect we constrain them to the attached campaigns so we
   // don't pull the whole account's ad metadata. All stay unscoped (full
   // account) on the HTTP audit path where `scopeIds` is null.
+  // One decision, applied to all six insights queries below.
+  const insightsFields = slimInsights
+    ? getAutopilotInsightsFields()
+    : getInsightsFields();
+  // `maximum` has no previous period at all; otherwise the caller decides.
+  const skipPrevious = isMaximumLookback || !needsPrevious;
+
   const adsetReadParams = { limit: PAGE_LIMIT };
   const adReadParams = { limit: PAGE_LIMIT };
   if (scopeIds) {
@@ -599,7 +622,7 @@ async function runAuditForAccount({
     ),
 
     fetchAllPages(
-      account.getInsights(getInsightsFields(), {
+      account.getInsights(insightsFields, {
         level: "campaign",
         ...currentInsightsRange,
         filtering: insightsFiltering("campaign"),
@@ -608,7 +631,7 @@ async function runAuditForAccount({
       { label: "campaign-insights" },
     ),
     fetchAllPages(
-      account.getInsights(getInsightsFields(), {
+      account.getInsights(insightsFields, {
         level: "adset",
         ...currentInsightsRange,
         filtering: insightsFiltering("adset"),
@@ -617,7 +640,7 @@ async function runAuditForAccount({
       { label: "adset-insights" },
     ),
     fetchAllPages(
-      account.getInsights(getInsightsFields(), {
+      account.getInsights(insightsFields, {
         level: "ad",
         ...currentInsightsRange,
         filtering: insightsFiltering("ad"),
@@ -626,10 +649,10 @@ async function runAuditForAccount({
       { label: "ad-insights" },
     ),
 
-    isMaximumLookback
+    skipPrevious
       ? Promise.resolve([])
       : fetchAllPages(
-          account.getInsights(getInsightsFields(), {
+          account.getInsights(insightsFields, {
             level: "campaign",
             time_range: prevRange,
             filtering: insightsFiltering("campaign"),
@@ -637,10 +660,10 @@ async function runAuditForAccount({
           }),
           { label: "campaign-insights-prev" },
         ),
-    isMaximumLookback
+    skipPrevious
       ? Promise.resolve([])
       : fetchAllPages(
-          account.getInsights(getInsightsFields(), {
+          account.getInsights(insightsFields, {
             level: "adset",
             time_range: prevRange,
             filtering: insightsFiltering("adset"),
@@ -648,10 +671,10 @@ async function runAuditForAccount({
           }),
           { label: "adset-insights-prev" },
         ),
-    isMaximumLookback
+    skipPrevious
       ? Promise.resolve([])
       : fetchAllPages(
-          account.getInsights(getInsightsFields(), {
+          account.getInsights(insightsFields, {
             level: "ad",
             time_range: prevRange,
             filtering: insightsFiltering("ad"),

@@ -159,12 +159,73 @@ async function fetchAllPaged(firstPageCursor) {
   return items;
 }
 
+/**
+ * getAutopilotInsightsFields — the SLIM field list for the Autopilot cron.
+ *
+ * `getInsightsFields()` above returns ~35 fields and is shared by seven
+ * consumers (Ads Manager tables, partner API, LLM audit, metrics catalog),
+ * several of which genuinely need video and outbound metrics. It must not be
+ * trimmed in place.
+ *
+ * The cron does not. `metaAuditService`'s normalisers read exactly these
+ * fields and nothing else, so everything omitted here was previously fetched,
+ * parsed and discarded:
+ *
+ *   video_play_actions, video_p25/p50/p75/p95/p100_watched_actions,
+ *   video_avg_time_watched_actions, action_values, conversions,
+ *   conversion_values, outbound_clicks, outbound_clicks_ctr,
+ *   cost_per_outbound_click, unique_clicks, unique_ctr, reach, cpp,
+ *   website_purchase_roas, account_id
+ *
+ * That matters because Business Use Case rate limits meter `total_cputime`,
+ * not just call count — and video breakdowns plus action-value aggregation
+ * are among the most expensive things Meta computes. Requesting them for data
+ * nobody reads is what let a handful of calls exhaust an account's CPU budget
+ * while the App Dashboard still showed the call bucket almost untouched.
+ *
+ * If a normaliser ever starts reading a new raw field, add it HERE too or the
+ * derived value silently becomes 0/undefined — the evaluator fails conditions
+ * closed on missing fields, so the symptom is a rule that quietly stops
+ * matching rather than an error.
+ */
+function getAutopilotInsightsFields() {
+  return [
+    // Identity — needed to join insight rows back to entities.
+    "campaign_id",
+    "campaign_name",
+    "adset_id",
+    "adset_name",
+    "ad_id",
+    "ad_name",
+
+    // Cheap scalars. Kept unconditionally even when no rule references them,
+    // because they are what `metricsSnapshot` puts in the action log and the
+    // alert emails ("spend Rs56.89 - ctr 1.77% - impr 283"). Dropping them to
+    // save CPU would make every "why was this paused?" answer worse for no
+    // meaningful saving.
+    "impressions",
+    "clicks",
+    "ctr",
+    "cpc",
+    "cpm",
+    "spend",
+    "frequency",
+
+    // The expensive three. `actions` and `cost_per_action_type` drive
+    // purchases / installs / cpa / cpi; `purchase_roas` drives roas.
+    "actions",
+    "cost_per_action_type",
+    "purchase_roas",
+  ];
+}
+
 module.exports = {
   formatBudget,
   getAdFields,
   getAdSetFields,
   getCampaignFields,
   getInsightsFields,
+  getAutopilotInsightsFields,
   fetchAllPaged,
   plainMetaList,
 };

@@ -112,6 +112,15 @@ const {
   retirementRecorded,
   scaleHistoryFor,
 } = require("./actionLogQueries");
+// Meta's Business Use Case rate-limit meters, read per ad account BEFORE we
+// spend the expensive insights calls on it. See rateLimitProbe.js for why the
+// App Dashboard's rate-limit page can read 100% remaining while a single
+// account is throttled.
+const {
+  probeAccountUsage,
+  shouldDefer,
+  formatUsage,
+} = require("./rateLimitProbe");
 
 let _bizSdk;
 function bizSdk() {
@@ -175,6 +184,23 @@ function resolveEffectiveLookback(rule, now = new Date()) {
     return Math.max(1, now.getDate()); // 1..31
   }
   return Number((rule && rule.lookbackDays) || 14);
+}
+
+/**
+ * Does any rule in this batch read a previous-period field?
+ *
+ * Three of the six insights queries exist solely to populate `prev_*`, and
+ * they cost the same as the current-period ones. Most rules compare against
+ * absolute thresholds ("cpi > 40"), never touching a `prev_*` field — so for
+ * them half the insights CPU is spent on data nothing reads. Business Use Case
+ * rate limits meter `total_cputime`, which is what makes that waste matter.
+ */
+function batchNeedsPreviousPeriod(rules) {
+  return (rules || []).some((r) =>
+    (r?.conditions?.rules || []).some(
+      (c) => typeof c.field === "string" && c.field.startsWith("prev_"),
+    ),
+  );
 }
 
 /**
@@ -1615,6 +1641,35 @@ async function runUserRuleCycle({
               `No connected Facebook account can access ${acctKey}`,
             );
           }
+
+          // One cheap call (a single field on the account node) buys the
+          // account's BUC meters. Logged every tick so the numbers behind a
+          // throttle are visible instead of inferred — `total_cputime` is
+          // usually the one that bites, and it is invisible in the App
+          // Dashboard.
+          const usage = await probeAccountUsage({
+            adAccountId: acctKey,
+            accessToken: accountAccessToken,
+          });
+          acctSummary.rateLimit = usage || undefined;
+          logger.info(
+            `[autopilot v4] ${acctKey} rate-limit ${formatUsage(usage)}`,
+          );
+          // Defer only when Meta says we are ALREADY blocked. Running then is
+          // a guaranteed failure that still costs the calls, so skipping is
+          // strictly cheaper and loses nothing — the next tick retries.
+          // Threshold-based deferral is deliberately not wired yet: it needs
+          // real numbers from the logging above to be set responsibly.
+          const deferral = shouldDefer(usage, Number.POSITIVE_INFINITY);
+          if (deferral.defer) {
+            acctSummary.ok = false;
+            acctSummary.error = `Skipped — ${deferral.reason}`;
+            logger.warn(
+              `[autopilot v4] ${acctKey} deferred: ${deferral.reason}`,
+            );
+            summaries.push(acctSummary);
+            continue;
+          }
           // Group this account's rules by lookbackDays. Rules sharing the
           // same window share a single Meta fetch — keeps insights API
           // cost bounded by the number of *distinct* windows in play, not
@@ -1690,6 +1745,14 @@ async function runUserRuleCycle({
                       prevLookbackDays: effectiveLookback,
                     }),
                 campaignIds,
+                // Ask for the 16 fields the normalisers read, not the ~37 the
+                // shared list carries. The omitted ones (video breakdowns,
+                // action values, outbound clicks, uniques) were fetched and
+                // discarded, and they are where the server-side cost lives.
+                slimInsights: true,
+                // Skip the three previous-period queries unless a rule here
+                // actually reads a `prev_*` field.
+                needsPrevious: batchNeedsPreviousPeriod(rulesAtLookback),
               },
             });
             // Account name is a constant for the (user, account) — first
@@ -1811,6 +1874,7 @@ module.exports = {
   _internals: {
     groupRulesByUserAndAccount,
     collectTargetsForRule,
+    batchNeedsPreviousPeriod,
     pauseEntity,
     markAttachmentOrphan,
     unmarkAttachmentOrphan,
