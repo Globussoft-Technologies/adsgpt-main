@@ -61,7 +61,11 @@ function introducingCommit(path, line, sha) {
   }
 }
 
-// "Upstream PR:      #1301, #1306" -> ["1301", "1306"]
+// "Upstream PR:      #1301 (Jaydev Jana), #1306 (Chethan S)"
+//   -> [{ num: "1301", name: "Jaydev Jana" }, { num: "1306", name: "Chethan S" }]
+//
+// The name is optional: trailers written before Jenkins started recording the
+// author carry the number alone, so fall back to numbers-only parsing.
 function upstreamPrs(sha) {
   if (!sha) return [];
   let body;
@@ -71,7 +75,11 @@ function upstreamPrs(sha) {
     return [];
   }
   const line = body.match(/^Upstream PR:\s*(.+)$/m);
-  return line ? [...line[1].matchAll(/#(\d+)/g)].map((m) => m[1]) : [];
+  if (!line) return [];
+  const named = [...line[1].matchAll(/#(\d+)\s*\(([^)]*)\)/g)]
+    .map((m) => ({ num: m[1], name: m[2].trim() || null }));
+  if (named.length) return named;
+  return [...line[1].matchAll(/#(\d+)/g)].map((m) => ({ num: m[1], name: null }));
 }
 
 function renderAlert(alert) {
@@ -90,8 +98,15 @@ function renderAlert(alert) {
   ];
 
   if (prs.length) {
-    lines.push("Likely introduced by PR " +
-      prs.map((n) => `<a href="${PRIVATE_REPO_URL}/pull/${n}">#${n}</a>`).join(", "));
+    const links = prs
+      .map((p) => `<a href="${PRIVATE_REPO_URL}/pull/${p.num}">#${p.num}</a>`)
+      .join(", ");
+    // Distinct authors, in order. A batch can carry several PRs from one person.
+    const who = [...new Set(prs.map((p) => p.name).filter(Boolean))];
+    lines.push(
+      `Likely introduced by PR ${links}` +
+      (who.length ? ` — <b>${escape(who.join(", "))}</b>` : ""),
+    );
   } else {
     // No trailer means the line predates the Jenkinsfile change, or the mirror
     // batch carried no detectable PR. The SHA still gives a thread to pull.
