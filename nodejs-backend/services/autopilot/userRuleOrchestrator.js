@@ -112,15 +112,14 @@ const {
   retirementRecorded,
   scaleHistoryFor,
 } = require("./actionLogQueries");
-// Meta's Business Use Case rate-limit meters, read per ad account BEFORE we
-// spend the expensive insights calls on it. See rateLimitProbe.js for why the
-// App Dashboard's rate-limit page can read 100% remaining while a single
-// account is throttled.
+// Meta's rate-limit meters. The limiter learns from the headers on every
+// response the audit already makes (no extra calls) and self-throttles before
+// the next one. Ported from mcps/meta, which runs this in production.
 const {
-  probeAccountUsage,
-  shouldDefer,
-  formatUsage,
-} = require("./rateLimitProbe");
+  sharedRateLimiter,
+  hashToken,
+  formatWorst,
+} = require("./metaRateLimiter");
 
 let _bizSdk;
 function bizSdk() {
@@ -1642,34 +1641,28 @@ async function runUserRuleCycle({
             );
           }
 
-          // One cheap call (a single field on the account node) buys the
-          // account's BUC meters. Logged every tick so the numbers behind a
-          // throttle are visible instead of inferred — `total_cputime` is
-          // usually the one that bites, and it is invisible in the App
-          // Dashboard.
-          const usage = await probeAccountUsage({
-            adAccountId: acctKey,
-            accessToken: accountAccessToken,
-          });
-          acctSummary.rateLimit = usage || undefined;
-          logger.info(
-            `[autopilot v4] ${acctKey} rate-limit ${formatUsage(usage)}`,
-          );
-          // Defer only when Meta says we are ALREADY blocked. Running then is
-          // a guaranteed failure that still costs the calls, so skipping is
-          // strictly cheaper and loses nothing — the next tick retries.
-          // Threshold-based deferral is deliberately not wired yet: it needs
-          // real numbers from the logging above to be set responsibly.
-          const deferral = shouldDefer(usage, Number.POSITIVE_INFINITY);
-          if (deferral.defer) {
+          // Pre-flight check against what we learned on previous ticks.
+          // Buckets live process-wide with a 1h TTL, so after the first cycle
+          // this knows whether the account is already blocked — and skipping
+          // then costs nothing, whereas running is a guaranteed failure that
+          // still spends the calls.
+          const rlContext = {
+            tokenHash: hashToken(accountAccessToken),
+            accountId: acctKey.replace(/^act_/, ""),
+          };
+          const preflight = sharedRateLimiter.worstFor(rlContext);
+          if (preflight && preflight.blockedMs > 0) {
+            const mins = Math.ceil(preflight.blockedMs / 60000);
             acctSummary.ok = false;
-            acctSummary.error = `Skipped — ${deferral.reason}`;
+            acctSummary.error = `Skipped — Meta rate limit, ${mins} min remaining`;
+            acctSummary.rateLimit = preflight;
             logger.warn(
-              `[autopilot v4] ${acctKey} deferred: ${deferral.reason}`,
+              `[autopilot v4] ${acctKey} deferred: ${formatWorst(preflight)}`,
             );
             summaries.push(acctSummary);
             continue;
           }
+
           // Group this account's rules by lookbackDays. Rules sharing the
           // same window share a single Meta fetch — keeps insights API
           // cost bounded by the number of *distinct* windows in play, not
@@ -1758,6 +1751,16 @@ async function runUserRuleCycle({
             // Account name is a constant for the (user, account) — first
             // window's response is fine.
             if (!acctSummary.name) acctSummary.name = audit.account_name;
+            // Log the real meters every tick. Which bucket is binding is the
+            // thing that was previously invisible: an insights-heavy workload
+            // usually exhausts `x-fb-ads-insights-throttle` or BUC cputime
+            // long before the call-count bucket the App Dashboard graphs.
+            if (audit.rateLimit) {
+              acctSummary.rateLimit = audit.rateLimit;
+              logger.info(
+                `[autopilot v4] ${acctKey} rate-limit ${formatWorst(audit.rateLimit)}`,
+              );
+            }
 
             // Build the scale context lazily, and only once per account even
             // across lookback groups — the per-cycle deltas and the action

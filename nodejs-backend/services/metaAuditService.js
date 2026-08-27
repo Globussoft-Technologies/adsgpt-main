@@ -34,6 +34,10 @@ const {
 } = require("../utils/metaHelpers");
 const { getEffectiveSettings } = require("../config/autopilotConfig");
 const { evaluateRules } = require("./autopilot/ruleEvaluator");
+const {
+  sharedRateLimiter,
+  hashToken,
+} = require("./autopilot/metaRateLimiter");
 
 // ---------------------------------------------------------------------------
 // Helpers (pure)
@@ -118,6 +122,44 @@ async function fetchAllPages(
     pages += 1;
   }
   return all;
+}
+
+/**
+ * Feed Meta's rate-limit headers to the shared limiter, and self-throttle
+ * before each request when a bucket says we should.
+ *
+ * The SDK hides response headers unless `setShowHeader(true)` is on, and even
+ * then it attaches them ONTO THE RESPONSE BODY (`response.data.headers`),
+ * which would leak an unexpected key into everything downstream. So we enable
+ * it and wrap `api.call` to strip the key back off after reading it —
+ * downstream sees exactly the shape it saw before.
+ *
+ * Wrapping `call` also gives us the pre-flight hook: every request waits for
+ * whatever delay the limiter computed from the PREVIOUS response's headers.
+ * That is what turns "discover the limit by failing" into "slow down before
+ * reaching it".
+ *
+ * Costs no extra API calls — it reads headers off requests we already make,
+ * unlike a separate probe.
+ */
+function attachRateLimiting(api, { adAccountId, accessToken, logger }) {
+  const context = {
+    tokenHash: hashToken(accessToken),
+    accountId: String(adAccountId || "").replace(/^act_/, ""),
+  };
+  api.setShowHeader(true);
+  const originalCall = api.call.bind(api);
+  api.call = async (...args) => {
+    await sharedRateLimiter.waitIfNeeded(context, logger);
+    const response = await originalCall(...args);
+    if (response && typeof response === "object" && response.headers) {
+      sharedRateLimiter.updateFromHeaders(response.headers, context);
+      // Put the shape back exactly as callers expect.
+      delete response.headers;
+    }
+    return response;
+  };
+  return context;
 }
 
 const getActionValue = (actions, type) => {
@@ -517,6 +559,19 @@ async function runAuditForAccount({
 
   const api = bizSdk.FacebookAdsApi.init(accessToken);
   bizSdk.FacebookAdsApi.setDefaultApi(api);
+  // Read Meta's five usage headers off every response and self-throttle when
+  // any bucket runs hot. See services/autopilot/metaRateLimiter.js.
+  const rateLimitContext = attachRateLimiting(api, {
+    adAccountId,
+    accessToken,
+    logger: (() => {
+      try {
+        return require("../utils/logger");
+      } catch {
+        return null;
+      }
+    })(),
+  });
 
   const acctKey = adAccountId.startsWith("act_")
     ? adAccountId
@@ -541,16 +596,30 @@ async function runAuditForAccount({
     lookbackPreset,
   });
 
-  // Page size for the entity + insights reads. Meta's response size is
-  // bounded — larger `limit` values combined with the heavy insights field
-  // set (action arrays, cost_per_action_type, purchase_roas, …) trip the
-  // "Please reduce the amount of data you're asking for" error (code 100)
-  // on large accounts. 20 is a conservative page size that Meta accepts
-  // even on the heaviest accounts; the cost is more round-trips per
-  // account (handled transparently by `fetchAllPages`), which is fine
-  // since we now ACTUALLY see every active entity (vs. the silent
-  // first-25-only behavior before pagination was added).
-  const PAGE_LIMIT = 20;
+  // Page size for the entity + insights reads.
+  //
+  // EVERY PAGE IS A SEPARATE API CALL, so this constant multiplies the whole
+  // audit's request count. At the old value of 20, an account with ~200 ads
+  // turned nine logical queries into roughly 45 calls — the ad-level insights
+  // query alone was 10 pages, doubled for the previous period. That is a large
+  // part of why a single account could exhaust its Business Use Case budget
+  // while the App Dashboard's call bucket still looked idle.
+  //
+  // The old value was chosen defensively: large `limit` values combined with
+  // the HEAVY shared field set (video breakdowns, action arrays, outbound
+  // clicks, …) trip Meta's "Please reduce the amount of data you're asking
+  // for" error (code 100). Two things have changed since:
+  //
+  //   1. The Autopilot path now requests 16 fields instead of ~37
+  //      (`getAutopilotInsightsFields`), so each row is far smaller.
+  //   2. These values match what `mcps/meta` already runs in production
+  //      against these same accounts — insights at 500, entity lists at 100 —
+  //      rather than being a fresh guess.
+  //
+  // Split because the two reads have very different row weights: an insights
+  // row carries aggregations, a campaign row is a name and a status.
+  const ENTITY_PAGE_LIMIT = 100;
+  const INSIGHTS_PAGE_LIMIT = 500;
 
   // Insights are filtered to ACTIVE entities (paused/archived ones deliver
   // no new data in the lookback, and a pause against an already-paused
@@ -587,8 +656,8 @@ async function runAuditForAccount({
   // `maximum` has no previous period at all; otherwise the caller decides.
   const skipPrevious = isMaximumLookback || !needsPrevious;
 
-  const adsetReadParams = { limit: PAGE_LIMIT };
-  const adReadParams = { limit: PAGE_LIMIT };
+  const adsetReadParams = { limit: ENTITY_PAGE_LIMIT };
+  const adReadParams = { limit: ENTITY_PAGE_LIMIT };
   if (scopeIds) {
     const scopeFilter = [
       { field: "campaign.id", operator: "IN", value: scopeIds },
@@ -609,7 +678,7 @@ async function runAuditForAccount({
     adInsightsPrev,
   ] = await Promise.all([
     fetchAllPages(
-      account.getCampaigns(getCampaignFields(), { limit: PAGE_LIMIT }),
+      account.getCampaigns(getCampaignFields(), { limit: ENTITY_PAGE_LIMIT }),
       { label: "campaigns" },
     ),
     fetchAllPages(
@@ -626,7 +695,7 @@ async function runAuditForAccount({
         level: "campaign",
         ...currentInsightsRange,
         filtering: insightsFiltering("campaign"),
-        limit: PAGE_LIMIT,
+        limit: INSIGHTS_PAGE_LIMIT,
       }),
       { label: "campaign-insights" },
     ),
@@ -635,7 +704,7 @@ async function runAuditForAccount({
         level: "adset",
         ...currentInsightsRange,
         filtering: insightsFiltering("adset"),
-        limit: PAGE_LIMIT,
+        limit: INSIGHTS_PAGE_LIMIT,
       }),
       { label: "adset-insights" },
     ),
@@ -644,7 +713,7 @@ async function runAuditForAccount({
         level: "ad",
         ...currentInsightsRange,
         filtering: insightsFiltering("ad"),
-        limit: PAGE_LIMIT,
+        limit: INSIGHTS_PAGE_LIMIT,
       }),
       { label: "ad-insights" },
     ),
@@ -656,7 +725,7 @@ async function runAuditForAccount({
             level: "campaign",
             time_range: prevRange,
             filtering: insightsFiltering("campaign"),
-            limit: PAGE_LIMIT,
+            limit: INSIGHTS_PAGE_LIMIT,
           }),
           { label: "campaign-insights-prev" },
         ),
@@ -667,7 +736,7 @@ async function runAuditForAccount({
             level: "adset",
             time_range: prevRange,
             filtering: insightsFiltering("adset"),
-            limit: PAGE_LIMIT,
+            limit: INSIGHTS_PAGE_LIMIT,
           }),
           { label: "adset-insights-prev" },
         ),
@@ -678,7 +747,7 @@ async function runAuditForAccount({
             level: "ad",
             time_range: prevRange,
             filtering: insightsFiltering("ad"),
-            limit: PAGE_LIMIT,
+            limit: INSIGHTS_PAGE_LIMIT,
           }),
           { label: "ad-insights-prev" },
         ),
@@ -807,6 +876,9 @@ async function runAuditForAccount({
       // from `adsets`, and must not be mistaken for a deleted one.
       allAdsetIds: adSets.map((s) => String(s.id)),
     },
+    // Worst live rate-limit bucket for this account after the fetch, so the
+    // caller can log the real numbers rather than infer them.
+    rateLimit: sharedRateLimiter.worstFor(rateLimitContext),
   };
 }
 
