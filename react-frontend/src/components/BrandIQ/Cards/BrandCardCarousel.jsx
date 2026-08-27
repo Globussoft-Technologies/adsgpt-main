@@ -6,20 +6,32 @@ import 'swiper/css';
 import 'swiper/css/navigation';
 import { useDynamicBackground } from '@/hooks/useDynamicBackground';
 
-const BrandCardCarousel = ({ from = '', images, onImagesLoaded }) => {
+const BrandCardCarousel = ({ from = '', images, onFirstImageReady }) => {
   const prevRef = useRef(null);
   const nextRef = useRef(null);
   const swiperRef = useRef(null);
   const [isBeginning, setIsBeginning] = useState(true);
   const [isEnd, setIsEnd] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [loadedCount, setLoadedCount] = useState(0);
+
+  // The skeleton only needs to cover the first visible slide, so notify as soon
+  // as that one settles instead of waiting on every slide in the carousel - a
+  // single slow or broken image used to hold the whole card's skeleton up.
+  const readyNotifiedRef = useRef(false);
+  const onFirstImageReadyRef = useRef(onFirstImageReady);
+  onFirstImageReadyRef.current = onFirstImageReady;
+
+  // A cached image can finish loading before React attaches onLoad, so the
+  // first slide also checks `complete` from a ref callback on mount.
+  const notifyReady = () => {
+    if (readyNotifiedRef.current) return;
+    readyNotifiedRef.current = true;
+    onFirstImageReadyRef.current?.();
+  };
 
   useEffect(() => {
-    if (loadedCount === images?.length && images?.length > 0) {
-      onImagesLoaded?.();
-    }
-  }, [loadedCount, images?.length, onImagesLoaded]);
+    readyNotifiedRef.current = false;
+  }, [images]);
 
   const slides = useMemo(() => {
     if (!images || images?.length === 0) return [];
@@ -82,8 +94,15 @@ const BrandCardCarousel = ({ from = '', images, onImagesLoaded }) => {
                     src={src}
                     alt={`Ad ${idx + 1}`}
                     className="max-h-full max-w-full object-contain"
-                    onLoad={() => setLoadedCount((prev) => prev + 1)}
-                    onError={() => setLoadedCount((prev) => prev + 1)}
+                    ref={
+                      idx === 0
+                        ? (el) => {
+                            if (el?.complete) notifyReady();
+                          }
+                        : undefined
+                    }
+                    onLoad={idx === 0 ? notifyReady : undefined}
+                    onError={idx === 0 ? notifyReady : undefined}
                   />
                 </div>
               ) : (

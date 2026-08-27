@@ -13,6 +13,9 @@ import BrandCardCarousel from './BrandCardCarousel';
 import { globalToast } from '@/utils/globalToast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GA4Events } from '@/utils/ga4';
+// Logos are downsampled to this square before any pixel scanning.
+const LOGO_SAMPLE_SIZE = 32;
+
 const BrandCard = ({ brand }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [editingBrand, setEditingBrand] = useState(false);
@@ -33,40 +36,57 @@ const BrandCard = ({ brand }) => {
     setAudienceOpen(true);
   };
 
+  // Failsafe only - the skeleton is normally cleared by the carousel as soon as
+  // its first slide settles. This just guarantees the card never stays covered
+  // if that never fires (e.g. an image that neither loads nor errors).
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 1000);
+    }, 10000);
 
     return () => clearTimeout(timer);
   }, []);
   function getDominantLogoColor(canvas) {
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-    const colorCounts = {};
+    // Quantise to a 16x16x16 grid so tallying is an array index instead of a
+    // string allocation per pixel, and so anti-aliased edges fold into the
+    // colour they belong to rather than splitting the count.
+    const counts = new Uint32Array(4096);
+    const sums = new Uint32Array(4096 * 3);
     let maxCount = 0;
-    let dominant = { r: 0, g: 0, b: 0 };
+    let dominantBucket = -1;
 
     for (let i = 0; i < data.length; i += 4) {
-      const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
 
       // skip near-white or transparent pixels
       if (a < 128) continue;
       if (r > 240 && g > 240 && b > 240) continue;
 
-      const key = `${r},${g},${b}`;
-      colorCounts[key] = (colorCounts[key] || 0) + 1;
+      const bucket = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+      const count = ++counts[bucket];
+      sums[bucket * 3] += r;
+      sums[bucket * 3 + 1] += g;
+      sums[bucket * 3 + 2] += b;
 
-      if (colorCounts[key] > maxCount) {
-        maxCount = colorCounts[key];
-        dominant = { r, g, b };
+      if (count > maxCount) {
+        maxCount = count;
+        dominantBucket = bucket;
       }
     }
 
     // fallback if only whitespace
     if (maxCount === 0) return { r: 200, g: 200, b: 200 };
-    return dominant;
+    return {
+      r: Math.round(sums[dominantBucket * 3] / maxCount),
+      g: Math.round(sums[dominantBucket * 3 + 1] / maxCount),
+      b: Math.round(sums[dominantBucket * 3 + 2] / maxCount),
+    };
   }
 
   function adjustBackgroundColor({ r, g, b }) {
@@ -92,16 +112,25 @@ const BrandCard = ({ brand }) => {
     img.src = brand.logoUrls[0];
 
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        // Downsample to a fixed thumbnail first. A dominant-colour estimate
+        // does not need full resolution, and scanning the source at natural
+        // size blocked the main thread for every card on the page.
+        canvas.width = LOGO_SAMPLE_SIZE;
+        canvas.height = LOGO_SAMPLE_SIZE;
+        ctx.drawImage(img, 0, 0, LOGO_SAMPLE_SIZE, LOGO_SAMPLE_SIZE);
 
-      const dominant = getDominantLogoColor(canvas);
-      const adjustedBg = adjustBackgroundColor(dominant);
-      setBgColor(adjustedBg);
+        const dominant = getDominantLogoColor(canvas);
+        const adjustedBg = adjustBackgroundColor(dominant);
+        setBgColor(adjustedBg);
+      } catch (err) {
+        // A CORS failure taints the canvas and makes getImageData throw; the
+        // card just keeps its default background in that case.
+        console.error('Failed to read logo colour:', err);
+      }
     };
   }, [brand?.logoUrls]);
 
@@ -153,7 +182,7 @@ const BrandCard = ({ brand }) => {
             <BrandCardCarousel
               from="BrandCard"
               images={brand?.imageUrl}
-              onImagesLoaded={() => setIsLoading(false)}
+              onFirstImageReady={() => setIsLoading(false)}
             />
           </>
         ) : (
