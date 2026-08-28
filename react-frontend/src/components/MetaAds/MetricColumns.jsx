@@ -189,7 +189,7 @@ export function MetricHeaderCells({ entries, SortTh, sortKey, sortDir, onSort })
  * a 0 means it delivered and the metric is genuinely zero. Users read those
  * very differently, so don't collapse them.
  */
-export function MetricBodyCells({ entries, values, loading }) {
+export function MetricBodyCells({ entries, values, loading, currency }) {
   return (entries || []).map((entry) => (
     <td
       key={entry.key}
@@ -198,7 +198,7 @@ export function MetricBodyCells({ entries, values, loading }) {
       {loading && !values
         ? <span className="text-gray-400 dark:text-white/30">…</span>
         : values && values[entry.key] !== undefined
-          ? formatMetricValue(entry.format, values[entry.key])
+          ? formatMetricValue(entry.format, values[entry.key], currency)
           : <span className="text-gray-400 dark:text-white/30">—</span>}
     </td>
   ));

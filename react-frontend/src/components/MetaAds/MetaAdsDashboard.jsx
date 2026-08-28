@@ -847,6 +847,7 @@ export default function MetaAdsDashboard() {
                 campaigns={campaigns}
                 loadingCampaigns={loadingCampaigns}
                 adAccountId={selectedAccount?.id}
+                currency={selectedAccount?.currency}
                 onRefresh={reloadCampaigns}
                 onNewCampaign={() => openWizard('create-full')}
                 campaignUsage={campaignUsage}
@@ -906,6 +907,7 @@ export default function MetaAdsDashboard() {
                 loading={loadingInsights}
                 metricsCatalog={metricsCatalog}
                 visibleMetricKeys={visibleMetricKeys}
+                currency={selectedAccount?.currency}
               />
             </motion.div>
           )}

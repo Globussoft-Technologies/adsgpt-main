@@ -44,6 +44,7 @@ import {
   CHART_COLORS,
   getActionVal,
   METRIC_ICONS,
+  currencySymbol,
   formatMetricValue,
 } from './metaAdsUtils';
 import { StatusBadge, Spinner, EmptyState, ChartTooltip } from './MetaAdsAtoms';
@@ -529,7 +530,16 @@ const CustomActiveDot = ({ cx, cy, stroke }) => {
 // one-time fetch of GET /meta-ads/analytics/metrics-catalog + the user's
 // saved preference (see MetricsPicker.jsx for the picker itself). Default to
 // empty arrays so this still renders sensibly before that fetch resolves.
-export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], visibleMetricKeys = [] }) => {
+// `currency` is the selected ad account's ISO code (e.g. 'USD', 'INR') —
+// every money-formatted card and the spend chart's series label read it, so a
+// USD account shows $ instead of the ₹ this panel used to hardcode.
+export const AnalyticsPanel = ({
+  analyticsData,
+  loading,
+  metricsCatalog = [],
+  visibleMetricKeys = [],
+  currency,
+}) => {
   const [chartMetric, setChartMetric] = useState('spend');
 
   const chartData = analyticsData?.chartData || [];
@@ -551,6 +561,10 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
     return <EmptyState message="No analytics data for the selected account and period" />;
 
   const { stats, actions = [] } = analyticsData;
+  // "Spend ($)" / "Spend (₹)" — drop the parenthetical entirely when we can't
+  // resolve a symbol, rather than labelling the axis with the wrong one.
+  const symbol = currencySymbol(currency);
+  const spendSeriesName = symbol ? `Spend (${symbol})` : 'Spend';
 
   const hasData = stats && Object.values(stats).some((s) => parseFloat(s?.val) > 0);
   if (!hasData) {
@@ -581,7 +595,7 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
     key: entry.key,
     icon: METRIC_ICONS[entry.icon] || TrendingUp,
     label: entry.label,
-    value: formatMetricValue(entry.format, stats[entry.key]?.val),
+    value: formatMetricValue(entry.format, stats[entry.key]?.val, currency),
     change: stats[entry.key]?.change,
   }));
   // The card design is sized for the default 8 metrics (2 rows). Now that a
@@ -753,7 +767,7 @@ export const AnalyticsPanel = ({ analyticsData, loading, metricsCatalog = [], vi
             <Area
               type="monotone"
               dataKey={chartMetric}
-              name={chartMetric === 'spend' ? 'Spend (₹)' : 'Clicks'}
+              name={chartMetric === 'spend' ? spendSeriesName : 'Clicks'}
               stroke={chartMetric === 'spend' ? 'url(#strokeGradSpend)' : 'url(#strokeGradClicks)'}
               strokeWidth={3}
               strokeLinecap="round"

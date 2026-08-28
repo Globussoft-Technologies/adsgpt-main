@@ -95,9 +95,44 @@ export const fmt = (val, dec = 2) => {
   const n = parseFloat(val);
   return isNaN(n) ? '—' : n.toFixed(dec);
 };
-export const fmtINR = (val) => {
+// Money formatter for the ad account's OWN currency. Insights amounts
+// (spend, cpc, cpm, ROAS values) arrive in MAJOR units already — unlike the
+// campaign / ad-set budget fields, which Meta returns in minor units and the
+// backend pre-formats (utils/formatBudget.js). `currency` is the account's
+// ISO 4217 code, threaded down from selectedAccount.currency; Intl gives it
+// the right symbol AND the right decimal count (₹1,00,000, $1,000.00, ¥1000).
+// A missing or unrecognised code falls back to a plain number + code rather
+// than guessing a symbol — this used to hardcode ₹, which rendered every USD
+// account's spend as rupees.
+export const fmtMoney = (val, currency) => {
   const n = parseFloat(val);
-  return isNaN(n) ? '—' : `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+  if (isNaN(n)) return '—';
+  const code = String(currency || '').toUpperCase();
+  if (code) {
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(n);
+    } catch {
+      // Not a valid ISO 4217 code — fall through to the neutral form.
+    }
+  }
+  return `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}${code ? ` ${code}` : ''}`;
+};
+
+// Just the symbol ("$", "₹", "¥") — for input prefixes, where a fully
+// formatted amount would be wrong. Empty when we have no code yet, so a
+// not-yet-loaded account shows nothing instead of the wrong currency.
+export const currencySymbol = (currency) => {
+  const code = String(currency || '').toUpperCase();
+  if (!code) return '';
+  try {
+    return (
+      new Intl.NumberFormat(undefined, { style: 'currency', currency: code })
+        .formatToParts(0)
+        .find((part) => part.type === 'currency')?.value || code
+    );
+  } catch {
+    return code;
+  }
 };
 export const getActionVal = (actions, type) =>
   parseInt(actions?.find((a) => a.action_type === type)?.value || 0, 10);
@@ -172,14 +207,16 @@ export const METRIC_GROUP_LABELS = {
 
 // Format a raw numeric metric value per the catalog entry's `format` field.
 // Mirrors the ad-hoc per-field formatting AnalyticsPanel used to do inline
-// (fmtINR for currency, .toLocaleString() for integers) — centralized here
+// (fmtMoney for currency, .toLocaleString() for integers) — centralized here
 // now that the set of formattable metrics isn't a fixed hardcoded list.
-export const formatMetricValue = (format, val) => {
+// `currency` is the ad account's ISO code; every caller that renders money
+// must pass it, or the amount comes out as a bare number + no symbol.
+export const formatMetricValue = (format, val, currency) => {
   const n = parseFloat(val);
   if (isNaN(n)) return '—';
   switch (format) {
     case 'currency':
-      return fmtINR(n);
+      return fmtMoney(n, currency);
     case 'integer':
       return Math.round(n).toLocaleString();
     case 'percent':

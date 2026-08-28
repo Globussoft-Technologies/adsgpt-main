@@ -10,6 +10,7 @@ import {
   STRING_FIELDS,
   SEVERITIES,
   ACTION_TYPES,
+  SELECTABLE_ACTION_TYPES,
   SCALE_DIRECTIONS,
   MIN_SCALE_PCT,
   MAX_SCALE_PCT,
@@ -113,6 +114,21 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
 
   // Lazy initializer so the seed is built exactly once on mount.
   const [form, setForm] = useState(buildSeed);
+
+  // Hidden action types stay selectable IF the rule already uses one. Filtering
+  // them unconditionally would silently blank the action on an existing rule —
+  // the user opens it to change a threshold, sees nothing selected, and saving
+  // either fails validation or quietly rewrites the action to whatever they
+  // click. A hidden option is "not offered to new rules", not "invalid".
+  const visibleActionTypes = useMemo(() => {
+    const current = form?.action?.type;
+    if (current && !SELECTABLE_ACTION_TYPES.some((a) => a.value === current)) {
+      const hiddenMatch = ACTION_TYPES.find((a) => a.value === current);
+      if (hiddenMatch) return [...SELECTABLE_ACTION_TYPES, hiddenMatch];
+    }
+    return SELECTABLE_ACTION_TYPES;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form?.action?.type]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [testing, setTesting] = useState(false);
@@ -641,7 +657,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
             <div>
               <FieldLabel>Action when matched</FieldLabel>
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {ACTION_TYPES.map((opt) => (
+                {visibleActionTypes.map((opt) => (
                   <ChoiceCard
                     key={opt.value}
                     selected={form.action.type === opt.value}

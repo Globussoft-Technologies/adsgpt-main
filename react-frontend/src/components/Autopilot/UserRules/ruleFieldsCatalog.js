@@ -124,8 +124,21 @@ export const ACTION_TYPES = [
     value: "scale",
     label: "Change the budget",
     hint: "Raise or lower the daily budget each time this rule fires. Budgets live on campaigns and ad sets, so an ad-level rule changes the ad's parent ad set.",
+    // HIDDEN, NOT REMOVED. Budget scaling is fully built and tested end to end
+    // — validator, cron, ceilings, action log — it is simply not being offered
+    // to users yet. Everything behind this flag stays live: rules already
+    // saved with `action.type: 'scale'` keep running on the cron, and the
+    // ScaleStepEditor below still renders for anyone editing one.
+    //
+    // To ship it: delete this line. Nothing else needs changing.
+    hidden: true,
   },
 ];
+
+// The options a user may CHOOSE from. Hidden ones are still valid values —
+// see `visibleActionTypes` in RuleFormModal for why an existing rule using a
+// hidden action must still show it.
+export const SELECTABLE_ACTION_TYPES = ACTION_TYPES.filter((a) => !a.hidden);
 
 // Bounds on a SINGLE step. Must match MIN_RULE_STEP_PCT / MAX_RULE_STEP_PCT in
 // nodejs-backend/services/autopilot/scalePolicy.js — the form and Joi are a

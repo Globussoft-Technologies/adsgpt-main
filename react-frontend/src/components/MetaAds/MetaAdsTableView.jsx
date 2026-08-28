@@ -536,7 +536,7 @@ function TableShell({ toolbar, children, colSpan, loading, emptyMsg }) {
 
 // ─── campaign table ───────────────────────────────────────────────────────────
 
-function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onNewCampaign, campaignUsage, managedCampaignIds, onManagedCampaignsChanged, facebookId, onLaunchWizard, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown, onRefresh, onNewCampaign, campaignUsage, managedCampaignIds, onManagedCampaignsChanged, facebookId, onLaunchWizard, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
   // Plan-slot state. `managedCampaignIds === null` means the plan is uncapped
   // — every helper below then reports "managed", so no lock UI renders and
   // paying tiers see the table exactly as before this feature.
@@ -869,6 +869,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                     entries={metrics.entries}
                     values={metrics.metricsById[c.id]}
                     loading={metrics.loading}
+                    currency={currency}
                   />
                   {/* manage slot — only on plans that cap campaigns */}
                   {slotsCapped && (
@@ -1022,7 +1023,7 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
 
 // ─── ad-set table ─────────────────────────────────────────────────────────────
 
-function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce, restoreAdSetId, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWizard, manageNonce, restoreAdSetId, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
   const metrics = useTableMetricColumns({
     level: 'adset',
     adAccountId,
@@ -1335,6 +1336,7 @@ function AdSetTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manage
                     entries={metrics.entries}
                     values={metrics.metricsById[s.id]}
                     loading={metrics.loading}
+                    currency={currency}
                   />
                   {canAdd && (
                     <td className="pr-5 pl-2 py-4">
@@ -1674,7 +1676,7 @@ function AdDrawer({ ad, onClose }) {
 
 // ─── ads table ────────────────────────────────────────────────────────────────
 
-function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, onSelectAdChange, query, onQueryChange, adAccountId, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, restoreAdId, onSelectAdChange, query, onQueryChange, adAccountId, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
   const metrics = useTableMetricColumns({
     level: 'ad',
     adAccountId,
@@ -1965,6 +1967,7 @@ function AdsTable({ adSet, campaign, onLaunchWizard, manageNonce, restoreAdId, o
                       entries={metrics.entries}
                       values={metrics.metricsById[a.id]}
                       loading={metrics.loading}
+                      currency={currency}
                     />
                     {canAdd && (
                       <td className="pr-5 pl-2 py-3">
@@ -2041,6 +2044,9 @@ export function TableViewCampaigns({
   campaigns,
   loadingCampaigns,
   adAccountId,
+  // The ad account's ISO currency code — money-formatted metric columns
+  // render in it instead of a hardcoded ₹.
+  currency,
   onRefresh,
   onNewCampaign,
   // { allowed, managed } when the plan caps managed campaigns, else null —
@@ -2145,7 +2151,7 @@ export function TableViewCampaigns({
         <AnimatePresence mode="wait">
           {level === 'campaigns' && (
             <motion.div key="campaigns" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} campaignUsage={campaignUsage} managedCampaignIds={managedCampaignIds} onManagedCampaignsChanged={onManagedCampaignsChanged} facebookId={facebookId} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} metricsCatalog={metricsCatalog} metricKeys={tableMetricKeys.campaign} onMetricKeysSaved={onTableMetricsSaved} dateParams={dateParams} dateLabel={dateLabel} />
+              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} currency={currency} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} campaignUsage={campaignUsage} managedCampaignIds={managedCampaignIds} onManagedCampaignsChanged={onManagedCampaignsChanged} facebookId={facebookId} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} metricsCatalog={metricsCatalog} metricKeys={tableMetricKeys.campaign} onMetricKeysSaved={onTableMetricsSaved} dateParams={dateParams} dateLabel={dateLabel} />
             </motion.div>
           )}
           {level === 'adsets' && selectedCampaign && (
@@ -2153,6 +2159,7 @@ export function TableViewCampaigns({
               <AdSetTable
                 campaign={selectedCampaign}
                 adAccountId={adAccountId}
+                currency={currency}
                 onDrillDown={drillToAdSet}
                 onLaunchWizard={onLaunchWizard}
                 manageNonce={manageNonce}
@@ -2172,6 +2179,7 @@ export function TableViewCampaigns({
               <AdsTable
                 adSet={selectedAdSet}
                 campaign={selectedCampaign}
+                currency={currency}
                 onLaunchWizard={onLaunchWizard}
                 manageNonce={manageNonce}
                 restoreAdId={adIdParam}

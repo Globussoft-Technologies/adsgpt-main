@@ -37,6 +37,7 @@ import { Calendar } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 import { globalToast } from '@/utils/globalToast';
+import { currencySymbol } from './metaAdsUtils';
 import { getClipboardImageFiles } from '@/utils/clipboardImages';
 
 // ─── media validation ────────────────────────────────────────────────────────
@@ -262,6 +263,10 @@ export function NumberField({
 // Number input with a currency-symbol prefix. We send minor units to the
 // backend (so 100 INR becomes 10000 paise) — that conversion happens at
 // submit, not here. This component shows major units.
+//
+// `currency` is the ad account's ISO code; the prefix is derived from it so a
+// USD account prompts for $ rather than the ₹ this used to hardcode. Callers
+// may still pass an explicit `symbol` to override.
 
 export function CurrencyField({
   label,
@@ -271,14 +276,16 @@ export function CurrencyField({
   value,
   onChange,
   placeholder,
-  symbol = '₹',
+  currency,
+  symbol,
   className = '',
 }) {
+  const prefix = symbol ?? currencySymbol(currency);
   return (
     <FieldShell label={label} hint={hint} error={error} required={required} className={className}>
       <div className="relative">
         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-13 text-gray-400 dark:text-[#AFAFAF] pointer-events-none 2xl:text-base">
-          {symbol}
+          {prefix}
         </span>
         <input
           type="number"

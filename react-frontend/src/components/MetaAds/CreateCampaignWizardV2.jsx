@@ -108,6 +108,7 @@ import {
   validateAllSteps,
   CAPPED_BID_STRATEGIES,
 } from './wizardValidation';
+import { currencySymbol } from './metaAdsUtils';
 import LocationTargeting from './LocationTargeting';
 import DetailedTargeting from './DetailedTargeting';
 import AudienceReachEstimate from './AudienceReachEstimate';
@@ -1967,6 +1968,7 @@ function StepBody({
             form={form}
             update={update}
             adAccountId={adAccountId}
+            currency={account?.currency}
             errors={errors}
             mode={mode}
           />
@@ -1981,6 +1983,7 @@ function StepBody({
             pages={pages}
             savedAudiences={savedAudiences}
             adAccountId={adAccountId}
+            currency={account?.currency}
             errors={errors}
             mode={mode}
           />
@@ -2151,7 +2154,7 @@ function ConversionLocationStep({ form, update, schema }) {
 
 // ─── Step: Campaign ─────────────────────────────────────────────────────────
 
-function CampaignStep({ form, update, adAccountId, errors = {}, mode = 'create-full' }) {
+function CampaignStep({ form, update, adAccountId, currency, errors = {}, mode = 'create-full' }) {
   const isAppPromo = form.objective === 'OUTCOME_APP_PROMOTION';
   // Edit mode: only name / budget amount / spend cap are editable. CBO,
   // budget type, special categories, iOS are immutable post-creation, so
@@ -2203,6 +2206,7 @@ function CampaignStep({ form, update, adAccountId, errors = {}, mode = 'create-f
             value={form.campaignBudget}
             onChange={(v) => update({ campaignBudget: v })}
             placeholder="100"
+            currency={currency}
             error={errors.campaignBudget}
           />
         </div>
@@ -2213,6 +2217,7 @@ function CampaignStep({ form, update, adAccountId, errors = {}, mode = 'create-f
         value={form.spendCap}
         onChange={(v) => update({ spendCap: v })}
         placeholder="e.g. 50000"
+        currency={currency}
         error={errors.spendCap}
       />
 
@@ -2278,7 +2283,7 @@ function CampaignStep({ form, update, adAccountId, errors = {}, mode = 'create-f
 
 // ─── Step: Ad Set ───────────────────────────────────────────────────────────
 
-function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, schema, errors = {}, mode = 'create-full' }) {
+function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, currency, schema, errors = {}, mode = 'create-full' }) {
   // Editing an existing ad set: delivery + identity (page, performance goal,
   // billing event, bid strategy, app/pixel) are immutable post-creation, so
   // they're shown read-only / hidden. Name, bid cap, budget, targeting and
@@ -2561,6 +2566,7 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
             value={form.bidAmount}
             onChange={(v) => update({ bidAmount: v })}
             placeholder="50"
+            currency={currency}
             error={errors.bidAmount}
           />
         )}
@@ -2678,6 +2684,7 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, sch
             value={form.adSetBudget}
             onChange={(v) => update({ adSetBudget: v })}
             placeholder="100"
+            currency={currency}
             error={errors.adSetBudget}
           />
         </div>
@@ -4351,6 +4358,9 @@ function ReviewStep({
 }) {
   const isDarkMode = useSelector((s) => s.theme?.isDarkMode);
   const labels = schema?.labels || {};
+  // Budget summaries are the user's raw major-unit input, so prefix the ad
+  // account's own symbol — these lines used to read "₹100" on a USD account.
+  const money = (v) => `${currencySymbol(account?.currency)}${v}`;
   const showCampaign = mode === 'create-full';
   const showAdSet = mode === 'create-full' || mode === 'create-adset';
   // launchError can be a plain string (legacy) OR a structured object
@@ -4513,7 +4523,7 @@ function ReviewStep({
         {showCampaign && (
           <Section title="Campaign">
             <Field k="Name" v={form.campaignName} />
-            <Field k="Budget" v={form.cbo ? `${form.campaignBudgetType} ₹${form.campaignBudget}` : 'Per ad set'} />
+            <Field k="Budget" v={form.cbo ? `${form.campaignBudgetType} ${money(form.campaignBudget)}` : 'Per ad set'} />
             <Field k="Categories" v={form.specialAdCategories.length ? form.specialAdCategories.join(', ') : 'None'} />
           </Section>
         )}
@@ -4523,8 +4533,8 @@ function ReviewStep({
           <Field k="Page" v={form.pageId} />
           <Field k="Optimisation" v={form.optimizationGoal} />
           <Field k="Billing" v={form.billingEvent} />
-          <Field k="Bid strategy" v={form.bidStrategy + (form.bidAmount ? ` (cap ₹${form.bidAmount})` : '')} />
-          {!form.cbo && <Field k="Budget" v={`${form.adSetBudgetType} ₹${form.adSetBudget}`} />}
+          <Field k="Bid strategy" v={form.bidStrategy + (form.bidAmount ? ` (cap ${money(form.bidAmount)})` : '')} />
+          {!form.cbo && <Field k="Budget" v={`${form.adSetBudgetType} ${money(form.adSetBudget)}`} />}
           <Field
             k="Audience"
             v={
