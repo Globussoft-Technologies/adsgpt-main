@@ -244,7 +244,7 @@ exports.activateBrief = async (req, res) => {
   /*
     #swagger.tags = ['Ad Factory 2.0']
     #swagger.summary = 'Start the automation for a brief'
-    #swagger.description = 'Builds the autopilot job from the brief and hands it to the existing createJob flow. No saved Meta template is required — the template is synthesised from the objective and budget.'
+    #swagger.description = 'Builds the autopilot job from the brief and hands it to the existing createJob flow. No saved Meta template is required — the template is synthesised from the objective and budget. An optional `google` body field carries a targets.google block built from a saved Google template; a job may target Meta, Google, or both.'
     #swagger.security = [{ "BearerAuth": [] }]
   */
   try {
@@ -260,11 +260,18 @@ exports.activateBrief = async (req, res) => {
 
     const connection = req.body?.connection || req.body || {};
     const cadence = req.body?.cadence || null;
+    // The optional second destination. Quick setup's Google tab sends an
+    // already-built `targets.google` block, because Google has no synthesize
+    // path — the job schema wants a real payload, and only a SAVED Google
+    // template has one. It is validated by createJob's googleTargetSchema
+    // like any other, so nothing is trusted here that isn't trusted there.
+    const google = req.body?.google || null;
     let payload;
     try {
       payload = briefToJobPayload(brief, connection, {
         campaignId: campaign._id,
         cadenceOverride: cadence,
+        google,
       });
     } catch (err) {
       if (err instanceof BriefJobPayloadError) {
@@ -279,6 +286,8 @@ exports.activateBrief = async (req, res) => {
     // BEFORE handing them to createJob / Mongoose validation. briefToJobPayload
     // emits { synthesize: true, objective, conversionLocation, adAccountId, budget }
     // as a short-hand; the Mongoose schema requires template.name + template.payload.
+    // Google-only payloads have no targets.meta at all, hence the optional
+    // chaining doing real work here rather than being decoration.
     if (payload?.targets?.meta?.template?.synthesize === true) {
       const { synthesizeTemplate, TemplateSynthesisError } = require('../../services/adsFactoryAuto/templateSynthesizer');
       try {

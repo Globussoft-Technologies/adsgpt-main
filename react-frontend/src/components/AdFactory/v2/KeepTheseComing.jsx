@@ -2,6 +2,7 @@ import React from 'react';
 import { Pause, Play } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Switch } from '@/components/Autopilot/_atoms';
+import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 
 import { Panel, PanelFooter, PanelHeader, PrimaryBtn, GhostBtn, Notice } from './Panel';
 import CadencePills from './CadencePills';
@@ -51,6 +52,14 @@ export default function KeepTheseComing({
   isMetaConnected = false,
   connection,
   onConnectionChange,
+  // Google as a second destination. `platforms` is the brief's own
+  // delivery.platforms — the panel decides from it whether Google is even a
+  // tab; `isGoogleReady` is that tab's readiness, computed by the page from
+  // the same predicate the tab's tick uses.
+  platforms = [],
+  googleConnection,
+  onGoogleConnectionChange,
+  isGoogleReady = false,
   pairsPerCycle = 3,
   hour = 9,
   timezone,
@@ -76,6 +85,23 @@ export default function KeepTheseComing({
   const budgetNumber = Number(budget);
   const budgetOk = Number.isFinite(budgetNumber) && budgetNumber >= minBudget;
   const budgetTooLow = Number.isFinite(budgetNumber) && budgetNumber > 0 && !budgetOk;
+
+  const googleOffered =
+    IS_GOOGLE_AUTOMATION_ENABLED &&
+    (Array.isArray(platforms) ? platforms : []).includes('google');
+
+  // ONE ready destination starts a schedule — Meta, Google, or both.
+  // `briefToJobPayload` validates Meta's ids only when Meta is actually a
+  // destination, so a Google-only schedule no longer trips a Facebook check it
+  // was never subject to.
+  const googleReadyHere = googleOffered && isGoogleReady;
+  const canStart = isMetaConnected || googleReadyHere;
+
+  // Where these ads will actually be uploaded, as opposed to which tabs happen
+  // to be filled in.
+  const destinations = [];
+  if (isMetaConnected) destinations.push('Meta');
+  if (googleReadyHere) destinations.push('Google');
 
   return (
     <Panel>
@@ -184,7 +210,30 @@ export default function KeepTheseComing({
                     value={connection}
                     onChange={onConnectionChange}
                     disabled={activating || busy}
+                    platforms={platforms}
+                    googleValue={googleConnection}
+                    onGoogleChange={onGoogleConnectionChange}
                   />
+
+                  {/* Where these ads actually land, stated under the tabs that
+                      configure it. Two filled-in tabs do not mean two
+                      destinations, and a green tick on a tab is a statement
+                      about that tab, not about the run — this line is the one
+                      place that speaks for the whole schedule. */}
+                  <div className="mt-4 flex flex-col gap-1 border-t border-dashed pt-3 border-[#E7DCC9] dark:border-[#252B33]">
+                    {destinations.length > 0 ? (
+                      <span className={MUTED}>
+                        Uploading to{' '}
+                        <b className="font-semibold text-[#111827] dark:text-[#ECEFF3]">
+                          {destinations.join(' and ')}
+                        </b>
+                      </span>
+                    ) : (
+                      <span className={MUTED}>
+                        No destination set up yet — these ads won&apos;t be uploaded anywhere.
+                      </span>
+                    )}
+                  </div>
                 </Section>
               </div>
             </div>
@@ -240,15 +289,23 @@ export default function KeepTheseComing({
 
                   {/* Both preconditions the server enforces, stated on the
                       button rather than discovered after the click. Meta first:
-                      it is the bigger job of the two. */}
+                      it is the bigger job of the two.
+
+                      With Google in play the destination test becomes "at
+                      least ONE platform is ready", not "Meta is ready" —
+                      a Google-only schedule is a legitimate thing to start,
+                      and demanding a Facebook account for it would be asking
+                      for a connection the job will never use. */}
                   {!isRunning && (
                     <PrimaryBtn
                       onClick={onActivate}
                       busy={activating}
-                      disabled={!isMetaConnected || !budgetOk}
+                      disabled={!canStart || !budgetOk}
                     >
-                      {!isMetaConnected
-                        ? 'Connect Meta to start'
+                      {!canStart
+                        ? googleOffered
+                          ? 'Connect Meta or Google to start'
+                          : 'Connect Meta to start'
                         : !budgetOk
                           ? 'Set a daily budget to start'
                           : 'Start deliveries'}

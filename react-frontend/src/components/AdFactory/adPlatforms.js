@@ -13,14 +13,20 @@
 // flat global list is what let that be selectable.
 //
 // `isLaunchable` marks the platforms we can also POST to, not just generate
-// for. Only Meta today — the rest produce creatives you download and upload
-// yourself, and the UI has to say so rather than implying a launch that will
-// never happen.
+// for. Meta always; Google only where automation is switched on, since that
+// flag is what decides whether a Google destination exists at all. The rest
+// produce creatives you download and upload yourself, and the UI has to say so
+// rather than implying a launch that will never happen — which is exactly what
+// a hardcoded `google: false` did once Google automation shipped: the Output
+// panel kept promising "we'll make the Google sizes for you to download" on the
+// same screen whose schedule card offers to post them.
 // ----------------------------------------------------------------------------
+
+import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 
 export const AD_PLATFORMS = [
   { id: 'meta', label: 'Meta', isLaunchable: true, ratios: ['1:1', '4:5', '9:16', '16:9'] },
-  { id: 'google', label: 'Google', isLaunchable: false, ratios: ['1:1', '16:9'] },
+  { id: 'google', label: 'Google', isLaunchable: IS_GOOGLE_AUTOMATION_ENABLED, ratios: ['1:1', '16:9'] },
   { id: 'tiktok', label: 'TikTok', isLaunchable: false, ratios: ['9:16'] },
   { id: 'snapchat', label: 'Snapchat', isLaunchable: false, ratios: ['9:16', '1:1'] },
   { id: 'linkedin', label: 'LinkedIn', isLaunchable: false, ratios: ['1:1', '16:9'] },

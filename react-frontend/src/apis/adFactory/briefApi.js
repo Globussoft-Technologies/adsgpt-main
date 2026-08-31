@@ -106,12 +106,19 @@ export const generateFromBrief = async (briefId) => {
 
 // Creates the AdsFactoryJob. No saved Meta template needed — one is synthesised
 // from the objective and budget.
-export const activateBrief = async (briefId, connection, cadence = null) => {
+// `google` is the optional second destination — the `targets.google` block
+// Quick setup builds when the user configures the Google tab. It is sent
+// alongside `connection` rather than inside it because the two are different
+// shapes: Meta's is ids the server synthesizes a template from, Google's IS
+// the template. The server ignores the key until briefToJobPayload learns to
+// emit targets.google.
+export const activateBrief = async (briefId, connection, cadence = null, google = null) => {
   const { data } = await axios.post(
     `${BRIEFS}/${briefId}/activate`,
     {
       connection,
       ...(cadence ? { cadence } : {}),
+      ...(google ? { google } : {}),
     },
     { headers: authHeaders() },
   );

@@ -125,6 +125,11 @@ function resolveFrequency(preset) {
  * @param {string} [connection.instagramUserId]
  * @param {object} [opts]
  * @param {Date}   [opts.now]  injected for deterministic tests
+ * @param {object} [opts.google]  an already-built `targets.google` block —
+ *   `{ template: { name, payload, ... } }`. Quick setup's Google tab builds it
+ *   client-side from a SAVED Google template, because Google has no synthesize
+ *   path: the job schema's googleTargetSchema requires a real payload. It is
+ *   passed through untouched; this function never invents Google fields.
  * @returns {object} body for POST /ads-factory/autopilot/jobs
  * @throws  {BriefJobPayloadError}
  */
@@ -160,6 +165,21 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
     );
   }
 
+  // A job needs at least one destination, not specifically Meta.
+  //
+  // These three checks used to be unconditional, which is what made a
+  // Google-only schedule fail with "Connect a Facebook account first" — an
+  // error about a platform the user had deliberately left blank. Meta is
+  // validated only when Meta is actually one of the destinations.
+  const googleTarget = opts.google && opts.google.template ? opts.google : null;
+  const wantsMeta = !!(
+    connection.facebookId ||
+    connection.connectionId ||
+    connection.adAccountId ||
+    !googleTarget
+  );
+
+  if (wantsMeta) {
   if (!connection.facebookId) {
     throw new BriefJobPayloadError("Connect a Facebook account first", "facebookId");
   }
@@ -171,6 +191,7 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
   }
   if (!connection.adAccountId) {
     throw new BriefJobPayloadError("Select an ad account", "adAccountId");
+    }
   }
 
   // Budget is required and must be positive. A missing budget silently
@@ -184,7 +205,12 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
   const objective = offer.primaryObjective;
   const conversionLocation = offer.conversionLocation;
   const advertiserName = String(connection.pageName || b.brand?.name || "").trim();
-  if (!objective || !conversionLocation) {
+  // Only Meta needs these: they are the inputs the template SYNTHESIZER reads
+  // to build a campaign from nothing. A Google target arrives as a finished
+  // saved template that already carries its own objective, so demanding the
+  // brief resolve a Meta objective for a Google-only schedule would block it
+  // on a field nothing in that job will read.
+  if (wantsMeta && (!objective || !conversionLocation)) {
     throw new BriefJobPayloadError(
       "This brief has no advertising objective resolved yet",
       "offer.primaryObjective",
@@ -220,8 +246,14 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
         : {}),
     },
     pairsPerCycle,
-    targets: {
-      meta: {
+    targets: {},
+  };
+
+  // `targets` is assembled rather than declared inline now that either half can
+  // be absent. The schema's `.min(1)` is the real guarantee here: a job with
+  // neither destination is rejected at createJob rather than created empty.
+  if (wantsMeta) {
+    payload.targets.meta = {
         facebookId: String(connection.facebookId),
         connectionId: String(connection.connectionId),
         // If the user picked a saved template (has name + payload), use it
@@ -253,10 +285,24 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
             : {}),
           ...(offer.cta?.url ? { linkUrl: offer.cta.url } : {}),
           ...(b.brand?.name ? { campaignName: String(b.brand.name).slice(0, 120) } : {}),
-        },
       },
-    },
-  };
+    };
+  }
+
+  // Passed straight through. Everything Google needs — the customer id, the
+  // budget in micros, the destination url — was resolved client-side against a
+  // saved template, and re-deriving any of it here would just be a second
+  // opinion that can disagree with the first.
+  if (googleTarget) {
+    payload.targets.google = googleTarget;
+  }
+
+  if (!payload.targets.meta && !payload.targets.google) {
+    throw new BriefJobPayloadError(
+      "Connect Meta or Google to start deliveries",
+      "targets",
+    );
+  }
 
   if (frequency.endDate) {
     payload.schedule.endDate = new Date(frequency.endDate).toISOString().slice(0, 10);

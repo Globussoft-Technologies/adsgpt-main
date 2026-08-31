@@ -27,6 +27,13 @@ import SchedulePanel from '@/components/AdFactory/v2/SchedulePanel';
 import KeepTheseComing from '@/components/AdFactory/v2/KeepTheseComing';
 import ShipTheseAds from '@/components/AdFactory/v2/ShipTheseAds';
 import { emptyConnection, isConnectionComplete } from '@/components/AdFactory/v2/LaunchConnection';
+import {
+  buildGoogleTarget,
+  emptyGoogleConnection,
+  isGoogleAccountConnected,
+  isGoogleConnectionComplete,
+} from '@/components/AdFactory/v2/GoogleLaunchConnection';
+import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 import { Notice, PrimaryBtn } from '@/components/AdFactory/v2/Panel';
 import {
   BTN_GHOST,
@@ -174,6 +181,11 @@ export default function AdFactoryV2Page() {
   // None of it belongs on the brief — the brief describes WHAT to advertise,
   // not the plumbing or the UI's current state.
   const [connection, setConnection] = useState(emptyConnection);
+  // The Google destination, held separately rather than folded into
+  // `connection`: the two share not one field. Meta's is four ids plus an
+  // optional template; Google's is a REQUIRED template plus its overrides,
+  // because `googleTargetSchema` has no synthesize branch to fall back on.
+  const [googleConnection, setGoogleConnection] = useState(emptyGoogleConnection);
   const [scheduleOn, setScheduleOn] = useState(false);
   // The manual path. Mutually exclusive with the schedule card by design —
   // both answer "what happens to these ads next", and two open cards asking
@@ -820,19 +832,55 @@ export default function AdFactoryV2Page() {
     ]
   );
 
+  // Google is a destination only when it is one of the brief's own platforms —
+  // the same tick in Output that decides whether we render Google sizes.
+  const briefPlatforms = useMemo(
+    () => (brief?.delivery?.platforms?.length ? brief.delivery.platforms : ['meta']),
+    [brief?.delivery?.platforms],
+  );
+  const googleOffered =
+    IS_GOOGLE_AUTOMATION_ENABLED && briefPlatforms.includes('google');
+  const { googleUser } = useSelector((state) => state.adFactoryNew) || {};
+  const googleReady =
+    googleOffered &&
+    isGoogleConnectionComplete(googleConnection, isGoogleAccountConnected(googleUser));
+
   const handleActivate = useCallback(async () => {
-    if (!briefId || !isConnectionComplete(connection)) return;
+    if (!briefId) return;
+    const metaReady = isConnectionComplete(connection);
+    // One ready destination is enough. Meta stays optional here for the same
+    // reason Google does — the job only carries the targets that are actually
+    // configured, and demanding both would make a Google-only schedule
+    // impossible to start.
+    if (!metaReady && !googleReady) return;
+    // The Google target borrows the schedule's budget and the brief's
+    // destination URL — the two things the Google tab deliberately stops
+    // short of asking for a second time.
+    const googleTarget = googleReady
+      ? buildGoogleTarget(googleConnection, {
+          dailyBudget: budget,
+          ctaUrl: brief?.offer?.cta?.url || '',
+        })
+      : null;
     const result = await dispatch(
       activateAutomation({
         briefId,
-        connection: {
-          facebookId: connection.facebookId,
-          connectionId: connection.connectionId,
-          adAccountId: connection.adAccountId,
-          adAccountName: connection.adAccountName,
-          pageId: connection.pageId,
-          pageName: connection.pageName,
-        },
+        connection: metaReady
+          ? {
+              facebookId: connection.facebookId,
+              connectionId: connection.connectionId,
+              adAccountId: connection.adAccountId,
+              adAccountName: connection.adAccountName,
+              pageId: connection.pageId,
+              pageName: connection.pageName,
+            }
+          : {},
+        // `targets.google` for the activate endpoint. The backend does not
+        // read this yet — briefToJobPayload only ever emits targets.meta — so
+        // a Google-only activation will be refused until it does. Sent in the
+        // shape the autopilot job schema already accepts so that catching up
+        // is a mapping, not a redesign.
+        ...(googleTarget ? { google: googleTarget } : {}),
         cadence: {
           frequency: cadence.frequency,
           hour: cadence.hour,
@@ -847,7 +895,7 @@ export default function AdFactoryV2Page() {
     if (activateAutomation.fulfilled.match(result)) {
       setScheduleOn(false);
     }
-  }, [dispatch, briefId, connection, cadence]);
+  }, [dispatch, briefId, connection, cadence, googleReady, googleConnection, budget, brief?.offer?.cta?.url]);
 
   // A list, so it replaces rather than merges — removing a recipient is the
   // main thing anyone does to one.
@@ -1178,6 +1226,10 @@ export default function AdFactoryV2Page() {
                     isMetaConnected={isConnectionComplete(connection)}
                     connection={connection}
                     onConnectionChange={setConnection}
+                    platforms={briefPlatforms}
+                    googleConnection={googleConnection}
+                    onGoogleConnectionChange={setGoogleConnection}
+                    isGoogleReady={googleReady}
                     pairsPerCycle={cadence.pairsPerCycle}
                     budget={budget}
                     onBudgetChange={(v) => dispatch(setPendingBudget(v))}
@@ -1309,6 +1361,10 @@ export default function AdFactoryV2Page() {
                     isMetaConnected={isConnectionComplete(connection)}
                     connection={connection}
                     onConnectionChange={setConnection}
+                    platforms={briefPlatforms}
+                    googleConnection={googleConnection}
+                    onGoogleConnectionChange={setGoogleConnection}
+                    isGoogleReady={googleReady}
                     pairsPerCycle={cadence.pairsPerCycle}
                     budget={budget}
                     onBudgetChange={(v) => dispatch(setPendingBudget(v))}

@@ -22,7 +22,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
+import { FaFacebookF } from 'react-icons/fa6';
+import { FcGoogle } from 'react-icons/fc';
+import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
+import GoogleLaunchConnection, {
+  emptyGoogleConnection,
+  isGoogleAccountConnected,
+  isGoogleConnectionComplete,
+} from './GoogleLaunchConnection';
 import { LABEL, CONTROL, CONTROL_H, MENU, MENU_ITEM, MUTED } from './_tokens';
 
 // ----------------------------------------------------------------------------
@@ -49,7 +57,7 @@ export const emptyConnection = () => ({
 export const isConnectionComplete = (conn) =>
   Boolean(conn?.facebookId && conn?.connectionId) && isAutoSetupComplete(conn);
 
-export default function LaunchConnection({ value, onChange, disabled = false }) {
+function MetaLaunchConnection({ value, onChange, disabled = false }) {
   const dispatch = useDispatch();
   const conn = value || emptyConnection();
   const { userData } = useSelector((state) => state.socket) || {};
@@ -232,6 +240,109 @@ export default function LaunchConnection({ value, onChange, disabled = false }) 
             <span className="text-xs text-[#B45309] dark:text-[#E8A33D]">{templatesError}</span>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// The tab strip.
+//
+// A tab, not a dropdown, and not the pair of always-open cards Full control
+// uses. The reason is what a tab can say that neither of the others can: each
+// one carries its OWN readiness tick, so "Meta is set up, Google still needs a
+// template" is legible without opening anything. A dropdown hides the state of
+// whichever platform isn't selected; two stacked cards make the panel twice as
+// tall for the common Meta-only case.
+//
+// Tabs are navigation only. Both platforms stay configured at once — the job
+// schema takes `targets.meta` AND `targets.google` on one job, which is how
+// Full control has always worked — so switching tabs never discards anything.
+//
+// When Google isn't ticked in Output (or the env flag is off) there is nothing
+// to switch between and the strip doesn't render at all: the Meta body is the
+// panel, exactly as before.
+// ----------------------------------------------------------------------------
+
+function TabButton({ active, done, icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-selected={active}
+      role="tab"
+      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+        active
+          ? 'bg-[#F7E8CD] text-[#8A4E0D] dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]'
+          : 'text-[#7A6F62] hover:text-[#2C241B] dark:text-[#8B939E] dark:hover:text-[#ECEFF3]'
+      }`}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      <span>{label}</span>
+      {/* The whole point of the tab: this platform is ready to post. */}
+      {done && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+    </button>
+  );
+}
+
+export default function LaunchConnection({
+  value,
+  onChange,
+  disabled = false,
+  // The brief's own `delivery.platforms`. Google only becomes a destination
+  // when the user ticked it in Output — generating Google sizes and POSTING to
+  // Google are the same decision as far as this panel is concerned.
+  platforms = [],
+  googleValue,
+  onGoogleChange,
+}) {
+  const googleChosen =
+    IS_GOOGLE_AUTOMATION_ENABLED &&
+    (Array.isArray(platforms) ? platforms : []).includes('google');
+
+  const [tab, setTab] = React.useState('meta');
+  const { googleUser } = useSelector((state) => state.adFactoryNew) || {};
+
+  // Untick Google in Output while sitting on its tab and the tab vanishes
+  // underneath you — fall back rather than render an empty panel.
+  React.useEffect(() => {
+    if (!googleChosen && tab === 'google') setTab('meta');
+  }, [googleChosen, tab]);
+
+  const metaDone = isConnectionComplete(value);
+  const googleDone = isGoogleConnectionComplete(googleValue, isGoogleAccountConnected(googleUser));
+
+  if (!googleChosen) {
+    return <MetaLaunchConnection value={value} onChange={onChange} disabled={disabled} />;
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div role="tablist" className="flex flex-wrap items-center gap-1">
+        <TabButton
+          active={tab === 'meta'}
+          done={metaDone}
+          icon={FaFacebookF}
+          label="Meta"
+          onClick={() => setTab('meta')}
+        />
+        <TabButton
+          active={tab === 'google'}
+          done={googleDone}
+          icon={FcGoogle}
+          label="Google"
+          onClick={() => setTab('google')}
+        />
+      </div>
+
+      {tab === 'meta' ? (
+        <MetaLaunchConnection value={value} onChange={onChange} disabled={disabled} />
+      ) : (
+        <GoogleLaunchConnection
+          value={googleValue || emptyGoogleConnection()}
+          onChange={onGoogleChange}
+          disabled={disabled}
+        />
       )}
     </div>
   );

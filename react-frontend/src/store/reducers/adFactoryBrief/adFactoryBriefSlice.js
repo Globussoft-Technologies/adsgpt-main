@@ -172,9 +172,9 @@ export const generateAds = createAsyncThunk(
 
 export const activateAutomation = createAsyncThunk(
   'adFactoryBrief/activate',
-  async ({ briefId, connection, cadence }, { rejectWithValue }) => {
+  async ({ briefId, connection, cadence, google }, { rejectWithValue }) => {
     try {
-      return await activateBrief(briefId, connection, cadence);
+      return await activateBrief(briefId, connection, cadence, google);
     } catch (err) {
       return rejectWithValue({
         message: message(err, "We couldn't start deliveries."),
