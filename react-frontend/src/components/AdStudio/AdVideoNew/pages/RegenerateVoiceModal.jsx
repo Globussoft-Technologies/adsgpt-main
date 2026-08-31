@@ -661,13 +661,26 @@ export default function RegenerateVoiceModal({
     if (discarded) onOpenChange(false);
   };
 
+  // The preview video and the regenerated voice are rarely the same length — the
+  // voice usually runs a beat longer than the footage. The video is the clock
+  // only while it still has frames left; once it runs out the audio finishes on
+  // its own, so never drag the audio back to the frozen last frame.
   const syncAudio = () => {
-    if (audioRef.current && videoRef.current) audioRef.current.currentTime = videoRef.current.currentTime;
+    if (!audioRef.current || !videoRef.current) return;
+    if (videoRef.current.ended) return;
+    audioRef.current.currentTime = videoRef.current.currentTime;
   };
 
   const togglePreview = async () => {
     const player = videoRef.current || audioRef.current;
     if (!player) return;
+    // Tail window: the video has run out but the longer voice track is still
+    // playing. `player.paused` is true here, so without this the button would
+    // restart the video from 0 instead of stopping the audio the user hears.
+    if (videoRef.current?.ended && audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause();
+      return;
+    }
     if (player.paused) {
       syncAudio();
       await player.play();
@@ -747,7 +760,14 @@ export default function RegenerateVoiceModal({
               aria-label="Muted video used with the regenerated voice-over preview"
               className="min-h-0 w-full flex-1 rounded-xl border border-white/10 bg-black object-contain"
               onPlay={() => { setIsPreviewPlaying(true); syncAudio(); audioRef.current?.play(); }}
-              onPause={() => { setIsPreviewPlaying(false); audioRef.current?.pause(); }}
+              onPause={(event) => {
+                // Reaching the end fires `pause` before `ended`; pausing the audio
+                // on that would cut the last stretch of voice-over off whenever the
+                // voice outlasts the footage. Hold the last frame instead.
+                if (event.currentTarget.ended) return;
+                setIsPreviewPlaying(false);
+                audioRef.current?.pause();
+              }}
               onSeeked={syncAudio}
               onEnded={() => {}}
             />

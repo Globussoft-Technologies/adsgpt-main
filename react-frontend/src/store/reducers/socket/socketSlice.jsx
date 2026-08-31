@@ -651,6 +651,7 @@ export const initSocket = (url) => (dispatch, getState) => {
         sessionId: data.sessionId,
         index: data.index,
         result: data.result,
+        committed: data.committed === true,
       }));
     });
 

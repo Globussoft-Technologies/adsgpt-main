@@ -381,12 +381,26 @@ async function applyAiAdsVoiceRegen(record, body) {
     aiAds,
   };
 
+  // Did this completion come from an accepted "Accept & merge"? finalMerge only
+  // runs off a saved voicePreview (it 409s without one) and leaves it in place,
+  // while a bare regen clears voicePreview before firing Python. So a preview
+  // still sitting on the record means the user explicitly approved this render
+  // — that IS the apply, and the committed pointer should move with it.
+  // A bare regen only appends; the user commits that from the card's "Keep".
+  const wasAcceptedMerge = !!record.voicePreview;
+
   const updated = await VideoGeneration.findByIdAndUpdate(
     sessionId,
     { $set: { regenState: "idle", pendingRegen: null, voicePreview: null }, $push: { results: newResult } },
     { new: true },
   );
   const newIndex = (updated?.results?.length || 1) - 1;
+
+  if (wasAcceptedMerge) {
+    await VideoGeneration.findByIdAndUpdate(sessionId, {
+      $set: { version: newIndex },
+    }).catch(() => {});
+  }
 
   if (global.io) {
     global.io.to(record.userId).emit("aiAdsVoiceReady", {
@@ -395,6 +409,9 @@ async function applyAiAdsVoiceRegen(record, body) {
       regenType: pending.regenType || null,
       totalDuration: vDuration,
       result: newResult,
+      // Tells the client whether this version is committed (accepted merge) or
+      // merely appended for review (bare regen).
+      committed: wasAcceptedMerge,
     });
   }
 }

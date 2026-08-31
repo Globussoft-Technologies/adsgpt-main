@@ -166,6 +166,27 @@ export default function VideoCard({
     dispatch(setAiAdsPreviewVersion({ sessionId: item._id, previewVersion: idx }));
   const handleRevertVersion = () =>
     dispatch(setAiAdsPreviewVersion({ sessionId: item._id, previewVersion: null }));
+
+  // Previewing a freshly regenerated version is a look, not a commit — the
+  // pointer only moves on "Keep this one". previewVersion lives in Redux, so
+  // without this it outlives the card: regenerate, navigate to My Space, and
+  // the grid keeps playing a version the user never applied. Drop the preview
+  // when the card goes away so anywhere else in the app shows the committed
+  // version; the regen is still there under the Version dropdown.
+  const pendingPreviewRef = useRef(null);
+  useEffect(() => {
+    pendingPreviewRef.current =
+      item?.previewVersion != null ? { sessionId: item?._id, previewVersion: item.previewVersion } : null;
+  }, [item?._id, item?.previewVersion]);
+  useEffect(
+    () => () => {
+      const pending = pendingPreviewRef.current;
+      if (pending?.sessionId) {
+        dispatch(setAiAdsPreviewVersion({ sessionId: pending.sessionId, previewVersion: null }));
+      }
+    },
+    [dispatch],
+  );
   const handleKeepVersion = async (idx) => {
     try {
       await dispatch(selectAiAdsVersionAction(item._id, idx));

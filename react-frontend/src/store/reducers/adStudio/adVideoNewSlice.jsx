@@ -274,9 +274,13 @@ const adVideoNewSlice = createSlice({
       const v = state.allVideos.find((x) => x._id === sessionId);
       if (v) v.regenState = regenState;
     },
-    // Socket 'aiAdsVoiceReady' — append the new version and preview it.
+    // Socket 'aiAdsVoiceReady' — append the new version.
+    // `committed` mirrors the server: an accepted "Accept & merge" already moved
+    // the pointer, so adopt it as the committed version and clear the preview
+    // marker. A bare regen is only offered for review — preview it, but leave
+    // the pointer where it is until the user picks "Keep this one".
     appendAiAdsVersion: (state, action) => {
-      const { sessionId, index, result } = action.payload;
+      const { sessionId, index, result, committed } = action.payload;
       const v = state.allVideos.find((x) => x._id === sessionId);
       if (!v || !result) return;
       if (!Array.isArray(v.results)) v.results = [];
@@ -284,7 +288,13 @@ const adVideoNewSlice = createSlice({
       if (index != null && v.results[index]) v.results[index] = result;
       else v.results.push(result);
       v.regenState = 'idle';
-      v.previewVersion = index != null ? index : v.results.length - 1;
+      const newIndex = index != null ? index : v.results.length - 1;
+      if (committed) {
+        v.version = newIndex;
+        v.previewVersion = null;
+      } else {
+        v.previewVersion = newIndex;
+      }
     },
     // select-version success — commit the pointer, clear the preview marker.
     setAiAdsVersion: (state, action) => {
