@@ -496,7 +496,7 @@ const AppSidebar = () => {
 
             {/* LIBRARY group — Workspace + My Space */}
             {showLibraryGroup && (
-              <div className={showExpanded ? undefined : 'mt-auto'}>
+              <div className="mt-auto">
                 <SectionHeader label="LIBRARY" />
                 <div className={showExpanded ? 'space-y-1 px-2.5' : 'space-y-2 px-2'}>
 
@@ -613,7 +613,7 @@ const AppSidebar = () => {
                             My Space
                           </span>
                           {savedCount > 0 && (
-                            <div className="sidebar-nav-badge--compact absolute right-3.5 2xl:right-5 -top-2">
+                            <div className="sidebar-nav-badge--compact absolute right-1.5 2xl:right-5 -top-2">
                               {renderBadge(savedCount)}
                             </div>
                           )}

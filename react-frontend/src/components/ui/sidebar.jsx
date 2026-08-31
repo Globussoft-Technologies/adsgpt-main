@@ -26,7 +26,7 @@ function getSidebarDimensions(viewportWidth) {
 
   return {
     sidebarWidth: isLaptop ? '11.75rem' : '14.75rem',
-    sidebarWidthIcon: isLaptop ? '5.5rem' : '7rem',
+    sidebarWidthIcon: isLaptop ? '4.75rem' : '7rem',
   };
 }
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b';
