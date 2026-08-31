@@ -74,15 +74,15 @@
 // TWO accents, one per theme, and every token below pairs them:
 //
 //   dark   #15DCFF   the app's cyan — selection, focus, links, primary fill
-//   light  #C17A1C   amber — the same roles on the warm light surface
+//   light  #5867EB   indigo — the app's accessible accent on the light surface
 //
 // These three used to name the teal ramp (#02C8C4 / #0B7A78) the light theme
 // was built on before the amber repaint. Nothing read them, so nothing broke —
 // but a constant called ACCENT_LIGHT holding the colour light mode no longer
 // uses is a trap for whoever reaches for it next.
 export const ACCENT = '#15DCFF'; // fills, borders, and text on dark
-export const ACCENT_LIGHT = '#C17A1C'; // fills, borders and focus on light
-export const ACCENT_INK = '#8A4E0D'; // the same hue, dark enough to read on white
+export const ACCENT_LIGHT = '#5867EB'; // accessible Light Mode accent text and focus
+export const ACCENT_INK = '#4654D4'; // stronger accent ink for Light Mode copy
 // What sits ON an accent fill. Never white — cyan at full strength is brighter
 // than most page backgrounds.
 export const ON_ACCENT = 'text-[#062024]';
@@ -92,12 +92,12 @@ export const ON_ACCENT = 'text-[#062024]';
 // The card. 10px, one hairline, and in light mode a single 1px shadow rather
 // than a second border.
 export const CARD =
-  'rounded-lg border border-[#DED2BD] bg-[#FFFDF8] shadow-none dark:border-[#2E353E] dark:bg-[#14181D]';
+  'rounded-lg border border-[var(--ws-border)] bg-[var(--ws-surface)] shadow-[var(--ws-shadow-sm)] dark:border-[#2A2A2A] dark:bg-[#171717] dark:shadow-none';
 
 // A hairline between two sections of the same card — a 1px rule, never a gap
 // plus a border.
-export const RULE = 'h-px w-full bg-[#E7DCC9] dark:bg-[#252B33]';
-export const RULE_BORDER = 'border-[#E7DCC9] dark:border-[#252B33]';
+export const RULE = 'h-px w-full bg-[var(--ws-border)] dark:bg-[#2A2A2A]';
+export const RULE_BORDER = 'border-[var(--ws-border)] dark:border-[#2A2A2A]';
 
 // Padding inside a card section. One value, everywhere.
 export const SECTION_PAD = 'px-4 py-4 2xl:px-5';
@@ -105,23 +105,23 @@ export const SECTION_PAD = 'px-4 py-4 2xl:px-5';
 // ─── Type ────────────────────────────────────────────────────────────────────
 
 // The page anchor — the brand name, and the only 21px thing on screen.
-export const TITLE = 'text-[18px] font-semibold leading-[1.2] text-[#211A12] dark:text-[#ECEFF3]';
+export const TITLE = 'text-[18px] font-semibold leading-[1.2] text-[var(--ws-text-primary)] dark:text-[#F4F4F5]';
 
 // A section heading inside a card.
-export const SECTION = 'text-[14px] font-semibold text-[#211A12] dark:text-[#ECEFF3]';
+export const SECTION = 'text-[14px] font-semibold text-[var(--ws-text-primary)] dark:text-[#F4F4F5]';
 
 // A field label. Sentence case, 13px, regular weight, grey — it names the
 // field and then gets out of the way.
-export const LABEL = 'text-[12px] font-medium text-[#6D6255] dark:text-[#8B939E]';
+export const LABEL = 'text-[12px] font-medium text-[var(--ws-text-secondary)] dark:text-[#AFAFAF]';
 
 // The value inside a control.
-export const VALUE = 'text-[13px] font-medium text-[#2C241B] dark:text-[#ECEFF3]';
+export const VALUE = 'text-[13px] font-medium text-[var(--ws-text-primary)] dark:text-[#F4F4F5]';
 
 // Secondary prose — hints, counts, the sentence under a heading.
-export const MUTED = 'text-[12px] text-[#7A6F62] dark:text-[#AFB6C0]';
+export const MUTED = 'text-[12px] text-[var(--ws-text-secondary)] dark:text-[#AFAFAF]';
 
 // Tertiary — placeholders, "None yet", a disabled count.
-export const FAINT = 'text-[11px] text-[#9C8F7D] dark:text-[#6C7480]';
+export const FAINT = 'text-[11px] text-[var(--ws-text-muted)] dark:text-[#777777]';
 
 export const NUM = 'tabular-nums';
 
@@ -129,7 +129,7 @@ export const NUM = 'tabular-nums';
 
 // The shell every input, select and stepper shares. 8px, one border, one fill.
 export const CONTROL =
-  'rounded-md border border-[#D9CCB6] bg-[#FFFDF8] text-[#2C241B] shadow-none dark:border-[#2E353E] dark:bg-[#1E232A] dark:text-[#ECEFF3]';
+  'rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface-control)] text-[var(--ws-text-primary)] shadow-none dark:border-[#2A2A2A] dark:bg-[#202020] dark:text-[#F4F4F5]';
 
 // 36px is the control height across the system — tall enough to hit, short
 // enough that four in a row don't dominate a section.
@@ -139,10 +139,10 @@ export const CONTROL =
 // of them stacked in a 340px column. The comment was right; the value wasn't.
 export const CONTROL_H = 'h-9';
 
-export const FOCUS = 'focus:border-[#C17A1C] focus:outline-none dark:focus:border-[#15DCFF]';
-export const FOCUS_WITHIN = 'focus-within:border-[#C17A1C] dark:focus-within:border-[#15DCFF]';
+export const FOCUS = 'focus:border-[#5867EB] focus:outline-none dark:focus:border-[#15DCFF]';
+export const FOCUS_WITHIN = 'focus-within:border-[#5867EB] dark:focus-within:border-[#15DCFF]';
 
-export const PLACEHOLDER = 'placeholder:text-[#A99B88] dark:placeholder:text-[#6C7480]';
+export const PLACEHOLDER = 'placeholder:text-[var(--ws-text-muted)] dark:placeholder:text-[#777777]';
 
 // A full single-line text control.
 export const INPUT = `w-full ${CONTROL_H} ${CONTROL} ${FOCUS} ${PLACEHOLDER} px-3 text-[13px] font-medium disabled:opacity-50`;
@@ -155,13 +155,13 @@ export const TEXTAREA = `w-full resize-y ${CONTROL} ${FOCUS} ${PLACEHOLDER} px-3
 // A selectable pill. `on` is the one place indigo appears outside the primary
 // button.
 export const PILL =
-  'rounded-md border border-[#DED2BD] bg-[#FFFDF8] px-2 py-1 text-[12px] text-[#6D6255] transition-colors hover:border-[#CDBB9E] hover:text-[#2C241B] dark:border-[#2E353E] dark:bg-transparent dark:text-[#AFB6C0] dark:hover:border-[#3D4650] dark:hover:text-[#ECEFF3]';
+  'rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface)] px-2 py-1 text-[12px] text-[var(--ws-text-secondary)] transition-colors hover:border-[var(--ws-border-strong)] hover:text-[var(--ws-text-primary)] dark:border-[#2A2A2A] dark:bg-transparent dark:text-[#AFAFAF] dark:hover:border-[#3A3A3A] dark:hover:text-[#F4F4F5]';
 export const PILL_ON =
-  'rounded-md border border-[#C17A1C]/45 bg-[#F7E8CD] px-2 py-1 text-[12px] font-medium text-[#8A4E0D] dark:border-[#15DCFF]/35 dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]';
+  'rounded-md border border-[#5867EB]/30 bg-[#5867EB]/10 px-2 py-1 text-[12px] font-medium text-[#4654D4] dark:border-[#15DCFF]/35 dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]';
 
 // A read-only value chip — a listed item, not a choice.
 export const CHIP =
-  'rounded-md border border-[#DED2BD] bg-[#F7F1E8] px-2 py-1 text-[12px] text-[#2C241B] dark:border-[#2E353E] dark:bg-[#1E232A] dark:text-[#ECEFF3]';
+  'rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface-hover)] px-2 py-1 text-[12px] text-[var(--ws-text-primary)] dark:border-[#2A2A2A] dark:bg-[#202020] dark:text-[#F4F4F5]';
 
 // ─── Buttons ─────────────────────────────────────────────────────────────────
 
@@ -194,17 +194,17 @@ export const CHIP =
 // exactly what ImageStrip's "Add" (briefFields.jsx) and Autopilot's own
 // PrimaryButton already do with the same fill.
 export const BTN_PRIMARY =
-  'inline-flex h-9 items-center justify-center gap-2 rounded-md S px-5 text-[13px] font-semibold text-white shadow-none transition-colors hover:bg-[#9D5F11] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-[#15DCFF] dark:text-[#062024] dark:hover:bg-[#5FE8FF]';
+  'adfactory-btn-primary inline-flex h-9 items-center justify-center gap-2 rounded-md px-5 text-[13px] font-semibold text-white shadow-[0_3px_10px_rgba(88,103,235,0.22)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45 dark:shadow-[0_3px_12px_rgba(21,220,255,0.16)]';
 
 // Everything else. A hairline and a label — no fill in dark, white in light.
 export const BTN_GHOST =
-  'inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-[#DED2BD] bg-[#FFFDF8] px-3 text-[12px] font-medium text-[#5D5144] shadow-none transition-colors hover:border-[#CDBB9E] hover:text-[#2C241B] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#2E353E] dark:bg-transparent dark:text-[#AFB6C0] dark:hover:border-[#3D4650] dark:hover:text-[#ECEFF3]';
+  'inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface)] px-3 text-[12px] font-medium text-[var(--ws-text-secondary)] shadow-[var(--ws-shadow-sm)] transition-colors hover:border-[var(--ws-border-strong)] hover:text-[var(--ws-text-primary)] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#2A2A2A] dark:bg-transparent dark:text-[#AFAFAF] dark:shadow-none dark:hover:border-[#3A3A3A] dark:hover:text-[#F4F4F5]';
 
 // A text-only action inside prose.
 // #02C8C4 as TEXT on white is about 2.4:1 — the darker step of the same hue is
 // what makes an accent link readable in light mode.
 export const BTN_LINK =
-  'text-[12px] font-medium text-[#8A4E0D] underline-offset-2 hover:underline dark:text-[#15DCFF]';
+  'text-[12px] font-medium text-[#4654D4] underline-offset-2 hover:underline dark:text-[#15DCFF]';
 
 // ─── Amber — low-confidence guesses, and nothing else ────────────────────────
 
@@ -217,12 +217,13 @@ export const FLAG_BADGE =
 // Popover surfaces sit one step ABOVE the card so they read as floating, which
 // is the one place the neutral ramp goes lighter rather than darker.
 export const MENU =
-  'border border-[#DED2BD] bg-[#FFFDF8] text-[#2C241B] shadow-[0_8px_24px_rgba(84,62,32,0.10)] dark:border-[#2E353E] dark:bg-[#1A1F26] dark:text-[#ECEFF3] dark:shadow-[0_8px_24px_rgba(0,0,0,0.55)]';
-export const MENU_ITEM = 'text-[13px] focus:bg-[#F7F1E8] dark:focus:bg-[#272D35]';
+  'adfactory-v2-menu rounded-lg border border-[#E5E7EB] bg-white text-[#111827] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.04)] p-1 dark:border-[#2A2A2A] dark:bg-[#1C1C1C] dark:text-[#F4F4F5] dark:shadow-[0_8px_24px_rgba(0,0,0,0.55)]';
+export const MENU_ITEM =
+  'adfactory-v2-menu-item text-[13px] font-medium text-[#374151] rounded-md transition-colors hover:bg-[#F3F4F6] hover:text-[#111827] focus:bg-[#F3F4F6] focus:text-[#111827] data-[highlighted]:bg-[#F3F4F6] data-[highlighted]:text-[#111827] data-[state=checked]:bg-[#F3F4F6] data-[state=checked]:text-[#111827] dark:text-[#E4E4E7] dark:hover:bg-[#262626] dark:hover:text-[#F4F4F5] dark:focus:bg-[#262626] dark:focus:text-[#F4F4F5] dark:data-[highlighted]:bg-[#262626] dark:data-[highlighted]:text-[#F4F4F5] dark:data-[state=checked]:bg-[#262626] dark:data-[state=checked]:text-white cursor-pointer py-1.5 px-2.5';
 
 // ─── Thumbnails ──────────────────────────────────────────────────────────────
 
 export const THUMB =
-  'rounded-md border border-[#DED2BD] bg-[#F7F1E8] object-cover dark:border-[#2E353E] dark:bg-[#22272F]';
+  'rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface-hover)] object-cover dark:border-[#2A2A2A] dark:bg-[#242424]';
 export const THUMB_ADD =
-  'rounded-md border border-dashed border-[#CDBB9E] text-[#9C8F7D] transition-colors hover:border-[#C17A1C]/60 hover:text-[#8A4E0D] dark:border-[#3D4650] dark:text-[#8B939E] dark:hover:border-[#15DCFF]/50 dark:hover:text-[#15DCFF]';
+  'rounded-md border border-dashed border-[var(--ws-border-strong)] text-[var(--ws-text-muted)] transition-colors hover:border-[#5867EB]/60 hover:text-[#4654D4] dark:border-[#3A3A3A] dark:text-[#777777] dark:hover:border-[#15DCFF]/50 dark:hover:text-[#15DCFF]';

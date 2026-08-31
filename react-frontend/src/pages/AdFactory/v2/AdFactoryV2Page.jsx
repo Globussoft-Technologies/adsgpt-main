@@ -38,7 +38,6 @@ import {
   RULE_BORDER,
   SECTION,
 } from '@/components/AdFactory/v2/_tokens';
-import AdFactoryBgEffect from '@/components/AdFactory/NodeForms/AdFactoryBgEffect';
 import { useMotionPresets } from '@/components/AdFactory/v2/_motion';
 import emitter from '@/utils/eventEmitter';
 import { emitWhenConnected } from '@/utils/socketEmitter';
@@ -128,8 +127,8 @@ function CostLine({ label, value, strong = false }) {
       <span
         className={`${NUM} ${
           strong
-            ? 'text-[13px] font-semibold text-[#211A12] dark:text-[#ECEFF3]'
-            : 'text-[12px] font-medium text-[#6D6255] dark:text-[#AFB6C0]'
+            ? 'text-[13px] font-semibold text-[var(--ws-text-primary)] dark:text-[#F4F4F5]'
+            : 'text-[12px] font-medium text-[var(--ws-text-secondary)] dark:text-[#AFAFAF]'
         }`}
       >
         {value}
@@ -903,7 +902,7 @@ export default function AdFactoryV2Page() {
 
         <div className="flex items-baseline gap-2">
           <span
-            className={`text-[24px] leading-none font-semibold text-[#211A12] dark:text-[#ECEFF3] ${NUM}`}
+            className={`text-[24px] leading-none font-semibold text-[var(--ws-text-primary)] dark:text-[#F4F4F5] ${NUM}`}
           >
             {estimate?.total ?? '—'}
           </span>
@@ -966,43 +965,13 @@ export default function AdFactoryV2Page() {
   // No header here: the page title comes from TopHeader and the mode switch is
   // owned by AdFactoryPage, so both modes share exactly one of each.
   return (
-    <div className="relative isolate flex h-full w-full flex-col gap-3 overflow-y-auto bg-[#F3EEE6] pt-0 pb-8 text-[#2C241B] dark:bg-[#0f0f0f] dark:text-[#ECEFF3]">
-      {/* The same background Full control uses — one Ad Factory, one backdrop.
-          Mounted per-surface, which is the pattern every v1 screen already
-          follows (NoCompaignScreen, StartForm, NodeModal all mount their own).
-          It is `fixed`, so it stays put while this column scrolls.
-
-          The wrapper is load-bearing, not tidiness. AdFactoryBgEffect's own
-          elements are `fixed z-0`, and a POSITIONED element at z-0 paints above
-          non-positioned content regardless of document order — so the blue
-          gradient and the bottom-effect SVG were being drawn ON TOP of every
-          card on this page. The cards are solid #14181D; they only looked
-          washed out and semi-transparent because a full-opacity glow was
-          sitting over them.
-
-          A positioned wrapper with a negative z-index makes its own stacking
-          context and pulls the fixed children into it, putting the whole
-          backdrop behind the content. Wrapping here rather than editing
-          AdFactoryBgEffect keeps v1 — which mounts the same component into
-          differently stacked screens — untouched.
-
-          `isolate` on the page root above is the other half. Without it the
-          negative z-index would resolve against the ROOT stacking context and
-          the glow would paint behind `.layout_container`'s light-mode
-          background — visible in dark, gone in light. Isolating scopes it to
-          this page, so both themes keep the backdrop they had. */}
-      <div className="pointer-events-none fixed inset-0 -z-10 hidden dark:block" aria-hidden>
-        <AdFactoryBgEffect />
-      </div>
-
+    <div className="adfactory-v2-surface relative isolate flex h-full w-full flex-col gap-3 overflow-y-auto bg-[var(--ws-bg)] pt-0 pb-8 text-[var(--ws-text-primary)] dark:bg-[#0f0f0f] dark:text-[#F4F4F5]">
       {error && !(hasCreatives && scheduleOn) && (
         <div className="mx-auto w-full max-w-375 px-4 2xl:px-8">
           <Notice tone="warn" icon={AlertCircle}>
             <span className="flex flex-col items-start gap-1">
               <span>{error}</span>
               {errorCode === 'NO_BASE_PLAN' ? (
-                // The trial user's first real moment. An upgrade path, not a
-                // dead end.
                 <a href="/pricing" className={BTN_LINK}>
                   See plans
                 </a>
@@ -1017,23 +986,6 @@ export default function AdFactoryV2Page() {
               )}
             </span>
           </Notice>
-        </div>
-      )}
-
-      {/* The way out. Once a brief is open the URL carries ?briefId and there
-          was no route back to the front door except editing the address bar —
-          the browser's own Back works only if you arrived by navigation, not on
-          a reload or a shared link. */}
-      {brief && step !== STEP.SOURCE && (
-        <div className="mx-auto w-full max-w-375 px-4 2xl:px-8">
-          <button
-            type="button"
-            onClick={handleStartOver}
-            className="text-13 inline-flex items-center gap-1.5 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            All briefs
-          </button>
         </div>
       )}
 
@@ -1074,7 +1026,17 @@ export default function AdFactoryV2Page() {
 
       {/* ── 3, 4 ── */}
       {step === STEP.BRIEF && brief && (
-        <div className="mx-auto flex w-full max-w-375 flex-col gap-4 px-4 2xl:px-8">
+        <div className="mx-auto flex w-full max-w-375 flex-col gap-3 px-4 2xl:px-8">
+          <div>
+            <button
+              type="button"
+              onClick={handleStartOver}
+              className="text-13 inline-flex items-center gap-1.5 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              All briefs
+            </button>
+          </div>
           {brief.status === BRIEF_STATUS.NEEDS_INPUT && (
             <Notice tone="warn" icon={AlertCircle}>
               <span className="flex flex-col items-start gap-1">
@@ -1249,6 +1211,16 @@ export default function AdFactoryV2Page() {
       {/* ── 5 ── Deliveries are the page once a brief is live. */}
       {step === STEP.DELIVERIES && brief && (
         <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 px-3 py-3 sm:px-4 2xl:px-5">
+          <div>
+            <button
+              type="button"
+              onClick={handleStartOver}
+              className="text-13 inline-flex items-center gap-1.5 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              All briefs
+            </button>
+          </div>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex min-w-0 flex-col gap-3">
               <BriefSummary

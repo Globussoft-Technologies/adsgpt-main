@@ -110,7 +110,7 @@ html {
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: #F7F4EE;
+  --sidebar: #FCFAF7;
   --sidebar-foreground: oklch(0.129 0.042 264.695);
   --sidebar-primary: oklch(0.208 0.042 265.755);
   --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
@@ -344,44 +344,28 @@ html.theme-changing *::after {
     box-shadow: 0 1px 2px rgba(80, 70, 58, 0.04);
   }
 
-  /* Premium Warm Ivory Left Sidebar - Light Mode Only */
+  /* AdsGPT sidebar surface - Light Mode Only. It shares the application canvas
+     so the navigation reads as part of the workspace instead of a separate app. */
   html:not(.dark) .lm-sidebar-surface {
     position: relative;
-    background: #F7F4EE !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(88, 103, 235, 0.015)),
+      var(--ws-bg) !important;
     border-right: none !important;
     box-shadow: none !important;
-    backdrop-filter: blur(24px) !important;
+    backdrop-filter: none !important;
   }
 
   html:not(.dark) .lm-sidebar-surface::before {
     display: none !important;
   }
 
-  /* Vertical right-edge border that fades at upper & lower edges and stays visible in the middle */
+  /* The component renders one token-matched divider. */
   html:not(.dark) .lm-sidebar-surface::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 1px;
-    background: linear-gradient(
-      180deg,
-      transparent 0%,
-      transparent 18%,
-      rgba(200, 193, 180, 0.15) 28%,
-      rgba(190, 182, 169, 0.8) 36%,
-      #C8C1B4 44%,
-      #C8C1B4 66%,
-      rgba(190, 182, 169, 0.8) 74%,
-      rgba(200, 193, 180, 0.2) 84%,
-      transparent 95%,
-      transparent 100%
-    );
-    pointer-events: none;
-    z-index: 20;
-    filter: drop-shadow(0 0 5px rgba(94, 102, 245, 0.24));
+    display: none !important;
   }
+
+
 }
 
 @layer components {

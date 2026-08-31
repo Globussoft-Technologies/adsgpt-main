@@ -224,7 +224,7 @@ export default function TopHeader() {
   const [selectedBrand, setSelectedBrand] = useState(brandOptions[0]);
   const [selectedPlateform, setSelectedPlateform] = useState(adPlatformOptions[0]);
 
-  const { isMobile } = useSidebar();
+  const { isMobile, openMobile } = useSidebar();
 
   const headerName = useMemo(
     () => getHeaderName(location.pathname),
@@ -300,6 +300,17 @@ export default function TopHeader() {
     (currentRoute === '/adstudio' &&
       activeAdStudioTabId === 'adCreativeNew' &&
       adCreativeNewActivePage !== 'home');
+
+  const renderMobileSidebarTrigger = (className = '') => (
+    <SidebarTrigger
+      aria-label="Open navigation"
+      aria-controls="app-sidebar-navigation"
+      aria-expanded={openMobile}
+      className={`close_open_ flex h-9 w-9 cursor-pointer items-center justify-center rounded-full p-1 hover:bg-[#EAE5DC] lg:hidden ${className}`}
+    >
+      <PanelLeft className="h-5" aria-hidden="true" />
+    </SidebarTrigger>
+  );
 
   const resetMap = {
     adCopy: resetAdCopySlice,
@@ -397,6 +408,12 @@ export default function TopHeader() {
       activePage === 'myVideos');
 
   if (currentRoute !== '/adfactory-demo' && hideHeader) {
+    const mobileNavigationControl = (
+      <div className="fixed top-3 left-3 z-[60] lg:hidden">
+        {renderMobileSidebarTrigger()}
+      </div>
+    );
+
     // Meta and TikTok Ads Manager include controls in their own row so they
     // participate in layout instead of floating over provider controls.
     if (
@@ -404,15 +421,18 @@ export default function TopHeader() {
       currentRoute === '/autopilot/meta' ||
       currentRoute === '/tiktok-ads'
     )
-      return null;
+      return mobileNavigationControl;
 
     return (
-      <div className="pointer-events-none fixed top-4 right-5 z-[60] flex items-center gap-2">
-        <div className="pointer-events-auto flex items-center gap-2">
-          <WorkspaceSwitcher />
-          {SHOW_HIDDEN_HEADER_UI && !isMySpaceView && currentRoute !== '/autopilot/meta' && <ThemeToggle />}
+      <>
+        {mobileNavigationControl}
+        <div className="pointer-events-none fixed top-4 right-5 z-[60] flex items-center gap-2">
+          <div className="pointer-events-auto flex items-center gap-2">
+            <WorkspaceSwitcher />
+            {SHOW_HIDDEN_HEADER_UI && !isMySpaceView && currentRoute !== '/autopilot/meta' && <ThemeToggle />}
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -420,14 +440,10 @@ export default function TopHeader() {
     <>
       {currentRoute !== '/adfactory-demo' && !hideHeader && (
         <div
-          className={`lm-header-surface sticky top-0 z-50 flex h-16 w-full items-center justify-between gap-1 bg-transparent px-2 py-3 md:px-5 2xl:h-24 2xl:px-8 2xl:py-6 dark:bg-transparent dark:backdrop-blur-none ${activeAdStudioTabId === 'adCreative' && location.pathname === '/adstudio' && ''} `}
+          className={`lm-header-surface sticky top-0 z-50 flex h-[74px] w-full items-center justify-between gap-1 bg-transparent px-2 py-3 md:px-5 dark:bg-transparent dark:backdrop-blur-none ${activeAdStudioTabId === 'adCreative' && location.pathname === '/adstudio' && ''} `}
         >
           <div className="left_header_container flex items-center">
-            <SidebarTrigger>
-              <button className="close_open_ mr-0 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full p-1 hover:bg-[#EAE5DC] sm:mr-1.5 lg:hidden">
-                <PanelLeft className="h-5" />
-              </button>
-            </SidebarTrigger>
+            {renderMobileSidebarTrigger('mr-0 sm:mr-1.5')}
             {/* Left Title */}
             {currentRoute !== '/adfactory-demo' && (
               <h1
@@ -436,10 +452,6 @@ export default function TopHeader() {
                 {headerName}
               </h1>
             )}
-            {/* Ad Factory's mode switch sits beside the title, the same slot
-                /adstudio and /brandiq put their tabs in. It was in the page
-                body before, which floated it above the content with nothing to
-                align to. */}
             {currentRoute === '/adfactory' && IS_AD_FACTORY_V2 && (
               <ModeSwitch
                 mode={adFactoryUiMode}

@@ -83,7 +83,7 @@ export default function CreativePreview({
         <button
           type="button"
           onClick={() => setCollapsed((value) => !value)}
-          className={`flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${RULE_BORDER} bg-[#FFFDF8] hover:bg-[#F7F1E8] dark:bg-[#111318] dark:hover:bg-[#161A21]`}
+          className={`flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${RULE_BORDER} bg-[var(--ws-surface)] hover:bg-[var(--ws-surface-hover)] dark:bg-[#171717] dark:hover:bg-[#202020]`}
         >
           <div className="min-w-0">
             <h3 className={`text-15 tracking-[-0.013em] ${SECTION}`}>{title}</h3>
@@ -210,7 +210,7 @@ function Card({ pair, ratio, callToAction, onRegenerate }) {
     <article className={`flex flex-col overflow-hidden ${CARD}`}>
       <div className="group flex flex-col text-left">
         <div
-          className="relative bg-[#F7F1E8] dark:bg-[#22272F]"
+          className="relative bg-[var(--ws-surface-hover)] dark:bg-[#242424]"
           style={{ aspectRatio: aspectOf(ratio) }}
         >
           <img
@@ -256,7 +256,7 @@ function SkeletonCard({ ratio }) {
   return (
     <article className={`flex flex-col overflow-hidden ${CARD}`}>
       <div
-        className="relative animate-pulse bg-[#F7F1E8] dark:bg-[#191E24]"
+        className="relative animate-pulse bg-[var(--ws-surface-hover)] dark:bg-[#202020]"
         style={{ aspectRatio: aspectOf(ratio) }}
       >
         <RatioBadge ratio={ratio} />

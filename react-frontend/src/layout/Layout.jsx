@@ -86,10 +86,12 @@ const Layout = () => {
     prevPage.current = normalizedPath;
     pageEnterTime.current = now;
   }, [location, userData, activeAdStudioTabId]);
+
   const [baseImg, baseImgStatus] = useImage(
     baseImage ? `${HOST}/adsgpt/img/preview?url=${S3_BASE_URL}${baseImage}` : null,
     'Anonymous'
   );
+
   if (isOldEditorOpen) {
     // ------------------ OLD LAYOUT ------------------
     return (
@@ -98,7 +100,7 @@ const Layout = () => {
 
         <SidebarProvider>
           <AppSidebar />
-          <main className="relative flex h-svh w-full flex-col overflow-hidden">
+          <main className="relative flex h-svh min-w-0 flex-1 flex-col overflow-hidden">
             <TopHeader />
             <div
               className={`flex dark:bg-inherit bg-[#F7F4EE] min-h-0 flex-1 flex-col ${
@@ -155,7 +157,7 @@ const Layout = () => {
         {!isEditorOpen && (
           <>
             <AppSidebar />
-            <main className="relative flex h-svh w-full flex-col overflow-hidden bg-transparent dark:bg-inherit">
+            <main className="relative flex h-svh min-w-0 flex-1 flex-col overflow-hidden bg-transparent dark:bg-inherit">
               <TopHeader />
               <div
                 className={`flex min-h-0 flex-1 flex-col ${

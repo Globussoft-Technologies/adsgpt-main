@@ -42,6 +42,7 @@ import {
   CheckCheck,
   RotateCcw,
   Image as ImageIcon,
+  Trash2,
 } from 'lucide-react';
 import { FaTiktok } from 'react-icons/fa6';
 import CreateCampaignWizard from './CreateCampaignWizard';
@@ -660,6 +661,8 @@ const TikTokAdsDashboard = () => {
   // Meta/Google ad tables, where the thumbnail opens the creative).
   const [previewAd, setPreviewAd] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [campaignCount, setCampaignCount] = useState(0);
   const [activeCount, setActiveCount] = useState(0);
   const [tab, setTab] = useState('analytics');
@@ -1080,6 +1083,30 @@ const TikTokAdsDashboard = () => {
     const type = LEVEL_BY_VIEW[view];
     const mode = type === 'campaign' ? 'edit-campaign' : type === 'adgroup' ? 'edit-adgroup' : 'edit-ad';
     setEditWizard({ open: true, mode, context: row });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete || !selectedAccount) return;
+    setDeleting(true);
+    const level = LEVEL_BY_VIEW[view];
+    try {
+      await updateTiktokStatus({
+        advertiserId: selectedAccount.id,
+        level,
+        ids: [pendingDelete.id],
+        status: 'DELETED',
+      });
+      toast.success(`${level.charAt(0).toUpperCase() + level.slice(1)} deleted`);
+      setRows((prev) => prev.filter((r) => r.id !== pendingDelete.id));
+      setPendingDelete(null);
+      if (view === 'campaigns') loadCampaigns(selectedAccount);
+      else if (view === 'adgroups' && selectedCampaign) loadAdGroups(selectedCampaign);
+      else if (view === 'ads' && selectedAdGroup) loadAds(selectedAdGroup);
+    } catch (err) {
+      toast.error(err.response?.data?.error || `Failed to delete ${level}`);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const closeEditWizard = () => setEditWizard({ open: false, mode: 'create', context: null });
@@ -1533,7 +1560,7 @@ const TikTokAdsDashboard = () => {
                           setEditWizard({ open: true, mode: 'add-ad', context: selectedAdGroup });
                         }
                       }}
-                      className="flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-black transition-all hover:bg-gray-100 dark:bg-white dark:text-black shadow-xs"
+                      className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-100"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       {view === 'campaigns'
@@ -1824,7 +1851,16 @@ const TikTokAdsDashboard = () => {
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                   </button>
-                                  {view !== 'ads' && <ChevronRight size={16} className="text-gray-400" />}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPendingDelete(row);
+                                    }}
+                                    title="Delete"
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-red-500/40 hover:bg-red-50 hover:text-red-600 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
                                 </div>
                               </td>
                             )}
@@ -1847,6 +1883,98 @@ const TikTokAdsDashboard = () => {
           )}
         </>
       )}
+
+      {/* ── delete confirmation modal ── */}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {pendingDelete && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+                onClick={() => !deleting && setPendingDelete(null)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="relative w-full max-w-[440px] overflow-hidden rounded-[24px] border border-gray-200/80 bg-white/95 p-6 shadow-2xl backdrop-blur-xl sm:p-7 dark:border-white/10 dark:bg-[#18181b]/95"
+                >
+                  {/* Close icon button */}
+                  <button
+                    type="button"
+                    onClick={() => !deleting && setPendingDelete(null)}
+                    aria-label="Close dialog"
+                    disabled={deleting}
+                    className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+
+                  {/* Warning / Trash Icon */}
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 text-red-600 ring-1 ring-red-500/20 dark:bg-red-500/15 dark:text-red-400 dark:ring-red-500/30">
+                    <Trash2 className="h-6 w-6" />
+                  </div>
+
+                  {/* Title & description */}
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                    Delete this {view === 'campaigns' ? 'campaign' : view === 'adgroups' ? 'ad group' : 'ad'}?
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-[#AFAFAF]">
+                    Are you sure you want to delete{' '}
+                    <span className="font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2 dark:text-white dark:decoration-neutral-600">
+                      {pendingDelete.name}
+                    </span>
+                    ? It will be permanently removed from TikTok. This action cannot be undone.
+                  </p>
+
+                  {/* ID badge */}
+                  <div className="mt-3.5 mb-6 inline-flex items-center gap-1.5 rounded-lg border border-gray-200/80 bg-gray-50/80 px-2.5 py-1 text-xs font-mono text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-neutral-400">
+                    <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-gray-400 dark:text-neutral-500">
+                      ID
+                    </span>
+                    <span>{pendingDelete.id}</span>
+                  </div>
+
+                  {/* Actions footer */}
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(null)}
+                      disabled={deleting}
+                      className="h-10 flex-1 rounded-xl border border-gray-200 bg-gray-100/80 px-4 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-200/80 hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmDelete}
+                      disabled={deleting}
+                      className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-red-600 px-4 text-xs font-semibold text-white shadow-sm shadow-red-500/20 transition-all hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {deleting ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Deleting…</span>
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>Delete</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
       {/* ── create campaign wizard ── */}
       {showWizard && selectedAccount && (

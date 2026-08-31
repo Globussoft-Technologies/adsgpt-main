@@ -861,8 +861,9 @@ html:not(.dark) .lm-sidebar-surface .group:not(.active) .active_container:hover 
 }
 
 html:not(.dark) {
-  --sidebar-active-gradient: linear-gradient(135deg, #16C9DF 0%, #4899E6 48%, #6B72F8 100%);
-  --sidebar-active-shadow: 0 3px 10px rgba(77, 98, 222, 0.24), inset 0 1px 1px rgba(255, 255, 255, 0.32);
+  /* Warm ivory active state variables (used by profile button active state below). */
+  --sidebar-active-gradient: #F1ECE3;
+  --sidebar-active-shadow: 0 2px 8px rgba(184, 122, 24, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.90);
 }
 
 .dark {
@@ -870,77 +871,771 @@ html:not(.dark) {
   --sidebar-active-shadow: 0 3px 10px rgba(77, 98, 222, 0.30), inset 0 1px 1px rgba(255, 255, 255, 0.16);
 }
 
-html:not(.dark) .lm-sidebar-surface .group.active .active_container,
-html:not(.dark) .lm-sidebar-surface .group.active .active_container:hover,
-html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active,
-html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active:hover,
-.dark .lm-sidebar-surface .group.active .active_container,
-.dark .lm-sidebar-surface .group.active .active_container:hover,
-.dark .sidebar-profile-button.sidebar-profile-button-active,
-.dark .sidebar-profile-button.sidebar-profile-button-active:hover {
-  background: var(--sidebar-active-gradient) !important;
-  background-clip: padding-box;
-  box-shadow: var(--sidebar-active-shadow) !important;
+
+/* ── Sidebar navigation system ───────────────────────────────────────────────
+   The layout follows the compact/expanded navigation reference, while the
+   visual states use AdsGPT's existing workspace and cyan-violet theme tokens.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.sidebar-nav-label--expanded {
+  font-size: 17.25px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.01em;
 }
 
-/* Sidebar profile: keep a visible outer rim around the avatar and use a
-   restrained surface transition instead of generic hover motion. */
+.sidebar-nav-label--compact {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.sidebar-section-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.14em;
+}
+
+.sidebar-brand-title {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+}
+
+.sidebar-brand-subtitle {
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.sidebar-profile-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.sidebar-profile-role {
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+
+html:not(.dark) .lm-sidebar-surface {
+  --sidebar-nav-active-bg: linear-gradient(
+    100deg,
+    rgba(2, 168, 164, 0.11) 0%,
+    rgba(88, 103, 235, 0.10) 100%
+  );
+  --sidebar-nav-hover-bg: color-mix(in srgb, var(--ws-surface-hover) 76%, rgba(88, 103, 235, 0.05));
+  --sidebar-nav-accent: linear-gradient(180deg, #15dcff 0%, #5e66f5 100%);
+  color: var(--ws-text-primary);
+  font-family: 'Public Sans', sans-serif;
+  /* Subtle warm-white gradient so it's not a flat rectangle */
+  background: linear-gradient(
+    175deg,
+    #ffffff 0%,
+    #faf9f7 55%,
+    #f5f3f0 100%
+  ) !important;
+  /* Right-edge shadow: lifts the sidebar off the page content */
+  box-shadow:
+    4px 0 28px rgba(0, 0, 0, 0.07),
+    1px 0 0 rgba(0, 0, 0, 0.05);
+  /* Top accent highlight — thin indigo-cyan shimmer at the top edge */
+  border-top: 2px solid transparent;
+  background-clip: padding-box;
+  position: relative;
+}
+
+/* Top gradient accent bar on the sidebar */
+html:not(.dark) .lm-sidebar-surface::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #02a8a4 0%, #5867eb 50%, #8b5cf6 100%);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 1;
+}
+
+
+
+/* Override sidebar-inner's bg-sidebar so our lm-sidebar-surface gradient shows through */
+html:not(.dark) [data-sidebar="sidebar"] {
+  background: transparent !important;
+}
+
+/* ── Sidebar panel elevation — applied on the fixed outer container ──────── */
+/* Light mode: soft blur only — preserves the fading edge-divider line */
+html:not(.dark) [data-slot="sidebar-container"] {
+  box-shadow: 8px 0 36px rgba(0, 0, 0, 0.09) !important;
+}
+
+/* Dark mode: deep blur only */
+.dark [data-slot="sidebar-container"] {
+  box-shadow: 10px 0 44px rgba(0, 0, 0, 0.65) !important;
+}
+
+/* Top shimmer accent bar — light mode */
+html:not(.dark) .lm-sidebar-surface::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #02a8a4 0%, #5867eb 55%, #8b5cf6 100%);
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Top shimmer accent bar — dark mode */
+.dark .lm-sidebar-surface::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #15dcff 0%, #5e66f5 55%, #8b5cf6 100%);
+  opacity: 0.50;
+  pointer-events: none;
+  z-index: 10;
+}
+.lm-sidebar-surface .sidebar-nav-item {
+  cursor: pointer;
+  font-weight: 400;
+  will-change: transform;
+  transform: translateY(0px);
+  /* Premium cubic-bezier: fast-out for bg, snappy for color/opacity;
+     spring bezier for the elevation pop (slight overshoot = tactile feel) */
+  transition:
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 120ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 120ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Accent bar: starts scaled-out, grows in from center on active */
+.lm-sidebar-surface .nav-accent-bar {
+  transform-origin: center;
+  animation: nav-bar-reveal 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes nav-bar-reveal {
+  from {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* Keyboard focus uses the same restrained indigo employed by app controls. */
+html:not(.dark) .lm-sidebar-surface :is(a, button):focus-visible {
+  outline: 2px solid rgba(88, 103, 235, 0.72);
+  outline-offset: -2px;
+}
+
+.dark .lm-sidebar-surface :is(a, button):focus-visible {
+  outline: 2px solid rgba(107, 114, 248, 0.82);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='sidebar-gap'],
+  [data-slot='sidebar-container'],
+  .lm-sidebar-surface .sidebar-nav-item,
+  .lm-sidebar-surface a,
+  .lm-sidebar-surface button,
+  .lm-sidebar-surface .sidebar-profile-button,
+  [data-slot='tooltip-content'],
+  [data-slot='sheet-content'] {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
+
+/* ── Light Mode — inactive ────────────────────────────────────────────────── */
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--inactive {
+  color: #1F2937;
+  font-weight: 550;
+}
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--inactive:hover {
+  background: var(--sidebar-nav-hover-bg);
+  color: var(--ws-text-primary);
+}
+/* Muted icons for inactive — images (SVG) */
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--inactive img {
+  opacity: 1;
+}
+/* Muted icons for inactive — Lucide SVG */
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--inactive svg {
+  opacity: 1;
+}
+/* Slightly brighter on hover */
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--inactive:hover img,
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--inactive:hover svg {
+  opacity: 1;
+}
+
+/* ── Light Mode — active ─────────────────────────────────────────────────── */
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--active {
+  background: var(--sidebar-nav-active-bg);
+  color: var(--ws-text-primary);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(88, 103, 235, 0.09);
+}
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--active img,
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--active svg {
+  opacity: 1;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--active .sidebar-nav-label {
+  font-weight: 600;
+}
+
+/* Light Mode — AdsGPT cyan-to-violet accent bar */
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--active .nav-accent-bar {
+  background: var(--sidebar-nav-accent);
+}
+
+/* Expanded navigation uses the application's normal body typography and icon scale. */
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded {
+  height: 52px;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-label--expanded {
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item--inactive {
+  color: #1F2937;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item--inactive:hover {
+  background: var(--sidebar-nav-hover-bg);
+  color: var(--ws-text-primary);
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 18px rgba(88, 103, 235, 0.11),
+    0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item--active {
+  background: var(--sidebar-nav-active-bg);
+  color: var(--ws-text-primary);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded .sidebar-nav-icon {
+  width: 18px;
+  height: 18px;
+  color: #111827;
+  opacity: 1;
+  stroke-width: 1.7;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar {
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+}
+/* ── Dark Mode — inactive ─────────────────────────────────────────────────── */
+
+/* ── Dark Mode — sidebar panel elevation ─────────────────────────────────── */
+.dark .lm-sidebar-surface {
+  background: #0F0F0F !important;
+  position: relative;
+  overflow: visible;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-item--inactive {
+  color: #F4F4F5;
+  font-weight: 500;
+}
+.dark .lm-sidebar-surface .sidebar-nav-item--inactive:hover {
+  background-color: rgba(42, 42, 42, 0.50);
+  color: #AFAFAF;
+  transform: translateY(-3px);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.32),
+    0 2px 6px rgba(21, 220, 255, 0.07);
+}
+
+/* ── Dark Mode — active ───────────────────────────────────────────────────── */
+.dark .lm-sidebar-surface .sidebar-nav-item--active {
+  background-color: rgba(42, 42, 42, 0.60);
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+/* Dark Mode — blue/cyan accent bar (unchanged from existing DM design) */
+.dark .lm-sidebar-surface .sidebar-nav-item--active .nav-accent-bar {
+  background: linear-gradient(to bottom, #15DCFF, #5E66F5);
+}
+
+/* Dark Mode — high-contrast navigation labels and icons. */
+.dark .lm-sidebar-surface .sidebar-nav-label,
+.dark .lm-sidebar-surface .sidebar-nav-icon {
+  color: #F4F4F5;
+  opacity: 1;
+}
+
+.dark .lm-sidebar-surface img.sidebar-nav-icon {
+  filter: brightness(0) invert(1);
+  opacity: 1;
+}
+
+/* The compact BETA pill is wider than a count badge; keep it clear of the centered icon. */
+.dark .lm-sidebar-surface .sidebar-nav-badge--compact:has(.sidebar-badge--label) {
+  top: -3px;
+  right: -4px;
+}
+
+/* Dark Mode — keep navigation dimensions aligned with the Light Mode sidebar. */
+.dark .lm-sidebar-surface .sidebar-nav-item--expanded {
+  height: 52px;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-label--expanded {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-item--expanded .sidebar-nav-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.7;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar {
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-item--compact {
+  height: 56px;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 12px;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-label--compact {
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.7;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-item--compact .nav-accent-bar {
+  top: calc(50% - 12px);
+  bottom: auto;
+  height: 24px;
+  width: 3px;
+}
+
+/* Sidebar profile */
+.sidebar-profile-avatar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  line-height: 1 !important;
+}
+
 html:not(.dark) .sidebar-profile-button {
-  background: var(--ws-surface) !important;
-  border-color: var(--ws-border) !important;
-  box-shadow: var(--ws-shadow-sm) !important;
+  background-color: #E5E7EB !important;
+  color: #1F2937 !important;
+  border: 1px solid #D1D5DB !important;
   transition:
     background-color 160ms ease,
-    border-color 160ms ease,
     box-shadow 160ms ease !important;
 }
 
-html:not(.dark) .sidebar-profile-button:hover {
-  background: var(--ws-surface-header) !important;
-  border-color: var(--ws-border-strong) !important;
-  box-shadow: 0 4px 10px rgba(80, 70, 58, 0.10) !important;
-}
-
-html:not(.dark) .sidebar-profile-button:active {
-  background: var(--ws-surface-muted) !important;
-}
-
-html:not(.dark) .sidebar-profile-button:focus-visible {
-  outline: 2px solid rgba(88, 103, 235, 0.45);
-  outline-offset: 2px;
-}
-
-html:not(.dark) .sidebar-profile-avatar {
-  width: 28px !important;
-  height: 28px !important;
-  background: var(--ws-surface-muted) !important;
-  color: var(--ws-text-primary) !important;
-  transition: background-color 160ms ease;
-}
-
-html:not(.dark) .sidebar-profile-button:hover .sidebar-profile-avatar {
-  background: #E5DFD5 !important;
-}
-
-/* Keep the profile rim seamless when the shared sidebar active state is on. */
+/* Keep the profile active state consistent */
 html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active,
 html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active:hover {
-  border-color: transparent !important;
+  background-color: #D1D5DB !important;
+  color: #111827 !important;
 }
 
+html:not(.dark) .sidebar-profile-button .sidebar-profile-avatar,
 html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active .sidebar-profile-avatar {
-  background: rgba(255, 255, 255, 0.18) !important;
+  color: #1F2937 !important;
+}
+
+.dark .sidebar-profile-button.sidebar-profile-button-active,
+.dark .sidebar-profile-button.sidebar-profile-button-active:hover {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.dark .sidebar-profile-button.sidebar-profile-button-active .sidebar-profile-avatar {
+  background: rgba(255, 255, 255, 0.16) !important;
   color: #ffffff !important;
 }
 
-/* Ad Factory campaign state: mirror the Dark Mode status emphasis without
-   changing the card or adjacent action controls. */
-html:not(.dark) .adfactory-campaign-status {
-  border-color: rgba(107, 114, 248, 0.48) !important;
-  background: linear-gradient(135deg, rgba(21, 220, 255, 0.07), rgba(107, 114, 248, 0.10)) !important;
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item--active .sidebar-nav-icon {
+  color: var(--lm-accent-violet);
+}
+
+/* Ad Factory is an external SVG with a fixed fill, so color alone cannot
+   apply the active sidebar violet to it. */
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--active .sidebar-adfactory-icon {
+  filter: brightness(0) saturate(100%) invert(42%) sepia(78%) saturate(1055%) hue-rotate(202deg) brightness(95%) contrast(94%);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item--active .nav-accent-bar {
+  background: var(--sidebar-nav-accent);
+}
+
+/* Compact rail retains its labeled navigation but uses the app's type scale. */
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact {
+  height: 56px;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 12px;
+  color: #1F2937;
+  font-weight: 500;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-label--compact {
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item--inactive:hover {
+  background: var(--sidebar-nav-hover-bg);
+  color: var(--ws-text-primary);
+  transform: translateY(-3px);
   box-shadow:
-    0 0 12px rgba(107, 114, 248, 0.20),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+    0 6px 18px rgba(88, 103, 235, 0.14),
+    0 2px 5px rgba(0, 0, 0, 0.07);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item--active {
+  background: var(--sidebar-nav-active-bg);
+  color: var(--ws-text-primary);
+  font-weight: 600;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon {
+  width: 18px;
+  height: 18px;
+  color: #111827;
+  opacity: 1;
+  stroke-width: 1.7;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact .nav-accent-bar {
+  top: calc(50% - 12px);
+  bottom: auto;
+  height: 24px;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item--active .sidebar-nav-icon {
+  color: var(--lm-accent-violet);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item--active .nav-accent-bar {
+  background: var(--sidebar-nav-accent);
+}
+
+/* Stroke-based tab icons need a small optical-size adjustment to match the Ad Factory SVG mark. */
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded svg.sidebar-nav-icon,
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact svg.sidebar-nav-icon,
+.dark .lm-sidebar-surface .sidebar-nav-item--expanded svg.sidebar-nav-icon,
+.dark .lm-sidebar-surface .sidebar-nav-item--compact svg.sidebar-nav-icon {
+  width: 20px;
+  height: 20px;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-badge--numeric {
+  background: linear-gradient(135deg, #02a8a4 0%, #5867eb 100%);
+  box-shadow: 0 2px 6px rgba(88, 103, 235, 0.20);
+}
+
+.dark .lm-sidebar-surface .sidebar-badge--numeric {
+  background: linear-gradient(135deg, #02a8a4 0%, #5867eb 100%);
+  box-shadow: 0 2px 6px rgba(88, 103, 235, 0.28);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-badge--label {
+  border: 1px solid rgba(88, 103, 235, 0.13);
+  background: rgba(88, 103, 235, 0.09);
+  color: #4c58c7;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-section-label {
+  color: var(--ws-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-section-divider {
+  background: var(--ws-border);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-divider {
+  border-color: var(--ws-border);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-brand-title {
+  color: var(--ws-text-primary);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-brand-subtitle {
+  color: var(--ws-text-secondary);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-header-control {
+  color: var(--ws-text-muted);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-header-control:hover {
+  background: rgba(88, 103, 235, 0.08);
+  color: var(--lm-accent-violet);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-logo-shell {
+  box-shadow:
+    0 3px 10px rgba(36, 33, 29, 0.13),
+    0 0 0 1px rgba(88, 103, 235, 0.08);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-logo-shell--light-mark {
+  background: var(--ws-surface) !important;
+  box-shadow:
+    0 3px 10px rgba(36, 33, 29, 0.09),
+    0 0 0 1px rgba(88, 103, 235, 0.07) !important;
+}
+
+html:not(.dark) .lm-sidebar-surface :is(.sidebar-compact-logo-mark, .sidebar-expanded-logo-mark) {
+  filter: drop-shadow(0 2px 3px rgba(190, 132, 20, 0.16));
+}
+
+.dark .lm-sidebar-surface :is(.sidebar-compact-logo-mark, .sidebar-expanded-logo-mark) {
+  filter: drop-shadow(0 2px 4px rgba(255, 196, 68, 0.22));
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-secondary-action {
+  color: var(--ws-text-secondary);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-secondary-action:hover {
+  background: var(--sidebar-nav-hover-bg);
+  color: var(--ws-text-primary);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-profile-name {
+  color: var(--ws-text-primary);
+  font-size: 13px;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-profile-role {
+  color: var(--ws-text-muted);
+}
+
+.sidebar-edge-divider {
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.04) 40px,
+    rgba(0, 0, 0, 0.25) 90px,
+    rgba(0, 0, 0, 0.75) 150px,
+    rgba(0, 0, 0, 1) 200px,
+    rgba(0, 0, 0, 1) calc(100% - 200px),
+    rgba(0, 0, 0, 0.75) calc(100% - 150px),
+    rgba(0, 0, 0, 0.25) calc(100% - 90px),
+    rgba(0, 0, 0, 0.04) calc(100% - 40px),
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.04) 40px,
+    rgba(0, 0, 0, 0.25) 90px,
+    rgba(0, 0, 0, 0.75) 150px,
+    rgba(0, 0, 0, 1) 200px,
+    rgba(0, 0, 0, 1) calc(100% - 200px),
+    rgba(0, 0, 0, 0.75) calc(100% - 150px),
+    rgba(0, 0, 0, 0.25) calc(100% - 90px),
+    rgba(0, 0, 0, 0.04) calc(100% - 40px),
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+
+html:not(.dark) .lm-sidebar-surface .sidebar-edge-divider {
+  background: rgba(0, 0, 0, 0.14);
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.04) 40px,
+    rgba(0, 0, 0, 0.25) 90px,
+    rgba(0, 0, 0, 0.75) 150px,
+    rgba(0, 0, 0, 1) 200px,
+    rgba(0, 0, 0, 1) calc(100% - 200px),
+    rgba(0, 0, 0, 0.75) calc(100% - 150px),
+    rgba(0, 0, 0, 0.25) calc(100% - 90px),
+    rgba(0, 0, 0, 0.04) calc(100% - 40px),
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.04) 40px,
+    rgba(0, 0, 0, 0.25) 90px,
+    rgba(0, 0, 0, 0.75) 150px,
+    rgba(0, 0, 0, 1) 200px,
+    rgba(0, 0, 0, 1) calc(100% - 200px),
+    rgba(0, 0, 0, 0.75) calc(100% - 150px),
+    rgba(0, 0, 0, 0.25) calc(100% - 90px),
+    rgba(0, 0, 0, 0.04) calc(100% - 40px),
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+/* Quick Setup fields use a cool neutral ramp instead of the shared ivory
+   input treatment. Page and card surfaces keep their existing colors. */
+html:not(.dark) .adfactory-v2-surface {
+  --lm-surface-input-bg: #F5F7FA;
+  --lm-field-background: #F5F7FA;
+  --lm-field-border: #DCE3EB;
+  --lm-field-text: #586474;
+  --lm-field-placeholder: #8A95A5;
+  --lm-field-focus-border: rgba(88, 103, 235, 0.58);
+  --lm-field-focus-ring: rgba(88, 103, 235, 0.12);
+}
+
+html:not(.dark) .adfactory-v2-surface .adfactory-v2-tag-chip {
+  border-color: #DCE3EB !important;
+  background: #F0F3F7 !important;
+  color: #586474 !important;
+}
+
+.adfactory-btn-primary {
+  background: linear-gradient(135deg, #02A8A4 0%, #5867EB 100%) !important;
+  color: #ffffff !important;
+}
+
+.dark .adfactory-btn-primary {
+  background: linear-gradient(135deg, #15DCFF 0%, #5E66F5 100%) !important;
+  color: #ffffff !important;
+}
+
+/* Quick Setup / Ad Factory V2 Dropdown Popovers */
+.adfactory-v2-menu,
+[data-slot="select-content"].adfactory-v2-menu,
+[data-slot="popover-content"].adfactory-v2-menu {
+  background-color: #FFFFFF !important;
+  border: 1px solid #E5E7EB !important;
+  color: #111827 !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04) !important;
+}
+
+.adfactory-v2-menu-item,
+[data-slot="select-item"].adfactory-v2-menu-item {
+  color: #374151 !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+}
+
+.adfactory-v2-menu-item:hover,
+.adfactory-v2-menu-item:focus,
+.adfactory-v2-menu-item[data-highlighted],
+.adfactory-v2-menu-item[data-state="checked"],
+[data-slot="select-item"].adfactory-v2-menu-item:hover,
+[data-slot="select-item"].adfactory-v2-menu-item:focus,
+[data-slot="select-item"].adfactory-v2-menu-item[data-highlighted],
+[data-slot="select-item"].adfactory-v2-menu-item[data-state="checked"],
+.adfactory-v2-menu [cmdk-item][data-selected="true"],
+.adfactory-v2-menu [cmdk-item]:hover {
+  background-color: #F3F4F6 !important;
+  color: #111827 !important;
+}
+
+.dark .adfactory-v2-menu,
+.dark [data-slot="select-content"].adfactory-v2-menu,
+.dark [data-slot="popover-content"].adfactory-v2-menu {
+  background-color: #1C1C1C !important;
+  border: 1px solid #2A2A2A !important;
+  color: #F4F4F5 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55) !important;
+}
+
+.dark .adfactory-v2-menu-item,
+.dark [data-slot="select-item"].adfactory-v2-menu-item {
+  color: #E4E4E7 !important;
+}
+
+.dark .adfactory-v2-menu-item:hover,
+.dark .adfactory-v2-menu-item:focus,
+.dark .adfactory-v2-menu-item[data-highlighted],
+.dark .adfactory-v2-menu-item[data-state="checked"],
+.dark [data-slot="select-item"].adfactory-v2-menu-item:hover,
+.dark [data-slot="select-item"].adfactory-v2-menu-item:focus,
+.dark [data-slot="select-item"].adfactory-v2-menu-item[data-highlighted],
+.dark [data-slot="select-item"].adfactory-v2-menu-item[data-state="checked"],
+.dark .adfactory-v2-menu [cmdk-item][data-selected="true"],
+.dark .adfactory-v2-menu [cmdk-item]:hover {
+  background-color: #262626 !important;
+  color: #F4F4F5 !important;
+}
+
+/* Quick Setup uses the same restrained cyan-to-violet atmosphere as the rest
+   of AdsGPT. It is local to the v2 canvas, so Full Control and all other pages
+   keep their current presentation. */
+.adfactory-v2-surface::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: '';
+  background:
+    radial-gradient(58rem 34rem at 52% 108%, rgba(21, 220, 255, 0.15), transparent 64%),
+    radial-gradient(34rem 24rem at 94% 6%, rgba(94, 102, 245, 0.10), transparent 68%);
+}
+
+.dark .adfactory-v2-surface::before {
+  background:
+    radial-gradient(56rem 34rem at 52% 108%, rgba(21, 220, 255, 0.16), transparent 64%),
+    radial-gradient(34rem 24rem at 94% 6%, rgba(94, 102, 245, 0.13), transparent 68%);
 }
 
 html:not(.dark) .adfactory-campaign-status:hover {
@@ -964,6 +1659,11 @@ html:not(.dark) .adfactory-campaign-status:hover {
   html:not(.dark) .sidebar-profile-avatar {
     width: 40px !important;
     height: 40px !important;
+  }
+
+  html:not(.dark) .sidebar-profile-button--compact .sidebar-profile-avatar {
+    width: 100% !important;
+    height: 100% !important;
   }
 }
 
@@ -1343,7 +2043,9 @@ html:not(.dark) [data-slot="select-trigger"].adstudio-media-toolbar-select:hover
 /* My Space media toolbar: source, date range, and type filters intentionally
    share one light control surface even though they use different primitives. */
 html:not(.dark) .adstudio-media-toolbar-control:not(.adstudio-media-toolbar-control-active) {
-  background: var(--ws-surface-control) !important;
+  /* Match the cream-white Light Mode surface used by the AI Assistant's
+     History and New Chat pills, without changing shared controls or Dark Mode. */
+  background: var(--ws-surface) !important;
   border-color: var(--ws-border) !important;
   color: var(--ws-text-primary) !important;
   box-shadow: var(--ws-shadow-sm) !important;
@@ -3306,4 +4008,156 @@ html:not(.dark) .advideo-ugc-setup-card {
     0 8px 16px rgba(80, 70, 58, 0.05),
     0 2px 6px rgba(80, 70, 58, 0.03) !important;
 }
+
+/* ── Ad Factory V2 Primary Button & Controls ── */
+.adfactory-btn-primary {
+  background: linear-gradient(135deg, #02A8A4 0%, #5867EB 100%) !important;
+  color: #ffffff !important;
+}
+
+.dark .adfactory-btn-primary {
+  background: linear-gradient(135deg, #15DCFF 0%, #5E66F5 100%) !important;
+  color: #ffffff !important;
+}
+
+.adfactory-btn-primary:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+}
+
+/* ── Ad Factory V2 DatePicker & Calendar Popover ── */
+.adsgpt-cal-pop .rdrCalendarWrapper {
+  background: transparent !important;
+  font-size: 12px !important;
+}
+
+.adsgpt-cal-pop .rdrDateDisplayWrapper {
+  display: none !important;
+}
+
+.adsgpt-cal-pop .rdrMonthAndYearWrapper {
+  height: 42px !important;
+  padding-top: 4px !important;
+  background: transparent !important;
+}
+
+/* Light Mode Calendar */
+html:not(.dark) .adsgpt-cal-pop .rdrMonthAndYearPickers select {
+  color: #111827 !important;
+  background: #F3F4F6 !important;
+  border: 1px solid #E5E7EB !important;
+  border-radius: 6px !important;
+  padding: 2px 6px !important;
+  font-weight: 600 !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrNextPrevButton {
+  background: #F3F4F6 !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrNextPrevButton:hover {
+  background: #E5E7EB !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrPprevButton i {
+  border-color: transparent #374151 transparent transparent !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrNextButton i {
+  border-color: transparent transparent transparent #374151 !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrWeekDay {
+  color: #6B7280 !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrDayNumber span {
+  color: #111827 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrDayPassive .rdrDayNumber span {
+  color: #D1D5DB !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrDayDisabled {
+  background: transparent !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrDayDisabled .rdrDayNumber span {
+  color: #D1D5DB !important;
+  opacity: 0.6 !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrDayToday .rdrDayNumber span::after {
+  background: #5867EB !important;
+}
+
+html:not(.dark) .adsgpt-cal-pop .rdrSelected,
+html:not(.dark) .adsgpt-cal-pop .rdrDayStartPreview,
+html:not(.dark) .adsgpt-cal-pop .rdrDayEndPreview {
+  color: #5867EB !important;
+}
+
+/* Dark Mode Calendar */
+.dark .adsgpt-cal-pop .rdrMonthAndYearPickers select {
+  color: #FFFFFF !important;
+  background: #262626 !important;
+  border: 1px solid #333333 !important;
+  border-radius: 6px !important;
+  padding: 2px 6px !important;
+  font-weight: 600 !important;
+}
+
+.dark .adsgpt-cal-pop .rdrNextPrevButton {
+  background: #262626 !important;
+}
+
+.dark .adsgpt-cal-pop .rdrNextPrevButton:hover {
+  background: #333333 !important;
+}
+
+.dark .adsgpt-cal-pop .rdrPprevButton i {
+  border-color: transparent #ECEFF3 transparent transparent !important;
+}
+
+.dark .adsgpt-cal-pop .rdrNextButton i {
+  border-color: transparent transparent transparent #ECEFF3 !important;
+}
+
+.dark .adsgpt-cal-pop .rdrWeekDay {
+  color: #AFAFAF !important;
+  font-size: 11px !important;
+}
+
+.dark .adsgpt-cal-pop .rdrDayNumber span {
+  color: #E3E3E3 !important;
+  font-size: 12px !important;
+}
+
+.dark .adsgpt-cal-pop .rdrDayPassive .rdrDayNumber span {
+  color: #555555 !important;
+}
+
+.dark .adsgpt-cal-pop .rdrDayDisabled {
+  background: transparent !important;
+}
+
+.dark .adsgpt-cal-pop .rdrDayDisabled .rdrDayNumber span {
+  color: #444444 !important;
+}
+
+.dark .adsgpt-cal-pop .rdrDayToday .rdrDayNumber span::after {
+  background: #15DCFF !important;
+}
+
+.dark .adsgpt-cal-pop .rdrSelected,
+.dark .adsgpt-cal-pop .rdrDayStartPreview,
+.dark .adsgpt-cal-pop .rdrDayEndPreview {
+  color: #15DCFF !important;
+}
+
 

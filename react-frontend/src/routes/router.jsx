@@ -28,6 +28,7 @@ import WorkspaceProfilePage from '@/pages/Workspace/WorkspaceProfilePage';
 import MySpacePage from '@/pages/MySpace/MySpacePage';
 import WorkspaceFeatureRoute from '@/components/workspace/WorkspaceFeatureRoute';
 import RunBackLog from '@/utils/RunBackLog';
+import RouteErrorBoundary from '@/components/common/RouteErrorBoundary';
 import { IS_AI_ASSISTANT_ENABLED, IS_LANDING_ANALYZER_ENABLED } from '@/utils/featureFlags';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 const REDIRECT_TO_LOGOUT = import.meta.env.VITE_AMEMBER_URL;
@@ -45,6 +46,7 @@ const router = createBrowserRouter([
         </AuthWrapper>
       </RunBackLog>
     ),
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         index: true,

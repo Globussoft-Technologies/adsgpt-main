@@ -176,16 +176,16 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
 
   // Credit calculations
   const creativeCreditsLeft =
-    userData?.featureObject['Ad Creative'] - credits?.ChatCountAdsCreative > 0
-      ? userData?.featureObject['Ad Creative'] - credits?.ChatCountAdsCreative
+    (userData?.featureObject?.['Ad Creative'] ?? 0) - (credits?.ChatCountAdsCreative ?? 0) > 0
+      ? (userData?.featureObject?.['Ad Creative'] ?? 0) - (credits?.ChatCountAdsCreative ?? 0)
       : 0;
   const textCreditsLeft =
-    userData?.featureObject['Ad copy'] - credits?.chatCountAdsCopy > 0
-      ? userData?.featureObject['Ad copy'] - credits?.chatCountAdsCopy
+    (userData?.featureObject?.['Ad copy'] ?? 0) - (credits?.chatCountAdsCopy ?? 0) > 0
+      ? (userData?.featureObject?.['Ad copy'] ?? 0) - (credits?.chatCountAdsCopy ?? 0)
       : 0;
   const videoCreditsLeft =
-    userData?.featureObject['Ad Creative Video'] - credits?.ChatCountAdsVideo > 0
-      ? userData?.featureObject['Ad Creative Video'] - credits?.ChatCountAdsVideo
+    (userData?.featureObject?.['Ad Creative Video'] ?? 0) - (credits?.ChatCountAdsVideo ?? 0) > 0
+      ? (userData?.featureObject?.['Ad Creative Video'] ?? 0) - (credits?.ChatCountAdsVideo ?? 0)
       : 0;
 
   const initialValues = {

@@ -1,4 +1,6 @@
 import React from 'react';
+import { motion } from 'framer-motion';
+import { Zap, SlidersHorizontal } from 'lucide-react';
 
 // ----------------------------------------------------------------------------
 // ModeSwitch — Quick setup ⇄ Full control.
@@ -24,8 +26,8 @@ export const UI_MODE = Object.freeze({ QUICK: 'quick', FULL: 'full' });
 // control, a permanently supported mode — that they are on the deprecated
 // thing. These labels say what each mode IS.
 const OPTIONS = [
-  { value: UI_MODE.QUICK, label: 'Quick setup' },
-  { value: UI_MODE.FULL, label: 'Full control' },
+  { value: UI_MODE.QUICK, label: 'Quick setup', Icon: Zap },
+  { value: UI_MODE.FULL, label: 'Full control', Icon: SlidersHorizontal },
 ];
 
 export default function ModeSwitch({ mode, onChange, disabled = false, busy = false }) {
@@ -35,10 +37,11 @@ export default function ModeSwitch({ mode, onChange, disabled = false, busy = fa
     <div
       role="group"
       aria-label="Setup mode"
-      className="inline-flex gap-1 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#252525] p-1"
+      className="relative flex items-center gap-0 rounded-full border border-black/10 bg-white/80 p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)] backdrop-blur-md dark:border-transparent dark:bg-[#0D0D0D]"
     >
       {OPTIONS.map((opt) => {
         const active = current === opt.value;
+        const Icon = opt.Icon;
         return (
           <button
             key={opt.value}
@@ -46,17 +49,30 @@ export default function ModeSwitch({ mode, onChange, disabled = false, busy = fa
             aria-pressed={active}
             disabled={disabled || busy || active}
             onClick={() => onChange?.(opt.value)}
-            className={`rounded-lg px-3.5 py-1.5 text-[12px] font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed ${active
-                ? 'bg-linear-to-br from-[#15DCFF]/15 to-[#6b72f8]/15'
-                : 'text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-300 disabled:opacity-45'
-              }`}
+            className={`2xl:text-13 relative flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 2xl:px-4.5 2xl:py-2 disabled:cursor-not-allowed ${
+              active
+                ? 'font-bold text-zinc-900 dark:text-white'
+                : 'text-zinc-600 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:text-white disabled:opacity-45'
+            }`}
           >
-            {active ? (
-              <span className="bg-gradient-to-t from-[#0c9fbd] to-[#5057d6] bg-clip-text text-transparent dark:from-[#15DCFF] dark:to-[#6b72f8]">
-                {opt.label}
-              </span>
-            ) : (
-              opt.label
+            <div className="flex items-center gap-1.5 2xl:gap-2">
+              {Icon && (
+                <Icon
+                  className={`h-3.5 w-3.5 2xl:h-4.5 2xl:w-4.5 ${
+                    active
+                      ? 'text-zinc-900 dark:text-white'
+                      : 'text-zinc-500 dark:text-[#AFAFAF]'
+                  }`}
+                />
+              )}
+              <span>{opt.label}</span>
+            </div>
+            {active && (
+              <motion.div
+                layoutId="adFactoryModeSwitchTabBg"
+                className="absolute inset-0 -z-10 rounded-full border border-black/5 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:border-none dark:bg-gradient-to-br dark:from-[#3C3C3C] dark:to-[#3C3C3C] dark:shadow-none"
+                transition={{ type: 'spring', duration: 0.4 }}
+              />
             )}
           </button>
         );

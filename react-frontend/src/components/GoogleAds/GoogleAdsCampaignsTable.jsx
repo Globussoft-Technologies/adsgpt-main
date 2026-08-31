@@ -32,7 +32,6 @@ import {
   removeAssetFromAssetGroup,
 } from '@/apis/googleAds/googleAdsApi';
 import { globalToast } from '@/utils/globalToast';
-import { GA4Events } from '@/utils/ga4';
 import { Spinner, EmptyState } from '@/components/MetaAds/MetaAdsAtoms';
 import {
   adCopyText,
@@ -388,11 +387,6 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
     try {
       await updateGoogleAdStatus({ level: 'campaign', id, adAccountId, status: next });
       setStatuses((p) => ({ ...p, [id]: next }));
-      if (next === 'ENABLED') {
-        GA4Events.adFactoryCampaignStarted(['google'], { source: 'ads_manager', campaignId: id });
-      } else {
-        GA4Events.adFactoryCampaignStopped(['google'], { source: 'ads_manager', campaignId: id });
-      }
       // Don't guess primaryStatus here — Google can take a moment to settle
       // the real derived status after a toggle. Clear any stale override
       // and let the refetch below supply the truth.
@@ -440,10 +434,10 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
           </thead>
           <tbody>
             {loading && (
-              <tr className="google-ads-table-static-row"><td colSpan={8} className="py-14"><Spinner /></td></tr>
+              <tr><td colSpan={8} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr className="google-ads-table-static-row"><td colSpan={8} className="py-14"><EmptyState message={searchActive ? "No campaigns match your search" : "No campaigns found for this account"} /></td></tr>
+              <tr><td colSpan={8} className="py-14"><EmptyState message={searchActive ? "No campaigns match your search" : "No campaigns found for this account"} /></td></tr>
             )}
             {!loading && sorted.map((c, idx) => {
               const id        = c.campaignId || c.id;

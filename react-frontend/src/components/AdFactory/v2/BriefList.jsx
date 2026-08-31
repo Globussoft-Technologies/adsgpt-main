@@ -22,7 +22,7 @@ import { CARD, FAINT, SECTION } from './_tokens';
 // Status is a word first and a colour second. The neutral chip is the default
 // so that the two states that actually need attention — live, and anything
 // wrong — are the only coloured things in a grid of cards.
-const NEUTRAL = 'bg-[#F3F4F6] text-[#6B7280] dark:bg-[#22272F] dark:text-[#AFB6C0]';
+const NEUTRAL = 'bg-[var(--ws-surface-hover)] text-[var(--ws-text-secondary)] dark:bg-[#242424] dark:text-[#AFAFAF]';
 const STATUS = {
   live: { label: 'Live', cls: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400' },
   paused: { label: 'Paused', cls: 'bg-[#F59E0B]/12 text-[#B45309] dark:text-[#E8A33D]' },
@@ -30,7 +30,7 @@ const STATUS = {
     label: 'Ads ready',
     // Amber on light, cyan on dark — the same pair PILL_ON wears. It was still
     // on the old teal, which is the accent this surface moved off.
-    cls: 'bg-[#F7E8CD] text-[#8A4E0D] dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]',
+    cls: 'bg-[#5867EB]/10 text-[#4654D4] dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]',
   },
   draft: { label: 'Draft', cls: NEUTRAL },
   needs_input: { label: 'Needs input', cls: 'bg-[#F59E0B]/12 text-[#B45309] dark:text-[#E8A33D]' },
@@ -96,7 +96,7 @@ export default function BriefList({ briefs = [], loading = false, onOpen, onDele
               {/* The card is the button. A row of small targets inside a
                   clickable row makes it ambiguous what opens what. */}
               <div
-                className={`group relative flex h-full flex-col gap-2.5 p-4 transition-colors ${CARD} hover:border-[#D1D5DB] dark:hover:border-[#3D4650]`}
+                className={`group relative flex h-full flex-col gap-2.5 p-4 transition-colors ${CARD} hover:border-[var(--ws-border-strong)] dark:hover:border-[#3A3A3A]`}
               >
                 <button
                   type="button"
@@ -108,14 +108,14 @@ export default function BriefList({ briefs = [], loading = false, onOpen, onDele
                       <img
                         src={b.brand.logoUrls[0]}
                         alt=""
-                        className="size-7 shrink-0 rounded-md border border-[#E5E7EB] bg-white object-contain dark:border-[#2E353E] dark:bg-[#1E232A]"
+                        className="size-7 shrink-0 rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface)] object-contain dark:border-[#2A2A2A] dark:bg-[#202020]"
                       />
                     ) : (
-                      <span className="grid size-7 shrink-0 place-items-center rounded-md border border-[#E5E7EB] bg-[#F9FAFB] text-13 font-semibold text-[#6B7280] dark:border-[#2E353E] dark:bg-[#1E232A] dark:text-[#AFB6C0]">
+                      <span className="grid size-7 shrink-0 place-items-center rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface-control)] text-13 font-semibold text-[var(--ws-text-secondary)] dark:border-[#2A2A2A] dark:bg-[#202020] dark:text-[#AFAFAF]">
                         {label.charAt(0).toUpperCase()}
                       </span>
                     )}
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium tracking-[-0.006em] text-[#111827] dark:text-[#ECEFF3]">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium tracking-[-0.006em] text-[var(--ws-text-primary)] dark:text-[#F4F4F5]">
                       {label}
                     </span>
                   </span>

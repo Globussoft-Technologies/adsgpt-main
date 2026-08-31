@@ -190,6 +190,7 @@ export default function CadencePills({
             disabled={disabled}
             onChange={(value) => set({ startDate: value || null })}
             placeholder="today"
+            align="end"
           />
           {startDate && (
             <button
@@ -214,6 +215,7 @@ export default function CadencePills({
             onChange={(value) => set({ endDate: value || null })}
             min={startDate ? String(startDate).slice(0, 10) : undefined}
             placeholder="no end"
+            align="start"
           />
           {endDate && (
             <button
@@ -312,70 +314,34 @@ export default function CadencePills({
   );
 }
 
-function DatePillField({ value, onChange, min, disabled, placeholder }) {
+function DatePillField({ value, onChange, min, disabled, placeholder, align = 'center' }) {
   const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
   const dateObj = parseInputDate(value);
   const minDate = parseInputDate(min);
   const display = dateObj ? format(dateObj, 'd MMM yyyy') : placeholder;
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const handler = (event) => {
-      if (wrapRef.current && !wrapRef.current.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const handler = (event) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open]);
-
   return (
-    <span ref={wrapRef} className="relative inline-flex items-center">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((value) => !value)}
-        className={`inline-flex items-center gap-1.5 bg-transparent outline-none disabled:opacity-60 ${
-          dateObj ? VALUE : FAINT
-        }`}
-      >
-        <span>{display}</span>
-        <CalendarDays className="h-3.5 w-3.5 text-[#9CA3AF] dark:text-[#8B939E]" />
-      </button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className={`inline-flex items-center gap-1.5 bg-transparent outline-none disabled:opacity-60 cursor-pointer ${
+            dateObj ? VALUE : FAINT
+          }`}
+        >
+          <span>{display}</span>
+          <CalendarDays className="h-3.5 w-3.5 text-[#9CA3AF] dark:text-[#8B939E]" />
+        </button>
+      </PopoverTrigger>
 
-      {open && (
-        <span className="adsgpt-cal-pop absolute top-full left-0 z-10000 mt-2 overflow-hidden rounded-lg border border-black/10 bg-[#eef1f3] shadow-xl dark:border-white/10 dark:bg-[#1a1a1a] dark:shadow-2xl">
-          <style>{`
-            .adsgpt-cal-pop .rdrCalendarWrapper { background: #1a1a1a; color: #fff; font-size: 11px; }
-            .adsgpt-cal-pop .rdrDateDisplayWrapper { display: none; }
-            .adsgpt-cal-pop .rdrMonthAndYearWrapper { background: #1a1a1a; height: 44px; padding-top: 6px; }
-            .adsgpt-cal-pop .rdrMonthAndYearPickers select { color: #fff; background: #0D0D0D; border-radius: 6px; padding: 2px 6px; }
-            .adsgpt-cal-pop .rdrNextPrevButton { background: #2a2a2a; }
-            .adsgpt-cal-pop .rdrNextPrevButton:hover { background: #3a3a3a; }
-            .adsgpt-cal-pop .rdrPprevButton i { border-color: transparent #fff transparent transparent; }
-            .adsgpt-cal-pop .rdrNextButton i { border-color: transparent transparent transparent #fff; }
-            .adsgpt-cal-pop .rdrMonth { padding: 0 0.6em 0.6em; }
-            .adsgpt-cal-pop .rdrWeekDay { color: #AFAFAF; font-size: 11px; }
-            .adsgpt-cal-pop .rdrDayNumber span { color: #E3E3E3; font-size: 12px; }
-            .adsgpt-cal-pop .rdrDayPassive .rdrDayNumber span { color: #555; }
-            .adsgpt-cal-pop .rdrDayDisabled { background: transparent; }
-            .adsgpt-cal-pop .rdrDayDisabled .rdrDayNumber span { color: #444; }
-            .adsgpt-cal-pop .rdrDayToday .rdrDayNumber span::after { background: #15DCFF; }
-            .adsgpt-cal-pop .rdrDayHovered .rdrDayNumber span { color: #fff; }
-            .adsgpt-cal-pop .rdrSelected,
-            .adsgpt-cal-pop .rdrDayStartPreview,
-            .adsgpt-cal-pop .rdrDayEndPreview { color: #15DCFF !important; }
-          `}</style>
+      <PopoverContent
+        align={align}
+        sideOffset={6}
+        collisionPadding={20}
+        className="w-auto p-0 border border-[#E5E7EB] bg-white rounded-xl shadow-2xl dark:border-[#2A2A2A] dark:bg-[#1A1A1A] z-[99999] overflow-hidden"
+      >
+        <div className="adsgpt-cal-pop p-1">
           <Calendar
             date={dateObj || minDate || new Date()}
             onChange={(date) => {
@@ -383,11 +349,11 @@ function DatePillField({ value, onChange, min, disabled, placeholder }) {
               setOpen(false);
             }}
             minDate={minDate || undefined}
-            color="#15DCFF"
+            color="#5867EB"
           />
-        </span>
-      )}
-    </span>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -500,7 +466,7 @@ function TimezonePicker({ value, onChange, disabled }) {
                     {offsetLabel(zone)}
                   </span>
                   {zone === value && (
-                    <Check className="h-3.5 w-3.5 shrink-0 text-[#C17A1C] dark:text-[#15DCFF]" />
+                    <Check className="h-3.5 w-3.5 shrink-0 text-[#5867EB] dark:text-[#15DCFF]" />
                   )}
                 </CommandItem>
               ))}

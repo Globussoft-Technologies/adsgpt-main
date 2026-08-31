@@ -641,6 +641,13 @@ const SPECIAL_INDUSTRIES = [
 
 const formatFriendlyError = (raw) => {
   if (!raw || typeof raw !== 'string') return raw || 'Failed to create';
+  const rawLower = raw.toLowerCase();
+  if (rawLower.includes('suspended') || rawLower.includes('account suspension')) {
+    return 'Your TikTok Ad Account is currently suspended by TikTok. Please check TikTok Ads Manager to appeal the suspension or switch to an active ad account.';
+  }
+  if (rawLower.includes('lead generation agreement') || rawLower.includes('agreement has not')) {
+    return 'TikTok Lead Generation Terms of Service has not been accepted yet. Please log into TikTok Ads Manager for this ad account and accept the Lead Generation agreement (under Assets > Instant Pages / Forms or when creating a Lead Gen campaign), then retry publishing.';
+  }
   if (raw.includes('special_industries') && raw.includes('POLITICS')) {
     return "TikTok does not support 'Politics' under Special Industries. Only Housing, Employment, and Credit are supported.";
   }

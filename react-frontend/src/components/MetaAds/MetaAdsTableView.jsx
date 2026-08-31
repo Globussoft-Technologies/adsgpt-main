@@ -729,7 +729,7 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
                 type="button"
                 onClick={onNewCampaign}
                 disabled={!adAccountId || atLimit}
-                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#59D2EA] to-[#7C6BEA] px-3 py-1.5 text-[11px] font-semibold text-[#17212B] ring-1 ring-black/8 transition-all hover:brightness-[0.97] disabled:cursor-not-allowed disabled:opacity-50 dark:from-[#159BB8] dark:to-[#6654D2] dark:text-white dark:ring-white/15 dark:hover:brightness-110 2xl:text-xs"
+                className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white shadow-xs transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-gray-100 2xl:text-xs"
               >
                 <Plus className="h-3 w-3" />
                 New Campaign
@@ -948,53 +948,95 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
       </div>
 
       {/* delete confirmation modal */}
-      <AnimatePresence>
-        {pendingDelete && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            onClick={() => !deleting && setPendingDelete(null)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 8 }}
-              transition={{ duration: 0.18 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl workspace-card p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
-            >
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
-                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
-              </div>
-              <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Delete this campaign?</h2>
-              <p className="mb-2 text-xs text-gray-500 dark:text-[#BEBEBE]">
-                <span className="font-semibold text-gray-900 dark:text-white">{pendingDelete.name}</span> will be permanently
-                removed from Meta along with its ad sets and ads. This cannot be undone.
-              </p>
-              <p className="mb-6 font-mono text-[11px] text-gray-400 dark:text-white/40">ID: {pendingDelete.id}</p>
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  onClick={() => setPendingDelete(null)}
-                  disabled={deleting}
-                  className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-medium text-gray-900 transition-all hover:bg-gray-200 dark:border-white/8 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 disabled:opacity-50"
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {pendingDelete && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+                onClick={() => !deleting && setPendingDelete(null)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="relative w-full max-w-[440px] overflow-hidden rounded-[24px] border border-gray-200/80 bg-white/95 p-6 shadow-2xl backdrop-blur-xl sm:p-7 dark:border-white/10 dark:bg-[#18181b]/95"
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmDelete}
-                  disabled={deleting}
-                  className="flex items-center gap-1.5 rounded-xl bg-red-500/80 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-red-500 disabled:opacity-50"
-                >
-                  {deleting && <Loader2 className="h-3 w-3 animate-spin" />}
-                  {deleting ? 'Deleting…' : 'Delete'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+                  {/* Close icon button */}
+                  <button
+                    type="button"
+                    onClick={() => !deleting && setPendingDelete(null)}
+                    aria-label="Close dialog"
+                    disabled={deleting}
+                    className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+
+                  {/* Warning / Trash Icon */}
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 text-red-600 ring-1 ring-red-500/20 dark:bg-red-500/15 dark:text-red-400 dark:ring-red-500/30">
+                    <Trash2 className="h-6 w-6" />
+                  </div>
+
+                  {/* Title & description */}
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Delete this campaign?</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-[#AFAFAF]">
+                    Are you sure you want to delete{' '}
+                    <span className="font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2 dark:text-white dark:decoration-neutral-600">
+                      {pendingDelete.name}
+                    </span>
+                    ? It will be permanently removed from Meta along with its ad sets and ads. This cannot be undone.
+                  </p>
+
+                  {/* Campaign ID badge */}
+                  <div className="mt-3.5 mb-6 inline-flex items-center gap-1.5 rounded-lg border border-gray-200/80 bg-gray-50/80 px-2.5 py-1 text-xs font-mono text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-neutral-400">
+                    <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-gray-400 dark:text-neutral-500">
+                      ID
+                    </span>
+                    <span>{pendingDelete.id}</span>
+                  </div>
+
+                  {/* Actions footer */}
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(null)}
+                      disabled={deleting}
+                      className="h-10 flex-1 rounded-xl border border-gray-200 bg-gray-100/80 px-4 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-200/80 hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmDelete}
+                      disabled={deleting}
+                      className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-red-600 px-4 text-xs font-semibold text-white shadow-sm shadow-red-500/20 transition-all hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {deleting ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Deleting…</span>
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>Delete Campaign</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
+
 
       <MetricsPicker
         open={metrics.pickerOpen}

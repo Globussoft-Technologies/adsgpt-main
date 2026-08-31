@@ -169,7 +169,7 @@ export default function RunGallery({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="flex h-[90vh] w-[96%] max-w-6xl! scale-100! flex-col overflow-hidden rounded-xl border-[#DED2BD] bg-[#F3EEE6] p-0 text-[#2C241B] dark:border-[#2E353E] dark:bg-[#0f0f0f] dark:text-[#ECEFF3]"
+        className="flex h-[90vh] w-[96%] max-w-6xl! scale-100! flex-col overflow-hidden rounded-xl border-[var(--ws-border)] bg-[var(--ws-bg)] p-0 text-[var(--ws-text-primary)] dark:border-[#2A2A2A] dark:bg-[#0f0f0f] dark:text-[#F4F4F5]"
       >
         {/* ── Header ── */}
         <div
@@ -186,7 +186,7 @@ export default function RunGallery({
               {pendingTotal > 0 && (
                 <>
                   {' · '}
-                  <span className="inline-flex items-center gap-1.5 font-medium text-[#8A4E0D] dark:text-[#15DCFF]">
+                  <span className="inline-flex items-center gap-1.5 font-medium text-[#4654D4] dark:text-[#15DCFF]">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     <span className={NUM}>{pendingTotal}</span> still generating
                   </span>
@@ -269,7 +269,7 @@ export default function RunGallery({
 
           {/* ── Where they go ── */}
           <aside
-            className={`flex shrink-0 flex-col border-t ${RULE_BORDER} bg-[#FFFDF8]/45 lg:min-h-0 lg:w-90 lg:border-t-0 lg:border-l lg:overflow-y-auto dark:bg-[#14181D]/40`}
+            className={`flex shrink-0 flex-col border-t ${RULE_BORDER} bg-[var(--ws-surface)]/70 lg:min-h-0 lg:w-90 lg:border-t-0 lg:border-l lg:overflow-y-auto dark:bg-[#171717]/70`}
           >
             <div className="flex flex-col gap-4 px-5 py-4">
               {publishResult ? (
@@ -369,7 +369,7 @@ export default function RunGallery({
                 type="button"
                 onClick={() => setPreviewing(null)}
                 aria-label="Close preview"
-                className="absolute -top-2 -right-2 rounded-full bg-[#211A12] p-1.5 text-white shadow-lg dark:bg-[#ECEFF3] dark:text-[#0A0A0A]"
+                className="absolute -top-2 -right-2 rounded-full bg-[#5867EB] p-1.5 text-white shadow-lg dark:bg-[#15DCFF] dark:text-[#062024]"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -393,7 +393,7 @@ function Tile({ pair, ratio, callToAction, selected, onToggle, onPreview }) {
   return (
     <article
       className={`group relative flex flex-col overflow-hidden ${CARD} ${
-        selected ? 'ring-2 ring-[#C17A1C] dark:ring-[#15DCFF]' : ''
+        selected ? 'ring-2 ring-[#5867EB] dark:ring-[#15DCFF]' : ''
       }`}
     >
       {/* The whole image is the checkbox. On a grid whose only job is picking,
@@ -403,7 +403,7 @@ function Tile({ pair, ratio, callToAction, selected, onToggle, onPreview }) {
         onClick={onToggle}
         aria-pressed={selected}
         aria-label={selected ? 'Deselect this ad' : 'Select this ad'}
-        className="relative block w-full bg-[#F7F1E8] dark:bg-[#22272F]"
+        className="relative block w-full bg-[var(--ws-surface-hover)] dark:bg-[#242424]"
         style={{ aspectRatio: aspectOf(ratio) }}
       >
         {broken ? (
@@ -473,7 +473,7 @@ function SkeletonTile({ ratio }) {
   return (
     <article className={`flex flex-col overflow-hidden ${CARD}`}>
       <div
-        className="relative grid animate-pulse place-items-center bg-[#F7F1E8] dark:bg-[#191E24]"
+        className="relative grid animate-pulse place-items-center bg-[var(--ws-surface-hover)] dark:bg-[#202020]"
         style={{ aspectRatio: aspectOf(ratio) }}
       >
         <Loader2 className="h-4 w-4 animate-spin text-[#9C8F7D] dark:text-[#6C7480]" />
@@ -496,7 +496,7 @@ function TileAction({ onClick, title, children }) {
       onClick={onClick}
       title={title}
       aria-label={title}
-      className="grid h-7 w-7 place-items-center rounded-md border border-[#DED2BD] text-[#5D5144] transition-colors hover:border-[#CDBB9E] hover:text-[#2C241B] dark:border-[#2E353E] dark:text-[#AFB6C0] dark:hover:border-[#3D4650] dark:hover:text-[#ECEFF3]"
+      className="grid h-7 w-7 place-items-center rounded-md border border-[var(--ws-border)] text-[var(--ws-text-secondary)] transition-colors hover:border-[var(--ws-border-strong)] hover:text-[var(--ws-text-primary)] dark:border-[#2A2A2A] dark:text-[#AFAFAF] dark:hover:border-[#3A3A3A] dark:hover:text-[#F4F4F5]"
     >
       {children}
     </button>

@@ -20,14 +20,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH_MOBILE = '5.5rem';
-function getSidebarWidth(innerWidth) {
-  return innerWidth >= 1300 ? '16.5rem' : '11rem';
+// Expanded nav width = 14.75rem (236px), matching dark mode.
+function getSidebarWidth() {
+  return '14.75rem';
 }
-function getSidebarWidthIcon(innerWidth) {
-  if (innerWidth >= 1536) return '6rem';
-  if (innerWidth >= 1200) return '5.5rem';
-  return '5rem';
+// Compact navigation rail width = 5.5rem (88px), matching dark mode.
+function getSidebarWidthIcon() {
+  return '5.5rem';
 }
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b';
 
@@ -43,7 +42,7 @@ function useSidebar() {
 }
 
 function SidebarProvider({
-  defaultOpen = false,
+  defaultOpen = true,
   open: openProp,
   onOpenChange: setOpenProp,
   className,
@@ -54,33 +53,51 @@ function SidebarProvider({
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
   const [openHistory, setOpenHistory] = React.useState(false);
-  const initialWidth = typeof window !== 'undefined' ? window.innerWidth : 0;
-  const [sidebarWidth, setSidebarWidth] = React.useState(getSidebarWidth(initialWidth));
-  const [sidebarWidthIcon, setSidebarWidthIcon] = React.useState(getSidebarWidthIcon(initialWidth));
+  const sidebarWidth = getSidebarWidth();
+  // Collapsed icon width is a fixed constant — no resize needed.
+  const sidebarWidthIcon = getSidebarWidthIcon();
+
+  // ── Nav expand / collapse — independent of chat-history panel ──────────────
+  // Persisted to localStorage so the state survives page refreshes.
+  const [internalNavExpanded, setInternalNavExpanded] = React.useState(() => {
+    try {
+      const persisted = localStorage.getItem('adsgpt_sidebar_collapsed');
+      return persisted === null ? defaultOpen : persisted !== 'true';
+    } catch {
+      return defaultOpen;
+    }
+  });
+  const isNavExpanded = openProp ?? internalNavExpanded;
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
-  const [_open, _setOpen] = React.useState(defaultOpen);
-  const open = openProp ?? _open;
   const setOpen = React.useCallback(
     (value) => {
-      const openState = typeof value === 'function' ? value(open) : value;
+      const openState = typeof value === 'function' ? value(isNavExpanded) : value;
       if (setOpenProp) {
         setOpenProp(openState);
       } else {
-        _setOpen(openState);
+        setInternalNavExpanded(openState);
       }
 
-      // This sets the cookie to keep the sidebar state.
+      try {
+        localStorage.setItem('adsgpt_sidebar_collapsed', String(!openState));
+      } catch (_e) {
+        // Storage can be unavailable in private or restricted browser contexts.
+      }
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     },
-    [setOpenProp, open]
+    [isNavExpanded, setOpenProp]
   );
+
+  const toggleNavExpanded = React.useCallback(() => {
+    setOpen((expanded) => !expanded);
+  }, [setOpen]);
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
-  }, [isMobile, setOpen, setOpenMobile]);
+    return isMobile ? setOpenMobile((open) => !open) : toggleNavExpanded();
+  }, [isMobile, toggleNavExpanded]);
 
   const toggleHistorySection = React.useCallback(() => {
     setOpenHistory((open) => !open);
@@ -90,37 +107,39 @@ function SidebarProvider({
   React.useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
+        const target = event.target;
+        const isEditableTarget =
+          target instanceof HTMLElement &&
+          (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+        if (isEditableTarget) return;
+
         event.preventDefault();
+        if (!isMobile && openHistory) {
+          setOpenHistory(false);
+          return;
+        }
         toggleSidebar();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleSidebar]);
+  }, [isMobile, openHistory, toggleSidebar]);
 
-  // Update CSS width variables on viewport resize so the layout responds dynamically.
+  // A sheet closed on desktop must not reopen when the viewport returns to mobile.
   React.useEffect(() => {
-    const handleResize = () => {
-      const width = window.innerWidth;
-      const nextSidebarWidth = getSidebarWidth(width);
-      const nextSidebarWidthIcon = getSidebarWidthIcon(width);
-      setSidebarWidth((prev) => (prev !== nextSidebarWidth ? nextSidebarWidth : prev));
-      setSidebarWidthIcon((prev) => (prev !== nextSidebarWidthIcon ? nextSidebarWidthIcon : prev));
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    if (!isMobile) setOpenMobile(false);
+  }, [isMobile]);
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
-  const state = open ? 'expanded' : 'collapsed';
+  const visualOpen = openHistory || isNavExpanded;
+  const state = visualOpen ? 'expanded' : 'collapsed';
 
   const contextValue = React.useMemo(
     () => ({
       state,
-      open,
+      open: visualOpen,
       setOpen,
       isMobile,
       openMobile,
@@ -129,10 +148,12 @@ function SidebarProvider({
       openHistory,
       setOpenHistory,
       toggleHistorySection,
+      isNavExpanded,
+      toggleNavExpanded,
     }),
     [
       state,
-      open,
+      visualOpen,
       setOpen,
       isMobile,
       openMobile,
@@ -141,6 +162,8 @@ function SidebarProvider({
       openHistory,
       setOpenHistory,
       toggleHistorySection,
+      isNavExpanded,
+      toggleNavExpanded,
     ]
   );
 
@@ -149,6 +172,7 @@ function SidebarProvider({
       <TooltipProvider delayDuration={0}>
         <div
           data-slot="sidebar-wrapper"
+          data-sidebar-nav-expanded={isNavExpanded ? 'true' : 'false'}
           style={{
             '--sidebar-width': sidebarWidth,
             '--sidebar-width-icon': sidebarWidthIcon,
@@ -175,7 +199,7 @@ function Sidebar({
   children,
   ...props
 }) {
-  const { isMobile, state, openMobile, open, setOpenMobile, openHistory } = useSidebar();
+  const { isMobile, state, openMobile, setOpenMobile, openHistory, isNavExpanded } = useSidebar();
 
   if (collapsible === 'none') {
     return (
@@ -199,7 +223,11 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className={`bg-sidebar sidebar_adjust_container text-sidebar-foreground w-full ${openHistory ? 'max-w-[230px]! lg:max-w-[300px]!' : 'max-w-[84px]! sm:max-w-[94px]!'} p-0 [&>button]:hidden`}
+          className={`bg-sidebar sidebar_adjust_container text-sidebar-foreground w-full ${
+            openHistory || isNavExpanded
+              ? 'max-w-[260px]! dark:max-w-[230px]! dark:lg:max-w-[300px]!'
+              : 'max-w-[90px]! dark:max-w-[84px]! dark:sm:max-w-[94px]!'
+          } p-0 motion-reduce:duration-0 [&>button]:hidden`}
           side={side}
         >
           <SheetHeader className="sr-only">
@@ -225,7 +253,7 @@ function Sidebar({
       <div
         data-slot="sidebar-gap"
         className={cn(
-          'relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
+          'relative w-(--sidebar-width) shrink-0 bg-transparent transition-[width] duration-[220ms] ease-in-out motion-reduce:transition-none',
           'group-data-[collapsible=offcanvas]:w-0',
           'group-data-[side=right]:rotate-180',
           variant === 'floating' || variant === 'inset'
@@ -236,7 +264,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          'fixed inset-y-0 z-10 flex h-svh w-(--sidebar-width) border-none transition-[left,right,width] duration-200 ease-linear',
+          'fixed inset-y-0 z-10 flex h-svh w-(--sidebar-width) border-none transition-[left,right,width] duration-[220ms] ease-in-out motion-reduce:transition-none',
           side === 'left'
             ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
             : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
@@ -261,14 +289,17 @@ function Sidebar({
 }
 
 function SidebarTrigger({ className, onClick, children, ...props }) {
-  const { toggleSidebar, setOpenHistory, toggleHistorySection } = useSidebar();
+  const { toggleSidebar, setOpenHistory } = useSidebar();
 
   return (
     <button
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
       type="button"
-      className={cn('bg-transparent border-0 p-0 shadow-none outline-none focus-visible:outline-none', className)}
+      className={cn(
+        'border-0 bg-transparent p-0 shadow-none outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar',
+        className
+      )}
       onClick={(event) => {
         onClick?.(event);
         toggleSidebar();

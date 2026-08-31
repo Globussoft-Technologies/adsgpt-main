@@ -9,6 +9,7 @@ const router = express.Router();
 // ─── Assets ─────────────────────────────────────────────────────────────────
 router.get("/pixels", tiktokAdController.getPixels);
 router.post("/pixels", tiktokAdController.createPixel);
+router.get("/apps", tiktokAdController.getApps);
 
 // ─── Lead Generation ─────────────────────────────────────────────────────────
 router.get("/lead-forms", tiktokAdController.getLeadForms);

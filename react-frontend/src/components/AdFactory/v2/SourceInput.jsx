@@ -83,7 +83,7 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
       >
         {/* An eyebrow, not a badge. A tinted pill with a letterspaced caps
             label inside it is two treatments doing one job. */}
-        <span className="inline-flex items-center gap-2 text-13 font-medium text-[#8A4E0D] dark:text-[#15DCFF]">
+        <span className="inline-flex items-center gap-2 text-13 font-medium text-[#4654D4] dark:text-[#15DCFF]">
           <Sparkles className="h-3.5 w-3.5" />
           Quick setup
         </span>
@@ -91,12 +91,12 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
         {/* 15ch, not max-w-3xl. The measure IS the design here: it forces the
             three-line stack that makes the gradient line land as its own
             statement. On one wide line the same words read as a caption. */}
-        <h2 className="mt-5 max-w-[15ch] text-4xl leading-[1.06] font-semibold tracking-[-0.028em] text-balance text-[#0A0A0A] 2xl:text-5xl dark:text-[#ECEFF3]">
+        <h2 className="mt-5 max-w-[15ch] text-4xl leading-[1.06] font-semibold tracking-[-0.028em] text-balance text-[var(--ws-text-primary)] 2xl:text-5xl dark:text-[#F4F4F5]">
           Turn any page into a{' '}
-          <span className="text-[#8A4E0D] dark:text-[#15DCFF]">running campaign.</span>
+          <span className="text-[#5867EB] dark:text-[#15DCFF]">running campaign.</span>
         </h2>
 
-        <p className="mt-5 max-w-[46ch] text-base leading-relaxed text-balance text-[#6B7280] dark:text-[#AFB6C0]">
+        <p className="mt-5 max-w-[46ch] text-base leading-relaxed text-balance text-[var(--ws-text-secondary)] dark:text-[#AFAFAF]">
           Paste a product or landing page. We read your brand, audience and objective
           from it, then build the ads. About 30 seconds.
         </p>
@@ -104,13 +104,13 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
         {/* A filled well, darker than the page — the same treatment every
             control on this surface gets (see briefFields INPUT). */}
         <div
-          className={`mt-8 flex w-full max-w-xl items-center gap-2.5 rounded-xl border bg-white p-1.5 pl-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors focus-within:border-[#C17A1C] dark:bg-[#14181D] dark:shadow-none dark:focus-within:border-[#15DCFF] ${
+          className={`mt-8 flex w-full max-w-xl items-center gap-2.5 rounded-xl border bg-[var(--ws-surface)] p-1.5 pl-3.5 shadow-[var(--ws-shadow-sm)] transition-colors focus-within:border-[#5867EB] dark:bg-[#171717] dark:shadow-none dark:focus-within:border-[#15DCFF] ${
             invalid
               ? 'border-red-400/60 dark:border-red-500/40'
-              : 'border-[#E5E7EB] dark:border-[#2E353E]'
+              : 'border-[var(--ws-border)] dark:border-[#2A2A2A]'
           }`}
         >
-          <Globe className="h-4.5 w-4.5 shrink-0 text-[#9CA3AF] dark:text-[#8B939E]" />
+          <Globe className="h-4.5 w-4.5 shrink-0 text-[var(--ws-text-muted)] dark:text-[#777777]" />
           <input
             value={url}
             disabled={busy}
@@ -118,7 +118,7 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
             onBlur={() => setTouched(true)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
             placeholder="yourbrand.com/product"
-            className="min-w-0 flex-1 bg-transparent py-2 text-base text-[#111827] outline-none placeholder:text-[#9CA3AF] dark:text-[#ECEFF3] dark:placeholder:text-[#6C7480]"
+            className="min-w-0 flex-1 bg-transparent py-2 text-base text-[var(--ws-text-primary)] outline-none placeholder:text-[var(--ws-text-muted)] dark:text-[#F4F4F5] dark:placeholder:text-[#777777]"
           />
           <PrimaryBtn
             icon={ArrowRight}
@@ -147,7 +147,7 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
                   type="button"
                   disabled={busy}
                   onClick={() => onPickBrand?.(brand.id || brand._id)}
-                  className="inline-flex items-center gap-2.5 rounded-lg border border-[#E5E7EB] bg-white py-1.5 pr-3.5 pl-1.5 text-13 font-medium text-[#111827] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors hover:border-[#D1D5DB] disabled:opacity-50 dark:border-[#2E353E] dark:bg-[#14181D] dark:text-[#ECEFF3] dark:shadow-none dark:hover:border-[#3D4650]"
+                  className="inline-flex items-center gap-2.5 rounded-lg border border-[var(--ws-border)] bg-[var(--ws-surface)] py-1.5 pr-3.5 pl-1.5 text-13 font-medium text-[var(--ws-text-primary)] shadow-[var(--ws-shadow-sm)] transition-colors hover:border-[var(--ws-border-strong)] disabled:opacity-50 dark:border-[#2A2A2A] dark:bg-[#171717] dark:text-[#F4F4F5] dark:shadow-none dark:hover:border-[#3A3A3A]"
                 >
                   <BrandMark brand={brand} />
                   <span className="max-w-45 truncate">{brand.name || brand.brandName}</span>
@@ -170,13 +170,13 @@ function BrandMark({ brand }) {
       <img
         src={logo}
         alt=""
-        className="size-7 rounded-md border border-[#E5E7EB] bg-white object-contain dark:border-[#2E353E] dark:bg-[#1E232A]"
+        className="size-7 rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface)] object-contain dark:border-[#2A2A2A] dark:bg-[#202020]"
         onError={() => setBroken(true)}
       />
     );
   }
   return (
-    <span className="grid size-7 place-items-center rounded-md border border-[#E5E7EB] bg-[#F9FAFB] text-13 font-semibold text-[#6B7280] dark:border-[#2E353E] dark:bg-[#1E232A] dark:text-[#AFB6C0]">
+    <span className="grid size-7 place-items-center rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface-control)] text-13 font-semibold text-[var(--ws-text-secondary)] dark:border-[#2A2A2A] dark:bg-[#202020] dark:text-[#AFAFAF]">
       {String(brand?.name || brand?.brandName || '?').trim().charAt(0).toUpperCase()}
     </span>
   );

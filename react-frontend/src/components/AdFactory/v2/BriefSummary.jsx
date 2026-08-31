@@ -108,14 +108,14 @@ export default function BriefSummary({
     .join(' · ');
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 rounded-lg border border-[#DED2BD] bg-[#FFFDF8] px-4 py-3 shadow-none dark:border-[#252B33] dark:bg-[#14181D]">
+    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 rounded-lg border border-[var(--ws-border)] bg-[var(--ws-surface)] px-4 py-3 shadow-[var(--ws-shadow-sm)] dark:border-[#2A2A2A] dark:bg-[#171717] dark:shadow-none">
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
           {brand.logoUrls?.[0] && (
             <img
               src={brand.logoUrls[0]}
               alt=""
-              className="size-7 shrink-0 rounded-md border border-[#DED2BD] bg-[#F7F1E8] object-contain dark:border-[#2E353E] dark:bg-[#1E232A]"
+              className="size-7 shrink-0 rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface-hover)] object-contain dark:border-[#2A2A2A] dark:bg-[#202020]"
             />
           )}
           <h1 className={`min-w-0 truncate ${TITLE}`}>{brand.name || 'Your brand'}</h1>

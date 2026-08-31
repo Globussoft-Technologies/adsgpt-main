@@ -2,7 +2,6 @@ const axios = require("axios");
 const crypto = require("crypto");
 const TiktokUsers = require("../../Module/adPosting/tiktokUsers");
 const logger = require("../../utils/logger");
-const { trackBackendGA4Event } = require("../../utils/ga4");
 const { redisClient } = require("../../db/redis");
 const {
   getValidAccessToken,
@@ -16,6 +15,7 @@ const {
   TIKTOK_API_BASE,
   getTiktokProxyAgent,
 } = require("../../utils/tiktokHelpers");
+const { validateAppPromotionPayload } = require("../../utils/tiktokAppPromotion");
 const tiktokObjectivesConfig = require("../../config/tiktokObjectives");
 
 // Reporting numbers move fast — cache them for a short window only.
@@ -95,6 +95,7 @@ class TiktokAdController {
     this.getVideoInfo = this.getVideoInfo.bind(this);
     this.getInterestCategories = this.getInterestCategories.bind(this);
     this.getPixels = this.getPixels.bind(this);
+    this.getApps = this.getApps.bind(this);
     this.createPixel = this.createPixel.bind(this);
     this.getLeadForms = this.getLeadForms.bind(this);
     this.getLeads = this.getLeads.bind(this);
@@ -1207,19 +1208,6 @@ class TiktokAdController {
       });
 
       await invalidateUserTiktokCache(userId).catch(() => {});
-
-      if (level === "campaign") {
-        const isStart = status === "ACTIVE";
-        trackBackendGA4Event("ad_factory", {
-          user_id: userId,
-          feature: "ad_factory",
-          action_name: isStart ? "ad_factory_campaign_started_tiktok" : "ad_factory_campaign_stopped_tiktok",
-          source: "ads_manager",
-          platforms: "tiktok",
-          success: true,
-        });
-      }
-
       return res.json({
         success: true,
         level,
@@ -1451,6 +1439,11 @@ class TiktokAdController {
         incoming.operating_systems = ["ANDROID"];
       } else if (incoming.promotion_type === "APP_IOS") {
         incoming.operating_systems = ["IOS"];
+      }
+
+      const appPromotionError = validateAppPromotionPayload(incoming);
+      if (appPromotionError) {
+        return res.status(400).json({ error: appPromotionError });
       }
 
       // Sanitize promotion_type for Lead Generation
@@ -2664,6 +2657,43 @@ class TiktokAdController {
       logger.error(`TikTok getPixels error: ${error.message}`);
       return res.status(error.status || 500).json({
         error: error.userMessage || "Failed to fetch TikTok pixels",
+        tiktokCode: error.tiktokCode,
+      });
+    }
+  }
+
+  /**
+   * List apps registered to a TikTok ad account for App Promotion.
+   * TikTok API: GET /app/list/
+   */
+  async getApps(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      const { advertiserId } = req.query;
+      if (!advertiserId) {
+        return res.status(400).json({ error: "advertiserId is required" });
+      }
+
+      const accessToken = await getValidAccessToken(userId);
+      const data = await tiktokApiRequest({
+        method: "GET",
+        endpoint: "/app/list/",
+        accessToken,
+        params: { advertiser_id: advertiserId },
+      });
+
+      const apps = (data?.data?.list || data?.data?.apps || []).map((app) => ({
+        id: String(app.app_id || app.id || ""),
+        name: app.app_name || app.name || String(app.app_id || app.id),
+        platform: app.app_type || app.platform || app.operating_system || "",
+        raw: app,
+      })).filter((app) => app.id);
+
+      return res.json({ status: true, apps });
+    } catch (error) {
+      logger.error(`TikTok getApps error: ${error.message}`);
+      return res.status(error.status || 500).json({
+        error: error.userMessage || "Failed to fetch TikTok apps",
         tiktokCode: error.tiktokCode,
       });
     }

@@ -217,7 +217,13 @@ function formatTiktokError(error) {
 
   // Humanize common raw parameter errors from TikTok API
   if (formatted.userMessage) {
-    if (formatted.userMessage.includes("special_industries") && formatted.userMessage.includes("POLITICS")) {
+    if (
+      formatted.userMessage.toLowerCase().includes("lead generation agreement") ||
+      formatted.userMessage.toLowerCase().includes("agreement has not")
+    ) {
+      formatted.userMessage =
+        "TikTok Lead Generation Terms of Service has not been accepted yet. Please log into TikTok Ads Manager and accept the Lead Generation agreement before publishing Lead Gen ads.";
+    } else if (formatted.userMessage.includes("special_industries") && formatted.userMessage.includes("POLITICS")) {
       formatted.userMessage = "TikTok does not support 'Politics' under Special Industries. Only Housing, Employment, and Credit are supported.";
     } else if (formatted.userMessage.includes("special_industries") && formatted.userMessage.includes("one or more value of the param is not acceptable")) {
       formatted.userMessage = "Invalid Special Industries selection. TikTok only supports Housing, Employment, and Credit.";

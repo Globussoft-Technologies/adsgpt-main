@@ -181,6 +181,14 @@ export const getTiktokPixels = async (advertiserId) => {
   return data;
 };
 
+export const getTiktokApps = async (advertiserId) => {
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/tiktok-ads/apps`, {
+    params: { advertiserId },
+    headers: getAuthHeaders(),
+  });
+  return data;
+};
+
 export const createTiktokPixel = async ({ advertiserId, name, pixelType = 'TT_WEB_PIXEL' }) => {
   const { data } = await axios.post(
     `${BASE_URL}/adsgpt/tiktok-ads/pixels`,

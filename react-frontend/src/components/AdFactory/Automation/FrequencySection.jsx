@@ -5,6 +5,7 @@ import { Calendar } from 'react-date-range';
 import { format } from 'date-fns';
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import InputCommonDropdown from '@/components/AdFactory/NodeForms/InputCommonDropdown';
 import { describeFrequency } from '@/store/reducers/adFactoryAutomation/nextRun';
 import TimezoneSelect from './TimezoneSelect';
@@ -473,47 +474,29 @@ function DateField({ label, value, onChange, min, disabled, placeholder, allowCl
           </button>
         )}
       </div>
-      <div ref={wrapRef} className="relative">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => setOpen((v) => !v)}
-          className={`flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-black/10 bg-gray-200 px-3 text-sm text-gray-900 outline-none transition hover:border-black/20 focus:border-[#15DCFF]/60 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#0D0D0D]/40 dark:text-white dark:hover:border-white/20 dark:disabled:opacity-50 ${
-            open ? 'border-[#15DCFF]/60' : ''
-          }`}
-        >
-          <span className={`truncate ${dateObj ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#666]'}`}>
-            {display}
-          </span>
-          <CalendarDays className="size-4 shrink-0 text-gray-500 dark:text-[#AFAFAF]" />
-        </button>
-
-        {open && (
-          <div
-            className="adsgpt-cal-pop absolute top-full right-0 z-10000 mt-1 overflow-hidden rounded-lg border border-black/10 bg-[#eef1f3] shadow-xl dark:border-white/10 dark:bg-[#1a1a1a] dark:shadow-2xl"
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            className={`flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-black/10 bg-gray-200 px-3 text-sm text-gray-900 outline-none transition hover:border-black/20 focus:border-[#15DCFF]/60 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#0D0D0D]/40 dark:text-white dark:hover:border-white/20 dark:disabled:opacity-50 cursor-pointer ${
+              open ? 'border-[#15DCFF]/60' : ''
+            }`}
           >
-            <style>{`
-              .adsgpt-cal-pop .rdrCalendarWrapper { background: #1a1a1a; color: #fff; font-size: 11px; }
-              .adsgpt-cal-pop .rdrDateDisplayWrapper { display: none; }
-              .adsgpt-cal-pop .rdrMonthAndYearWrapper { background: #1a1a1a; height: 44px; padding-top: 6px; }
-              .adsgpt-cal-pop .rdrMonthAndYearPickers select { color: #fff; background: #0D0D0D; border-radius: 6px; padding: 2px 6px; }
-              .adsgpt-cal-pop .rdrNextPrevButton { background: #2a2a2a; }
-              .adsgpt-cal-pop .rdrNextPrevButton:hover { background: #3a3a3a; }
-              .adsgpt-cal-pop .rdrPprevButton i { border-color: transparent #fff transparent transparent; }
-              .adsgpt-cal-pop .rdrNextButton i { border-color: transparent transparent transparent #fff; }
-              .adsgpt-cal-pop .rdrMonth { padding: 0 0.6em 0.6em; }
-              .adsgpt-cal-pop .rdrWeekDay { color: #AFAFAF; font-size: 11px; }
-              .adsgpt-cal-pop .rdrDay { color: #E3E3E3; }
-              .adsgpt-cal-pop .rdrDayNumber span { color: #E3E3E3; font-size: 12px; }
-              .adsgpt-cal-pop .rdrDayPassive .rdrDayNumber span { color: #555; }
-              .adsgpt-cal-pop .rdrDayDisabled { background: transparent; }
-              .adsgpt-cal-pop .rdrDayDisabled .rdrDayNumber span { color: #444; }
-              .adsgpt-cal-pop .rdrDayToday .rdrDayNumber span::after { background: #15DCFF; }
-              .adsgpt-cal-pop .rdrDayHovered .rdrDayNumber span { color: #fff; }
-              .adsgpt-cal-pop .rdrSelected,
-              .adsgpt-cal-pop .rdrDayStartPreview,
-              .adsgpt-cal-pop .rdrDayEndPreview { color: #15DCFF !important; }
-            `}</style>
+            <span className={`truncate ${dateObj ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#666]'}`}>
+              {display}
+            </span>
+            <CalendarDays className="size-4 shrink-0 text-gray-500 dark:text-[#AFAFAF]" />
+          </button>
+        </PopoverTrigger>
+
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          collisionPadding={20}
+          className="w-auto p-0 border border-[#E5E7EB] bg-white rounded-xl shadow-2xl dark:border-[#2A2A2A] dark:bg-[#1A1A1A] z-[99999] overflow-hidden"
+        >
+          <div className="adsgpt-cal-pop p-1">
             <Calendar
               date={dateObj || new Date()}
               onChange={(d) => {
@@ -521,11 +504,11 @@ function DateField({ label, value, onChange, min, disabled, placeholder, allowCl
                 setOpen(false);
               }}
               minDate={minDate || undefined}
-              color="#15DCFF"
+              color="#5867EB"
             />
           </div>
-        )}
-      </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

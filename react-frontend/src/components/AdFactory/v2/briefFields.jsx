@@ -25,6 +25,7 @@ import {
   NUM,
   PILL,
   PILL_ON,
+  RULE,
   RULE_BORDER,
   SECTION,
   SECTION_PAD,
@@ -36,38 +37,18 @@ import {
 
 // ----------------------------------------------------------------------------
 // Editable field primitives for the brief screen.
-//
-// These used to be built on Autopilot's atoms. They are built on `_tokens.js`
-// now — the "Refined" system — for one reason: Autopilot's field vocabulary is
-// a 10px bold uppercase letterspaced label above every control, and repeated
-// across twenty fields that is what made this screen read as a settings dump
-// rather than a brief. Autopilot is a monitoring surface where every row is
-// equally weighted and that treatment is right; this is a document you read.
-//
-// What is shared with Autopilot is only `InfoTip`, because a portalled tooltip
-// that measures itself against the viewport is behaviour, not styling, and
-// there is no reason for two of them.
-//
-// The ramp every atom below sits on:
-//
-//   section   14px / 600   what part of the brief this is
-//   value     14px / 500   what the brief says
-//   label     13px / 400   grey, sentence case — what this field is called
-//   hint      13px / 400   grey, only when the label alone isn't enough
 // ----------------------------------------------------------------------------
 
-// Low confidence gets an amber border. It is the only place amber appears on a
-// field, so "worth a look" stays unambiguous.
 const flaggedBorder = (flagged) => (flagged ? FLAG_BORDER : '');
 
 // ─── Section ─────────────────────────────────────────────────────────────────
 
-// One band of a card, divided from its neighbours by a hairline rather than
-// being a card of its own. Nested cards were how the brief ended up looking
-// like six stacked panels; a brief is one document with parts.
-export function Section({ title, badge, children, className = '' }) {
+export function Section({ title, badge, children, className = '', unstyled = false }) {
+  const containerClass = unstyled
+    ? `${SECTION_PAD} ${className}`
+    : `${CARD} ${SECTION_PAD} ${className}`;
   return (
-    <section className={`${CARD} ${SECTION_PAD} ${className}`}>
+    <section className={containerClass}>
       {(title || badge) && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {title && <h3 className={SECTION}>{title}</h3>}
@@ -79,13 +60,10 @@ export function Section({ title, badge, children, className = '' }) {
   );
 }
 
-// The rule between two sections.
-export function SectionRule() {
-  return null;
+export function SectionRule({ className = '' }) {
+  return <div className={`h-px w-full bg-[var(--ws-border)] dark:bg-[#2A2A2A] ${className}`} />;
 }
 
-// The grid a section's fields sit on. Four columns at the widest so a row of
-// short values doesn't stretch to the full page width.
 export function FieldGrid({ cols = 4, children }) {
   const at = {
     2: 'sm:grid-cols-2',
@@ -101,10 +79,6 @@ export function FieldBlock({ label, hint, tooltip, wide, full, children }) {
   const span = full ? 'sm:col-span-2 xl:col-span-3 2xl:col-span-4' : wide ? 'sm:col-span-2' : '';
   return (
     <div className={`flex min-w-0 flex-col gap-1.5 ${span}`}>
-      {/* Label, tip and hint on ONE line. The hint used to sit BELOW the
-          control, which put a third piece of type under every field and pushed
-          the next row down by a line it did not need. Beside the label it reads
-          as part of the field's name, which is what a hint is. */}
       <label className={`flex flex-wrap items-center gap-x-1.5 gap-y-0.5 ${LABEL}`}>
         <span>{label}</span>
         {tooltip && <InfoTip text={tooltip} />}
@@ -124,25 +98,10 @@ export function EditableText({ value, placeholder, flagged, onSave, multiline, r
   const dirty = useRef(false);
   const area = useRef(null);
 
-  // Re-seed when the server sends a newer value — but never mid-edit, which
-  // would yank half-typed text out from under the user.
   useEffect(() => {
     if (!dirty.current) setDraft(value ?? '');
   }, [value]);
 
-  // Grow to fit what is in it.
-  //
-  // `rows` was a fixed height, not a minimum, so anything longer than two lines
-  // was clipped — and clipped MID-LINE, because a scroll container cuts at
-  // whatever pixel the box ends at rather than at a line boundary. Half a row
-  // of letter-tops under the last full line is what "cropping the last line"
-  // looked like, and the inferred description is three or four lines in
-  // basically every brief.
-  //
-  // Height is measured, not calculated: reset to `auto` first so scrollHeight
-  // reports the content's real height rather than the height we last set. Runs
-  // on every draft change (typing, and the server re-seed above) and once on
-  // mount, since the value usually arrives before this ever gets focus.
   useEffect(() => {
     const el = area.current;
     if (!multiline || !el) return;
@@ -169,9 +128,6 @@ export function EditableText({ value, placeholder, flagged, onSave, multiline, r
         placeholder={placeholder}
         onChange={onChange}
         onBlur={commit}
-        // `resize-none` and `overflow-hidden` are what make the autosize above
-        // the single source of truth for the height: a drag handle would fight
-        // it on the next keystroke, and a scrollbar is the thing being fixed.
         className={`${TEXTAREA} resize-none overflow-hidden ${flaggedBorder(flagged)}`}
       />
     );
@@ -219,7 +175,7 @@ export function ChipList({ items, flagged, onChange, max = 10, placeholder = 'Ad
           {list.map((item, i) => (
             <span
               key={`${item}-${i}`}
-              className={`inline-flex max-w-full items-center gap-1.5 py-1 pr-1.5 pl-2.5 ${CHIP} ${
+              className={`adfactory-v2-tag-chip inline-flex max-w-full items-center gap-1.5 py-1 pr-1.5 pl-2.5 ${CHIP} ${
                 flagged ? FLAG_BORDER : ''
               }`}
             >
@@ -265,13 +221,6 @@ export function SelectField({
   placeholder = 'Select…',
   disabled,
 }) {
-  // The project's shadcn Select, the same primitive Full control's
-  // InputCommonDropdown and the shared CommonDropdown are built on. A native
-  // <select> was wrong here for reasons that are not cosmetic: it cannot be
-  // styled to match the surrounding controls on either theme, its option list
-  // is drawn by the OS so it ignores the app's dark palette entirely, and it
-  // has no empty state — an objective list that failed to load rendered as a
-  // silently empty box.
   const empty = !options || options.length === 0;
 
   return (
@@ -297,8 +246,6 @@ export function SelectField({
 
 // ─── Toggle pills ────────────────────────────────────────────────────────────
 
-// Selected is indigo — the same indigo as the primary button, and the only
-// other place it appears. On this surface indigo means "this one is on".
 export function TogglePill({ on, onClick, disabled, children }) {
   return (
     <button
@@ -319,8 +266,6 @@ export function PillGroup({ children }) {
 
 // ─── Stepper ─────────────────────────────────────────────────────────────────
 
-// One segmented control rather than three floating parts — minus, the number,
-// plus, inside a single 36px shell with internal hairlines.
 export function Stepper({ value, onChange, min = 1, max = 20, suffix }) {
   const current = Number.isFinite(Number(value)) ? Number(value) : min;
   const set = (n) => onChange?.(Math.min(max, Math.max(min, n)));
@@ -357,19 +302,11 @@ export function Stepper({ value, onChange, min = 1, max = 20, suffix }) {
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 
-// Swatches only. The hex string isn't information anyone needs while reviewing
-// a brief — they're picking a colour, and a colour is what a swatch shows. The
-// value is still available on hover and inside the picker.
-//
-// Editing is direct: click a swatch to change it in place, × to drop it, + to
-// add. No text field, so there's no way to type an invalid value at all.
 export function PaletteEditor({ colors, onChange, max = null }) {
   const list = Array.isArray(colors) ? colors : [];
   const commitTimer = useRef(null);
   const capped = Number.isFinite(max);
 
-  // <input type="color"> fires continuously while the user drags through the
-  // picker; committing per event would write a trail of intermediate colours.
   const debounced = (fn) => {
     clearTimeout(commitTimer.current);
     commitTimer.current = setTimeout(fn, 250);
@@ -393,7 +330,7 @@ export function PaletteEditor({ colors, onChange, max = null }) {
               onChange={(e) => replaceAt(i, e.target.value)}
               title={hex}
               aria-label={`Brand colour ${hex}`}
-              className="h-9 w-9 cursor-pointer overflow-hidden rounded-md border border-[#DED2BD] bg-transparent p-0 dark:border-white/10"
+              className="h-9 w-9 cursor-pointer overflow-hidden rounded-md border border-[var(--ws-border)] bg-transparent p-0 dark:border-white/10"
             />
             <button
               type="button"
@@ -409,7 +346,7 @@ export function PaletteEditor({ colors, onChange, max = null }) {
         {(!capped || list.length < max) && (
           <label
             title="Add a colour"
-            className="grid h-9 w-9 cursor-pointer place-items-center rounded-md border border-dashed border-[#CDBB9E] bg-[#F7F1E8] text-[#9C8F7D] transition-colors hover:border-[#C17A1C]/60 hover:text-[#8A4E0D] dark:border-white/14 dark:bg-[#2B2F37] dark:text-[#AFB6C0] dark:hover:border-white/25 dark:hover:text-white"
+            className="grid h-9 w-9 cursor-pointer place-items-center rounded-md border border-dashed border-[var(--ws-border-strong)] bg-[var(--ws-surface-hover)] text-[var(--ws-text-muted)] transition-colors hover:border-[#5867EB]/60 hover:text-[#4654D4] dark:border-white/14 dark:bg-[#2A2A2A] dark:text-[#AFAFAF] dark:hover:border-white/25 dark:hover:text-white"
           >
             <Plus className="h-4 w-4" />
             <input
@@ -434,9 +371,6 @@ export function PaletteEditor({ colors, onChange, max = null }) {
 
 // ─── Disclosure ──────────────────────────────────────────────────────────────
 
-// Kept for the surfaces that still want a card that folds. Inside Adjust the
-// sections no longer fold at all — the user asked for everything open — so
-// this is now only used where a genuinely optional block hangs off a screen.
 export function Disclosure({ title, hint, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -467,18 +401,6 @@ export function Disclosure({ title, hint, children, defaultOpen = false }) {
 
 // ─── Images ──────────────────────────────────────────────────────────────────
 
-// ImageStrip — a real asset editor, not a read-only strip.
-//
-// This was thumbnails plus a remove button and nothing else: no way to add a
-// logo the scrape missed, no upload, no URL, no competitor visuals. v1's "Key
-// visuals" node has all three, and key visuals are one of the strongest inputs
-// to what the generator actually draws — "review and prune what we found" was
-// too thin a job for it.
-//
-// `max` was also only a DISPLAY cap — `slice(0, max)` hid the overflow while
-// still sending it. Hiding assets that remain in the payload is worse than no
-// limit, so the cap is enforced on the way IN and the count is stated on
-// screen, the way v1 states "4 / 5 assets".
 const IMAGE_TYPES = 'image/jpeg,image/png,image/webp,image/gif,image/svg+xml';
 
 export function ImageStrip({
@@ -506,8 +428,6 @@ export function ImageStrip({
     }
   }, [rawList.length, max, list, onChange]);
 
-  // Adds are capped and de-duplicated here rather than at each call site —
-  // uploading four files with two slots left must add two, not overflow.
   const addMany = (incoming) => {
     const merged = [...list];
     for (const u of incoming) {
@@ -576,8 +496,6 @@ export function ImageStrip({
           </span>
         ))}
 
-        {/* Only while there is room. A tile that stays put and silently does
-            nothing once you hit the cap is how a limit gets read as a bug. */}
         {!full && uploadFile && (
           <label
             title="Upload from device"
@@ -606,7 +524,7 @@ export function ImageStrip({
           <button
             type="button"
             onClick={onAddCompetitors}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-[#C17A1C]/30 bg-[#F7E8CD] px-2 text-[11px] font-medium text-[#8A4E0D] transition-colors hover:border-[#C17A1C]/55 hover:bg-[#F4DEB8] dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/8 dark:text-[#15DCFF] dark:hover:border-[#15DCFF]/45 dark:hover:bg-[#15DCFF]/12"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-[#5867EB]/30 bg-[#5867EB]/10 px-2 text-[11px] font-medium text-[#4654D4] transition-colors hover:border-[#5867EB]/55 hover:bg-[#5867EB]/15 dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/8 dark:text-[#15DCFF] dark:hover:border-[#15DCFF]/45 dark:hover:bg-[#15DCFF]/12"
           >
             <Search className="h-3.5 w-3.5" />
             <span>Competitor visuals</span>

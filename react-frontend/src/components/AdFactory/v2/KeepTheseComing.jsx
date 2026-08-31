@@ -116,7 +116,7 @@ export default function KeepTheseComing({
           <motion.div key="body" {...M.expand}>
             <div className="grid grid-cols-1 lg:grid-cols-2">
               <div className="flex flex-col">
-                <Section title="How often">
+                <Section title="How often" unstyled>
                   <CadencePills
                     frequency={frequency}
                     hour={hour}
@@ -132,15 +132,15 @@ export default function KeepTheseComing({
 
                 <SectionRule />
 
-                <Section title="Daily budget">
+                <Section title="Daily budget" unstyled>
                   <FieldBlock
                     label="What each ad set spends per day"
                     hint="the campaign we create for you"
                   >
                     <div
-                      className={`flex ${CONTROL_H} w-44 items-center gap-1.5 rounded-md border bg-[#FFFDF8] px-3 ${FOCUS_WITHIN} dark:bg-[#1E232A] ${
+                      className={`flex ${CONTROL_H} w-44 items-center gap-1.5 rounded-md border bg-[var(--ws-surface-control)] px-3 ${FOCUS_WITHIN} dark:bg-[#202020] ${
                         budgetOk
-                          ? 'border-[#D9CCB6] dark:border-[#2E353E]'
+                          ? 'border-[var(--ws-border)] dark:border-[#2A2A2A]'
                           : 'border-[#F59E0B]/45 dark:border-[#F59E0B]/35'
                       }`}
                     >
@@ -169,7 +169,7 @@ export default function KeepTheseComing({
 
                 <SectionRule />
 
-                <Section>
+                <Section unstyled>
                   <AlertEmails
                     value={alertEmails}
                     onChange={onAlertEmailsChange}
@@ -179,7 +179,7 @@ export default function KeepTheseComing({
               </div>
 
               <div className={`border-t lg:border-t-0 lg:border-l ${RULE_BORDER}`}>
-                <Section title="Where these publish">
+                <Section title="Where these publish" unstyled>
                   <LaunchConnection
                     value={connection}
                     onChange={onConnectionChange}
