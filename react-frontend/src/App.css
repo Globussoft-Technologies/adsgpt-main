@@ -853,11 +853,6 @@ html:not(.dark) .lm-sidebar-surface .bottom_section_container .group > span {
 
 html:not(.dark) .lm-sidebar-surface .group:not(.active) .active_container:hover {
   background: var(--ws-surface-hover) !important;
-  box-shadow:
-    2px 2px 6px rgba(80, 70, 58, 0.08),
-    -1px -1px 4px rgba(255, 255, 255, 0.90),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
-  transform: scale(1.04) !important;
 }
 
 html:not(.dark) {
@@ -899,14 +894,14 @@ html:not(.dark) {
 }
 
 .sidebar-brand-title {
-  font-size: 12px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: 0.12em;
 }
 
 .sidebar-brand-subtitle {
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.25;
 }
 
@@ -1010,16 +1005,10 @@ html:not(.dark) .lm-sidebar-surface::before {
 .lm-sidebar-surface .sidebar-nav-item {
   cursor: pointer;
   font-weight: 400;
-  will-change: transform;
-  transform: translateY(0px);
-  /* Premium cubic-bezier: fast-out for bg, snappy for color/opacity;
-     spring bezier for the elevation pop (slight overshoot = tactile feel) */
   transition:
     background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
     color 120ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 120ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 120ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Accent bar: starts scaled-out, grows in from center on active */
@@ -1111,7 +1100,7 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--active .nav-accent-bar {
 
 /* Expanded navigation uses the application's normal body typography and icon scale. */
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded {
-  height: 52px;
+  height: 48px;
   gap: 12px;
   padding: 9px 12px;
   border-radius: 12px;
@@ -1131,10 +1120,6 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item--inactive:hover {
   background: var(--sidebar-nav-hover-bg);
   color: var(--ws-text-primary);
-  transform: translateY(-2px);
-  box-shadow:
-    0 6px 18px rgba(88, 103, 235, 0.11),
-    0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item--active {
@@ -1165,23 +1150,36 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar 
 }
 
 .dark .lm-sidebar-surface .sidebar-nav-item--inactive {
-  color: #F4F4F5;
+  color: #AFAFAF;
   font-weight: 500;
 }
 .dark .lm-sidebar-surface .sidebar-nav-item--inactive:hover {
   background-color: rgba(42, 42, 42, 0.50);
   color: #AFAFAF;
-  transform: translateY(-3px);
-  box-shadow:
-    0 6px 20px rgba(0, 0, 0, 0.32),
-    0 2px 6px rgba(21, 220, 255, 0.07);
 }
 
 /* ── Dark Mode — active ───────────────────────────────────────────────────── */
 .dark .lm-sidebar-surface .sidebar-nav-item--active {
-  background-color: rgba(42, 42, 42, 0.60);
+  background-color: rgba(42, 42, 42);
   color: #FFFFFF;
   font-weight: 600;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-item--inactive :is(.sidebar-nav-label, .sidebar-nav-icon) {
+  color: #AFAFAF;
+  opacity: 1;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-item--inactive img.sidebar-nav-icon {
+  filter: brightness(0) saturate(100%) invert(68%) !important;
+  opacity: 1;
+}
+
+.dark .lm-sidebar-surface .sidebar-nav-item--active :is(.sidebar-nav-label, .sidebar-nav-icon),
+.dark .lm-sidebar-surface .sidebar-nav-item--active img.sidebar-nav-icon {
+  color: #FFFFFF;
+  filter: brightness(0) invert(1);
+  opacity: 1;
 }
 
 /* Dark Mode — blue/cyan accent bar (unchanged from existing DM design) */
@@ -1203,13 +1201,13 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar 
 
 /* The compact BETA pill is wider than a count badge; keep it clear of the centered icon. */
 .dark .lm-sidebar-surface .sidebar-nav-badge--compact:has(.sidebar-badge--label) {
-  top: -3px;
-  right: -4px;
+  top: -6px;
+  right: 5px;
 }
 
 /* Dark Mode — keep navigation dimensions aligned with the Light Mode sidebar. */
 .dark .lm-sidebar-surface .sidebar-nav-item--expanded {
-  height: 52px;
+  height: 48px;
   gap: 12px;
   padding: 9px 12px;
   border-radius: 12px;
@@ -1235,22 +1233,22 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar 
 }
 
 .dark .lm-sidebar-surface .sidebar-nav-item--compact {
-  height: 56px;
-  gap: 4px;
+  height: 60px;
+  gap: 6px;
   padding: 6px;
   border-radius: 12px;
 }
 
 .dark .lm-sidebar-surface .sidebar-nav-label--compact {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 550;
   line-height: 1.1;
   letter-spacing: 0;
 }
 
 .dark .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   stroke-width: 1.7;
 }
 
@@ -1319,8 +1317,8 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item
 
 /* Compact rail retains its labeled navigation but uses the app's type scale. */
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact {
-  height: 56px;
-  gap: 4px;
+  height: 60px;
+  gap: 6px;
   padding: 6px;
   border-radius: 12px;
   color: #1F2937;
@@ -1328,7 +1326,7 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact {
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-label--compact {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 550;
   line-height: 1.1;
   letter-spacing: 0;
@@ -1337,10 +1335,6 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-label--compact {
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item--inactive:hover {
   background: var(--sidebar-nav-hover-bg);
   color: var(--ws-text-primary);
-  transform: translateY(-3px);
-  box-shadow:
-    0 6px 18px rgba(88, 103, 235, 0.14),
-    0 2px 5px rgba(0, 0, 0, 0.07);
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item--active {
@@ -1350,8 +1344,8 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item-
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   color: #111827;
   opacity: 1;
   stroke-width: 1.7;
@@ -1376,8 +1370,8 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded svg.sidebar-nav-
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact svg.sidebar-nav-icon,
 .dark .lm-sidebar-surface .sidebar-nav-item--expanded svg.sidebar-nav-icon,
 .dark .lm-sidebar-surface .sidebar-nav-item--compact svg.sidebar-nav-icon {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-badge--numeric {
@@ -1527,6 +1521,67 @@ html:not(.dark) .lm-sidebar-surface .sidebar-edge-divider {
     rgba(0, 0, 0, 0.04) calc(100% - 40px),
     rgba(0, 0, 0, 0) 100%
   );
+}
+
+/* Keep sidebar navigation proportional on laptop-sized viewports. */
+@media (max-width: 1440px) {
+  html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded svg.sidebar-nav-icon,
+  html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact svg.sidebar-nav-icon,
+  .dark .lm-sidebar-surface .sidebar-nav-item--expanded svg.sidebar-nav-icon,
+  .dark .lm-sidebar-surface .sidebar-nav-item--compact svg.sidebar-nav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact,
+  .dark .lm-sidebar-surface .sidebar-nav-item--compact {
+    height: 40px;
+    gap: 4px;
+    padding: 6px;
+    border-radius: 12px;
+  }
+
+  html:not(.dark) .lm-sidebar-surface .sidebar-nav-label--expanded,
+  .dark .lm-sidebar-surface .sidebar-nav-label--expanded {
+    font-size: 11px;
+  }
+
+  html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded .sidebar-nav-icon,
+  .dark .lm-sidebar-surface .sidebar-nav-item--expanded .sidebar-nav-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  html:not(.dark) .lm-sidebar-surface .sidebar-nav-label--compact,
+  .dark .lm-sidebar-surface .sidebar-nav-label--compact {
+    font-size: 8.5px;
+  }
+
+  html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon,
+  .dark .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  html:not(.dark) .lm-sidebar-surface .sidebar-section-label,
+  .dark .lm-sidebar-surface .sidebar-section-label {
+    font-size: 7px;
+  }
+
+  html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded,
+  .dark .lm-sidebar-surface .sidebar-nav-item--expanded {
+    height: auto;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .sidebar-brand-title {
+    font-size: 14px;
+  }
+
+  .sidebar-brand-subtitle {
+    font-size: 10px;
+  }
 }
 
 /* Quick Setup fields use a cool neutral ramp instead of the shared ivory

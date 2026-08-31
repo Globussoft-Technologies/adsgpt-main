@@ -20,13 +20,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-// Expanded nav width = 14.75rem (236px), matching dark mode.
-function getSidebarWidth() {
-  return '14.75rem';
-}
-// Compact navigation rail width = 5.5rem (88px), matching dark mode.
-function getSidebarWidthIcon() {
-  return '5.5rem';
+function getSidebarDimensions(viewportWidth) {
+  const width = viewportWidth ?? (typeof window === 'undefined' ? 1441 : window.innerWidth);
+  const isLaptop = width <= 1400;
+
+  return {
+    sidebarWidth: isLaptop ? '11.75rem' : '14.75rem',
+    sidebarWidthIcon: isLaptop ? '5.5rem' : '7rem',
+  };
 }
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b';
 
@@ -53,9 +54,24 @@ function SidebarProvider({
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
   const [openHistory, setOpenHistory] = React.useState(false);
-  const sidebarWidth = getSidebarWidth();
+  const [sidebarDimensions, setSidebarDimensions] = React.useState(getSidebarDimensions);
+  const { sidebarWidth, sidebarWidthIcon } = sidebarDimensions;
   // Collapsed icon width is a fixed constant — no resize needed.
-  const sidebarWidthIcon = getSidebarWidthIcon();
+  React.useEffect(() => {
+    const updateSidebarDimensions = () => {
+      const nextDimensions = getSidebarDimensions(window.innerWidth);
+      setSidebarDimensions((currentDimensions) =>
+        currentDimensions.sidebarWidth === nextDimensions.sidebarWidth &&
+        currentDimensions.sidebarWidthIcon === nextDimensions.sidebarWidthIcon
+          ? currentDimensions
+          : nextDimensions
+      );
+    };
+
+    updateSidebarDimensions();
+    window.addEventListener('resize', updateSidebarDimensions);
+    return () => window.removeEventListener('resize', updateSidebarDimensions);
+  }, []);
 
   // ── Nav expand / collapse — independent of chat-history panel ──────────────
   // Persisted to localStorage so the state survives page refreshes.

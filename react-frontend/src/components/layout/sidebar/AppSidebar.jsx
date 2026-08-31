@@ -226,10 +226,10 @@ const AppSidebar = () => {
           isNumeric
             ? showExpanded
               ? 'sidebar-badge--numeric h-[20px] min-w-[20px] rounded-full px-1.5 text-[9px] text-white dark:w-[18px] dark:px-0 dark:text-[9px] dark:bg-[#5E66F5]'
-              : 'sidebar-badge--numeric h-[18px] w-[18px] rounded-full text-[9px] text-white dark:bg-[#5E66F5]'
+              : 'sidebar-badge--numeric h-[18px] w-[18px] rounded-full text-[7px] 2xl:text-[9px] text-white dark:bg-[#5E66F5]'
             : showExpanded
               ? 'sidebar-badge--label rounded-full px-[8px] py-[2.5px] text-[8px] uppercase tracking-[0.06em] dark:rounded-[4px] dark:bg-[#2A2A2A] dark:px-[5px] dark:py-[2px] dark:text-[8.5px] dark:tracking-wide dark:text-[#AFAFAF]'
-              : 'sidebar-badge--label rounded-[4px] px-[5px] py-[2px] text-[8.5px] uppercase tracking-wide dark:bg-[#2A2A2A] dark:text-[#AFAFAF]'
+              : 'sidebar-badge--label rounded-[4px] px-[5px] py-[2px] text-[6px] 2xl:text-[8.5px] uppercase tracking-wide dark:bg-[#2A2A2A] dark:text-[#AFAFAF]'
         }`}
       >
         {badge}
@@ -278,7 +278,7 @@ const AppSidebar = () => {
         aria-label={item.label}
         aria-current={isActive ? 'page' : undefined}
         className={`sidebar-nav-item sidebar-nav-item--compact${isActive ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 ${
-          item.badge ? 'h-[84px]' : 'h-[70px]'
+          item.badge ? 'h-[90px]' : 'h-[76px]'
         }`}
       >
         {isActive && (
@@ -294,7 +294,7 @@ const AppSidebar = () => {
           {item.compactLabel || item.label}
         </span>
         {item.badge && (
-          <div className="sidebar-nav-badge--compact absolute right-1 top-1">
+          <div className="sidebar-nav-badge--compact absolute right-0 2xl:right-2 -top-2">
             {renderBadge(item.badge)}
           </div>
         )}
@@ -308,7 +308,7 @@ const AppSidebar = () => {
       to={item.link}
       onClick={onClick}
       aria-current={isActive ? 'page' : undefined}
-      className={`sidebar-nav-item sidebar-nav-item--expanded${isActive ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-[19px]`}
+      className={`sidebar-nav-item sidebar-nav-item--expanded${isActive ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
     >
       {isActive && (
         <span
@@ -330,15 +330,15 @@ const AppSidebar = () => {
       className={`${
         showExpanded
           ? `px-4.5 pb-2 ${first ? 'pt-3.5' : 'pt-5.5'}`
-          : `flex flex-col items-center justify-center px-1 pb-2 ${
-              first ? 'pt-3.5' : 'pt-4'
+          : `flex flex-col items-center justify-center px-1 pb-2 2xl:pb-3 ${
+              first ? 'pt-4 2xl:pt-5' : 'pt-4 2xl:pt-6'
             }`
       }`}
     >
       {!showExpanded && !first && (
-        <div className="sidebar-section-divider mb-2.5 h-px w-7 dark:bg-white/8" />
+        <div className="sidebar-section-divider mb-4 h-px w-7 dark:bg-white/15" />
       )}
-      <span className="sidebar-section-label uppercase dark:leading-normal dark:text-[#555555]">
+      <span className="sidebar-section-label uppercase dark:leading-normal dark:text-[#999]">
         {label}
       </span>
     </div>
@@ -381,7 +381,7 @@ const AppSidebar = () => {
             /* History open — full brand header + close history trigger */
             <div className="flex h-[74px] items-center gap-3 px-3.5">
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <SidebarLogoMark className="sidebar-expanded-logo-mark h-12 w-12 flex-shrink-0 object-contain" />
+                <SidebarLogoMark className="sidebar-expanded-logo-mark w-10 h-10 2xl:h-12 2xl:w-12 flex-shrink-0 object-contain" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="sidebar-brand-title dark:font-extrabold dark:tracking-[0.01em] dark:text-white">
                     AdsGPT
@@ -412,7 +412,7 @@ const AppSidebar = () => {
                 aria-label="Collapse sidebar"
                 title="Collapse sidebar"
               >
-                <SidebarLogoMark className="sidebar-expanded-logo-mark h-12 w-12 flex-shrink-0 object-contain" />
+                <SidebarLogoMark className="sidebar-expanded-logo-mark h-10 w-10 2xl:h-12 2xl:w-12 flex-shrink-0 object-contain" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="sidebar-brand-title transition-colors group-hover:text-black dark:font-extrabold dark:tracking-[0.01em] dark:text-white">
                     AdsGPT
@@ -437,7 +437,7 @@ const AppSidebar = () => {
             </div>
           ) : (
             /* Collapsed — use the AdsGPT mark itself as the compact header control. */
-            <div className="relative flex h-[74px] items-center justify-center">
+            <div className="relative flex h-[60px] 2xl:h-[74px] items-center justify-center">
               <button
                 type="button"
                 onClick={toggleNavExpanded}
@@ -446,7 +446,7 @@ const AppSidebar = () => {
                 aria-expanded={isNavExpanded}
                 className="group relative flex h-12 w-12 items-center justify-center bg-transparent focus:outline-none cursor-pointer"
               >
-                <SidebarLogoMark className="sidebar-compact-logo-mark h-12 w-12 object-contain" />
+                <SidebarLogoMark className="sidebar-compact-logo-mark w-10 h-10 2xl:h-12 2xl:w-12 object-contain" />
                 <ChevronRight
                   className="pointer-events-none absolute -right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400 transition-colors group-hover:text-zinc-900 dark:text-[#888888] dark:group-hover:text-white"
                   aria-hidden="true"
@@ -457,7 +457,7 @@ const AppSidebar = () => {
         </div>
 
         {/* ── DIVIDER (reduced wideness / inset) ─────────────────────────────── */}
-        <div className="sidebar-divider mx-3.5 flex-shrink-0 border-t dark:border-white/8" />
+        <div className="sidebar-divider mx-3.5 flex-shrink-0 border-t dark:border-white/15" />
 
         {/* ── CHAT HISTORY SECTION (only when open) ─────────────────────────── */}
         {openHistory && activeAdStudioTabId === 'adCopy' && (
@@ -471,16 +471,14 @@ const AppSidebar = () => {
           <nav
             id="app-sidebar-navigation"
             aria-label="Primary navigation"
-            className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${
-              showExpanded ? 'pb-2' : 'pb-0 dark:pb-2'
-            }`}
+            className={`flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-hide pb-2`}
           >
 
             {/* Main nav groups: CREATE, MEASURE */}
             {visibleNavGroups.map((group, index) => (
               <div key={group.id}>
                 <SectionHeader label={group.label} first={index === 0} />
-                <div className={showExpanded ? 'space-y-1.5 px-2.5' : 'space-y-1 px-2'}>
+                <div className={showExpanded ? 'space-y-1 px-2.5' : 'space-y-1 2xl:space-y-2 px-2'}>
                   {group.items.map((item) => {
                     const active = isItemActive(item);
                     const onClick = () => handleNavClick(item.link);
@@ -498,9 +496,9 @@ const AppSidebar = () => {
 
             {/* LIBRARY group — Workspace + My Space */}
             {showLibraryGroup && (
-              <div>
+              <div className={showExpanded ? undefined : 'mt-auto'}>
                 <SectionHeader label="LIBRARY" />
-                <div className={showExpanded ? 'space-y-2 px-2.5' : 'space-y-2 px-2'}>
+                <div className={showExpanded ? 'space-y-1 px-2.5' : 'space-y-2 px-2'}>
 
                   {/* Workspace (owner only) */}
                   {showWorkspace && (() => {
@@ -516,7 +514,7 @@ const AppSidebar = () => {
                           to="/workspace/members"
                           onClick={doNav}
                           aria-current={active ? 'page' : undefined}
-                          className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-[19px]`}
+                          className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
                         >
                           {active && (
                             <span
@@ -538,7 +536,7 @@ const AppSidebar = () => {
                           onClick={doNav}
                           aria-label="Workspace"
                           aria-current={active ? 'page' : undefined}
-                          className={`sidebar-nav-item sidebar-nav-item--compact${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[70px]`}
+                          className={`sidebar-nav-item sidebar-nav-item--compact${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[76px]`}
                         >
                           {active && (
                             <span
@@ -573,7 +571,7 @@ const AppSidebar = () => {
                           to="/my-space"
                           onClick={doNav}
                           aria-current={active ? 'page' : undefined}
-                          className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-[19px]`}
+                          className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
                         >
                           {active && (
                             <span
@@ -599,7 +597,7 @@ const AppSidebar = () => {
                           aria-label="My Space"
                           aria-current={active ? 'page' : undefined}
                           className={`sidebar-nav-item sidebar-nav-item--compact${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 ${
-                            savedCount > 0 ? 'h-[84px]' : 'h-[70px]'
+                            savedCount > 0 ? 'h-[90px]' : 'h-[76px]'
                           }`}
                         >
                           {active && (
@@ -615,7 +613,7 @@ const AppSidebar = () => {
                             My Space
                           </span>
                           {savedCount > 0 && (
-                            <div className="sidebar-nav-badge--compact absolute right-1 top-1">
+                            <div className="sidebar-nav-badge--compact absolute right-3.5 2xl:right-5 -top-2">
                               {renderBadge(savedCount)}
                             </div>
                           )}
@@ -658,7 +656,7 @@ const AppSidebar = () => {
                 aria-label="Chat History"
                 className={`sidebar-nav-item sidebar-nav-item--expanded ${
                   openHistory ? 'sidebar-nav-item--active' : 'sidebar-nav-item--inactive'
-                } relative flex w-full items-center gap-4 rounded-[15px] px-4 py-[19px]`}
+                } relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
               >
                 {openHistory && (
                   <span
@@ -679,7 +677,7 @@ const AppSidebar = () => {
                   aria-label="Chat History"
                   className={`sidebar-nav-item sidebar-nav-item--compact ${
                     openHistory ? 'sidebar-nav-item--active' : 'sidebar-nav-item--inactive'
-                  } relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[70px]`}
+                  } relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[76px]`}
                 >
                   {openHistory && (
                     <span
@@ -702,8 +700,8 @@ const AppSidebar = () => {
           <div
             className={
               showExpanded || openHistory
-                ? 'sidebar-divider mx-3.5 flex-shrink-0 border-t dark:border-white/8'
-                : 'sidebar-section-divider mx-auto mb-1.5 h-px w-7 flex-shrink-0 dark:bg-white/8'
+                ? 'sidebar-divider mx-3.5 flex-shrink-0 border-t dark:border-white/15'
+                : 'sidebar-section-divider mx-auto mb-1.5 h-px w-7 flex-shrink-0 dark:bg-white/15'
             }
           />
         )}
@@ -714,7 +712,7 @@ const AppSidebar = () => {
             className={`flex flex-shrink-0 items-center ${
               showExpanded || openHistory
                 ? 'h-[76px] px-2.5'
-                : 'h-[68px] justify-center'
+                : 'h-[55px] 2xl:h-[68px] justify-center'
             }`}
           >
             <ShadcnTooltip label={showExpanded || openHistory ? undefined : 'User Profile'} side="right">
@@ -746,7 +744,7 @@ const AppSidebar = () => {
                 )}
                 {/* Avatar */}
                 <div
-                  className="sidebar-profile-button relative flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[#25221E] text-white shadow-xs transition-transform duration-200 group-hover:scale-105 dark:bg-[#2A2A2A]"
+                  className="sidebar-profile-button relative flex h-9 w-9 2xl:h-10 2xl:w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[#25221E] text-white shadow-xs dark:bg-[#2A2A2A]"
                 >
                   {profileImage ? (
                     <img
@@ -756,7 +754,7 @@ const AppSidebar = () => {
                       className="sidebar-profile-avatar h-full w-full rounded-[12px] object-cover"
                     />
                   ) : (
-                    <span className="sidebar-profile-avatar flex h-full w-full items-center justify-center text-center text-[13px] font-bold text-white">
+                    <span className="sidebar-profile-avatar flex h-full w-full items-center justify-center text-center text-xs 2xl:text-[13px] font-bold text-white">
                       {profileInitials}
                     </span>
                   )}
