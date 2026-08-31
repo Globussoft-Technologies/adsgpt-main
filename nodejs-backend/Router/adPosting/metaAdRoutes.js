@@ -30,13 +30,48 @@ router.patch("/preferences", metaAdsPreferenceController.updatePreference);
 // DEPRECATED shape-adapting aliases for the pre-namespacing flat
 // `{ visibleMetricKeys }` body. Kept for one release so a browser holding a
 // cached bundle through a deploy doesn't 404 into a defaults-only dashboard.
-router.get("/analytics/metrics-preference", metaAdsPreferenceController.getLegacyPreference);
-router.patch("/analytics/metrics-preference", metaAdsPreferenceController.updateLegacyPreference);
+router.get("/analytics/metrics-preference", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Get legacy metrics preference'
+  */
+  metaAdsPreferenceController.getLegacyPreference(req, res, next);
+});
+
+router.patch("/analytics/metrics-preference", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Update legacy metrics preference'
+  */
+  metaAdsPreferenceController.updateLegacyPreference(req, res, next);
+});
+
 // Managed-campaign slots — which campaigns a capped plan spends its
 // allowance on. See services/managedCampaigns.js.
-router.get("/managed-campaigns", managedCampaignController.list);
-router.post("/managed-campaigns", managedCampaignController.claim);
-router.delete("/managed-campaigns", managedCampaignController.release);
+router.get("/managed-campaigns", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'List managed campaign slots'
+  */
+  managedCampaignController.list(req, res, next);
+});
+
+router.post("/managed-campaigns", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Claim a managed campaign slot'
+  */
+  managedCampaignController.claim(req, res, next);
+});
+
+router.delete("/managed-campaigns", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Release a managed campaign slot'
+  */
+  managedCampaignController.release(req, res, next);
+});
+
 // Metric COLUMNS for the entity tables. Deliberately separate from the
 // entity-list endpoints below: those cache for 2h (stable lists), metrics
 // cache for 5min (volatile). See metaTableMetricsController.js.
@@ -45,9 +80,24 @@ router.get("/get-campaigns", metaAdController.getCapaignsByAdAccount);
 router.get("/get-ad-sets", metaAdController.getAdSetsByCampaignId);
 router.get("/get-campaign-ads", metaAdController.getAdsByCampaignId);
 router.get("/get-ad-set-ads", metaAdController.getAdsByAdSetId);
-router.get("/get-insights", metaAdController.getInsights);
+
+router.get("/get-insights", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Get Meta Ads performance insights'
+  */
+  metaAdController.getInsights(req, res, next);
+});
+
 router.get("/audit", metaAdController.runAudit);
-router.patch("/update-status", metaAdController.updateStatus);
+
+router.patch("/update-status", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Update status of campaign, ad set, or ad'
+  */
+  metaAdController.updateStatus(req, res, next);
+});
 
 // Wizard V2 schema — drives the config-driven CreateCampaignWizardV2.jsx
 // renderer. Static data + the FEATURE_WIZARD_V2 flag state. No FB token
@@ -160,10 +210,38 @@ router.get("/v2/resolve-ad", metaAdControllerV2.resolveAdForEdit);
 // Campaign Templates — user-saved snapshots of the wizard `form` state, so an
 // agency can stamp out new campaigns from a known-good setup (budget / account
 // / name editable on apply). See campaignTemplate.controller.js.
-router.get("/v2/templates", campaignTemplateController.listTemplates);
-router.get("/v2/templates/:id", campaignTemplateController.getTemplate);
-router.post("/v2/templates", campaignTemplateController.createTemplate);
-router.delete("/v2/templates/:id", campaignTemplateController.deleteTemplate);
+router.get("/v2/templates", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher V2']
+    #swagger.summary = 'List campaign templates'
+  */
+  campaignTemplateController.listTemplates(req, res, next);
+});
+
+router.get("/v2/templates/:id", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher V2']
+    #swagger.summary = 'Get campaign template details'
+  */
+  campaignTemplateController.getTemplate(req, res, next);
+});
+
+router.post("/v2/templates", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher V2']
+    #swagger.summary = 'Create campaign template'
+  */
+  campaignTemplateController.createTemplate(req, res, next);
+});
+
+router.delete("/v2/templates/:id", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher V2']
+    #swagger.summary = 'Delete campaign template'
+  */
+  campaignTemplateController.deleteTemplate(req, res, next);
+});
+
 // Resolve the wizard cell for an existing ad set — powers the "Add Ad"
 // flow + gating Add/Edit for legacy-objective campaigns.
 router.get("/v2/resolve-cell", metaAdControllerV2.resolveCellForAdSet);
@@ -174,7 +252,13 @@ router.get("/v2/resolve-campaign", metaAdControllerV2.resolveCampaignForAdd);
 // returns { primary_text, headline, description, call_to_action } generated
 // by Gemini. Synchronous (no socket/stream). Credits charged on success via
 // the freeze→settle path. Inherits authenticateJWT from the /meta-ads mount.
-router.post("/generate-ad-copy", adCopyGenerator.generateAdCopy);
+router.post("/generate-ad-copy", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Generate AI ad copy using Gemini'
+  */
+  adCopyGenerator.generateAdCopy(req, res, next);
+});
 
 // Autopilot — owns ALL audit + fix flows (continuous rule cron + on-demand
 // LLM audit). Mounted at /meta-ads/autopilot/* and inherits authenticateJWT

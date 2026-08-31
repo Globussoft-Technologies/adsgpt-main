@@ -30,13 +30,54 @@ const uploadMediaSingle = (req, res, next) => {
   });
 };
 
-router.post("/stream", metaChatController.streamChat);
-router.post("/confirm", metaChatController.confirmAction);
+router.post("/stream", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Stream AI chat responses for Meta Ads assistant'
+  */
+  metaChatController.streamChat(req, res, next);
+});
+
+router.post("/confirm", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Confirm AI assistant proposed action'
+  */
+  metaChatController.confirmAction(req, res, next);
+});
+
 // Resume a turn paused on the in-chat media picker (pick_creative_media).
-router.post("/media-pick", metaChatController.pickMedia);
+router.post("/media-pick", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Select media in AI chat assistant'
+  */
+  metaChatController.pickMedia(req, res, next);
+});
+
 // Store a user-uploaded creative file, returning its public URL for the picker.
-router.post("/media/upload", uploadMediaSingle, metaChatController.uploadCreativeMedia);
-router.get("/history/:sessionId", metaChatController.getHistory);
-router.get("/sessions", metaChatController.listSessions);
+router.post("/media/upload", uploadMediaSingle, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Upload creative media in AI chat assistant'
+  */
+  metaChatController.uploadCreativeMedia(req, res, next);
+});
+
+router.get("/history/:sessionId", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'Get AI chat history by session ID'
+  */
+  metaChatController.getHistory(req, res, next);
+});
+
+router.get("/sessions", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Meta Ads Launcher']
+    #swagger.summary = 'List AI chat sessions'
+  */
+  metaChatController.listSessions(req, res, next);
+});
 
 module.exports = router;

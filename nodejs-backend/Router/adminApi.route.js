@@ -18,40 +18,202 @@ const modelIconUpload = multer({
   },
 });
 
-router.post("/login", adminAuth.login);
-router.get("/me", requireAdmin, adminAuth.me);
+router.post("/login", (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Admin authentication login'
+  */
+  adminAuth.login(req, res, next);
+});
 
-router.get("/overview", requireAdmin, adminDashboard.overview);
-router.get("/users/filter-options", requireAdmin, adminDashboard.usersFilterOptions);
-router.get("/users", requireAdmin, adminDashboard.usersList);
-router.get("/users/:userId", requireAdmin, adminDashboard.userDetail);
+router.get("/me", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get current authenticated admin profile'
+  */
+  adminAuth.me(req, res, next);
+});
+
+router.get("/overview", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get admin dashboard overview statistics'
+  */
+  adminDashboard.overview(req, res, next);
+});
+
+router.get("/users/filter-options", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get user filter options for admin dashboard'
+  */
+  adminDashboard.usersFilterOptions(req, res, next);
+});
+
+router.get("/users", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'List all registered users (paginated and filtered)'
+  */
+  adminDashboard.usersList(req, res, next);
+});
+
+router.get("/users/:userId", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get user profile details by ID'
+  */
+  adminDashboard.userDetail(req, res, next);
+});
+
 // Look up a failed Meta launch by its reference code (see wizard error
 // banner) — returns the exact request body + full Meta error for reproduction.
-router.get("/meta-launch-trace/:traceId", requireAdmin, adminDashboard.getMetaLaunchTrace);
+router.get("/meta-launch-trace/:traceId", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Trace a failed Meta launch by reference code'
+  */
+  adminDashboard.getMetaLaunchTrace(req, res, next);
+});
 
 // Partner API key issuance for the /partner-api/v1/meta-ads surface.
-router.post("/partner-api-keys", requireAdmin, partnerApiKeys.createKey);
-router.get("/partner-api-keys", requireAdmin, partnerApiKeys.listKeys);
-router.patch("/partner-api-keys/:id/revoke", requireAdmin, partnerApiKeys.revokeKey);
+router.post("/partner-api-keys", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Issue a new partner API key'
+  */
+  partnerApiKeys.createKey(req, res, next);
+});
 
-router.get("/token-usage/overview", requireAdmin, tokenUsageDashboard.overview);
-router.get("/token-usage/users/:userId", requireAdmin, tokenUsageDashboard.userDetail);
+router.get("/partner-api-keys", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'List issued partner API keys'
+  */
+  partnerApiKeys.listKeys(req, res, next);
+});
+
+router.patch("/partner-api-keys/:id/revoke", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Revoke a partner API key'
+  */
+  partnerApiKeys.revokeKey(req, res, next);
+});
+
+router.get("/token-usage/overview", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get AI token usage overview dashboard'
+  */
+  tokenUsageDashboard.overview(req, res, next);
+});
+
+router.get("/token-usage/users/:userId", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get AI token usage detail for a specific user'
+  */
+  tokenUsageDashboard.userDetail(req, res, next);
+});
 
 // Per-plan caps on managed ad accounts / campaigns (Meta Ads). See
 // utils/planLimits.js + utils/planUsage.js for where these are enforced.
-router.get("/plans", requireAdmin, planLimits.listPlans);
-router.patch("/plans/:planId", requireAdmin, planLimits.upsertPlanLimit);
+router.get("/plans", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'List per-plan account and campaign limits'
+  */
+  planLimits.listPlans(req, res, next);
+});
+
+router.patch("/plans/:planId", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Upsert plan limit configuration'
+  */
+  planLimits.upsertPlanLimit(req, res, next);
+});
 
 // Database-backed AI model configuration.
-router.get("/models", requireAdmin, modelConfiguration.listModels);
-router.get("/models/:canonicalKey", requireAdmin, modelConfiguration.getModel);
-router.post("/models", requireAdmin, modelConfiguration.createModel);
-router.patch("/models/:canonicalKey", requireAdmin, modelConfiguration.updateModel);
-router.patch("/models/:canonicalKey/status/:status", requireAdmin, modelConfiguration.setStatus);
-router.patch("/models/:canonicalKey/surfaces", requireAdmin, modelConfiguration.updateSurfaces);
-router.patch("/models/:canonicalKey/unarchive", requireAdmin, modelConfiguration.unarchiveModel);
-router.post("/models/:canonicalKey/icon", requireAdmin, modelIconUpload.single("icon"), modelConfiguration.uploadIcon);
-router.delete("/models/:canonicalKey/icon", requireAdmin, modelConfiguration.removeIcon);
-router.delete("/models/:canonicalKey", requireAdmin, modelConfiguration.archiveModel);
+router.get("/models", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'List all database-backed AI model configurations'
+  */
+  modelConfiguration.listModels(req, res, next);
+});
+
+router.get("/models/:canonicalKey", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get AI model configuration by canonical key'
+  */
+  modelConfiguration.getModel(req, res, next);
+});
+
+router.post("/models", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Create a new AI model entry in catalog'
+  */
+  modelConfiguration.createModel(req, res, next);
+});
+
+router.patch("/models/:canonicalKey", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Update AI model configuration details'
+  */
+  modelConfiguration.updateModel(req, res, next);
+});
+
+router.patch("/models/:canonicalKey/status/:status", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Set AI model status (active/inactive)'
+  */
+  modelConfiguration.setStatus(req, res, next);
+});
+
+router.patch("/models/:canonicalKey/surfaces", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Update AI model surface availability'
+  */
+  modelConfiguration.updateSurfaces(req, res, next);
+});
+
+router.patch("/models/:canonicalKey/unarchive", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Unarchive an archived AI model'
+  */
+  modelConfiguration.unarchiveModel(req, res, next);
+});
+
+router.post("/models/:canonicalKey/icon", requireAdmin, modelIconUpload.single("icon"), (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Upload icon for an AI model'
+  */
+  modelConfiguration.uploadIcon(req, res, next);
+});
+
+router.delete("/models/:canonicalKey/icon", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Remove icon from an AI model'
+  */
+  modelConfiguration.removeIcon(req, res, next);
+});
+
+router.delete("/models/:canonicalKey", requireAdmin, (req, res, next) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Archive an AI model entry'
+  */
+  modelConfiguration.archiveModel(req, res, next);
+});
 
 module.exports = router;

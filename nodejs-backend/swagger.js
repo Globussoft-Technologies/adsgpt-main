@@ -139,6 +139,22 @@ const doc = {
       description: "External partner-facing Meta Ads reporting APIs — authenticated via a partner-supplied Meta System User access token, not an AdsGPT JWT",
     },
     {
+      name: "Workspaces",
+      description: "Workspace management, member invitations, member roles, active session switching, and member authentication APIs",
+    },
+    {
+      name: "BrandIQ",
+      description: "Brand intelligence & management APIs — create/update brands, search brands, competitor ads discovery, logo removal, and audience suggestions",
+    },
+    {
+      name: "Voice Selector",
+      description: "AI voice catalog, voice filters (languages, genders, accents, ages), voice search, and Sarvam voice catalog APIs",
+    },
+    {
+      name: "Admin",
+      description: "Admin panel APIs — admin authentication, dashboard metrics, user management, partner API keys, token usage, plan limits, and AI model configurations",
+    },
+    {
       name: "default",
       description: "Miscellaneous APIs",
     },

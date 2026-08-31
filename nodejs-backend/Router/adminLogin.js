@@ -3,15 +3,23 @@ const jwt = require('jsonwebtoken');
 const express = require("express"); 
 const router = express.Router();
 
-router.get('/login', (req,res)=>{
-    res.render("login");
-})
+router.get('/login', (req, res) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Render admin login page'
+  */
+  res.render("login");
+});
 
 const generateToken = (payload, secretKey) => {
   return jwt.sign(payload, secretKey, { algorithm: 'HS512' });
 };
 
 router.post("/login", (req, res) => {
+  /* 
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Submit admin login credentials'
+  */
   const { username, password } = req.body;
   if (
     username && username.trim() === process.env.UI_USERNAME &&
