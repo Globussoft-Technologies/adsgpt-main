@@ -121,6 +121,9 @@ const {
   formatWorst,
   formatAll,
 } = require("./metaRateLimiter");
+// One retry on a transient blip; never on a deliberate throttle. Safe because
+// every Meta write below is idempotent (absolute status / absolute budget).
+const { withRetry } = require("./metaRetry");
 
 let _bizSdk;
 function bizSdk() {
@@ -444,6 +447,7 @@ async function evaluateRuleAtAccount({
   rule,
   acctKey,
   acctName,
+  accessToken,
   entities,
   finalDryRun,
   runId,
@@ -561,11 +565,14 @@ async function evaluateRuleAtAccount({
 
       if (isPause && !finalDryRun) {
         try {
-          await pauseEntity({
-            level: rule.evaluateOn,
-            entityId:
-              target[`${rule.evaluateOn}_id`] || target.id,
-          });
+          await metaWrite(
+            () =>
+              pauseEntity({
+                level: rule.evaluateOn,
+                entityId: target[`${rule.evaluateOn}_id`] || target.id,
+              }),
+            { acctKey, accessToken, label: `pause ${rule.evaluateOn}` },
+          );
         } catch (err) {
           outcome = "failed";
           error = formatMetaError(err);
@@ -607,6 +614,40 @@ async function evaluateRuleAtAccount({
       }
     }
   }
+}
+
+/**
+ * Wrap one Meta write with a single transient retry, feeding any throttle Meta
+ * reports in the ERROR BODY into the rate limiter.
+ *
+ * Headers cover the usual case, but a refusal sometimes carries
+ * `estimated_time_to_regain_access` in the body instead — and without this the
+ * limiter would never learn about it and would keep sending into the block.
+ */
+function metaWrite(fn, { acctKey, accessToken, label }) {
+  return withRetry(fn, {
+    onRetry: (err, cls, attempt) => {
+      getLogger().warn(
+        `[autopilot v4] ${label} attempt ${attempt} failed (${cls.reason}) — retrying`,
+      );
+    },
+    onRateLimit: (retryAfterMs, cls) => {
+      if (retryAfterMs > 0) {
+        sharedRateLimiter.markRetryAfter(
+          {
+            tokenHash: hashToken(accessToken),
+            accountId: String(acctKey || "").replace(/^act_/, ""),
+          },
+          cls.reason,
+          retryAfterMs,
+        );
+      }
+      getLogger().warn(
+        `[autopilot v4] ${label} refused: ${cls.reason}` +
+          (retryAfterMs ? ` — deferring ${Math.ceil(retryAfterMs / 60000)}min` : ""),
+      );
+    },
+  });
 }
 
 // ─── scale: move a winner's (or loser's) budget ────────────────────────────
@@ -788,7 +829,11 @@ async function applyScale({
 
   let budgets;
   try {
-    budgets = await readBudget({ level, entityId });
+    budgets = await metaWrite(() => readBudget({ level, entityId }), {
+      acctKey,
+      accessToken: scaleContext.accessToken,
+      label: `budget read ${level}`,
+    });
   } catch (err) {
     c.failed += 1;
     logger.error(
@@ -913,7 +958,11 @@ async function applyScale({
   let error = null;
   if (!finalDryRun) {
     try {
-      await writeBudget({ level, entityId, newBudget });
+      await metaWrite(() => writeBudget({ level, entityId, newBudget }), {
+        acctKey,
+        accessToken: scaleContext.accessToken,
+        label: `budget write ${level}`,
+      });
     } catch (err) {
       outcome = "failed";
       error = formatMetaError(err);
@@ -1050,6 +1099,7 @@ async function resumeAtAccount({
   rules,
   effectiveLookback,
   actionBudget,
+  accessToken,
   acctKey,
   acctName,
   entities,
@@ -1292,7 +1342,11 @@ async function resumeAtAccount({
     let error = null;
     if (!finalDryRun) {
       try {
-        await resumeEntity({ level, entityId });
+        await metaWrite(() => resumeEntity({ level, entityId }), {
+          acctKey,
+          accessToken,
+          label: `resume ${level}`,
+        });
       } catch (err) {
         outcome = "failed";
         error = formatMetaError(err);
@@ -1782,6 +1836,9 @@ async function runUserRuleCycle({
               };
               scaleContext = {
                 policy,
+                // Needed so a throttle reported in an error BODY can be fed
+                // back into the rate limiter, which is keyed by token.
+                accessToken: accountAccessToken,
                 counters: acctSummary.scale,
                 budget: actionBudget,
                 accountCap: accountCapAbsolute(
@@ -1801,6 +1858,7 @@ async function runUserRuleCycle({
                 rule,
                 acctKey,
                 acctName: audit.account_name,
+                accessToken: accountAccessToken,
                 entities: audit.entities,
                 finalDryRun,
                 runId,
@@ -1821,6 +1879,7 @@ async function runUserRuleCycle({
                 rules: rulesAtLookback,
                 effectiveLookback,
                 actionBudget,
+                accessToken: accountAccessToken,
                 acctKey,
                 acctName: audit.account_name,
                 entities: audit.entities,
