@@ -74,3 +74,28 @@ export const parseBudgetINR = (v) => {
 };
 
 export const hasBudget = (v) => v != null && v !== '' && v !== '0' && v !== 0;
+
+import { getGoogleWizardSchema } from '@/apis/googleAds/googleAdsApi';
+
+// Module-level schema cache — fetched once, reused across opens
+let _schemaCache = null;
+let _schemaPromise = null;
+
+export function fetchSchemaOnce() {
+  if (_schemaCache) return Promise.resolve(_schemaCache);
+  if (_schemaPromise) return _schemaPromise;
+  _schemaPromise = getGoogleWizardSchema()
+    .then((r) => {
+      _schemaCache = r?.schema || null;
+      return _schemaCache;
+    })
+    .catch((e) => {
+      _schemaPromise = null;
+      throw e;
+    });
+  return _schemaPromise;
+}
+
+export function getSchemaCache() {
+  return _schemaCache;
+}

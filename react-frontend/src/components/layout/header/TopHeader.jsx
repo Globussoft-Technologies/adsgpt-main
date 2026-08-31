@@ -414,12 +414,14 @@ export default function TopHeader() {
       </div>
     );
 
-    // Meta and TikTok Ads Manager include controls in their own row so they
+    // Meta, Google, and TikTok Ads Manager include controls in their own row so they
     // participate in layout instead of floating over provider controls.
     if (
       currentRoute === '/meta-ads' ||
       currentRoute === '/autopilot/meta' ||
-      currentRoute === '/tiktok-ads'
+      currentRoute === '/tiktok-ads' ||
+      currentRoute === '/google-ads' ||
+      currentRoute === '/autopilot/google'
     )
       return mobileNavigationControl;
 
@@ -733,7 +735,12 @@ export default function TopHeader() {
 
       {/* Floating fallback — keeps workspace switching reachable when the inline
           header is hidden on provider and Ad Studio sub-pages. */}
-      {(currentRoute === '/adfactory-demo' || hideHeader) && (
+      {(currentRoute === '/adfactory-demo' ||
+        (hideHeader &&
+          !currentRoute.startsWith('/meta-ads') &&
+          !currentRoute.startsWith('/google-ads') &&
+          !currentRoute.startsWith('/tiktok-ads') &&
+          !currentRoute.startsWith('/autopilot'))) && (
         <div
           className={`fixed top-4 right-5 z-[60] 2xl:right-6 ${currentRoute === '/meta-ads' ? 'md:top-9 2xl:top-10' : 'md:top-8 2xl:top-8.5'}`}
         >

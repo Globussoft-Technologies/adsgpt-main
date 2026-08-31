@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SiGoogleads } from 'react-icons/si';
 import {
@@ -32,10 +33,35 @@ import { Dropdown, StatusBadge } from '@/components/MetaAds/MetaAdsAtoms';
 import GoogleAdsAnalyticsPanel from './GoogleAdsAnalyticsPanel';
 import GoogleAdsCampaignsTable from './GoogleAdsCampaignsTable';
 import GoogleAdsAuditTab from './GoogleAdsAuditTab';
-import CreateCampaignWizard, { fetchSchemaOnce } from './CreateCampaignWizard';
+import CreateCampaignWizard from './CreateCampaignWizard';
+import { fetchSchemaOnce } from './googleAdsUtils';
 import AdsManagerModeSwitcher from '@/components/AdsManager/AdsManagerModeSwitcher';
+import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
+import ThemeToggle from '@/components/layout/header/ThemeToggle';
 
 const GOOGLE_BLUE = '#4285F4';
+
+// Meta/TikTok-style pill dropdown (button + menu, closes on backdrop click)
+const PillDropdown = ({ icon: Icon, iconClass = 'text-emerald-500', label, open, setOpen, children }) => (
+  <div className="relative">
+    <button
+      onClick={() => setOpen(!open)}
+      className="flex items-center gap-2 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 py-2 text-xs font-medium text-[#24211D] shadow-xs backdrop-blur-xl transition-all hover:border-[#DDD7CD] hover:bg-[#EAE5DC] dark:border-white/[0.06] dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
+    >
+      {Icon && <Icon className={`h-3 w-3 ${iconClass}`} />}
+      <span className="max-w-44 truncate">{label}</span>
+      <ChevronDown className="h-3 w-3 text-[#7A7369] dark:text-[#BEBEBE]" />
+    </button>
+    {open && (
+      <>
+        <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+        <div className="absolute right-0 z-50 mt-1 max-h-72 min-w-52 overflow-auto rounded-xl border border-[#DDD7CD] bg-white p-1 shadow-xl dark:border-white/10 dark:bg-[#161616]">
+          {children}
+        </div>
+      </>
+    )}
+  </div>
+);
 
 export default function GoogleAdsDashboard() {
   const { userData } = useSelector((state) => state.socket);
@@ -271,200 +297,199 @@ export default function GoogleAdsDashboard() {
 
         {/* Disconnect confirm modal */}
         <AnimatePresence>
-          {showDisconnectModal && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-              onClick={() => setShowDisconnectModal(false)}
-            >
+          {showDisconnectModal &&
+            typeof document !== 'undefined' &&
+            createPortal(
               <motion.div
-                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-sm rounded-2xl workspace-card p-6 shadow-xl dark:border-white/10 dark:bg-[#1a1a1a]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+                onClick={() => setShowDisconnectModal(false)}
               >
-                <h3 className="text-base font-bold text-gray-900 dark:text-white">Disconnect Google Ads?</h3>
-                <p className="mt-2 text-sm text-gray-500 dark:text-[#BEBEBE]">
-                  Your Google account will be disconnected. You can reconnect anytime from Profile settings.
-                </p>
-                <div className="mt-5 flex justify-end gap-2">
-                  <button
-                    onClick={() => setShowDisconnectModal(false)}
-                    className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:text-[#BEBEBE] dark:hover:bg-white/5"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={async () => { setShowDisconnectModal(false); await handleDisconnect(); }}
-                    disabled={disconnecting}
-                    className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-50"
-                  >
-                    {disconnecting ? 'Disconnecting…' : 'Disconnect'}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full max-w-sm rounded-2xl border border-gray-200/80 bg-white p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1a1a1a]"
+                >
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Disconnect Google Ads?</h3>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-[#BEBEBE]">
+                    Your Google account will be disconnected. You can reconnect anytime from Profile settings.
+                  </p>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button
+                      onClick={() => setShowDisconnectModal(false)}
+                      className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:text-[#BEBEBE] dark:hover:bg-white/5"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setShowDisconnectModal(false);
+                        await handleDisconnect();
+                      }}
+                      disabled={disconnecting}
+                      className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+                    >
+                      {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>,
+              document.body
+            )}
         </AnimatePresence>
       </div>
     );
   }
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden">
-      {/* grid dot bg */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.012]"
-        style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}
-      />
-      {/* ambient glow */}
-      <div className="pointer-events-none absolute -top-32 left-1/2 hidden h-64 w-96 -translate-x-1/2 rounded-full blur-3xl dark:block dark:bg-white/3" />
-
-      {/* ── header ─────────────────────────────────────────────────────────── */}
-      <div className="ads-operations-divider relative z-50 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#DDD7CD] px-5 py-3 pr-14 2xl:px-6 2xl:py-4 2xl:pr-16 dark:border-white/6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs dark:border-white/20 dark:bg-[#1b1c1e]">
-            <SiGoogleads className="h-5 w-5" style={{ color: GOOGLE_BLUE }} />
-          </div>
-          <div>
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-auto px-5 pt-3 pb-6 2xl:px-7 2xl:pt-4 text-gray-900 dark:text-white">
+      {/* Header — title left, account + date pickers and theme toggle top-right (TikTok-style) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DDD7CD] pb-2.5 dark:border-white/10">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs 2xl:h-12 2xl:w-12 dark:border-white/10 dark:bg-white">
+              <SiGoogleads className="h-6.5 w-6.5 2xl:h-7.5 2xl:w-7.5" style={{ color: GOOGLE_BLUE }} />
+            </div>
             <AdsManagerModeSwitcher activeMode="manager" platform="Google" />
-            <p className="text-xs text-[#7A7369] dark:text-[#BEBEBE]">Manage · Analyse · Optimise</p>
           </div>
+          <p className="px-1 text-xs font-medium text-[#7A7369] dark:text-[#BEBEBE]">
+            Manage · Analyse · Optimise
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* account picker */}
-          <Dropdown
-            open={accountOpen}
-            onClose={() => setAccountOpen(false)}
-            trigger={
-              <button
-                onClick={() => setAccountOpen((p) => !p)}
-                className="flex items-center gap-2 rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] px-3 py-2 text-xs text-[#24211D] shadow-xs backdrop-blur-xl transition-all hover:border-[#DDD7CD] hover:bg-[#EAE5DC] dark:border-white/6 dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <WorkspaceSwitcher />
+          {adAccounts.length > 0 && (
+            <>
+              <PillDropdown
+                icon={Radio}
+                iconClass="text-emerald-500"
+                label={selectedAccount?.name || 'Select Account'}
+                open={accountOpen}
+                setOpen={setAccountOpen}
               >
-                {loadingAccounts ? (
-                  <Loader2 className="h-3 w-3 animate-spin text-gray-500 dark:text-[#BEBEBE]" />
-                ) : (
-                  <>
-                    <Radio className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                    <span className="max-w-37.5 truncate font-medium">
-                      {selectedAccount?.name ?? 'Select Account'}
-                    </span>
-                    <ChevronDown className="h-3 w-3 text-gray-500 dark:text-[#BEBEBE]" />
-                  </>
-                )}
-              </button>
-            }
-          >
-            <div className="w-72 p-1">
-              <div className="max-h-55 overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20">
                 {adAccounts.map((acc) => (
                   <button
                     key={acc.id}
-                    onClick={() => { setSelectedAccount(acc); setAccountOpen(false); setActiveTab('analytics'); }}
-                    className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${selectedAccount?.id === acc.id ? 'bg-gray-100 dark:bg-white/5' : ''}`}
+                    onClick={() => {
+                      setSelectedAccount(acc);
+                      setAccountOpen(false);
+                      setActiveTab('analytics');
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition hover:bg-gray-100 dark:hover:bg-white/5 ${
+                      selectedAccount?.id === acc.id ? 'text-[#4285F4]' : 'text-gray-900 dark:text-white'
+                    }`}
                   >
                     <div>
-                      <p className={`text-xs font-medium ${selectedAccount?.id === acc.id ? 'text-[#4285F4]' : 'text-gray-900 dark:text-white'}`}>
+                      <p className={`font-medium ${selectedAccount?.id === acc.id ? 'text-[#4285F4]' : 'text-gray-900 dark:text-white'}`}>
                         {acc.name}
                       </p>
-                      <p className="text-10 text-gray-500 dark:text-[#BEBEBE]">{acc.currency} · {acc.timezone}</p>
+                      <p className="text-[10px] text-[#7A7369] dark:text-[#BEBEBE]">{acc.currency} · {acc.timezone}</p>
                     </div>
                     <StatusBadge status={acc.status === 'ENABLED' ? 'ACTIVE' : 'PAUSED'} />
                   </button>
                 ))}
-              </div>
-            </div>
-          </Dropdown>
+              </PillDropdown>
 
-          {/* date picker — analytics tab only */}
-          {activeTab === 'analytics' && (
-            <Dropdown
-              open={dateOpen}
-              onClose={() => setDateOpen(false)}
-              trigger={
-                <button
-                  onClick={() => setDateOpen((p) => !p)}
-                  className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 dark:border-white/6 dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
-                >
-                  <Calendar className="h-3 w-3 text-gray-900 dark:text-white" />
-                  <span className="font-medium">
-                    {DATE_PRESETS.find((d) => d.value === datePreset)?.label}
-                  </span>
-                  <ChevronDown className="h-3 w-3 text-gray-500 dark:text-[#BEBEBE]" />
-                </button>
-              }
-            >
-              <div className="w-44 p-1">
+              <PillDropdown
+                icon={Calendar}
+                iconClass="text-gray-400"
+                label={DATE_PRESETS.find((d) => d.value === datePreset)?.label || 'Date range'}
+                open={dateOpen}
+                setOpen={setDateOpen}
+              >
                 {DATE_PRESETS.map((preset) => (
                   <button
                     key={preset.value}
-                    onClick={() => { setDatePreset(preset.value); setDateOpen(false); }}
-                    className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${datePreset === preset.value ? 'bg-gray-100 text-[#4285F4] dark:bg-white/5' : 'text-gray-900 dark:text-white'}`}
+                    onClick={() => {
+                      setDatePreset(preset.value);
+                      setDateOpen(false);
+                    }}
+                    className={`block w-full rounded-lg px-3 py-2 text-left text-xs transition hover:bg-gray-100 dark:hover:bg-white/5 ${
+                      datePreset === preset.value ? 'text-[#4285F4]' : 'text-gray-900 dark:text-white'
+                    }`}
                   >
                     {preset.label}
                   </button>
                 ))}
-              </div>
-            </Dropdown>
+              </PillDropdown>
+            </>
           )}
+
+          <div className="ml-1 2xl:ml-2">
+            <ThemeToggle />
+          </div>
         </div>
       </div>
 
       {/* ── account summary strip ──────────────────────────────────────────── */}
       {selectedAccount && !loadingAccounts && (
-        <div className="ads-operations-divider relative z-30 flex shrink-0 flex-wrap items-center justify-between gap-5 border-b border-gray-200 px-5 py-2 2xl:px-6 dark:border-white/4">
-          {[
-            { label: 'Account',  value: <span className="font-semibold text-gray-900 dark:text-white">{selectedAccount.name}</span> },
-            { label: 'Currency', value: <span className="font-semibold text-gray-900 dark:text-white">{selectedAccount.currency}</span> },
-            {
-              label: 'Campaigns',
-              value: (
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {campaigns.length}
-                  {activeCampaigns > 0 && (
-                    <span className="ml-1 text-emerald-600 dark:text-emerald-400">({activeCampaigns} active)</span>
-                  )}
-                </span>
-              ),
-            },
-            { label: 'Timezone', value: <span className="font-semibold text-gray-900 dark:text-white">{selectedAccount.timezone}</span> },
-          ].map(({ label, value }, i) => (
-            <React.Fragment key={label}>
-              {i > 0 && <div className="h-4 w-px bg-gray-200 dark:bg-white/6" />}
-              <div className="flex items-center gap-2 text-sm 2xl:text-15">
-                <span className="text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-white/40">{label}</span>
-                {value}
-              </div>
-            </React.Fragment>
-          ))}
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-5 border-b border-[#DDD7CD] px-1 py-2 dark:border-white/10">
+          <div className="flex flex-wrap items-center gap-5">
+            {[
+              { label: 'Account', value: selectedAccount.name },
+              {
+                label: 'Campaigns',
+                value: (
+                  <>
+                    {campaigns.length}
+                    {activeCampaigns > 0 && (
+                      <span className="ml-1 text-emerald-600 dark:text-emerald-400">({activeCampaigns} active)</span>
+                    )}
+                  </>
+                ),
+              },
+              { label: 'Currency', value: selectedAccount.currency },
+              { label: 'Timezone', value: selectedAccount.timezone },
+            ].map((item, i) => (
+              <React.Fragment key={item.label}>
+                {i > 0 && <div className="h-3.5 w-px self-center bg-gray-300 dark:bg-white/20" />}
+                <div className="flex items-center gap-2 text-sm leading-none">
+                  <span className="text-xs font-medium uppercase tracking-wider text-[#7A7369] dark:text-white/40">
+                    {item.label}
+                  </span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{item.value}</span>
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+
           <button
             onClick={() => setShowDisconnectModal(true)}
             disabled={disconnecting}
-            className="ml-auto flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-bold text-red-600 transition-all hover:border-red-500/40 hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
+            className="flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-bold text-red-600 transition-all hover:border-red-500/40 hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
           >
-            {disconnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <LogOut className="h-3 w-3" />}
-            {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+            {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+            Disconnect
           </button>
         </div>
       )}
 
       {/* ── tabs ──────────────────────────────────────────────────────────── */}
-      <div className="ads-operations-divider relative z-40 flex shrink-0 items-center justify-between border-b border-gray-200 px-5 2xl:px-6 dark:border-white/6">
-        <div className="flex items-center gap-0.5">
+      <div className="mb-3 flex items-center justify-between border-b border-[#DDD7CD] dark:border-white/10">
+        <div className="flex items-center gap-1">
           {TABS.map((tab) => {
             const TabIcon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-1.5 px-3 py-3 text-sm font-semibold transition-all duration-200 ${activeTab === tab.id ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:text-[#BEBEBE] dark:hover:text-white/70'}`}
+                className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-sm font-semibold transition-all duration-200 ${
+                  activeTab === tab.id
+                    ? 'text-gray-900 dark:text-white'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-[#BEBEBE] dark:hover:text-white/70'
+                }`}
               >
                 <TabIcon className="h-3.5 w-3.5" />
                 {tab.label}
                 {activeTab === tab.id && (
                   <motion.div
                     layoutId="googleActiveTab"
-                    className="absolute right-0 bottom-0 left-0 h-0.5 rounded-full bg-gray-900 dark:bg-white/60"
+                    className="absolute right-0 bottom-0 left-0 h-0.5 rounded-full bg-gray-900 dark:bg-white"
                     transition={{ type: 'spring', bounce: 0.2, duration: 0.35 }}
                   />
                 )}
@@ -473,7 +498,7 @@ export default function GoogleAdsDashboard() {
           })}
         </div>
         {activeTab === 'audit' && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 pr-2">
             <Info className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/30" />
             <p className="text-xs text-gray-400 dark:text-white/40">
               Audit data reflects the <span className="font-semibold text-gray-500 dark:text-white/60">last 14 days</span> of campaign activity.
@@ -519,49 +544,6 @@ export default function GoogleAdsDashboard() {
                 <div>
                   <p className="text-base font-bold text-gray-900 2xl:text-xl dark:text-white">Campaigns</p>
                   <p className="text-xs text-gray-500 2xl:text-sm dark:text-[#BEBEBE]">Manage your Google Ads campaigns</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {campaignsLevel === 'campaigns' && (
-                    <div
-                      className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-1.5 dark:border-white/6 dark:bg-[#171717]"
-                      title="Search campaigns by name or ID"
-                    >
-                      <Search className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/40" />
-                      <input
-                        type="text"
-                        value={campaignSearch}
-                        onChange={(e) => setCampaignSearch(e.target.value)}
-                        placeholder="Search by name or ID…"
-                        title="Search campaigns by name or ID"
-                        className="w-40 bg-transparent text-xs text-gray-700 outline-none placeholder:text-gray-400 dark:text-white/90 dark:placeholder:text-white/40 2xl:w-56"
-                      />
-                    </div>
-                  )}
-                  <button
-                    onClick={reloadCampaigns}
-                    disabled={loadingCampaigns}
-                    className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-10 font-medium text-gray-500 backdrop-blur-xl transition-all hover:border-gray-300 hover:text-gray-900 disabled:opacity-50 dark:border-white/6 dark:bg-[#171717] dark:text-[#BEBEBE] dark:hover:border-white/10 dark:hover:text-white"
-                  >
-                    <RefreshCw className={`h-3 w-3 ${loadingCampaigns ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (schemaLoading || isGoogleDisconnected) return;
-                      setSchemaLoading(true);
-                      fetchSchemaOnce()
-                        .catch(() => {})
-                        .finally(() => { setSchemaLoading(false); openWizard('create-full'); });
-                    }}
-                    disabled={isGoogleDisconnected || schemaLoading}
-                    className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                    style={{ background: GOOGLE_BLUE }}
-                  >
-                    {schemaLoading
-                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…</>
-                      : <><Plus className="h-3.5 w-3.5" /> New Campaign</>
-                    }
-                  </button>
                 </div>
               </div>
               {isGoogleDisconnected && (
@@ -629,46 +611,54 @@ export default function GoogleAdsDashboard() {
 
       {/* ── disconnect modal ───────────────────────────────────────────────── */}
       <AnimatePresence>
-        {showDisconnectModal && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowDisconnectModal(false)}
-          >
+        {showDisconnectModal &&
+          typeof document !== 'undefined' &&
+          createPortal(
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 8 }}
-              transition={{ duration: 0.18 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl workspace-card p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+              onClick={() => setShowDisconnectModal(false)}
             >
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10">
-                <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" />
-              </div>
-              <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Disconnect Google Ads Account?</h2>
-              <p className="mb-6 text-xs text-gray-500 dark:text-[#BEBEBE]">
-                This will remove the connection to your Google Ads account. You can reconnect at any time from the Ads Manager.
-              </p>
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  onClick={() => setShowDisconnectModal(false)}
-                  className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-medium text-gray-900 transition-all hover:bg-gray-200 dark:border-white/8 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => { setShowDisconnectModal(false); handleDisconnect(); }}
-                  disabled={disconnecting}
-                  className="flex items-center gap-1.5 rounded-xl bg-red-500/80 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-red-500 disabled:opacity-50"
-                >
-                  {disconnecting && <Loader2 className="h-3 w-3 animate-spin" />}
-                  Disconnect
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                transition={{ duration: 0.18 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm rounded-2xl border border-gray-200/80 bg-white p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#161616]"
+              >
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10">
+                  <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" />
+                </div>
+                <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Disconnect Google Ads Account?</h2>
+                <p className="mb-6 text-xs text-gray-500 dark:text-[#BEBEBE]">
+                  This will remove the connection to your Google Ads account. You can reconnect at any time from the Ads Manager.
+                </p>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setShowDisconnectModal(false)}
+                    className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-medium text-gray-900 transition-all hover:bg-gray-200 dark:border-white/8 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowDisconnectModal(false);
+                      handleDisconnect();
+                    }}
+                    disabled={disconnecting}
+                    className="flex items-center gap-1.5 rounded-xl bg-red-500/80 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-red-500 disabled:opacity-50"
+                  >
+                    {disconnecting && <Loader2 className="h-3 w-3 animate-spin" />}
+                    Disconnect
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>,
+            document.body
+          )}
       </AnimatePresence>
     </div>
   );

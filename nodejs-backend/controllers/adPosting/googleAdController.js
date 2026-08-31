@@ -1400,7 +1400,12 @@ class GoogleAdController {
               // (identityVerificationError: BILLING_NOT_ON_MONTHLY_INVOICING) —
               // most self-serve/card-billed accounts can't be checked at all.
               identityVerificationUnknown = true;
-              logger.warn(`Identity verification check failed for ${tid}: ${formatGoogleError(ivErr).message} | raw: ${JSON.stringify(ivErr?.response?.data)}`);
+              const rawStr = JSON.stringify(ivErr?.response?.data || '');
+              if (rawStr.includes('BILLING_NOT_ON_MONTHLY_INVOICING')) {
+                logger.info(`[Google Ads] Account ${tid} is on card billing (getIdentityVerification API is restricted by Google to monthly invoicing accounts)`);
+              } else {
+                logger.warn(`Identity verification check failed for ${tid}: ${formatGoogleError(ivErr).message}`);
+              }
             }
           }
 

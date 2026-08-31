@@ -48,7 +48,7 @@ function PlainDropdown({ value, onChange, options, placeholder, disabled }) {
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
-        className={`group relative flex h-10! w-full items-center gap-0 rounded-full bg-[#383838]/50 px-4! py-2.5 text-base text-white shadow-none backdrop-blur-md transition duration-200 ease-in outline-none placeholder:text-base placeholder:text-[#AFAFAF] hover:bg-slate-100/10 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] dark:border-none dark:text-[#AFAFAF] ${
+        className={`group relative flex h-10! w-full items-center gap-0 rounded-full border border-gray-200 bg-gray-50 px-4! py-2.5 text-base text-gray-800 shadow-none transition duration-200 ease-in outline-none placeholder:text-base placeholder:text-gray-400 hover:bg-gray-100 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] dark:border-none dark:bg-[#383838]/50 dark:text-[#AFAFAF] dark:placeholder:text-[#AFAFAF] dark:hover:bg-slate-100/10 dark:backdrop-blur-md ${
           disabled ? 'cursor-not-allowed opacity-50' : ''
         }`}
         disabled={disabled}
@@ -57,15 +57,15 @@ function PlainDropdown({ value, onChange, options, placeholder, disabled }) {
           {selected?.label ?? placeholder}
         </SelectValue>
       </SelectTrigger>
-      <SelectContent className="backdrop-blur-100 z-9999 min-w-[300px] border dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
+      <SelectContent className="z-9999 min-w-[300px] border border-gray-200 bg-white text-gray-800 shadow-lg dark:border-white/20 dark:bg-[#0D0D0D]/90 dark:text-white dark:backdrop-blur-md">
         {options.length === 0 ? (
-          <div className="m-3 h-8 w-full text-center text-sm text-gray-300">No options found</div>
+          <div className="m-3 h-8 w-full text-center text-sm text-gray-400 dark:text-gray-300">No options found</div>
         ) : (
           options.map((opt) => (
             <SelectItem
               key={opt.value}
               value={opt.value}
-              className="cursor-pointer pr-4! text-base dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white"
+              className="cursor-pointer pr-4! text-base text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white"
             >
               {opt.label}
             </SelectItem>
@@ -85,7 +85,7 @@ function CampaignDropdown({ value, onChange, options, placeholder, disabled }) {
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
-        className={`group relative flex h-10! w-full items-center gap-0 rounded-full bg-[#383838]/50 px-4! py-2.5 text-base text-white shadow-none backdrop-blur-md transition duration-200 ease-in outline-none placeholder:text-base placeholder:text-[#AFAFAF] hover:bg-slate-100/10 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] dark:border-none dark:text-[#AFAFAF] ${
+        className={`group relative flex h-10! w-full items-center gap-0 rounded-full border border-gray-200 bg-gray-50 px-4! py-2.5 text-base text-gray-800 shadow-none transition duration-200 ease-in outline-none placeholder:text-base placeholder:text-gray-400 hover:bg-gray-100 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] dark:border-none dark:bg-[#383838]/50 dark:text-[#AFAFAF] dark:placeholder:text-[#AFAFAF] dark:hover:bg-slate-100/10 dark:backdrop-blur-md ${
           disabled ? 'cursor-not-allowed opacity-50' : ''
         }`}
         disabled={disabled}
@@ -94,9 +94,9 @@ function CampaignDropdown({ value, onChange, options, placeholder, disabled }) {
           {selected?.label ?? placeholder}
         </SelectValue>
       </SelectTrigger>
-      <SelectContent className="backdrop-blur-100 z-9999 min-w-[360px] border dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
+      <SelectContent className="z-9999 min-w-[360px] border border-gray-200 bg-white text-gray-800 shadow-lg dark:border-white/20 dark:bg-[#0D0D0D]/90 dark:text-white dark:backdrop-blur-md">
         {options.length === 0 ? (
-          <div className="m-3 h-8 w-full text-center text-sm text-gray-300">No options found</div>
+          <div className="m-3 h-8 w-full text-center text-sm text-gray-400 dark:text-gray-300">No options found</div>
         ) : (
           options.map((opt) => (
             <SelectItem
@@ -107,13 +107,13 @@ function CampaignDropdown({ value, onChange, options, placeholder, disabled }) {
               // and accessible by default. Hover the row to see why an
               // incompatible campaign is greyed out.
               title={opt.disabled ? opt.disabledReason : undefined}
-              className={`cursor-pointer pr-4! text-base dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
+              className={`cursor-pointer pr-4! text-base text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
                 opt.disabled ? 'cursor-not-allowed opacity-40' : ''
               }`}
             >
               <div className="flex w-full items-center justify-between gap-3">
                 <span className="truncate">{opt.label}</span>
-                <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/55">
+                <span className="shrink-0 rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[10px] uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-white/55">
                   {opt.channelLabel}
                 </span>
               </div>
@@ -248,7 +248,7 @@ export default function GoogleSelectStep({ payload, onBack, onNext }) {
         <button
           type="button"
           onClick={onBack}
-          className="flex w-fit items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
+          className="flex w-fit items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-white"
         >
           <ChevronLeft className="h-4 w-4" />
           Back to platforms
@@ -256,18 +256,18 @@ export default function GoogleSelectStep({ payload, onBack, onNext }) {
       )}
 
       <div>
-        <h2 className="text-lg font-semibold text-white 2xl:text-xl">
+        <h2 className="text-lg font-semibold text-gray-900 2xl:text-xl dark:text-white">
           Google Ads Account
         </h2>
-        <p className="mt-0.5 text-xs text-gray-400 2xl:mt-1 2xl:text-sm">
+        <p className="mt-0.5 text-xs text-gray-500 2xl:mt-1 2xl:text-sm dark:text-gray-400">
           Select your Google Ads customer account, campaign, and ad group.
-          Only <span className="text-white/75">{neededHuman}</span> campaigns can post a {isVideo ? 'video' : 'image'} asset.
+          Only <span className="text-gray-700 dark:text-white/75">{neededHuman}</span> campaigns can post a {isVideo ? 'video' : 'image'} asset.
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3 2xl:gap-8">
         <div className="flex flex-col gap-2">
-          <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+          <label className="text-sm text-gray-600 2xl:text-[18px] dark:text-[#AFAFAF]">
             Select Ad Account *
           </label>
           <PlainDropdown
@@ -286,7 +286,7 @@ export default function GoogleSelectStep({ payload, onBack, onNext }) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+          <label className="text-sm text-gray-600 2xl:text-[18px] dark:text-[#AFAFAF]">
             Select Campaign *
           </label>
           <CampaignDropdown
@@ -307,7 +307,7 @@ export default function GoogleSelectStep({ payload, onBack, onNext }) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="text-sm text-[#AFAFAF] 2xl:text-[18px]">
+          <label className="text-sm text-gray-600 2xl:text-[18px] dark:text-[#AFAFAF]">
             Select Ad Group *
           </label>
           <PlainDropdown

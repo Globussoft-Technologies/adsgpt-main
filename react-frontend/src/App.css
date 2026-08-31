@@ -2185,7 +2185,7 @@ html:not(.dark) table thead tr {
   background: var(--ws-surface-secondary) !important;
 }
 
-html:not(.dark) table tbody tr:hover {
+html:not(.dark) table tbody tr:not(.google-ads-table-static-row):not(.meta-ads-table-static-row):not(:has(td[colspan])):hover {
   background: var(--ws-surface-hover) !important;
 }
 
@@ -3646,20 +3646,20 @@ html:not(.dark) table tbody tr {
   background-color: var(--ws-surface) !important;
 }
 
-html:not(.dark) table tbody tr:hover {
+html:not(.dark) table tbody tr:not(.google-ads-table-static-row):not(.meta-ads-table-static-row):not(:has(td[colspan])):hover {
   background-color: var(--ws-surface-hover) !important;
 }
 
 /* Google Ads loading and empty rows do not open a campaign, so they should not
    receive the table's generic ivory hover feedback. */
-html:not(.dark) table tbody tr.google-ads-table-static-row:hover {
-  background-color: var(--ws-surface) !important;
-}
-
-/* Meta Ads uses the same static loading and empty rows. Keep them visually
-   neutral while preserving hover feedback for interactive campaign rows. */
-html:not(.dark) table tbody tr.meta-ads-table-static-row:hover {
-  background-color: var(--ws-surface) !important;
+html:not(.dark) table tbody tr.google-ads-table-static-row,
+html:not(.dark) table tbody tr.google-ads-table-static-row:hover,
+html:not(.dark) table tbody tr.meta-ads-table-static-row,
+html:not(.dark) table tbody tr.meta-ads-table-static-row:hover,
+html:not(.dark) table tbody tr:has(td[colspan]),
+html:not(.dark) table tbody tr:has(td[colspan]):hover {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 /* The date-range picker owns the visual border around each date value. Keep

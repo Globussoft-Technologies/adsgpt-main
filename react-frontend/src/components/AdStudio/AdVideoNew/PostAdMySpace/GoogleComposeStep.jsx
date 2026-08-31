@@ -162,7 +162,7 @@ export default function GoogleComposeStep({ payload, selection, onBack, onPosted
         <button
           type="button"
           onClick={onBack}
-          className="flex w-fit items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
+          className="flex w-fit items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-white"
         >
           <ChevronLeft className="h-4 w-4" />
           Back to selection
@@ -170,17 +170,17 @@ export default function GoogleComposeStep({ payload, selection, onBack, onPosted
       )}
 
       {selection && (
-        <div className="flex flex-wrap gap-2 text-[11px] text-white/55">
-          <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-0.5">
+        <div className="flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-white/55">
+          <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 dark:border-white/8 dark:bg-white/5">
             Ad account · {selection.adAccountId}
           </span>
-          <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-0.5">
+          <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 dark:border-white/8 dark:bg-white/5">
             Campaign · {selection.campaignId}
           </span>
-          <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-0.5">
+          <span className="rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 dark:border-white/8 dark:bg-white/5">
             Ad group · {selection.adGroupId}
           </span>
-          <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-emerald-200">
+          <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-emerald-600 dark:text-emerald-200">
             {isVideo ? 'Demand Gen · video' : 'Display · image'}
           </span>
         </div>
@@ -198,8 +198,8 @@ export default function GoogleComposeStep({ payload, selection, onBack, onPosted
           </Field>
 
           <Field label="Media">
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/2 px-3 py-3">
-              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-[#111]">
+            <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-3 dark:border-white/10 dark:bg-white/2">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-gray-200 dark:bg-[#111]">
                 {mediaUrl ? (
                   isVideo ? (
                     <video src={mediaUrl} className="h-full w-full object-cover" muted />
@@ -209,23 +209,23 @@ export default function GoogleComposeStep({ payload, selection, onBack, onPosted
                 ) : null}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-white">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-white">
                   {isVideo ? (
-                    <VideoIcon className="h-3.5 w-3.5 text-white/55" />
+                    <VideoIcon className="h-3.5 w-3.5 text-gray-400 dark:text-white/55" />
                   ) : (
-                    <ImageIcon className="h-3.5 w-3.5 text-white/55" />
+                    <ImageIcon className="h-3.5 w-3.5 text-gray-400 dark:text-white/55" />
                   )}
                   <span className="truncate">{filename || 'Selected media'}</span>
                 </p>
-                <p className="mt-0.5 text-xs text-white/40">
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-white/40">
                   Prefilled from MySpace · {isVideo ? 'video (auto-uploaded to YouTube)' : 'image'}
                 </p>
               </div>
             </div>
           </Field>
 
-          <div className="rounded-2xl border border-white/8 bg-white/2 p-4 2xl:p-5">
-            <p className="mb-3 text-xs font-semibold tracking-wide text-white/55 uppercase">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 2xl:p-5 dark:border-white/8 dark:bg-white/2">
+            <p className="mb-3 text-xs font-semibold tracking-wide text-gray-400 uppercase dark:text-white/55">
               Ad Copy
             </p>
 
@@ -242,8 +242,8 @@ export default function GoogleComposeStep({ payload, selection, onBack, onPosted
                   disabled={generating || !form.prompt.trim()}
                   className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition 2xl:text-sm ${
                     generating || !form.prompt.trim()
-                      ? 'cursor-not-allowed bg-white/8 text-white/40'
-                      : 'bg-white text-black hover:opacity-90'
+                      ? 'cursor-not-allowed bg-gray-100 text-gray-400 dark:bg-white/8 dark:text-white/40'
+                      : 'bg-gray-900 text-white hover:opacity-90 dark:bg-white dark:text-black'
                   }`}
                 >
                   {generating ? (
@@ -318,18 +318,18 @@ export default function GoogleComposeStep({ payload, selection, onBack, onPosted
                     setForm((f) => ({ ...f, callToAction: v === '__none__' ? '' : v }))
                   }
                 >
-                  <SelectTrigger className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-3 text-sm text-white">
+                  <SelectTrigger className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-800 dark:border-white/10 dark:bg-white/5 dark:text-white">
                     {/* Children override — same Radix gotcha as Meta */}
                     <SelectValue placeholder="No CTA">
                       {form.callToAction ? labelize(form.callToAction) : 'No CTA'}
                     </SelectValue>
                   </SelectTrigger>
-                  <SelectContent className="z-[9999] border-white/10 bg-[#1A1A1A] text-white">
-                    <SelectItem value="__none__" className="text-sm text-white/70">
+                  <SelectContent className="z-[9999] border border-gray-200 bg-white text-gray-800 shadow-lg dark:border-white/10 dark:bg-[#1A1A1A] dark:text-white">
+                    <SelectItem value="__none__" className="text-sm text-gray-500 dark:text-white/70">
                       No CTA
                     </SelectItem>
                     {GOOGLE_CTA_OPTIONS.map((opt) => (
-                      <SelectItem key={opt} value={opt} className="text-sm">
+                      <SelectItem key={opt} value={opt} className="text-sm text-gray-700 dark:text-white">
                         {labelize(opt)}
                       </SelectItem>
                     ))}
@@ -356,7 +356,7 @@ export default function GoogleComposeStep({ payload, selection, onBack, onPosted
 
         {/* live preview — Google ad mockup */}
         <div>
-          <p className="mb-2 text-xs font-semibold tracking-wide text-white/55 uppercase">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-gray-400 uppercase dark:text-white/55">
             Preview · {isVideo ? 'YouTube / Demand Gen' : 'Google Display'}
           </p>
           <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#0D0D0D]">
@@ -448,8 +448,8 @@ export default function GoogleComposeStep({ payload, selection, onBack, onPosted
           }
           className={`flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-semibold transition 2xl:px-10 2xl:py-3 2xl:text-base ${
             canPost
-              ? 'bg-white text-black hover:opacity-90'
-              : 'cursor-not-allowed bg-gray-400/30 text-gray-400'
+              ? 'bg-gray-900 text-white hover:opacity-90 dark:bg-white dark:text-black'
+              : 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-400/30'
           }`}
         >
           {posting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -464,8 +464,8 @@ function Field({ label, hint, children }) {
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <label className="text-sm font-medium text-white/75 2xl:text-base">{label}</label>
-        {hint && <span className="text-[10px] text-white/40 2xl:text-xs">{hint}</span>}
+        <label className="text-sm font-medium text-gray-700 2xl:text-base dark:text-white/75">{label}</label>
+        {hint && <span className="text-[10px] text-gray-400 2xl:text-xs dark:text-white/40">{hint}</span>}
       </div>
       {children}
     </div>
@@ -480,7 +480,7 @@ function TextInput({ value, onChange, placeholder, maxLength }) {
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       maxLength={maxLength}
-      className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-white/25 focus:bg-white/8 2xl:h-11 2xl:text-base"
+      className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-800 placeholder:text-gray-400 outline-none transition focus:border-gray-400 focus:bg-white 2xl:h-11 2xl:text-base dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/25 dark:focus:bg-white/8"
     />
   );
 }
@@ -493,7 +493,7 @@ function TextArea({ value, onChange, placeholder, rows = 3, maxLength }) {
       placeholder={placeholder}
       rows={rows}
       maxLength={maxLength}
-      className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-white/25 focus:bg-white/8 2xl:text-base"
+      className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 outline-none transition focus:border-gray-400 focus:bg-white 2xl:text-base dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/25 dark:focus:bg-white/8"
     />
   );
 }

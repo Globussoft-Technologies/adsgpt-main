@@ -55,7 +55,7 @@ export default function AdsManagerModeSwitcher({
             aria-disabled={!tab.available}
             title={!tab.available ? comingSoonLabel : undefined}
             onClick={() => selectMode(tab.id)}
-            className={`2xl:text-13 relative flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 2xl:px-4.5 2xl:py-2 ${
+            className={`relative flex items-center rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all duration-200 2xl:px-5 2xl:py-2 2xl:text-sm ${
               isActive
                 ? 'font-bold text-zinc-900 dark:text-white'
                 : tab.available

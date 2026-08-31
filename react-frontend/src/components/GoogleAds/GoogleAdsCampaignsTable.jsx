@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -307,7 +308,7 @@ function AddButton({ label, onClick, busy = false }) {
       type="button"
       onClick={onClick}
       disabled={busy}
-      className="flex items-center gap-1.5 rounded-xl bg-linear-to-r from-[#4285F4] to-[#34A853] px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 2xl:text-xs"
+      className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white shadow-xs transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-gray-100 2xl:text-xs"
     >
       {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
       {label}
@@ -315,15 +316,30 @@ function AddButton({ label, onClick, busy = false }) {
   );
 }
 
+function RefreshButton({ onClick, busy = false, title = 'Refresh' }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      title={title}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 disabled:opacity-50 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
+    >
+      <RefreshCw className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`} />
+    </button>
+  );
+}
+
 // ─── delete confirm modal ─────────────────────────────────────────────────────
 
 function DeleteModal({ item, onConfirm, onCancel, deleting }) {
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={() => !deleting && onCancel()}
     >
       <motion.div
@@ -337,15 +353,12 @@ function DeleteModal({ item, onConfirm, onCancel, deleting }) {
         <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
           <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
         </div>
-        <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">
-          Permanently remove this {item._adLabel ? 'ad' : 'campaign'}?
-        </h2>
-        <p className="mb-2 text-xs text-gray-500 dark:text-[#BEBEBE]">
-          Once removed, <span className="font-semibold text-gray-900 dark:text-white">{item.name}</span> can't be re-enabled.
-          {!item._adLabel && ' Instead of removing, you can pause it to stop accumulating new charges — paused campaigns can be re-enabled at any time.'}
+        <p className="text-sm font-bold text-gray-900 dark:text-white">Delete Campaign?</p>
+        <p className="mt-1.5 text-xs text-gray-500 dark:text-[#BEBEBE]">
+          Are you sure you want to delete <span className="font-semibold text-gray-700 dark:text-white/80">"{item.name}"</span>?
+          This will permanently remove the campaign and all its ad groups from Google Ads.
         </p>
-        <p className="mb-6 font-mono text-[11px] text-gray-400 dark:text-white/40">ID: {item.campaignId || item.id}</p>
-        <div className="flex items-center justify-end gap-2">
+        <div className="mt-5 flex items-center justify-end gap-2">
           <button
             onClick={onCancel}
             disabled={deleting}
@@ -359,17 +372,27 @@ function DeleteModal({ item, onConfirm, onCancel, deleting }) {
             className="flex items-center gap-1.5 rounded-xl bg-red-500/80 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-red-500 disabled:opacity-50"
           >
             {deleting && <Loader2 className="h-3 w-3 animate-spin" />}
-            {deleting ? 'Removing…' : 'Remove'}
+            {deleting ? 'Removing…' : 'Delete'}
           </button>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body
   );
 }
 
-// ─── campaign table (level 1) ─────────────────────────────────────────────────
-
-function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh, onLaunchWizard, searchActive }) {
+function CampaignTable({
+  campaigns,
+  loading,
+  adAccountId,
+  onDrillDown,
+  onRefresh,
+  onLaunchWizard,
+  searchActive,
+  query,
+  onQueryChange,
+  totalCount,
+}) {
   const [statuses, setStatuses]           = useState({});
   const [primaryStatuses, setPrimaryStatuses] = useState({});
   const [toggling, setToggling]           = useState({});
@@ -418,6 +441,48 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
+      {/* Top action bar inside card — matching Meta table structure */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 p-3 dark:border-white/12">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
+            {totalCount ?? campaigns.length} campaign{(totalCount ?? campaigns.length) === 1 ? '' : 's'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative w-56">
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
+            <input
+              type="text"
+              value={query || ''}
+              onChange={(e) => onQueryChange?.(e.target.value)}
+              placeholder="Search campaigns…"
+              className="w-full rounded-full border border-gray-300 bg-gray-100 py-1.5 pl-9 pr-9 text-xs text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => onQueryChange?.('')}
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <RefreshButton onClick={onRefresh} busy={loading} title="Refresh campaigns" />
+          {onLaunchWizard && (
+            <button
+              type="button"
+              onClick={() => onLaunchWizard('create-full')}
+              disabled={!adAccountId}
+              className="flex items-center gap-1.5 rounded-xl bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white shadow-xs transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-gray-100 2xl:text-xs"
+            >
+              <Plus className="h-3 w-3" />
+              New Campaign
+            </button>
+          )}
+        </div>
+      </div>
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table className="w-full min-w-190 border-collapse">
           <thead>
@@ -434,10 +499,10 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={8} className="py-14"><Spinner /></td></tr>
+              <tr className="google-ads-table-static-row"><td colSpan={8} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={8} className="py-14"><EmptyState message={searchActive ? "No campaigns match your search" : "No campaigns found for this account"} /></td></tr>
+              <tr className="google-ads-table-static-row"><td colSpan={8} className="py-14"><EmptyState message={searchActive ? "No campaigns match your search" : "No campaigns found for this account"} /></td></tr>
             )}
             {!loading && sorted.map((c, idx) => {
               const id        = c.campaignId || c.id;
@@ -455,13 +520,9 @@ function CampaignTable({ campaigns, loading, adAccountId, onDrillDown, onRefresh
                 >
                   {/* name */}
                   <td className="pl-5 pr-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-0.5 shrink-0 rounded-full bg-gray-300 dark:bg-white/20" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-white leading-tight">{c.name}</p>
-                        <p className="mt-0.5 font-mono text-11 text-gray-400 dark:text-white/40">ID: {id}</p>
-                        {budget && <BudgetBar budget={budget ? `₹${budget}` : null} remaining={remaining} />}
-                      </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white leading-tight">{c.name}</p>
+                      <p className="mt-0.5 font-mono text-11 text-gray-400 dark:text-white/40">ID: {id}</p>
                     </div>
                   </td>
                   {/* status — Google-style serving status */}
@@ -628,23 +689,27 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
 
   return (
     <>
-    {pendingDelete && (
-      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-        <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#1a1a1a]">
+    {pendingDelete && typeof document !== 'undefined' && createPortal(
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md" onClick={() => !deleting && setPendingDelete(null)}>
+        <div className="w-full max-w-sm rounded-2xl border border-gray-200/80 bg-white p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1a1a1a]" onClick={(e) => e.stopPropagation()}>
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
+            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+          </div>
           <p className="text-sm font-bold text-gray-900 dark:text-white">Permanently remove this {isPmax ? 'asset group' : 'ad group'}?</p>
           <p className="mt-1.5 text-xs text-gray-500 dark:text-white/50">
             Once removed, <span className="font-semibold text-gray-700 dark:text-white/80">"{pendingDelete.name}"</span> can't be re-enabled.
             Instead of removing, you can pause it to stop accumulating new charges — paused {isPmax ? 'asset groups' : 'ad groups'} can be re-enabled at any time.
           </p>
           <div className="mt-5 flex justify-end gap-2">
-            <button onClick={() => setPendingDelete(null)} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/4 dark:text-white/60">Cancel</button>
+            <button onClick={() => setPendingDelete(null)} disabled={deleting} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/4 dark:text-white/60">Cancel</button>
             <button onClick={handleConfirmDelete} disabled={deleting} className="flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60">
               {deleting && <Loader2 className="h-3 w-3 animate-spin" />}
               {deleting ? 'Removing…' : 'Remove'}
             </button>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     )}
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
@@ -657,28 +722,27 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
               Performance Max
             </span>
           )}
-          <div
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 dark:border-white/10 dark:bg-white/4"
-            title={`Search ${isPmax ? 'asset' : 'ad'} groups by name or ID`}
-          >
-            <Search className="h-3 w-3 shrink-0 text-gray-400 dark:text-white/40" />
+          <div className="relative w-56">
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
             <input
               type="text"
               value={adGroupSearch}
               onChange={(e) => setAdGroupSearch(e.target.value)}
-              placeholder="Search by name or ID…"
-              title={`Search ${isPmax ? 'asset' : 'ad'} groups by name or ID`}
-              className="w-36 bg-transparent text-xs text-gray-700 outline-none placeholder:text-gray-400 dark:text-white/90 dark:placeholder:text-white/40 2xl:w-44"
+              placeholder={`Search ${isPmax ? 'asset' : 'ad'} groups…`}
+              className="w-full rounded-full border border-gray-300 bg-gray-100 py-1.5 pl-9 pr-9 text-xs text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
             />
+            {adGroupSearch && (
+              <button
+                type="button"
+                onClick={() => setAdGroupSearch('')}
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
-          >
-            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <RefreshButton onClick={handleRefresh} busy={refreshing} title={`Refresh ${isPmax ? 'asset' : 'ad'} groups`} />
           {onLaunchWizard && !isPmax && (
             <AddButton
               label="Add Ad Group"
@@ -707,10 +771,10 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={onLaunchWizard ? 6 : 5} className="py-14"><Spinner /></td></tr>
+              <tr className="google-ads-table-static-row"><td colSpan={onLaunchWizard ? 6 : 5} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={onLaunchWizard ? 6 : 5} className="py-14"><EmptyState message={adGroupSearch.trim() ? `No ${isPmax ? 'asset' : 'ad'} groups match your search` : (isPmax ? 'No asset groups in this campaign' : 'No ad groups in this campaign')} /></td></tr>
+              <tr className="google-ads-table-static-row"><td colSpan={onLaunchWizard ? 6 : 5} className="py-14"><EmptyState message={adGroupSearch.trim() ? `No ${isPmax ? 'asset' : 'ad'} groups match your search` : (isPmax ? 'No asset groups in this campaign' : 'No ad groups in this campaign')} /></td></tr>
             )}
             {!loading && sorted.map((g, idx) => {
               const id     = g.adGroupId || g.id;
@@ -749,12 +813,9 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
                 >
                   {/* name */}
                   <td className="pl-5 pr-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-0.5 shrink-0 rounded-full bg-gray-300 dark:bg-white/20" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{g.name}</p>
-                        <p className="mt-0.5 font-mono text-11 text-gray-400 dark:text-white/40">ID: {id}</p>
-                      </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{g.name}</p>
+                      <p className="mt-0.5 font-mono text-11 text-gray-400 dark:text-white/40">ID: {id}</p>
                     </div>
                   </td>
                   {/* status */}
@@ -1236,50 +1297,53 @@ function PmaxAssetGroupDetail({ adGroup, campaign, adAccountId, manageNonce, onL
       ) : renderAssetTable()}
 
       <AnimatePresence>
-        {pendingDeleteAsset && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            onClick={() => !deletingRN && setPendingDeleteAsset(null)}
-          >
+        {pendingDeleteAsset &&
+          typeof document !== 'undefined' &&
+          createPortal(
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 8 }}
-              transition={{ duration: 0.18 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl workspace-card p-6 shadow-2xl dark:border-white/8 dark:bg-[#161616]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+              onClick={() => !deletingRN && setPendingDeleteAsset(null)}
             >
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
-                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
-              </div>
-              <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Remove this asset?</h2>
-              <p className="mb-6 text-xs text-gray-500 dark:text-[#BEBEBE]">
-                <span className="font-semibold text-gray-900 dark:text-white">{pendingDeleteAsset.text || pendingDeleteAsset.kind}</span> will
-                be removed from this asset group. This cannot be undone.
-              </p>
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  onClick={() => setPendingDeleteAsset(null)}
-                  disabled={!!deletingRN}
-                  className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-medium text-gray-900 transition-all hover:bg-gray-200 dark:border-white/8 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDeleteAsset}
-                  disabled={!!deletingRN}
-                  className="flex items-center gap-1.5 rounded-xl bg-red-500/80 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-red-500 disabled:opacity-50"
-                >
-                  {deletingRN && <Loader2 className="h-3 w-3 animate-spin" />}
-                  {deletingRN ? 'Removing…' : 'Remove'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                transition={{ duration: 0.18 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm rounded-2xl border border-gray-200/80 bg-white p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#161616]"
+              >
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
+                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                </div>
+                <h2 className="mb-1 text-sm font-bold text-gray-900 dark:text-white">Remove this asset?</h2>
+                <p className="mb-6 text-xs text-gray-500 dark:text-[#BEBEBE]">
+                  <span className="font-semibold text-gray-900 dark:text-white">{pendingDeleteAsset.text || pendingDeleteAsset.kind}</span> will
+                  be removed from this asset group. This cannot be undone.
+                </p>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setPendingDeleteAsset(null)}
+                    disabled={!!deletingRN}
+                    className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-medium text-gray-900 transition-all hover:bg-gray-200 dark:border-white/8 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteAsset}
+                    disabled={!!deletingRN}
+                    className="flex items-center gap-1.5 rounded-xl bg-red-500/80 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-red-500 disabled:opacity-50"
+                  >
+                    {deletingRN && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {deletingRN ? 'Removing…' : 'Remove'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>,
+            document.body
+          )}
       </AnimatePresence>
     </div>
   );
@@ -1474,28 +1538,27 @@ function AdsTableInner({ adGroup, campaign, adAccountId, onLaunchWizard, manageN
           Ads in <span className="text-gray-900 dark:text-white">{adGroup.name}</span>
         </p>
         <div className="flex items-center gap-2">
-          <div
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 dark:border-white/10 dark:bg-white/4"
-            title="Search ads by name or ID"
-          >
-            <Search className="h-3 w-3 shrink-0 text-gray-400 dark:text-white/40" />
+          <div className="relative w-56">
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
             <input
               type="text"
               value={adSearch}
               onChange={(e) => setAdSearch(e.target.value)}
-              placeholder="Search by name or ID…"
-              title="Search ads by name or ID"
-              className="w-36 bg-transparent text-xs text-gray-700 outline-none placeholder:text-gray-400 dark:text-white/90 dark:placeholder:text-white/40 2xl:w-44"
+              placeholder="Search ads…"
+              className="w-full rounded-full border border-gray-300 bg-gray-100 py-1.5 pl-9 pr-9 text-xs text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-400 focus:border-gray-400 focus:outline-none dark:border-white/10 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/40 dark:hover:border-white/15 dark:focus:border-white/25"
             />
+            {adSearch && (
+              <button
+                type="button"
+                onClick={() => setAdSearch('')}
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
-          >
-            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <RefreshButton onClick={handleRefresh} busy={refreshing} title="Refresh ads" />
           {onLaunchWizard && (
             <AddButton
               label="Add Ad"
@@ -1519,10 +1582,10 @@ function AdsTableInner({ adGroup, campaign, adAccountId, onLaunchWizard, manageN
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={onLaunchWizard ? 7 : 6} className="py-14"><Spinner /></td></tr>
+              <tr className="google-ads-table-static-row"><td colSpan={onLaunchWizard ? 7 : 6} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={onLaunchWizard ? 7 : 6} className="py-14"><EmptyState message={adSearch.trim() ? 'No ads match your search' : 'No ads in this ad group'} /></td></tr>
+              <tr className="google-ads-table-static-row"><td colSpan={onLaunchWizard ? 7 : 6} className="py-14"><EmptyState message={adSearch.trim() ? 'No ads match your search' : 'No ads in this ad group'} /></td></tr>
             )}
             {!loading && sorted.map((a, idx) => {
               const id     = a.adId || a.id;
@@ -1577,16 +1640,13 @@ function AdsTableInner({ adGroup, campaign, adAccountId, onLaunchWizard, manageN
                   </td>
                   {/* ad name */}
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-6 w-0.5 shrink-0 rounded-full bg-gray-300 dark:bg-white/15" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
-                          {adCopyText(a.headline) || adCopyText(a.headlines?.[0]) || `Ad ${id}`}
-                        </p>
-                        {adCopyText(a.descriptions?.[0]) && (
-                          <p className="truncate text-xs text-gray-400 dark:text-white/40">{adCopyText(a.descriptions[0])}</p>
-                        )}
-                      </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                        {adCopyText(a.headline) || adCopyText(a.headlines?.[0]) || `Ad ${id}`}
+                      </p>
+                      {adCopyText(a.descriptions?.[0]) && (
+                        <p className="truncate text-xs text-gray-400 dark:text-white/40">{adCopyText(a.descriptions[0])}</p>
+                      )}
                     </div>
                   </td>
                   {/* status */}
@@ -1721,10 +1781,14 @@ function AdsTableInner({ adGroup, campaign, adAccountId, onLaunchWizard, manageN
 
 // ─── root export ──────────────────────────────────────────────────────────────
 
-export default function GoogleAdsCampaignsTable({ campaigns, loading, adAccountId, onRefresh, onLaunchWizard, manageNonce, campaignSearch = '', onLevelChange }) {
+export default function GoogleAdsCampaignsTable({ campaigns = [], loading, adAccountId, onRefresh, onLaunchWizard, manageNonce, campaignSearch: externalSearch, onCampaignSearchChange, onLevelChange }) {
   const [level,            setLevel]            = useState('campaigns');
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [selectedAdGroup,  setSelectedAdGroup]  = useState(null);
+  const [internalSearch,   setInternalSearch]   = useState('');
+
+  const query = onCampaignSearchChange ? (externalSearch ?? '') : internalSearch;
+  const setQuery = onCampaignSearchChange || setInternalSearch;
 
   useEffect(() => { onLevelChange?.(level); }, [level, onLevelChange]);
 
@@ -1733,9 +1797,9 @@ export default function GoogleAdsCampaignsTable({ campaigns, loading, adAccountI
   const goToCampaigns   = ()  => { setLevel('campaigns'); setSelectedCampaign(null); setSelectedAdGroup(null); };
   const goToAdGroups    = ()  => { setLevel('adgroups');                              setSelectedAdGroup(null); };
 
-  const filteredCampaigns = campaignSearch.trim()
+  const filteredCampaigns = (query || '').trim()
     ? campaigns.filter((c) => {
-        const q = campaignSearch.trim().toLowerCase();
+        const q = (query || '').trim().toLowerCase();
         return (c.name || '').toLowerCase().includes(q) || String(c.campaignId || c.id || '').toLowerCase().includes(q);
       })
     : campaigns;
@@ -1760,12 +1824,15 @@ export default function GoogleAdsCampaignsTable({ campaigns, loading, adAccountI
             <motion.div key="campaigns" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
               <CampaignTable
                 campaigns={filteredCampaigns}
+                totalCount={campaigns.length}
+                query={query}
+                onQueryChange={setQuery}
                 loading={loading}
                 adAccountId={adAccountId}
                 onDrillDown={drillToCampaign}
                 onRefresh={onRefresh}
                 onLaunchWizard={onLaunchWizard}
-                searchActive={!!campaignSearch.trim()}
+                searchActive={!!(query || '').trim()}
               />
             </motion.div>
           )}

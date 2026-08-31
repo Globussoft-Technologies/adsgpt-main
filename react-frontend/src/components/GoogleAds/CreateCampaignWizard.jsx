@@ -27,7 +27,7 @@ import {
   Layers, Loader2, Target, X, AlertCircle, Plus, Trash2,
   Youtube, Search, Monitor, Zap, ShoppingBag, MapPin, TrendingUp,
   RefreshCw, Smartphone, Store, Key, MapPinned, Bookmark, BookmarkPlus, Users,
-  Info,
+  Info, Rocket,
 } from 'lucide-react';
 import {
   createGoogleCampaign,
@@ -75,18 +75,7 @@ const OBJECTIVE_ICONS = {
   MULTI_CHANNEL:   Smartphone,
 };
 
-// Module-level schema cache — fetched once, reused across opens
-let _schemaCache = null;
-let _schemaPromise = null;
-
-export function fetchSchemaOnce() {
-  if (_schemaCache) return Promise.resolve(_schemaCache);
-  if (_schemaPromise) return _schemaPromise;
-  _schemaPromise = getGoogleWizardSchema()
-    .then((r) => { _schemaCache = r?.schema || null; return _schemaCache; })
-    .catch((e) => { _schemaPromise = null; throw e; });
-  return _schemaPromise;
-}
+import { fetchSchemaOnce, getSchemaCache } from './googleAdsUtils';
 
 // ─── step definitions ─────────────────────────────────────────────────────────
 
@@ -799,8 +788,8 @@ function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpl
           {(form.pmaxHeadlines || ['', '', '']).map((h, i) => (
             <div key={i} className="flex items-center gap-1.5">
               <div className="relative flex-1">
-                <Input value={h} onChange={(e) => { const n = [...(form.pmaxHeadlines || ['','',''])]; n[i] = e.target.value.slice(0, 30); setField('pmaxHeadlines', n); }} placeholder={`Headline ${i + 1}`} />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-10 text-gray-400">{h.length}/30</span>
+                <Input value={h} onChange={(e) => { const n = [...(form.pmaxHeadlines || ['','',''])]; n[i] = e.target.value.slice(0, 30); setField('pmaxHeadlines', n); }} placeholder={`Headline ${i + 1}`} className="pr-12" />
+                <span className="pointer-events-none select-none absolute right-2.5 top-1/2 -translate-y-1/2 text-10 text-gray-400 dark:text-white/30">{h.length}/30</span>
               </div>
               {(form.pmaxHeadlines || []).length > 3 && (
                 <button onClick={() => setField('pmaxHeadlines', (form.pmaxHeadlines || []).filter((_, j) => j !== i))} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10">
@@ -819,8 +808,8 @@ function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpl
         <div className="mt-3">
           <Label required>Long headline <span className="text-gray-400 dark:text-white/30">(max 90 chars)</span></Label>
           <div className="relative">
-            <Input value={form.pmaxLongHeadline} onChange={(e) => setField('pmaxLongHeadline', e.target.value.slice(0, 90))} placeholder="Longer headline shown in some placements" />
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-10 text-gray-400">{(form.pmaxLongHeadline || '').length}/90</span>
+            <Input value={form.pmaxLongHeadline} onChange={(e) => setField('pmaxLongHeadline', e.target.value.slice(0, 90))} placeholder="Longer headline shown in some placements" className="pr-14" />
+            <span className="pointer-events-none select-none absolute right-2.5 top-1/2 -translate-y-1/2 text-10 text-gray-400 dark:text-white/30">{(form.pmaxLongHeadline || '').length}/90</span>
           </div>
           <FieldError msg={errors.pmaxLongHeadline} />
         </div>
@@ -834,8 +823,8 @@ function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpl
           {(form.pmaxDescriptions || ['', '']).map((d, i) => (
             <div key={i} className="flex items-center gap-1.5">
               <div className="relative flex-1">
-                <Input value={d} onChange={(e) => { const n = [...(form.pmaxDescriptions || ['',''])]; n[i] = e.target.value.slice(0, 90); setField('pmaxDescriptions', n); }} placeholder={`Description ${i + 1}`} />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-10 text-gray-400">{d.length}/90</span>
+                <Input value={d} onChange={(e) => { const n = [...(form.pmaxDescriptions || ['',''])]; n[i] = e.target.value.slice(0, 90); setField('pmaxDescriptions', n); }} placeholder={`Description ${i + 1}`} className="pr-14" />
+                <span className="pointer-events-none select-none absolute right-2.5 top-1/2 -translate-y-1/2 text-10 text-gray-400 dark:text-white/30">{d.length}/90</span>
               </div>
               {(form.pmaxDescriptions || []).length > 2 && (
                 <button onClick={() => setField('pmaxDescriptions', (form.pmaxDescriptions || []).filter((_, j) => j !== i))} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10">
@@ -1532,8 +1521,8 @@ function SearchAdFields({ form, setField, errors }) {
           {headlines.map((h, i) => (
             <div key={i} className="flex items-center gap-1.5">
               <div className="relative flex-1">
-                <Input value={h} onChange={(e) => setHeadline(i, e.target.value)} placeholder={`Headline ${i + 1}`} maxLength={30} />
-                <span className="absolute top-1/2 right-2 -translate-y-1/2 text-10 text-gray-400 dark:text-white/30">{h.length}/30</span>
+                <Input value={h} onChange={(e) => setHeadline(i, e.target.value)} placeholder={`Headline ${i + 1}`} maxLength={30} className="pr-12" />
+                <span className="pointer-events-none select-none absolute top-1/2 right-2.5 -translate-y-1/2 text-10 text-gray-400 dark:text-white/30">{h.length}/30</span>
               </div>
               {headlines.length > 3 && (
                 <button type="button" onClick={() => removeHeadline(i)} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10">
@@ -1557,8 +1546,8 @@ function SearchAdFields({ form, setField, errors }) {
           {descriptions.map((d, i) => (
             <div key={i} className="flex items-center gap-1.5">
               <div className="relative flex-1">
-                <Input value={d} onChange={(e) => setDesc(i, e.target.value)} placeholder={`Description ${i + 1}`} maxLength={90} />
-                <span className="absolute top-1/2 right-2 -translate-y-1/2 text-10 text-gray-400 dark:text-white/30">{d.length}/90</span>
+                <Input value={d} onChange={(e) => setDesc(i, e.target.value)} placeholder={`Description ${i + 1}`} maxLength={90} className="pr-14" />
+                <span className="pointer-events-none select-none absolute top-1/2 right-2.5 -translate-y-1/2 text-10 text-gray-400 dark:text-white/30">{d.length}/90</span>
               </div>
               {descriptions.length > 2 && (
                 <button type="button" onClick={() => removeDesc(i)} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10">
@@ -2448,23 +2437,23 @@ export default function CreateCampaignWizard({
   const [form, setFormState]        = useState(() => buildInitialForm(context));
 
   // ── schema (fetched once, cached at module level) ─────────────────────────
-  const [schema, setSchema] = useState(() => _schemaCache);
+  const [schema, setSchema] = useState(() => getSchemaCache());
   const schemaLoading = false;
   const schemaError = null;
 
   // Sync from cache when modal opens (cache may have been populated after first mount)
   useEffect(() => {
-    if (open && !schema && _schemaCache) setSchema(_schemaCache);
+    if (open && !schema && getSchemaCache()) setSchema(getSchemaCache());
   }, [open]);
 
 
   // ── form state ────────────────────────────────────────────────────────────
   const [stepIndex, setStepIndex]   = useState(0);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [touched, setTouched]       = useState({});
 
   const handleClose = () => setShowDiscardConfirm(true);
   const confirmDiscard = () => { setShowDiscardConfirm(false); onClose?.(); };
-  const [touched, setTouched]       = useState({});
   const [errors, setErrors]         = useState({});
   const [launched, setLaunched]     = useState({ loading: false, error: null });
   const [created, setCreated]       = useState(() => seedCreated(mode, context));
@@ -2617,7 +2606,7 @@ export default function CreateCampaignWizard({
 
   const launchIcon = (() => {
     if (['edit-campaign', 'edit-adgroup', 'edit-ad'].includes(mode)) return Check;
-    return RefreshCw;
+    return Rocket;
   })();
   const rawStepErrors = useMemo(() => validateStep(currentStep?.id, form, adType, schema, mode), [currentStep?.id, form, adType, schema, mode]);
   const visibleStepErrors = useMemo(() => {
@@ -3013,11 +3002,12 @@ export default function CreateCampaignWizard({
   const modeMeta = WIZARD_MODE_META[mode] || WIZARD_MODE_META['create-full'];
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
-      <div
-        className="light-glass-dialog relative flex h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-[#141414]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <>
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
+        <div
+          className="relative flex h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#141414]"
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* close button — pinned top-right */}
         <button
           type="button"
@@ -3153,52 +3143,55 @@ export default function CreateCampaignWizard({
             </button>
           )}
         </div>
-
-          {/* Discard confirmation overlay */}
-          <AnimatePresence>
-            {showDiscardConfirm && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="absolute inset-0 z-10 flex items-center justify-center bg-black/65 backdrop-blur-sm"
-              >
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.96 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.96 }}
-                  transition={{ duration: 0.16 }}
-                  className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-white/12 dark:bg-[#161616]"
-                >
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
-                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-300" />
-                  </div>
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">Discard this campaign?</h3>
-                  <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-white/55">
-                    Everything you've entered in the wizard will be cleared. Your existing campaigns in Google Ads aren't affected.
-                  </p>
-                  <div className="mt-5 flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowDiscardConfirm(false)}
-                      className="rounded-full border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-semibold text-gray-900 transition-all hover:bg-gray-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-                    >
-                      Keep editing
-                    </button>
-                    <button
-                      type="button"
-                      onClick={confirmDiscard}
-                      className="rounded-full bg-red-500/85 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-red-500"
-                    >
-                      Discard
-                    </button>
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
       </div>
     </div>
+
+      {/* Discard confirmation overlay — full-screen fixed overlay so no nested card borders or inner boxes show underneath */}
+      <AnimatePresence>
+        {showDiscardConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+            onClick={() => setShowDiscardConfirm(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 0 }}
+              transition={{ duration: 0.16 }}
+              className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-white/12 dark:bg-[#161616]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 dark:bg-red-500/10">
+                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-300" />
+              </div>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white">Discard this campaign?</h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-gray-500 dark:text-white/55">
+                Everything you've entered in the wizard will be cleared. Your existing campaigns in Google Ads aren't affected.
+              </p>
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDiscardConfirm(false)}
+                  className="rounded-full border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-semibold text-gray-900 transition-all hover:bg-gray-200 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                >
+                  Keep editing
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDiscard}
+                  className="rounded-full bg-red-600 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-red-700 shadow-sm"
+                >
+                  Discard
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

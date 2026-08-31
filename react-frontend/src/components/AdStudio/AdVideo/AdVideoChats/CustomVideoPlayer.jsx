@@ -350,12 +350,12 @@ const CustomVideoPlayer = ({ src, aspect }) => {
               }}
             >
               {/* Track background */}
-              <div className="absolute top-1/2 left-0 h-1.5 w-full -translate-y-1/2 rounded-full bg-white/50" />
+              <div className="absolute top-1/2 left-0 h-1.5 w-full -translate-y-1/2 rounded-full bg-white/30" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.18)' }} />
 
-              {/* Watched progress (white) */}
+              {/* Watched progress (white with shadow so visible on both dark and light) */}
               <div
                 className="absolute top-1/2 left-0 h-1 -translate-y-1/2 rounded-full bg-white transition-[width] duration-10"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${progress}%`, boxShadow: '0 0 0 1px rgba(0,0,0,0.25)' }}
               />
 
               {/* Hidden input for thumb behavior */}
@@ -366,7 +366,7 @@ const CustomVideoPlayer = ({ src, aspect }) => {
                 step="0.1"
                 value={progress}
                 onChange={handleSeek}
-                className="absolute top-0 left-0 w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:translate-y-[-2px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white hover:[&::-webkit-slider-thumb]:scale-110"
+                className="absolute top-0 left-0 w-full cursor-pointer appearance-none bg-transparent [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-black/20 [&::-moz-range-thumb]:bg-white [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:translate-y-[-2px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_0_0_1.5px_rgba(0,0,0,0.3)] hover:[&::-webkit-slider-thumb]:scale-110"
               />
             </div>
           </div>
