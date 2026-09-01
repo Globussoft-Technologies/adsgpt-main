@@ -349,14 +349,25 @@ export default function AdFactoryV2Page() {
       ? Math.max(0, availableCredits - estimate.total)
       : null;
 
+  const prevUrlBriefId = useRef(urlBriefId);
+
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (urlBriefId) dispatch(fetchBrief(urlBriefId));
+    if (urlBriefId) {
+      if (urlBriefId !== briefId && urlBriefId !== prevUrlBriefId.current) {
+        dispatch(fetchBrief(urlBriefId));
+      }
+    } else if (briefId) {
+      dispatch(resetBrief());
+    }
+    prevUrlBriefId.current = urlBriefId;
+  }, [dispatch, urlBriefId, briefId]);
+
+  useEffect(() => {
     return () => {
       dispatch(resetBrief());
     };
-    // Once per id — re-running on every render would refetch forever.
-  }, [dispatch, urlBriefId]);
+  }, [dispatch]);
 
   // History is loaded on the front door only — it is the one screen that shows
   // it, and refetching behind the working screens would be pure noise.
