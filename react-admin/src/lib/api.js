@@ -42,6 +42,12 @@ export const adminApi = {
   tokenUsageOverview: (params) => api.get("/token-usage/overview", { params }),
   tokenUsageUserDetail: (userId, params) =>
     api.get(`/token-usage/users/${encodeURIComponent(userId)}`, { params }),
+  // Meta API usage — what we spend against Meta's shared per-app quota.
+  // Distinct from token usage above: that meters what we spend on models,
+  // this meters what we spend against a third party's ceiling.
+  metaUsageOverview: (params) => api.get("/meta-usage/overview", { params }),
+  metaUsageUserDetail: (userId, params) =>
+    api.get(`/meta-usage/users/${encodeURIComponent(userId)}`, { params }),
   plans: () => api.get("/plans"),
   updatePlanLimit: (planId, patch) => api.patch(`/plans/${encodeURIComponent(planId)}`, patch),
   models: (params) => api.get("/models", { params }),
