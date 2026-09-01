@@ -596,7 +596,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
         <div>
           <label className="flex items-center gap-2 text-sm text-zinc-900 2xl:text-base dark:text-white">Aspect Ratio * {isAspectRatioLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}</label>
 
-          <div className="mt-2 flex flex-wrap gap-3">
+          <div className="mt-2 flex flex-wrap gap-4">
             {aspectRatioOptions
               .map(({ value, label }) => {
                 const isSelected = value === aspectRatio;
@@ -610,36 +610,27 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
                 }
 
                 return (
-                  <div
+                  <button
                     key={value}
+                    disabled={isDisabled || isAspectRatioLoading}
                     onClick={() => {
                       if (isDisabled || isAspectRatioLoading) return;
                       setAspectRatio(value);
                       setErrors((prev) => ({ ...prev, aspectRatio: '' }));
                     }}
-                    className={`group rounded-full bg-gradient-to-r ${
+                    className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${
                       isSelected
-                        ? 'from-[#02C8C4] to-[#5867EB]'
+                        ? 'border-black/10 dark:border-white/30 bg-black/5 dark:bg-white/10 text-gray-900 dark:text-white shadow-inner'
                         : isDisabled
-                          ? 'from-transparent to-transparent opacity-30 grayscale cursor-not-allowed'
-                          : 'from-zinc-200 to-zinc-200 dark:from-[#2d2d2d] dark:to-[#2d2d2d]'
-                    } w-fit p-[1px] hover:bg-gradient-to-tr transition-all`}
+                          ? 'border-black/10 dark:border-white/5 bg-transparent text-gray-500 dark:text-white/20 cursor-not-allowed opacity-40 grayscale'
+                          : errors.aspectRatio
+                            ? 'border-red-500/50 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5'
+                            : 'border-black/10 dark:border-white/5 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white/60'
+                    }`}
                   >
-                    <button
-                      type="button"
-                      disabled={isDisabled || isAspectRatioLoading}
-                      className={`flex min-w-20 items-center justify-between gap-1.5 rounded-full px-5 py-1.5 text-xs transition-all 2xl:min-w-22 2xl:py-2 ${
-                        isSelected
-                          ? 'bg-zinc-100 text-zinc-800 dark:bg-[#2d2d2d] dark:text-white'
-                          : isDisabled
-                            ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed dark:bg-[#383838]/30 dark:text-[#AFAFAF]/50'
-                            : 'bg-white text-zinc-700 hover:border-black/10 hover:text-zinc-900 dark:bg-[#383838]/50 dark:text-[#AFAFAF] dark:hover:border-white/10 dark:hover:text-white'
-                      }`}
-                    >
-                      <AspectRatioPreview ratio={value} className="h-4 w-4 2xl:h-5 2xl:w-5" />
-                      <span className="text-xs 2xl:text-sm">{label}</span>
-                    </button>
-                  </div>
+                    <AspectRatioPreview ratio={value} className={`h-4 w-4 ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/40'}`} />
+                    {label}
+                  </button>
                 );
               })}
           </div>
