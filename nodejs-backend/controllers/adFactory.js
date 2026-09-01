@@ -685,12 +685,12 @@ exports.getAdFactoryImagesByUserId = async (req, res) => {
 
     // 1. Live campaigns — success + generating + error
     const campaigns = await Campaign.find({ userId })
-      .select("metadata.campaignId metadata.campaignName results.image services")
+      .select("metadata.campaignId metadata.campaignName results.image services createdAt updatedAt")
       .lean();
 
     // 2. History snapshots — success + error only (generating is stale here)
     const histories = await CampaignHistory.find({ userId })
-      .select("campaignId previousData.metadata.campaignName previousData.results.image previousData.services")
+      .select("campaignId previousData.metadata.campaignName previousData.results.image previousData.services createdAt updatedAt")
       .lean();
 
     // 3. Assemble (merge → date-filter → dedupe → sort → count → paginate)

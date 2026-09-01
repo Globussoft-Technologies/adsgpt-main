@@ -53,10 +53,17 @@ const tsMs = (t) => (t ? new Date(t).getTime() : 0);
 // `now` is the reference "current time" (ms) used to stamp generating
 // placeholders that have no timestamp of their own, so they sort to the top
 // and fall inside a date range covering today.
-function mapImageEntry(entry, { campaignId, campaignName, model, origin, now }) {
+function mapImageEntry(entry, { campaignId, campaignName, model, origin, now, fallbackTimestamp }) {
   const status = classifyStatus(entry?.status);
+  // Errored entries often carry no timestamp of their own. Left null they sort
+  // to the very bottom of My Space (tsMs(null) === 0) and vanish entirely under
+  // a date filter, so a failure the user wants to see is the one thing they
+  // cannot find. Fall back to the campaign's own clock, which is the closest
+  // record we have of when the entry existed.
+  const ownTimestamp = entry?.timestamp || null;
   const timestamp =
-    entry?.timestamp || (status === "generating" ? new Date(now) : null);
+    ownTimestamp ||
+    (status === "generating" ? new Date(now) : fallbackTimestamp || null);
   // Human-facing label resolved from the model registry (canonicalKey OR alias).
   // Falls back to the raw model string so the frontend always has something.
   const configuredModel = modelConfigurationService.getRuntimeModel(model);
@@ -74,6 +81,10 @@ function mapImageEntry(entry, { campaignId, campaignName, model, origin, now }) 
     jobId: entry?.jobId || null,
     origin, // "live" | "history"
     timestamp,
+    // Internal only — dedupe keys off the entry's OWN timestamp so the fallback
+    // above cannot split one repeated error into several. Stripped before the
+    // list is returned.
+    ownTimestamp,
   };
 }
 
@@ -108,7 +119,7 @@ function buildInRange({ startDate, endDate } = {}) {
 function dedupeKey(img) {
   if (img.url) return `url:${img.url}`;
   if (img.status === "error") {
-    return `err:${img.campaignId || ""}:${tsMs(img.timestamp)}:${img.error || ""}`;
+    return `err:${img.campaignId || ""}:${tsMs(img.ownTimestamp)}:${img.error || ""}`;
   }
   return null; // generating — keep all
 }
@@ -147,7 +158,16 @@ function assembleAdFactoryImages({
     const campaignId = c?.metadata?.campaignId || c?._id?.toString?.() || null;
     const campaignName = c?.metadata?.campaignName || null;
     for (const entry of c?.results?.image || []) {
-      all.push(mapImageEntry(entry, { campaignId, campaignName, model, origin: "live", now }));
+      all.push(
+        mapImageEntry(entry, {
+          campaignId,
+          campaignName,
+          model,
+          origin: "live",
+          now,
+          fallbackTimestamp: c?.updatedAt || c?.createdAt || null,
+        }),
+      );
     }
   }
 
@@ -158,7 +178,14 @@ function assembleAdFactoryImages({
     const campaignId = h?.campaignId || prev?.metadata?.campaignId || null;
     const campaignName = prev?.metadata?.campaignName || null;
     for (const entry of prev?.results?.image || []) {
-      const mapped = mapImageEntry(entry, { campaignId, campaignName, model, origin: "history", now });
+      const mapped = mapImageEntry(entry, {
+        campaignId,
+        campaignName,
+        model,
+        origin: "history",
+        now,
+        fallbackTimestamp: h?.createdAt || h?.updatedAt || null,
+      });
       if (mapped.status === "generating") continue;
       all.push(mapped);
     }
@@ -179,7 +206,9 @@ function assembleAdFactoryImages({
     deduped.push(img);
   }
 
-  // 5. Sort newest-first.
+  // 5. Sort newest-first. ownTimestamp has done its job in the dedupe above;
+  // drop it so the response shape is unchanged.
+  for (const img of deduped) delete img.ownTimestamp;
   deduped.sort((a, b) => tsMs(b.timestamp) - tsMs(a.timestamp));
 
   // 6. Counts over the full deduped set.

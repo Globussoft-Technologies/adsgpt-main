@@ -71,7 +71,7 @@ function normalizeAdCreativeRecord(record) {
       aspectRatio: record.inputs?.aspectRatio || null,
       createdAt: record.createdAt || null,
       updatedAt: record.updatedAt || null,
-      timestamp: record.updatedAt || record.createdAt || null,
+      timestamp: record.createdAt || record.updatedAt || null,
       metadata: {
         quality: record.inputs?.quality || null,
         brandName: record.inputs?.brandName || null,
@@ -79,11 +79,15 @@ function normalizeAdCreativeRecord(record) {
     }));
   }
 
-  return results.map((result, index) => {
-    const timestamp = result.status === "completed"
-      ? result.completedAt || record.completedAt || record.updatedAt
-      : record.updatedAt || record.createdAt;
+  // Every result in a batch shares one clock. There are no per-result
+  // timestamps on the schema (result.completedAt does not exist), so the old
+  // split — record.completedAt for the successes, record.updatedAt for
+  // everything else — tore a single batch apart in the sort: the failed tiles
+  // outranked their own successful siblings, and any later write to an old
+  // record lifted its failures above genuinely newer images.
+  const batchTimestamp = record.completedAt || record.createdAt || record.updatedAt;
 
+  return results.map((result, index) => {
     return {
       id: `${record._id}:${index}`,
       source: "adCreative",
@@ -99,7 +103,7 @@ function normalizeAdCreativeRecord(record) {
       aspectRatio: result.aspectRatio || record.inputs?.aspectRatio || null,
       createdAt: record.createdAt || null,
       updatedAt: record.updatedAt || null,
-      timestamp,
+      timestamp: batchTimestamp,
       metadata: {
         quality: record.inputs?.quality || null,
         brandName: record.inputs?.brandName || null,
@@ -128,10 +132,10 @@ async function getAdCreativeImages({ userId, startDate, endDate, type, model, st
 async function getAdFactoryImages({ userId, startDate, endDate }) {
   const [campaigns, histories] = await Promise.all([
     Campaign.find({ userId })
-      .select("metadata.campaignId metadata.campaignName results.image services")
+      .select("metadata.campaignId metadata.campaignName results.image services createdAt updatedAt")
       .lean(),
     CampaignHistory.find({ userId })
-      .select("campaignId previousData.metadata.campaignName previousData.results.image previousData.services")
+      .select("campaignId previousData.metadata.campaignName previousData.results.image previousData.services createdAt updatedAt")
       .lean(),
   ]);
 

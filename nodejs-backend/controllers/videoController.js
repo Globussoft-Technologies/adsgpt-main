@@ -320,6 +320,15 @@ exports.generateVideo = async (req, res) => {
 // pendingRegen stash, the script from the (freshest) doc.scenes. doc.version is
 // NOT moved — the user commits it via /ai-ads/select-version. Voice regen is FREE
 // today, so no credit settle happens here.
+// My Space lists newest-touched first (sort: updatedAt desc), so every write to
+// a session reorders the user's grid. Regen bookkeeping — raising the in-flight
+// guard, stashing the arriving voice preview, clearing it again on discard —
+// changes nothing the user can see, and letting it bump updatedAt floats a
+// video they never applied (or actively cancelled) to the top of My Space.
+// Pass this on those writes. Only an explicit selection reorders the grid:
+// /ai-ads/select-version ("Keep this one") and an accepted "Accept & merge".
+const NO_TOUCH = { timestamps: false };
+
 async function applyAiAdsVoiceRegen(record, body) {
   const sessionId = record._id.toString();
   const videoStatus = body.videoStatus;
@@ -331,7 +340,7 @@ async function applyAiAdsVoiceRegen(record, body) {
       regenState: "idle",
       pendingRegen: null,
       voicePreview: null,
-    });
+    }, NO_TOUCH);
     if (global.io) {
       global.io.to(record.userId).emit("aiAdsVoiceFailed", {
         sessionId,
@@ -392,7 +401,9 @@ async function applyAiAdsVoiceRegen(record, body) {
   const updated = await VideoGeneration.findByIdAndUpdate(
     sessionId,
     { $set: { regenState: "idle", pendingRegen: null, voicePreview: null }, $push: { results: newResult } },
-    { new: true },
+    // Only an accepted merge is the user applying something; a bare regen just
+    // parks a version for review and must not reorder My Space.
+    { new: true, timestamps: wasAcceptedMerge },
   );
   const newIndex = (updated?.results?.length || 1) - 1;
 
@@ -2205,7 +2216,7 @@ exports.updateSceneResult = async (req, res) => {
       const previewFailed = type === "error" || success === false || status === 400;
       await VideoGeneration.findByIdAndUpdate(sessionId, {
         previewState: "idle",
-      }).catch(() => {});
+      }, NO_TOUCH).catch(() => {});
 
       if (previewFailed) {
         if (global.io) {
@@ -2840,7 +2851,7 @@ exports.updateAiAdsAudioResult = async (req, res) => {
       await VideoGeneration.findByIdAndUpdate(sessionId, {
         $set: { regenState: "idle", voicePreview: null },
         $unset: { pendingRegen: 1 },
-      });
+      }, NO_TOUCH);
       global.io?.to(record.userId).emit("audio-result", {
         sessionId,
         error: error || "Voice preview generation failed",
@@ -2859,7 +2870,7 @@ exports.updateAiAdsAudioResult = async (req, res) => {
     };
     await VideoGeneration.findByIdAndUpdate(sessionId, {
       $set: { regenState: "idle", voicePreview: preview },
-    });
+    }, NO_TOUCH);
     global.io?.to(record.userId).emit("audio-result", { sessionId, preview });
     return res.json({ status: "success" });
   } catch (err) {
@@ -3263,7 +3274,7 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       language: captionLanguage,
       scenes: finalScenes,
     };
-    await record.save();
+    await record.save(NO_TOUCH);
 
     try {
       await axios.post(process.env.AI_ADS_REGENERATE_VOICE_PYTHON_API, {
@@ -3287,7 +3298,7 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       await VideoGeneration.findByIdAndUpdate(sessionId, {
         regenState: "idle",
         pendingRegen: null,
-      }).catch(() => {});
+      }, NO_TOUCH).catch(() => {});
 
       const status = pyErr.response?.status;
       const body = pyErr.response?.data;
@@ -3324,7 +3335,7 @@ exports.discardAiAdsVoicePreview = async (req, res) => {
     if (record.regenState === "processing") {
       return res.status(409).json({ success: false, error: "regen_in_progress" });
     }
-    await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { voicePreview: null }, $unset: { pendingRegen: 1 } });
+    await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { voicePreview: null }, $unset: { pendingRegen: 1 } }, NO_TOUCH);
     return res.json({ success: true });
   } catch (error) {
     logger.error(`[AI Ads] discard voice preview failed: ${error.message}`);
@@ -3389,7 +3400,7 @@ exports.finalMergeAiAdsVoice = async (req, res) => {
       scenes: pending.scenes || record.scenes || [],
     };
 
-    await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { regenState: "processing" } });
+    await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { regenState: "processing" } }, NO_TOUCH);
     try {
       await axios.post(process.env.AI_ADS_FINAL_MERGE_PYTHON_API, {
         sessionId, userId, watermark,
@@ -3398,7 +3409,7 @@ exports.finalMergeAiAdsVoice = async (req, res) => {
       });
       return res.status(202).json({ status: "processing", sessionId, message: "Final merge started." });
     } catch (pythonError) {
-      await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { regenState: "idle" } });
+      await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { regenState: "idle" } }, NO_TOUCH);
       logger.error(`[AI Ads] final merge Python call failed: ${pythonError.message}`);
       return res.status(502).json({ success: false, error: "Final merge service failed. Please try again." });
     }
@@ -3513,7 +3524,7 @@ exports.previewRegenerateScript = async (req, res) => {
     // Mark preview in-flight so the scene-result callback forwards the script
     // without disturbing the committed video, and a concurrent request 409s.
     record.previewState = "processing";
-    await record.save();
+    await record.save(NO_TOUCH);
 
     try {
       await axios.post(process.env.AI_ADS_PREVIEW_REGENERATE_SCRIPT_PYTHON_API, {
@@ -3537,7 +3548,7 @@ exports.previewRegenerateScript = async (req, res) => {
       // Roll back the guard so the user can retry.
       await VideoGeneration.findByIdAndUpdate(sessionId, {
         previewState: "idle",
-      }).catch(() => {});
+      }, NO_TOUCH).catch(() => {});
 
       const status = pyErr.response?.status;
       const body = pyErr.response?.data;
