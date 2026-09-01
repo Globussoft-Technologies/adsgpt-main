@@ -96,7 +96,7 @@ const selectVideoType = [
 ];
 
 const selectImageType = [
-  { value: 'ai_ads', label: 'AI Ads' },
+  { value: 'ai_ads', label: 'AI Creatives' },
   { value: 'lifestyle', label: 'Lifestyle' },
   { value: 'product_shot', label: 'Product Shot' },
   { value: 'apps_saas', label: 'Apps & SaaS' },
