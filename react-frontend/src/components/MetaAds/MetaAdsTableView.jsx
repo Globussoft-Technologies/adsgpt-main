@@ -515,7 +515,7 @@ function LevelPills({ level, campaign, adSet }) {
 
 function TableShell({ toolbar, children, colSpan, loading, emptyMsg }) {
   return (
-    <div className="overflow-hidden rounded-2xl workspace-card dark:border-white/[0.10] dark:bg-[#141414]">
+    <div className="overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/[0.10] dark:bg-[#141414]">
       {toolbar}
       <div className="scrollbar-thin overflow-x-auto">
         <table className="w-full border-collapse">
@@ -675,7 +675,7 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/10 dark:bg-[#141414]">
 
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 p-3 dark:border-white/12">
         <div className="flex min-w-0 items-center gap-2">
@@ -1264,7 +1264,7 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/10 dark:bg-[#141414]">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
         <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
           Ad sets in <span className="text-gray-900 dark:text-white">{campaign.name}</span>
@@ -1492,7 +1492,7 @@ function AdDrawer({ ad, onClose }) {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 24 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="flex w-90 shrink-0 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#181818]"
+      className="flex w-90 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/10 dark:bg-[#181818]"
     >
       {/* ── header ── */}
       <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-white/12">
@@ -1894,7 +1894,7 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
   return (
     <div className="flex min-h-0 flex-1 gap-4">
       {/* main table */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/10 dark:bg-[#141414]">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
           <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
             Ads in <span className="text-gray-900 dark:text-white">{adSet.name}</span>

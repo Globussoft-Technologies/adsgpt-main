@@ -399,7 +399,7 @@ export default function GoogleAdsDashboard() {
   }
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-auto px-5 pt-3 pb-6 2xl:px-7 2xl:pt-4 text-gray-900 dark:text-white">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-auto pl-12 pr-5 sm:pl-14 lg:px-5 pt-3 pb-6 2xl:px-7 2xl:pt-4 text-gray-900 dark:text-white">
       {/* Header — title left, account + date pickers and theme toggle top-right (TikTok-style) */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DDD7CD] pb-2.5 dark:border-white/10">
         <div className="flex flex-col gap-1">

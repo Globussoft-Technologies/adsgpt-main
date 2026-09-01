@@ -68,21 +68,21 @@ function BudgetBar({ budget, remaining }) {
 
 const STATUS_CFG = {
   // Campaign / ad-group primary statuses
-  ELIGIBLE:              { label: 'Eligible',            color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50  dark:bg-emerald-400/10', dot: 'bg-emerald-500' },
-  ELIGIBLE_LIMITED:      { label: 'Eligible (limited)',  color: 'text-amber-700  dark:text-amber-400',   bg: 'bg-amber-50    dark:bg-amber-400/10',   dot: 'bg-amber-500'  },
-  LIMITED:               { label: 'Limited',             color: 'text-amber-700  dark:text-amber-400',   bg: 'bg-amber-50    dark:bg-amber-400/10',   dot: 'bg-amber-500'  },
-  PAUSED:                { label: 'Paused',              color: 'text-slate-600  dark:text-slate-300',    bg: 'bg-slate-100   dark:bg-slate-500/15',    dot: 'bg-slate-500'  },
-  NOT_ELIGIBLE:          { label: 'Not eligible',        color: 'text-red-600    dark:text-red-400',     bg: 'bg-red-50      dark:bg-red-500/10',      dot: 'bg-red-500'    },
-  REMOVED:               { label: 'Removed',             color: 'text-red-600    dark:text-red-400',     bg: 'bg-red-50      dark:bg-red-500/10',      dot: 'bg-red-500'    },
-  ENDED:                 { label: 'Ended',               color: 'text-purple-600 dark:text-purple-400',  bg: 'bg-purple-50   dark:bg-purple-500/10',   dot: 'bg-purple-500' },
-  PENDING:               { label: 'Pending',             color: 'text-blue-600   dark:text-blue-400',    bg: 'bg-blue-50     dark:bg-blue-500/10',     dot: 'bg-blue-400'   },
-  MISCONFIGURED:         { label: 'Misconfigured',       color: 'text-red-600    dark:text-red-400',     bg: 'bg-red-50      dark:bg-red-500/10',      dot: 'bg-red-500'    },
+  ELIGIBLE:              { label: 'Eligible',            color: 'text-emerald-800 dark:text-emerald-300', bg: 'border border-emerald-300/80 bg-emerald-100/80 dark:border-emerald-500/20 dark:bg-emerald-500/15', dot: 'bg-emerald-600 dark:bg-emerald-400' },
+  ELIGIBLE_LIMITED:      { label: 'Eligible (limited)',  color: 'text-amber-900 dark:text-amber-300',   bg: 'border border-amber-300/90 bg-amber-100/90 dark:border-amber-500/20 dark:bg-amber-500/15',   dot: 'bg-amber-600 dark:bg-amber-400'  },
+  LIMITED:               { label: 'Limited',             color: 'text-amber-900 dark:text-amber-300',   bg: 'border border-amber-300/90 bg-amber-100/90 dark:border-amber-500/20 dark:bg-amber-500/15',   dot: 'bg-amber-600 dark:bg-amber-400'  },
+  PAUSED:                { label: 'Paused',              color: 'text-gray-800 dark:text-slate-200',    bg: 'border border-gray-300/90 bg-gray-100 dark:border-white/10 dark:bg-white/10',         dot: 'bg-[#4285F4]'  },
+  NOT_ELIGIBLE:          { label: 'Not eligible',        color: 'text-red-800 dark:text-red-300',     bg: 'border border-red-300/90 bg-red-100/90 dark:border-red-500/20 dark:bg-red-500/15',      dot: 'bg-red-600 dark:bg-red-400'    },
+  REMOVED:               { label: 'Removed',             color: 'text-red-800 dark:text-red-300',     bg: 'border border-red-300/90 bg-red-100/90 dark:border-red-500/20 dark:bg-red-500/15',      dot: 'bg-red-600 dark:bg-red-400'    },
+  ENDED:                 { label: 'Ended',               color: 'text-purple-800 dark:text-purple-300',  bg: 'border border-purple-300/90 bg-purple-100/90 dark:border-purple-500/20 dark:bg-purple-500/15',   dot: 'bg-purple-600 dark:bg-purple-400' },
+  PENDING:               { label: 'Pending',             color: 'text-blue-800 dark:text-blue-300',    bg: 'border border-blue-300/90 bg-blue-100/90 dark:border-blue-500/20 dark:bg-blue-500/15',     dot: 'bg-blue-600 dark:bg-blue-400'   },
+  MISCONFIGURED:         { label: 'Misconfigured',       color: 'text-red-800 dark:text-red-300',     bg: 'border border-red-300/90 bg-red-100/90 dark:border-red-500/20 dark:bg-red-500/15',      dot: 'bg-red-600 dark:bg-red-400'    },
   // Ad-level approval statuses
-  APPROVED:              { label: 'Approved',            color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-400/10',  dot: 'bg-emerald-500' },
-  APPROVED_LIMITED:      { label: 'Approved (limited)',  color: 'text-amber-700  dark:text-amber-400',   bg: 'bg-amber-50    dark:bg-amber-400/10',   dot: 'bg-amber-500'  },
-  DISAPPROVED:           { label: 'Disapproved',         color: 'text-red-600    dark:text-red-400',     bg: 'bg-red-50      dark:bg-red-500/10',      dot: 'bg-red-500'    },
-  UNDER_REVIEW:          { label: 'Under review',        color: 'text-blue-600   dark:text-blue-400',    bg: 'bg-blue-50     dark:bg-blue-500/10',     dot: 'bg-blue-400'   },
-  AREA_OF_INTEREST_ONLY: { label: 'Limited reach',       color: 'text-amber-700  dark:text-amber-400',   bg: 'bg-amber-50    dark:bg-amber-400/10',   dot: 'bg-amber-500'  },
+  APPROVED:              { label: 'Approved',            color: 'text-emerald-800 dark:text-emerald-300', bg: 'border border-emerald-300/80 bg-emerald-100/80 dark:border-emerald-500/20 dark:bg-emerald-500/15',  dot: 'bg-emerald-600 dark:bg-emerald-400' },
+  APPROVED_LIMITED:      { label: 'Approved (limited)',  color: 'text-amber-900 dark:text-amber-300',   bg: 'border border-amber-300/90 bg-amber-100/90 dark:border-amber-500/20 dark:bg-amber-500/15',   dot: 'bg-amber-600 dark:bg-amber-400'  },
+  DISAPPROVED:           { label: 'Disapproved',         color: 'text-red-800 dark:text-red-300',     bg: 'border border-red-300/90 bg-red-100/90 dark:border-red-500/20 dark:bg-red-500/15',      dot: 'bg-red-600 dark:bg-red-400'    },
+  UNDER_REVIEW:          { label: 'Under review',        color: 'text-blue-800 dark:text-blue-300',    bg: 'border border-blue-300/90 bg-blue-100/90 dark:border-blue-500/20 dark:bg-blue-500/15',     dot: 'bg-blue-600 dark:bg-blue-400'   },
+  AREA_OF_INTEREST_ONLY: { label: 'Limited reach',       color: 'text-amber-900 dark:text-amber-300',   bg: 'border border-amber-300/90 bg-amber-100/90 dark:border-amber-500/20 dark:bg-amber-500/15',   dot: 'bg-amber-600 dark:bg-amber-400'  },
 };
 
 // Serving-status values → subtitle text (exact wording from Google Ads UI)
@@ -192,7 +192,7 @@ function GoogleServingStatus({ status, primaryStatus, servingStatus, approvalSta
       {subtitle && (
         <span
           title={STATUS_FIX_HINT[subtitle] || 'Open Google Ads to review and fix this.'}
-          className="mt-0.5 w-fit pl-0.5 text-10 leading-tight text-gray-400 dark:text-white/35"
+          className="mt-0.5 w-fit pl-0.5 text-10 font-medium leading-tight text-gray-600 dark:text-white/50"
         >
           {subtitle}
         </span>
@@ -440,7 +440,7 @@ function CampaignTable({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/10 dark:bg-[#141414]">
       {/* Top action bar inside card — matching Meta table structure */}
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 p-3 dark:border-white/12">
         <div className="flex min-w-0 items-center gap-2">
@@ -730,7 +730,7 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
       </div>,
       document.body
     )}
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/10 dark:bg-[#141414]">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
         <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
           {isPmax ? 'Asset groups' : 'Ad groups'} in <span className="text-gray-900 dark:text-white">{campaign.name}</span>
@@ -946,7 +946,7 @@ function GoogleAdDrawer({ ad, adAccountId, onClose, onStatusChange }) {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 24 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="flex w-90 shrink-0 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#181818]"
+      className="flex w-90 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/10 dark:bg-[#181818]"
     >
       <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-white/12">
         <div>
@@ -1378,7 +1378,7 @@ function AdsTable({ adGroup, campaign, adAccountId, onLaunchWizard, manageNonce 
   if (adGroup.isPmax || adGroup.type === 'ASSET_GROUP') {
     const agId = adGroup.adGroupId || adGroup.id;
     return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/10 dark:bg-[#141414]">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
           <div className="flex items-center gap-2">
             <Layers className="h-3.5 w-3.5 text-[#4285F4]" />
@@ -1551,7 +1551,7 @@ function AdsTableInner({ adGroup, campaign, adAccountId, onLaunchWizard, manageN
 
   return (
     <div className="flex min-h-0 flex-1 gap-3">
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl workspace-card dark:border-white/10 dark:bg-[#141414]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/10 dark:bg-[#141414]">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
         <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
           Ads in <span className="text-gray-900 dark:text-white">{adGroup.name}</span>

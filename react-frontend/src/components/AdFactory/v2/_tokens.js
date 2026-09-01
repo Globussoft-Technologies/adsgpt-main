@@ -210,7 +210,7 @@ export const BTN_LINK =
 
 export const FLAG_BORDER = '!border-[#F59E0B]/45 dark:!border-[#F59E0B]/35';
 export const FLAG_BADGE =
-  'inline-flex items-center gap-1.5 rounded-md border border-[#D8942E]/35 bg-[#F7E8CD] px-2 py-0.5 text-[11px] font-medium text-[#8A4E0D] dark:text-[#E8A33D]';
+  'inline-flex items-center gap-1.5 rounded-md border border-[#D8942E]/35 bg-[#F59E0B]/10 px-2 py-0.5 text-[11px] font-medium text-[#8A4E0D] dark:border-[#F59E0B]/30 dark:bg-[#F59E0B]/15 dark:text-[#E8A33D]';
 
 // ─── Menus ───────────────────────────────────────────────────────────────────
 

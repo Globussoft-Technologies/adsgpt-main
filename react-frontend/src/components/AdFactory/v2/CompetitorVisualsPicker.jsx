@@ -93,20 +93,20 @@ export default function CompetitorVisualsPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[min(1100px,96vw)] overflow-hidden rounded-[28px] border border-white/10 bg-[#262626] text-white shadow-2xl dark:bg-[#262626]">
+      <DialogContent className="max-h-[90vh] w-[min(1100px,96vw)] overflow-hidden rounded-[28px] border border-[var(--ws-border)] bg-[var(--ws-surface)] text-[var(--ws-text-primary)] shadow-2xl dark:border-white/10 dark:bg-[#1E1E1E] dark:text-white">
         <DialogHeader>
-          <DialogTitle className="text-center text-xl font-semibold tracking-[-0.018em]">
-            Add competitor visualss
+          <DialogTitle className="text-center text-xl font-semibold tracking-[-0.018em] text-[var(--ws-text-primary)] dark:text-white">
+            Add competitor visuals
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-4 pt-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-white/60">
+            <p className="text-sm text-[var(--ws-text-secondary)] dark:text-white/60">
               Select up to {max} visuals total. Selected: {selectedCount}/{max}
             </p>
-            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
-              <Search className="h-4 w-4 text-white/50" />
+            <div className="flex items-center gap-2 rounded-full border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-3 py-1.5 dark:border-white/10 dark:bg-white/5">
+              <Search className="h-4 w-4 text-[var(--ws-text-muted)] dark:text-white/50" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -117,12 +117,12 @@ export default function CompetitorVisualsPicker({
                   }
                 }}
                 placeholder="Search competitors or keywords"
-                className="w-64 bg-transparent text-sm outline-none placeholder:text-white/35"
+                className="w-64 bg-transparent text-sm text-[var(--ws-text-primary)] outline-none placeholder:text-[var(--ws-text-muted)] dark:text-white dark:placeholder:text-white/35"
               />
               <button
                 type="button"
                 onClick={() => runSearch()}
-                className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-black"
+                className="rounded-full bg-[var(--ws-text-primary)] px-3 py-1 text-xs font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-black"
               >
                 Search
               </button>
@@ -139,7 +139,9 @@ export default function CompetitorVisualsPicker({
                   runSearch(query, type);
                 }}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  searchType === type ? 'bg-white text-black' : 'bg-white/8 text-white/70'
+                  searchType === type
+                    ? 'bg-[var(--ws-text-primary)] text-white dark:bg-white dark:text-black'
+                    : 'border border-[var(--ws-border)] bg-[var(--ws-surface-control)] text-[var(--ws-text-secondary)] hover:text-[var(--ws-text-primary)] dark:border-transparent dark:bg-white/8 dark:text-white/70'
                 }`}
               >
                 {type === 'competitor' ? 'Competitor' : 'Keyword'}
@@ -149,11 +151,11 @@ export default function CompetitorVisualsPicker({
 
           <div
             ref={containerRef}
-            className="max-h-[55vh] overflow-y-auto rounded-2xl border border-white/10 bg-white/4 p-2"
+            className="max-h-[55vh] overflow-y-auto rounded-2xl border border-[var(--ws-border)] bg-[var(--ws-surface-header)] p-3 dark:border-white/10 dark:bg-white/4"
           >
             {loading && ads.length === 0 ? (
               <div className="flex items-center justify-center py-16">
-                <Loader2 className="h-6 w-6 animate-spin text-white/50" />
+                <Loader2 className="h-6 w-6 animate-spin text-[var(--ws-text-muted)] dark:text-white/50" />
               </div>
             ) : ads.length > 0 ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -177,14 +179,14 @@ export default function CompetitorVisualsPicker({
                 })}
               </div>
             ) : (
-              <div className="flex items-center justify-center py-16 text-sm text-white/50">
+              <div className="flex items-center justify-center py-16 text-sm text-[var(--ws-text-muted)] dark:text-white/50">
                 No results found
               </div>
             )}
 
             {onScrollLoading && (
               <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-5 w-5 animate-spin text-white/50" />
+                <Loader2 className="h-5 w-5 animate-spin text-[var(--ws-text-muted)] dark:text-white/50" />
               </div>
             )}
           </div>
@@ -195,7 +197,7 @@ export default function CompetitorVisualsPicker({
             <button
               type="button"
               onClick={() => onOpenChange?.(false)}
-              className="rounded-lg border border-white/20 px-5 py-2 text-sm text-white/80"
+              className="rounded-lg border border-[var(--ws-border)] bg-[var(--ws-surface)] px-5 py-2 text-sm font-medium text-[var(--ws-text-secondary)] transition-colors hover:bg-[var(--ws-surface-hover)] hover:text-[var(--ws-text-primary)] dark:border-white/20 dark:bg-transparent dark:text-white/80 dark:hover:bg-white/10"
             >
               Cancel
             </button>
@@ -203,7 +205,7 @@ export default function CompetitorVisualsPicker({
               type="button"
               onClick={handleSave}
               disabled={selectedUrls.length === 0}
-              className="rounded-lg bg-white px-5 py-2 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
+              className="adfactory-btn-primary rounded-lg px-5 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50"
             >
               Save selected
             </button>

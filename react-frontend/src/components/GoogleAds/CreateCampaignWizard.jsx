@@ -20,15 +20,19 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SiGoogleads } from 'react-icons/si';
 import {
-  Check, ChevronLeft, ChevronRight, Eye, Image as ImageIcon,
+  Check, ChevronLeft, ChevronRight, ChevronDown, Eye, Image as ImageIcon,
   Layers, Loader2, Target, X, AlertCircle, Plus, Trash2,
   Youtube, Search, Monitor, Zap, ShoppingBag, MapPin, TrendingUp,
   RefreshCw, Smartphone, Store, Key, MapPinned, Bookmark, BookmarkPlus, Users,
-  Info, Rocket,
+  Info, Rocket, FolderOpen,
 } from 'lucide-react';
+import MySpaceAdsPickerModal from '@/components/common/MySpaceAdsPickerModal';
+import MySpaceInlinePicker from '@/components/common/MySpaceInlinePicker';
+import toMediaUrl from '@/utils/mediaUrl';
 import {
   createGoogleCampaign,
   updateGoogleCampaign,
@@ -122,23 +126,33 @@ function hasGoals(objective, schema) {
 }
 
 function buildSteps(mode, form = {}, schema = null) {
-  if (mode === 'create-adgroup') return BASE_STEPS.filter((s) => ['adGroup', 'review'].includes(s.id));
+  const channel = effectiveChannel(form);
+  const isPmax = channel === 'PERFORMANCE_MAX' || form.isPmax;
+  const isShopping = channel === 'SHOPPING';
+
+  if (mode === 'create-adgroup') {
+    if (isPmax) {
+      return PMAX_STEPS.filter((s) => ['assetGroup', 'assets', 'review'].includes(s.id));
+    }
+    if (isShopping) {
+      return BASE_STEPS.filter((s) => ['adGroup', 'review'].includes(s.id));
+    }
+    return BASE_STEPS.filter((s) => ['adGroup', 'ad', 'review'].includes(s.id));
+  }
   if (mode === 'create-ad')      return BASE_STEPS.filter((s) => ['ad', 'review'].includes(s.id));
   if (mode === 'edit-campaign')  return BASE_STEPS.filter((s) => ['campaign', 'review'].includes(s.id));
   if (mode === 'edit-adgroup') {
-    return form.isPmax
+    return isPmax
       ? PMAX_STEPS.filter((s) => ['assets', 'review'].includes(s.id))
       : BASE_STEPS.filter((s) => ['adGroup', 'review'].includes(s.id));
   }
   if (mode === 'edit-ad')        return BASE_STEPS.filter((s) => ['ad', 'review'].includes(s.id));
 
-  const channel = effectiveChannel(form);
-
   // PMAX gets its own step list: Campaign (settings+budget only) + Assets (all creative)
-  let steps = channel === 'PERFORMANCE_MAX' ? PMAX_STEPS : BASE_STEPS;
+  let steps = isPmax ? PMAX_STEPS : BASE_STEPS;
 
   // Shopping has no ad step
-  if (channel === 'SHOPPING') {
+  if (isShopping) {
     steps = steps.filter((s) => s.id !== 'ad');
   }
 
@@ -284,15 +298,156 @@ function Input({ value, onChange, placeholder, type = 'text', maxLength, min, ma
   );
 }
 
-function Select({ value, onChange, children, className = '' }) {
+function Select({ value, onChange, children, options, placeholder = 'Select…', className = '' }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0, placement: 'bottom' });
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const items = useMemo(() => {
+    if (Array.isArray(options) && options.length > 0) {
+      return options.map((opt) =>
+        typeof opt === 'string'
+          ? { value: opt, label: opt }
+          : { value: opt.value ?? '', label: opt.label ?? String(opt.value ?? '') }
+      );
+    }
+    const extracted = [];
+    React.Children.forEach(children, (child) => {
+      if (!child) return;
+      if (child.type === 'option') {
+        extracted.push({
+          value: child.props.value !== undefined ? child.props.value : child.props.children,
+          label: child.props.children || child.props.value || '',
+        });
+      }
+    });
+    return extracted;
+  }, [children, options]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const updatePos = () => {
+      const el = triggerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const menuHeight = 220;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < menuHeight && rect.top > menuHeight;
+
+      if (openUpward) {
+        setPos({
+          top: rect.top - 4,
+          left: rect.left,
+          width: rect.width,
+          placement: 'top',
+        });
+      } else {
+        setPos({
+          top: rect.bottom + 4,
+          left: rect.left,
+          width: rect.width,
+          placement: 'bottom',
+        });
+      }
+    };
+    updatePos();
+    const onDocClick = (e) => {
+      const inTrigger = triggerRef.current?.contains(e.target);
+      const inMenu = menuRef.current?.contains(e.target);
+      if (!inTrigger && !inMenu) setOpen(false);
+    };
+    const onEsc = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    const onScroll = (e) => {
+      if (menuRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onEsc);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onEsc);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [open]);
+
+  const selectedItem = items.find((it) => String(it.value) === String(value));
+  const displayLabel = selectedItem ? selectedItem.label : (value || placeholder);
+
+  const handleSelect = (itemValue) => {
+    setOpen(false);
+    if (onChange) {
+      onChange({ target: { value: itemValue } });
+    }
+  };
+
   return (
-    <select
-      value={value}
-      onChange={onChange}
-      className={`w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-13 text-gray-900 outline-none transition-colors hover:border-gray-300 focus:border-[#4285F4]/50 focus:ring-1 focus:ring-[#4285F4]/15 dark:border-white/8 dark:bg-[#1e1e1e] dark:text-white dark:hover:border-white/15 dark:focus:border-[#4285F4]/40 [&>option]:bg-white [&>option]:text-gray-900 dark:[&>option]:bg-[#1e1e1e] dark:[&>option]:text-white ${className}`}
-    >
-      {children}
-    </select>
+    <div className={`relative w-full ${className}`}>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className={`flex w-full items-center justify-between rounded-lg border bg-white px-3 py-2 text-13 text-left transition-colors hover:border-gray-300 dark:border-white/10 dark:bg-white/8 dark:hover:border-white/20 ${
+          open
+            ? 'border-[#4285F4] ring-2 ring-[#4285F4]/15 dark:border-[#4285F4]/60'
+            : 'border-gray-200'
+        }`}
+      >
+        <span className={`truncate ${selectedItem || value ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-400 dark:text-white/40'}`}>
+          {displayLabel}
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 dark:text-white/40 ${open ? 'rotate-180 text-[#4285F4]' : ''}`} />
+      </button>
+
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              ref={menuRef}
+              initial={{ opacity: 0, y: pos.placement === 'top' ? 4 : -4, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: pos.placement === 'top' ? 4 : -4, scale: 0.98 }}
+              transition={{ duration: 0.12, ease: 'easeOut' }}
+              style={{
+                position: 'fixed',
+                boxShadow: '0 20px 48px -6px rgba(0, 0, 0, 0.28), 0 8px 18px -3px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.08)',
+                ...(pos.placement === 'top'
+                  ? { bottom: window.innerHeight - pos.top, left: pos.left, width: pos.width }
+                  : { top: pos.top, left: pos.left, width: pos.width }),
+              }}
+              className="z-[9999] rounded-2xl border border-gray-200/90 bg-white dark:border-white/20 dark:bg-[#1a1a1c] dark:shadow-[0_20px_48px_-6px_rgba(0,0,0,0.85)]"
+            >
+              <div className="scrollbar-thin max-h-56 overflow-y-auto p-1.5 space-y-0.5 rounded-2xl">
+                {items.map((item, idx) => {
+                  const isSelected = String(item.value) === String(value);
+                  return (
+                    <button
+                      key={item.value || idx}
+                      type="button"
+                      onClick={() => handleSelect(item.value)}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs text-left transition-all ${
+                        isSelected
+                          ? 'bg-[#4285F4]/12 text-[#4285F4] font-bold dark:bg-[#4285F4]/25 dark:text-[#4285F4]'
+                          : 'text-gray-800 hover:bg-gray-100 hover:text-gray-950 dark:text-white/85 dark:hover:bg-white/10 dark:hover:text-white font-medium'
+                      }`}
+                    >
+                      <span className="truncate">{item.label}</span>
+                      {isSelected && <Check className="h-4 w-4 shrink-0 stroke-[2.5] text-[#4285F4]" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+    </div>
   );
 }
 
@@ -401,13 +556,15 @@ function StepRail({ steps, currentIndex, onJumpToStep }) {
 
 // ─── Wizard side rail (Meta-style checklist) ──────────────────────────────────
 
-function WizardSideRail({ steps, stepIndex, stepErrors, rawStepErrors, allStepErrors, attemptedStepIds, onJumpToStep }) {
+function WizardSideRail({ steps, stepIndex, stepErrors, rawStepErrors, allStepErrors, attemptedStepIds, onJumpToStep, currentStepId, form, adType }) {
   const currentMessages = Object.values(stepErrors || {});
   const isActuallyComplete = Object.keys(rawStepErrors || {}).length === 0;
   const hasVisibleErrors = currentMessages.length > 0;
+  const showAdPreview = currentStepId === 'ad' && form;
+  const showPmaxPreview = currentStepId === 'assets' && form;
 
   return (
-    <aside className="scrollbar-thin hidden w-52 shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-100 bg-gray-50/60 px-3 py-4 dark:border-white/6 dark:bg-white/[0.02] md:flex">
+    <aside className="scrollbar-thin hidden w-72 shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-100 bg-gray-50/60 p-4 dark:border-white/6 dark:bg-white/[0.02] md:flex 2xl:w-80">
       <div>
         <p className="mb-2 text-10 font-bold uppercase tracking-wider text-gray-400 dark:text-white/35">Setup progress</p>
         <ul className="flex flex-col gap-0.5">
@@ -477,6 +634,22 @@ function WizardSideRail({ steps, stepIndex, stepErrors, rawStepErrors, allStepEr
           </p>
         </div>
       </div>
+
+      {/* Dedicated Right-hand Ad Preview (filling empty space below progress) */}
+      {showAdPreview && (
+        <div className="flex flex-col gap-2 pt-2 border-t border-gray-200 dark:border-white/8">
+          <p className="text-10 font-bold uppercase tracking-wider text-gray-400 dark:text-white/35">Ad preview</p>
+          {adType === 'SEARCH' && <SearchAdPreview form={form} />}
+          {adType === 'DISPLAY' && <DisplayAdPreview form={form} />}
+          {adType === 'DEMAND_GEN' && <VideoAdPreview form={form} />}
+        </div>
+      )}
+      {showPmaxPreview && (
+        <div className="flex flex-col gap-2 pt-2 border-t border-gray-200 dark:border-white/8">
+          <p className="text-10 font-bold uppercase tracking-wider text-gray-400 dark:text-white/35">Ad preview</p>
+          <PmaxAdPreview form={form} />
+        </div>
+      )}
     </aside>
   );
 }
@@ -741,8 +914,8 @@ function PmaxAdPreview({ form }) {
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#181818]">
         <p className="px-3 pt-2.5 pb-1.5 text-10 font-semibold uppercase tracking-widest text-gray-400 dark:text-white/35">Display</p>
         <div className="border-t border-gray-100 dark:border-white/8 rounded-b-xl overflow-hidden">
-          <div className="flex items-center gap-2.5 border-b border-gray-100 px-3 py-2 dark:border-white/5">
-            <div className="h-5 w-5 rounded-full bg-gray-200 dark:bg-white/10" />
+          <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2 dark:border-white/5">
+            <GoogleFavicon domain={form.businessName || domain} size="h-5 w-5" textSize="text-[9px]" />
             <p className="text-10 font-semibold text-gray-900 dark:text-white">Sponsored</p>
             <p className="text-10 text-gray-400 dark:text-[#444]">· Display</p>
           </div>
@@ -787,7 +960,8 @@ function PmaxAdPreview({ form }) {
   );
 }
 
-function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpload, uploadingPmaxVideo, onPmaxVideoUpload }) {
+function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpload, uploadingPmaxVideo, onPmaxVideoUpload, onSelectMySpaceImage }) {
+  const [sourceMode, setSourceMode] = useState('library'); // 'library' | 'upload'
   const handlePmaxImagePaste = (e) => {
     const file = getClipboardImageFiles(e.clipboardData, 1)[0] || null;
     if (!file) return;
@@ -795,9 +969,7 @@ function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpl
     onPmaxImageUpload(file, 'image');
   };
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <div className="flex flex-col gap-4">
-
+    <div className="flex flex-col gap-4 max-w-2xl">
       {/* Headlines */}
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/12 dark:bg-white/4">
         <p className="mb-1 text-10 font-semibold uppercase tracking-widest text-gray-400 dark:text-white/40">Headlines</p>
@@ -868,27 +1040,61 @@ function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpl
 
           {/* Image */}
           <div>
-            <Label>Image <span className="text-gray-400 dark:text-white/30">(landscape 1200×628)</span></Label>
-            <Input value={form.pmaxImageUrl} onChange={(e) => setField('pmaxImageUrl', e.target.value)} placeholder="https://example.com/image.jpg" />
-            <div className="mt-1.5 flex items-center gap-2" onPaste={handlePmaxImagePaste} tabIndex={0}>
-              <span className="text-xs text-gray-400 dark:text-white/30">or upload</span>
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-1.5 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
-                <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={(e) => { if (e.target.files[0]) { onPmaxImageUpload(e.target.files[0], 'image'); e.target.value = ''; } }} />
-                {uploadingPmaxImage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                {uploadingPmaxImage ? 'Uploading…' : 'Upload image'}
-              </label>
-              {(form.pmaxImageUrl || form.pmaxImageAssetRN) && <span className="rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">✓ Set</span>}
+            <div className="flex items-center justify-between mb-1.5">
+              <Label>Image <span className="text-gray-400 dark:text-white/30">(landscape 1200×628)</span></Label>
             </div>
+
+            {/* Source Toggle: From My Space ⇄ Upload / URL */}
+            <div className="mb-2.5 flex items-stretch gap-2 max-w-xs">
+              <button
+                type="button"
+                onClick={() => setSourceMode('library')}
+                className={`flex-1 rounded-xl py-1.5 px-3 text-xs font-semibold transition-all ${
+                  sourceMode === 'library'
+                    ? 'bg-gray-900 text-white shadow-sm dark:bg-white dark:text-black'
+                    : 'border border-gray-200 bg-gray-50 text-gray-600 hover:text-gray-900 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:text-white'
+                }`}
+              >
+                From My Space
+              </button>
+              <button
+                type="button"
+                onClick={() => setSourceMode('upload')}
+                className={`flex-1 rounded-xl py-1.5 px-3 text-xs font-semibold transition-all ${
+                  sourceMode === 'upload'
+                    ? 'bg-gray-900 text-white shadow-sm dark:bg-white dark:text-black'
+                    : 'border border-gray-200 bg-gray-50 text-gray-600 hover:text-gray-900 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:text-white'
+                }`}
+              >
+                Upload / URL
+              </button>
+            </div>
+
+            {sourceMode === 'library' ? (
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/3">
+                <MySpaceInlinePicker
+                  selectedUrl={form.pmaxImageUrl}
+                  onPick={(url) => onSelectMySpaceImage?.(url, 'pmaxImage')}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <Input value={form.pmaxImageUrl} onChange={(e) => setField('pmaxImageUrl', e.target.value)} placeholder="https://example.com/image.jpg" />
+                <div className="mt-1.5 flex flex-wrap items-center gap-2" onPaste={handlePmaxImagePaste} tabIndex={0}>
+                  <span className="text-xs text-gray-400 dark:text-white/30">or upload</span>
+                  <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-1.5 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
+                    <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={(e) => { if (e.target.files[0]) { onPmaxImageUpload(e.target.files[0], 'image'); e.target.value = ''; } }} />
+                    {uploadingPmaxImage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                    {uploadingPmaxImage ? 'Uploading…' : 'Upload image'}
+                  </label>
+                  {(form.pmaxImageUrl || form.pmaxImageAssetRN) && <span className="rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">✓ Set</span>}
+                </div>
+              </div>
+            )}
           </div>
 
           <FieldError msg={errors.pmaxMedia} />
         </div>
-      </div>
-      </div>{/* end form column */}
-
-      {/* Preview column */}
-      <div className="hidden lg:block">
-        <PmaxAdPreview form={form} />
       </div>
     </div>
   );
@@ -1033,20 +1239,54 @@ function CampaignStep({ form, setField, setFields, errors, countryOptions, statu
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {objectives.map(({ value, label, description }) => {
               const Icon = OBJECTIVE_ICONS[value] || Target;
+              const isComingSoon = value === 'APP_PROMOTION';
               const active = form.objective === value;
               return (
-                <div key={value} className={`rounded-xl transition-all ${active ? 'ring-2 ring-[#4285F4]' : 'ring-1 ring-gray-200 hover:ring-gray-300 dark:ring-white/8 dark:hover:ring-white/15'}`}>
+                <div
+                  key={value}
+                  className={`rounded-xl transition-all ${
+                    isComingSoon
+                      ? 'cursor-not-allowed ring-1 ring-gray-200/90 dark:ring-white/8 bg-gray-50/80 dark:bg-white/[0.03]'
+                      : active
+                      ? 'ring-2 ring-[#4285F4]'
+                      : 'ring-1 ring-gray-200 hover:ring-gray-300 dark:ring-white/8 dark:hover:ring-white/15'
+                  }`}
+                >
                   <button
                     type="button"
-                    onClick={() => setFields({ objective: value, destination: '', goal: '', biddingGoal: 'MAXIMIZE_CLICKS' })}
-                    className="flex h-full w-full items-start gap-2.5 rounded-xl bg-white p-2.5 text-left transition-all hover:bg-gray-50 dark:bg-white/4 dark:hover:bg-white/6"
+                    disabled={isComingSoon}
+                    onClick={() => !isComingSoon && setFields({ objective: value, destination: '', goal: '', biddingGoal: 'MAXIMIZE_CLICKS' })}
+                    className={`flex h-full w-full items-start gap-2.5 rounded-xl p-2.5 text-left transition-all ${
+                      isComingSoon
+                        ? 'cursor-not-allowed bg-transparent'
+                        : 'bg-white hover:bg-gray-50 dark:bg-white/4 dark:hover:bg-white/6'
+                    }`}
                   >
-                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${active ? 'bg-[#4285F4] text-white' : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-white/55'}`}>
+                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
+                      isComingSoon
+                        ? 'bg-gray-200/80 text-gray-400 dark:bg-white/10 dark:text-white/40'
+                        : active
+                        ? 'bg-[#4285F4] text-white'
+                        : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-white/55'
+                    }`}>
                       <Icon className="h-3.5 w-3.5" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold leading-tight text-gray-900 dark:text-white">{label}</p>
-                      {description && <p className="mt-0.5 text-10 leading-snug text-gray-500 dark:text-white/55">{description}</p>}
+                      <div className="flex items-center justify-between gap-1">
+                        <p className={`text-xs font-semibold leading-tight ${isComingSoon ? 'text-gray-600 dark:text-white/70' : 'text-gray-900 dark:text-white'}`}>
+                          {label}
+                        </p>
+                        {isComingSoon && (
+                          <span className="shrink-0 rounded-full border border-[#4285F4]/30 bg-[#4285F4]/10 px-2.5 py-0.5 text-[10px] font-semibold text-[#1a73e8] dark:border-[#4285F4]/40 dark:bg-[#4285F4]/20 dark:text-[#8ab4f8]">
+                            Coming soon
+                          </span>
+                        )}
+                      </div>
+                      {description && (
+                        <p className={`mt-0.5 text-10 leading-snug ${isComingSoon ? 'text-gray-400 dark:text-white/40' : 'text-gray-500 dark:text-white/55'}`}>
+                          {description}
+                        </p>
+                      )}
                     </div>
                   </button>
                 </div>
@@ -1622,7 +1862,8 @@ function SearchAdFields({ form, setField, errors }) {
 
 // ─── Step: Ad (DISPLAY) ───────────────────────────────────────────────────────
 
-function DisplayAdFields({ form, setField, errors, ctaOptions, uploadingImage, onImageUpload }) {
+function DisplayAdFields({ form, setField, errors, ctaOptions, uploadingImage, onImageUpload, onSelectMySpaceImage }) {
+  const [sourceMode, setSourceMode] = useState('library'); // 'library' | 'upload'
   const handleImagePaste = (e) => {
     const file = getClipboardImageFiles(e.clipboardData, 1)[0] || null;
     if (!file) return;
@@ -1630,7 +1871,7 @@ function DisplayAdFields({ form, setField, errors, ctaOptions, uploadingImage, o
     onImageUpload(file);
   };
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3.5">
       <div>
         <div className="flex items-center justify-between mb-1"><Label required>Headline</Label><CharCount val={form.headline} max={30} /></div>
         <Input value={form.headline} onChange={(e) => setField('headline', e.target.value)} placeholder="Best Deals Online" maxLength={30} />
@@ -1642,20 +1883,65 @@ function DisplayAdFields({ form, setField, errors, ctaOptions, uploadingImage, o
         <FieldError msg={errors.description} />
       </div>
       <div>
-        <Label required>Image</Label>
-        <Input value={form.imageUrl} onChange={(e) => setField('imageUrl', e.target.value)} placeholder="https://example.com/banner.jpg" />
-        <div className="mt-2 flex items-center gap-2" onPaste={handleImagePaste} tabIndex={0}>
-          <span className="text-xs text-gray-400 dark:text-white/30">or</span>
-          <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-1.5 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
-            <input type="file" accept="image/jpeg,image/png,image/gif,.jpg,.jpeg,.png,.gif" className="hidden" onChange={(e) => { if (e.target.files[0]) onImageUpload(e.target.files[0]); }} />
-            {uploadingImage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-            {uploadingImage ? 'Uploading…' : 'Upload image'}
-          </label>
-          {form.assetResourceName && (
-            <span className="rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">Uploaded ✓</span>
-          )}
+        <div className="flex items-center justify-between mb-1.5">
+          <Label required>Image</Label>
+          <span className="text-10 text-gray-400 dark:text-white/40">1200×628 recommended</span>
         </div>
-        <p className="mt-1.5 text-10 text-gray-400 dark:text-white/25">JPEG, PNG, GIF only. 1200×628 recommended.</p>
+
+        {/* Source Switcher: From My Space ⇄ Upload / URL */}
+        <div className="mb-2.5 flex items-stretch gap-2 max-w-xs">
+          <button
+            type="button"
+            onClick={() => setSourceMode('library')}
+            className={`flex-1 rounded-xl py-1.5 px-3 text-xs font-semibold transition-all ${
+              sourceMode === 'library'
+                ? 'bg-gray-900 text-white shadow-sm dark:bg-white dark:text-black'
+                : 'border border-gray-200 bg-gray-50 text-gray-600 hover:text-gray-900 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:text-white'
+            }`}
+          >
+            From My Space
+          </button>
+          <button
+            type="button"
+            onClick={() => setSourceMode('upload')}
+            className={`flex-1 rounded-xl py-1.5 px-3 text-xs font-semibold transition-all ${
+              sourceMode === 'upload'
+                ? 'bg-gray-900 text-white shadow-sm dark:bg-white dark:text-black'
+                : 'border border-gray-200 bg-gray-50 text-gray-600 hover:text-gray-900 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:text-white'
+            }`}
+          >
+            Upload / URL
+          </button>
+        </div>
+
+        {sourceMode === 'library' ? (
+          <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/3">
+            <MySpaceInlinePicker
+              selectedUrl={form.imageUrl}
+              onPick={(url) => onSelectMySpaceImage?.(url, 'displayImage')}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <Input
+              value={form.imageUrl}
+              onChange={(e) => setField('imageUrl', e.target.value)}
+              placeholder="https://example.com/banner.jpg"
+            />
+            <div className="flex flex-wrap items-center gap-2" onPaste={handleImagePaste} tabIndex={0}>
+              <span className="text-xs text-gray-400 dark:text-white/30">or</span>
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-3 py-1.5 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
+                <input type="file" accept="image/jpeg,image/png,image/gif,.jpg,.jpeg,.png,.gif" className="hidden" onChange={(e) => { if (e.target.files[0]) onImageUpload(e.target.files[0]); }} />
+                {uploadingImage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                {uploadingImage ? 'Uploading…' : 'Upload image'}
+              </label>
+              {form.assetResourceName && (
+                <span className="rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">Uploaded ✓</span>
+              )}
+            </div>
+            <p className="mt-0.5 text-10 text-gray-400 dark:text-white/25">JPEG, PNG, GIF only.</p>
+          </div>
+        )}
         <FieldError msg={errors.imageUrl} />
       </div>
       <div>
@@ -1766,17 +2052,28 @@ function GoogleLogoSvg() {
   );
 }
 
-function GoogleFavicon({ domain }) {
-  const letter = (domain || 'A').replace('www.', '')[0].toUpperCase();
+function GoogleFavicon({ domain, size = 'h-5 w-5' }) {
   return (
-    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-white/10">
-      <span className="text-[8px] font-bold text-gray-500 dark:text-white/50">{letter}</span>
-    </div>
+    <div className={`flex ${size} shrink-0 items-center justify-center rounded-full border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/5`} />
   );
 }
 
 function isValidUrl(str) {
-  try { return Boolean(str && new URL(str)); } catch { return false; }
+  if (!str || typeof str !== 'string') return false;
+  if (
+    str.startsWith('http://') ||
+    str.startsWith('https://') ||
+    str.startsWith('blob:') ||
+    str.startsWith('data:') ||
+    str.startsWith('/')
+  ) {
+    return true;
+  }
+  try {
+    return Boolean(new URL(str));
+  } catch {
+    return false;
+  }
 }
 
 function SkeletonLine({ w = 'w-full', h = 'h-2.5' }) {
@@ -1927,17 +2224,22 @@ function DisplayAdPreview({ form }) {
 
       {/* Sponsored row */}
       <div className="flex items-center gap-2.5 border-b border-gray-200 px-4 py-2.5 dark:border-white/5">
-        <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-white/10" />
+        <GoogleFavicon domain={form.businessName || domainDisplay} size="h-7 w-7" textSize="text-xs" />
         <div>
           <p className="text-xs font-semibold text-gray-900 dark:text-white">Sponsored</p>
           <p className="text-10 text-gray-400 dark:text-[#555]">Google · Display</p>
         </div>
       </div>
 
-      {/* Image — aspect-video, same as drawer */}
+      {/* Image — aspect-video */}
       {hasImage ? (
-        <div className="relative aspect-video w-full">
-          <img src={form.imageUrl} alt={headline || 'Ad preview'} className="h-full w-full object-cover" />
+        <div className="relative aspect-video w-full overflow-hidden bg-gray-100 dark:bg-white/5">
+          <img
+            key={form.imageUrl}
+            src={toMediaUrl(form.imageUrl)}
+            alt={headline || 'Ad preview'}
+            className="h-full w-full object-cover"
+          />
         </div>
       ) : (
         <div className="flex aspect-video w-full items-center justify-center bg-gray-100 dark:bg-white/5">
@@ -2084,33 +2386,26 @@ function AdStatusToggle({ form, setField }) {
   );
 }
 
-function AdStep({ form, setField, errors, ctaOptions, uploadingImage, onImageUpload, adType, uploadingVideo, onVideoUpload }) {
+function AdStep({ form, setField, errors, ctaOptions, uploadingImage, onImageUpload, adType, uploadingVideo, onVideoUpload, onSelectMySpaceImage }) {
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
-      <div className="min-w-0 flex-1 self-start flex flex-col gap-4">
-        {/* Ad type badge */}
-        <div className="flex items-center gap-2">
-          <span className="shrink-0 whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 text-10 font-semibold uppercase tracking-wider text-gray-500 dark:border-white/8 dark:bg-white/5 dark:text-[#BEBEBE]">
-            {adType} ad
-          </span>
-          <p className="text-xs text-gray-500 dark:text-[#BEBEBE]">
-            {adType === 'SEARCH'     && 'Responsive search ad'}
-            {adType === 'DISPLAY'    && 'Single image + headline'}
-            {adType === 'DEMAND_GEN' && 'YouTube / Discover / Gmail'}
-          </p>
-        </div>
-        {/* Fields */}
-        {adType === 'SEARCH'     && <SearchAdFields form={form} setField={setField} errors={errors} />}
-        {adType === 'DISPLAY'    && <DisplayAdFields form={form} setField={setField} errors={errors} ctaOptions={ctaOptions} uploadingImage={uploadingImage} onImageUpload={onImageUpload} />}
-        {adType === 'DEMAND_GEN' && <VideoAdFields form={form} setField={setField} errors={errors} ctaOptions={ctaOptions} uploadingVideo={uploadingVideo} onVideoUpload={onVideoUpload} />}
-        {/* Status toggle — bottom of form */}
-        <AdStatusToggle form={form} setField={setField} />
+    <div className="flex flex-col gap-4 max-w-2xl">
+      {/* Ad type badge */}
+      <div className="flex items-center gap-2">
+        <span className="shrink-0 whitespace-nowrap rounded-full border border-gray-200 bg-gray-100 px-2.5 py-0.5 text-10 font-semibold uppercase tracking-wider text-gray-500 dark:border-white/8 dark:bg-white/5 dark:text-[#BEBEBE]">
+          {adType} ad
+        </span>
+        <p className="text-xs text-gray-500 dark:text-[#BEBEBE]">
+          {adType === 'SEARCH'     && 'Responsive search ad'}
+          {adType === 'DISPLAY'    && 'Single image + headline'}
+          {adType === 'DEMAND_GEN' && 'YouTube / Discover / Gmail'}
+        </p>
       </div>
-      <div className="w-full self-start lg:w-[340px] lg:shrink-0 lg:sticky lg:top-4">
-        {adType === 'SEARCH'     && <SearchAdPreview form={form} />}
-        {adType === 'DISPLAY'    && <DisplayAdPreview form={form} />}
-        {adType === 'DEMAND_GEN' && <VideoAdPreview form={form} />}
-      </div>
+      {/* Fields */}
+      {adType === 'SEARCH'     && <SearchAdFields form={form} setField={setField} errors={errors} />}
+      {adType === 'DISPLAY'    && <DisplayAdFields form={form} setField={setField} errors={errors} ctaOptions={ctaOptions} uploadingImage={uploadingImage} onImageUpload={onImageUpload} onSelectMySpaceImage={onSelectMySpaceImage} />}
+      {adType === 'DEMAND_GEN' && <VideoAdFields form={form} setField={setField} errors={errors} ctaOptions={ctaOptions} uploadingVideo={uploadingVideo} onVideoUpload={onVideoUpload} />}
+      {/* Status toggle — bottom of form */}
+      <AdStatusToggle form={form} setField={setField} />
     </div>
   );
 }
@@ -2526,6 +2821,7 @@ export default function CreateCampaignWizard({
   const [uploadingPmaxVideo, setUploadingPmaxVideo] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [attemptedStepIds, setAttemptedStepIds] = useState(() => new Set());
+  const [mySpaceTarget, setMySpaceTarget] = useState(null);
 
   // ── derive from schema ────────────────────────────────────────────────────
   // Objectives list from server (schema.objectives is an array)
@@ -2744,6 +3040,43 @@ export default function CreateCampaignWizard({
       globalToast.error(e?.response?.data?.error || 'Image upload failed');
     } finally {
       setUploadingPmaxImage(false);
+    }
+  };
+
+  const handleMySpaceSelect = async (url, target) => {
+    if (!url) return;
+    const effectiveTarget = target || mySpaceTarget || 'displayImage';
+    if (effectiveTarget === 'displayImage') {
+      setField('imageUrl', url);
+      setField('assetResourceName', '');
+      setField('squareAssetResourceName', '');
+      if (adAccountId) {
+        setUploadingImage(true);
+        try {
+          const res = await uploadGoogleImage({ adAccountId, imageUrl: url });
+          if (res.assetResourceName) setField('assetResourceName', res.assetResourceName);
+          if (res.squareAssetResourceName) setField('squareAssetResourceName', res.squareAssetResourceName);
+        } catch {
+          // Keep the imageUrl valid for submission
+        } finally {
+          setUploadingImage(false);
+        }
+      }
+    } else if (effectiveTarget === 'pmaxImage') {
+      setField('pmaxImageUrl', url);
+      setField('pmaxImageAssetRN', '');
+      if (adAccountId) {
+        setUploadingPmaxImage(true);
+        try {
+          const res = await uploadGoogleImage({ adAccountId, imageUrl: url });
+          if (res.assetResourceName) setField('pmaxImageAssetRN', res.assetResourceName);
+          if (res.squareAssetResourceName) setField('pmaxSquareImageAssetRN', res.squareAssetResourceName);
+        } catch {
+          // Keep pmaxImageUrl
+        } finally {
+          setUploadingPmaxImage(false);
+        }
+      }
     }
   };
 
@@ -3148,13 +3481,13 @@ export default function CreateCampaignWizard({
                   <AssetGroupStep form={form} setField={setField} errors={visibleStepErrors} genderOptions={genderOptions} />
                 )}
                 {currentStep?.id === 'assets' && (
-                  <AssetsStep form={form} setField={setField} errors={visibleStepErrors} uploadingPmaxImage={uploadingPmaxImage} onPmaxImageUpload={handlePmaxImageUpload} uploadingPmaxVideo={uploadingPmaxVideo} onPmaxVideoUpload={handlePmaxVideoUpload} />
+                  <AssetsStep form={form} setField={setField} errors={visibleStepErrors} uploadingPmaxImage={uploadingPmaxImage} onPmaxImageUpload={handlePmaxImageUpload} uploadingPmaxVideo={uploadingPmaxVideo} onPmaxVideoUpload={handlePmaxVideoUpload} onSelectMySpaceImage={handleMySpaceSelect} />
                 )}
                 {currentStep?.id === 'adGroup' && (
                   <AdGroupStep form={form} setField={setField} errors={visibleStepErrors} keywordMatchTypes={keywordMatchTypes} videoFormatOptions={videoFormatOptions} genderOptions={genderOptions} countryOptions={countryOptions} biddingGoalOptions={biddingGoalOptions} />
                 )}
                 {currentStep?.id === 'ad' && (
-                  <AdStep form={form} setField={setField} errors={visibleStepErrors} ctaOptions={ctaOptions} adType={adType} uploadingImage={uploadingImage} onImageUpload={handleImageUpload} uploadingVideo={uploadingVideo} onVideoUpload={handleVideoUpload} />
+                  <AdStep form={form} setField={setField} errors={visibleStepErrors} ctaOptions={ctaOptions} adType={adType} uploadingImage={uploadingImage} onImageUpload={handleImageUpload} uploadingVideo={uploadingVideo} onVideoUpload={handleVideoUpload} onSelectMySpaceImage={handleMySpaceSelect} />
                 )}
                 {currentStep?.id === 'review' && (
                   <ReviewStep form={form} mode={mode} stepErrors={stepErrors} adType={adType} schema={schema} objectives={objectives} adAccountId={adAccountId} account={account} />
@@ -3172,6 +3505,9 @@ export default function CreateCampaignWizard({
               allStepErrors={stepErrors}
               attemptedStepIds={attemptedStepIds}
               onJumpToStep={setStepIndex}
+              currentStepId={currentStep?.id}
+              form={form}
+              adType={adType}
             />
           )}
         </div>
@@ -3215,6 +3551,13 @@ export default function CreateCampaignWizard({
         </div>
       </div>
     </div>
+
+      {/* My Space Ads Picker Modal */}
+      <MySpaceAdsPickerModal
+        open={Boolean(mySpaceTarget)}
+        onClose={() => setMySpaceTarget(null)}
+        onSelect={handleMySpaceSelect}
+      />
 
       {/* Discard confirmation overlay — full-screen fixed overlay so no nested card borders or inner boxes show underneath */}
       <AnimatePresence>

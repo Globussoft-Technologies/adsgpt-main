@@ -64,7 +64,7 @@ export default function MetaAdsSharedLayout() {
     <MetaAdsLayoutContext.Provider value={contextValue}>
       <div className="relative flex h-full w-full flex-col overflow-hidden">
         {/* ── Persistent Header Bar ── */}
-        <div className="relative z-50 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#DDD7CD] px-5 py-3 pr-5 2xl:px-6 2xl:py-4 2xl:pr-8 dark:border-white/[0.06]">
+        <div className="relative z-50 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#DDD7CD] pl-12 pr-5 py-3 sm:pl-14 lg:px-5 2xl:px-6 2xl:py-4 2xl:pr-8 dark:border-white/[0.06]">
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-3">
               <div className="flex h-9.5 w-9.5 items-center justify-center rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs 2xl:h-10.5 2xl:w-10.5 dark:border-white/10 dark:bg-[#1b1c1e]">

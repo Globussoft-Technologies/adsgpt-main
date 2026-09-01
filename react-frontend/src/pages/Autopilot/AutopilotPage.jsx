@@ -315,7 +315,7 @@ const AutopilotPage = () => {
           of capping mid-screen on wide displays. Horizontal padding scales
           with the viewport; Overview / Action log / Settings follow the
           same scale. */}
-      <div className="ads-operations-divider relative z-50 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-3 pr-5 2xl:px-6 2xl:py-4 2xl:pr-8 dark:border-white/[0.06]">
+      <div className="ads-operations-divider relative z-50 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 pl-12 pr-5 py-3 sm:pl-14 lg:px-5 2xl:px-6 2xl:py-4 2xl:pr-8 dark:border-white/[0.06]">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white shadow-sm 2xl:h-12 2xl:w-12 dark:border-white/10">

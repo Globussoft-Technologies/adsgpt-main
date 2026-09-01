@@ -1,7 +1,7 @@
 import { useSelector, useDispatch } from 'react-redux';
 import { ChevronLeft, PlayCircle, Library, Images, Video } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { toast } from 'react-toastify';
@@ -159,6 +159,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const pollingRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   // Recreate may clear its query parameters while the form is mounting, so
   // remember its origin rather than deciding later from the current URL.
   const [fromRecreate] = useState(() =>
@@ -403,9 +404,13 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
       ) : displayedActivePage === 'myVideos' ? (
         <>
           {/* Header */}
-          <div className="flex w-full items-center justify-between gap-2 p-4 pr-5 2xl:pr-8 text-gray-900 dark:text-white">
+          <div className="flex w-full items-center justify-between gap-2 p-4 pl-12 pr-5 sm:pl-14 lg:pl-4 2xl:pr-8 text-gray-900 dark:text-white">
             <div className="flex items-center gap-3">
-              {!libraryOnly && (
+              {location.pathname === '/my-space' ? (
+                <h1 className="text-lg font-semibold whitespace-nowrap text-[#24211D] md:text-xl 2xl:text-[30px] dark:text-white">
+                  My Space
+                </h1>
+              ) : !libraryOnly && (
                 <button
                   onClick={handleBackNavigation}
                   className="flex items-center gap-2 text-xl 2xl:text-3xl"

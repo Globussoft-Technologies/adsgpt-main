@@ -40,11 +40,11 @@ const HeaderTabs = ({
       {isShowHeadersTabs && (
         <motion.div
           ref={tabsRef}
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0, opacity: 0 }}
-          transition={{ duration: 0.1, ease: 'easeOut' }}
-          className="brand-iq-tabs fixed top-18 right-4 z-50 flex flex-col gap-2 rounded-full border border-black/10 bg-white/80 p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)] backdrop-blur-md lg:relative lg:inset-0 lg:flex-row lg:items-center lg:gap-0 dark:border-transparent dark:bg-[#0D0D0D]"
+          initial={{ scale: 0.95, opacity: 0, y: -6 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 0.95, opacity: 0, y: -6 }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
+          className="brand-iq-tabs fixed top-16 right-3 z-50 flex min-w-[170px] flex-col gap-1 rounded-2xl border border-black/10 bg-white/80 p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.12)] backdrop-blur-md sm:right-6 lg:relative lg:top-0 lg:right-0 lg:flex lg:min-w-0 lg:flex-row lg:items-center lg:gap-0 lg:rounded-full lg:border-black/10 lg:bg-white/80 lg:p-1 lg:shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:border-white/10 dark:bg-[#0D0D0D]/90 dark:lg:border-transparent dark:lg:bg-[#0D0D0D]"
         >
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -53,6 +53,7 @@ const HeaderTabs = ({
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => {
                   const planType = Object.keys(userData?.userSubscriptionType || {})[0];
                   const isPlan = planType == AUTO_GENERATED_PLAN_ID;
@@ -61,8 +62,11 @@ const HeaderTabs = ({
                   } else {
                     onTabChange(tab.id);
                   }
+                  if (window.innerWidth < 1024) {
+                    setIsShowHeadersTabs(false);
+                  }
                 }}
-                className={`2xl:text-13 relative flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 2xl:px-4.5 2xl:py-2 ${
+                className={`2xl:text-13 relative flex w-full items-center justify-start rounded-xl px-3 py-2 text-xs font-semibold whitespace-nowrap transition-all duration-200 lg:w-auto lg:rounded-full lg:py-1.5 lg:text-[11px] 2xl:px-4.5 2xl:py-2 ${
                   isActive
                     ? 'font-bold text-zinc-900 dark:text-white'
                     : 'text-zinc-600 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:text-white'
@@ -70,12 +74,18 @@ const HeaderTabs = ({
               >
                 <div
                   id={`tour_header_${tab.label.replace(/\s+/g, '-').toLocaleLowerCase()}_tabs`}
-                  className="flex items-center gap-1.5 2xl:gap-2"
+                  className="flex w-full items-center gap-2 lg:w-auto 2xl:gap-2"
                 >
-                  {Icon && <Icon className={`h-3.5 w-3.5 2xl:h-4.5 2xl:w-4.5 ${isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-[#AFAFAF]'}`} />}
-                  <span>{tab.label}</span>
+                  {Icon && (
+                    <Icon
+                      className={`h-4 w-4 shrink-0 2xl:h-4.5 2xl:w-4.5 ${
+                        isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-[#AFAFAF]'
+                      }`}
+                    />
+                  )}
+                  <span className="flex-1 text-left">{tab.label}</span>
                   {tab?.id === 'adVideo' && (
-                    <span className="h-fit rounded-[4px] bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] px-1.5 py-[1px] text-[8px] font-semibold text-white uppercase">
+                    <span className="ml-auto h-fit rounded-[4px] bg-gradient-to-r from-[#15DCFF] to-[#5E66F5] px-1.5 py-[1px] text-[8px] font-bold text-white uppercase shadow-xs lg:ml-0">
                       Beta
                     </span>
                   )}
@@ -83,7 +93,7 @@ const HeaderTabs = ({
                   {isActive && (
                     <motion.div
                       layoutId="headerTabBg"
-                      className="absolute inset-0 -z-10 rounded-full border border-black/5 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:border-none dark:bg-gradient-to-br dark:from-[#3C3C3C] dark:to-[#3C3C3C] dark:shadow-none"
+                      className="absolute inset-0 -z-10 rounded-xl border border-black/5 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] lg:rounded-full dark:border-none dark:bg-gradient-to-br dark:from-[#3C3C3C] dark:to-[#3C3C3C] dark:shadow-none"
                       transition={{ type: 'spring', duration: 0.4 }}
                     />
                   )}

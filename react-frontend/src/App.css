@@ -1584,22 +1584,26 @@ html:not(.dark) .lm-sidebar-surface .sidebar-edge-divider {
   }
 }
 
-/* Quick Setup fields use a cool neutral ramp instead of the shared ivory
-   input treatment. Page and card surfaces keep their existing colors. */
+/* Quick Setup fields use #fffdfa fill with clean soft borders */
 html:not(.dark) .adfactory-v2-surface {
-  --lm-surface-input-bg: #F5F7FA;
-  --lm-field-background: #F5F7FA;
-  --lm-field-border: #DCE3EB;
-  --lm-field-text: #586474;
-  --lm-field-placeholder: #8A95A5;
-  --lm-field-focus-border: rgba(88, 103, 235, 0.58);
-  --lm-field-focus-ring: rgba(88, 103, 235, 0.12);
+  --lm-surface-input-bg: #fffdfa;
+  --lm-field-background: #fffdfa;
+  --lm-field-border: #E8E4DD;
+  --lm-field-text: var(--ws-text-primary);
+  --lm-field-placeholder: var(--ws-text-secondary);
+  --lm-field-focus-border: var(--ws-border-strong);
+  --lm-field-focus-ring: var(--ws-input-focus-ring);
+}
+
+html:not(.dark) .adfactory-v2-surface [data-slot="select-trigger"] {
+  background: #fffdfa !important;
+  border-color: #E8E4DD !important;
 }
 
 html:not(.dark) .adfactory-v2-surface .adfactory-v2-tag-chip {
-  border-color: #DCE3EB !important;
-  background: #F0F3F7 !important;
-  color: #586474 !important;
+  border-color: #DDD7CD !important;
+  background: #f3f1e8 !important;
+  color: var(--ws-text-primary) !important;
 }
 
 .adfactory-btn-primary {
@@ -1613,24 +1617,48 @@ html:not(.dark) .adfactory-v2-surface .adfactory-v2-tag-chip {
 }
 
 /* Quick Setup / Ad Factory V2 Dropdown Popovers */
+html:not(.dark) .adfactory-v2-menu,
+html:not(.dark) [data-slot="select-content"].adfactory-v2-menu,
+html:not(.dark) [data-slot="popover-content"].adfactory-v2-menu,
 .adfactory-v2-menu,
 [data-slot="select-content"].adfactory-v2-menu,
 [data-slot="popover-content"].adfactory-v2-menu {
+  background: #FFFFFF !important;
   background-color: #FFFFFF !important;
-  border: 1px solid #E5E7EB !important;
-  color: #111827 !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04) !important;
+  border: 1px solid #D8D2C7 !important;
+  color: var(--ws-text-primary) !important;
+  box-shadow:
+    0 16px 38px -4px rgba(40, 30, 20, 0.18),
+    0 6px 16px -2px rgba(40, 30, 20, 0.10),
+    0 0 0 1px rgba(0, 0, 0, 0.04) !important;
 }
 
+html:not(.dark) .adfactory-v2-menu-item,
+html:not(.dark) [data-slot="select-item"].adfactory-v2-menu-item,
+html:not(.dark) .adfactory-v2-menu [data-slot="select-item"],
 .adfactory-v2-menu-item,
 [data-slot="select-item"].adfactory-v2-menu-item {
-  color: #374151 !important;
+  color: var(--ws-text-primary) !important;
   border-radius: 6px !important;
   font-size: 13px !important;
   font-weight: 500 !important;
   cursor: pointer !important;
+  background: transparent !important;
 }
 
+html:not(.dark) .adfactory-v2-menu-item:hover,
+html:not(.dark) .adfactory-v2-menu-item:focus,
+html:not(.dark) .adfactory-v2-menu-item[data-highlighted],
+html:not(.dark) .adfactory-v2-menu-item[data-state="checked"],
+html:not(.dark) [data-slot="select-item"].adfactory-v2-menu-item:hover,
+html:not(.dark) [data-slot="select-item"].adfactory-v2-menu-item:focus,
+html:not(.dark) [data-slot="select-item"].adfactory-v2-menu-item[data-highlighted],
+html:not(.dark) [data-slot="select-item"].adfactory-v2-menu-item[data-state="checked"],
+html:not(.dark) .adfactory-v2-menu [data-slot="select-item"]:hover,
+html:not(.dark) .adfactory-v2-menu [data-slot="select-item"][data-highlighted],
+html:not(.dark) .adfactory-v2-menu [data-slot="select-item"][data-state="checked"],
+html:not(.dark) .adfactory-v2-menu [cmdk-item][data-selected="true"],
+html:not(.dark) .adfactory-v2-menu [cmdk-item]:hover,
 .adfactory-v2-menu-item:hover,
 .adfactory-v2-menu-item:focus,
 .adfactory-v2-menu-item[data-highlighted],
@@ -1641,8 +1669,9 @@ html:not(.dark) .adfactory-v2-surface .adfactory-v2-tag-chip {
 [data-slot="select-item"].adfactory-v2-menu-item[data-state="checked"],
 .adfactory-v2-menu [cmdk-item][data-selected="true"],
 .adfactory-v2-menu [cmdk-item]:hover {
-  background-color: #F3F4F6 !important;
-  color: #111827 !important;
+  background: #f3f1e8 !important;
+  background-color: #f3f1e8 !important;
+  color: var(--ws-text-primary) !important;
 }
 
 .dark .adfactory-v2-menu,

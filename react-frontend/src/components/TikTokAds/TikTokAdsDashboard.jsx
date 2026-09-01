@@ -1169,7 +1169,7 @@ const TikTokAdsDashboard = () => {
   }
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-auto p-6 text-gray-900 dark:text-white">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-auto p-6 pl-12 sm:pl-14 lg:p-6 text-gray-900 dark:text-white">
       {/* Header — title left, account + date pickers and theme toggle top-right (Meta-style) */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DDD7CD] pb-3 dark:border-white/10">
         <div className="flex flex-col gap-1.5">
