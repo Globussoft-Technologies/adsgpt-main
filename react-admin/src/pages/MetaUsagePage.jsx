@@ -44,23 +44,14 @@ import {
 import StatCard from "@/components/StatCard.jsx";
 import DateRangePicker from "@/components/DateRangePicker.jsx";
 import MeterBar, { meterTone } from "@/components/MeterBar.jsx";
+import UsageFilterBar, {
+  EMPTY_FILTERS,
+  hasActiveFilters,
+  sourceLabel,
+} from "@/components/UsageFilterBar.jsx";
 import { adminApi } from "@/lib/api";
 import { formatNumber } from "@/lib/utils";
 import { getStoredDateRange, setStoredDateRange } from "@/lib/dateRangeStore";
-
-const SOURCE_LABELS = {
-  audit: "Autopilot audit",
-  autopilot: "Autopilot",
-  "ads-manager": "Ads Manager",
-  "ad-posting": "Ad posting",
-  "ad-factory": "Ad Factory",
-  "partner-api": "Partner API",
-  admin: "Admin panel",
-  http: "Other HTTP",
-  unknown: "Unattributed",
-};
-
-const sourceLabel = (s) => SOURCE_LABELS[s] || s || "Unattributed";
 
 /** Scheduled work is predictable; people clicking is not. */
 const SCHEDULED_SOURCES = new Set(["audit", "autopilot", "ad-factory"]);
@@ -73,16 +64,40 @@ function hourLabel(value) {
 
 export default function MetaUsagePage() {
   const [range, setRange] = useState(() => getStoredDateRange());
+  const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
+  const [options, setOptions] = useState(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Options depend only on the range: a dropdown must not narrow itself by
+  // the filter it exists to set.
+  useEffect(() => {
+    let cancel = false;
+    adminApi
+      .metaUsageFilterOptions({ from: range.from || undefined, to: range.to || undefined })
+      .then((res) => !cancel && setOptions(res.data))
+      .catch(() => !cancel && setOptions(null));
+    return () => {
+      cancel = true;
+    };
+  }, [range.from, range.to]);
 
   useEffect(() => {
     let cancel = false;
     setLoading(true);
     setError("");
     adminApi
-      .metaUsageOverview({ from: range.from || undefined, to: range.to || undefined })
+      .metaUsageOverview({
+        from: range.from || undefined,
+        to: range.to || undefined,
+        search: filters.search || undefined,
+        source: filters.source,
+        adAccountId: filters.adAccountId,
+        userId: filters.userId,
+        sort: filters.sort,
+        onlyThrottled: filters.onlyThrottled ? "true" : undefined,
+      })
       .then((res) => {
         if (!cancel) setData(res.data);
       })
@@ -93,13 +108,23 @@ export default function MetaUsagePage() {
     return () => {
       cancel = true;
     };
-  }, [range.from, range.to]);
+  }, [
+    range.from,
+    range.to,
+    filters.search,
+    filters.source,
+    filters.adAccountId,
+    filters.userId,
+    filters.sort,
+    filters.onlyThrottled,
+  ]);
 
   const totals = data?.totals || {};
   const hourly = data?.hourly || [];
   const bySource = data?.bySource || [];
   const topAccounts = data?.topAccounts || [];
   const recorder = data?.recorder;
+  const counts = data?.counts || {};
 
   const chartData = useMemo(
     () =>
@@ -155,6 +180,8 @@ export default function MetaUsagePage() {
           }}
         />
       </header>
+
+      <UsageFilterBar filters={filters} onChange={setFilters} options={options} />
 
       {error ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -352,8 +379,11 @@ export default function MetaUsagePage() {
             <div className="border-b border-slate-100 px-5 py-4">
               <h2 className="text-sm font-semibold text-slate-800">Busiest ad accounts</h2>
               <p className="text-xs text-slate-500">
-                Ranked by requests. The per-account meters say whether that volume actually put the
-                account near a ceiling.
+                The per-account meters say whether that volume actually put the account near a
+                ceiling.
+                {counts.accounts > topAccounts.length
+                  ? ` Showing ${topAccounts.length} of ${counts.accounts}.`
+                  : ""}
               </p>
             </div>
             <div className="overflow-x-auto">
@@ -372,7 +402,9 @@ export default function MetaUsagePage() {
                   {topAccounts.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-5 py-8 text-center text-slate-500">
-                        No Meta traffic recorded in this window.
+                        {hasActiveFilters(filters)
+                          ? "No accounts match these filters."
+                          : "No Meta traffic recorded in this window."}
                       </td>
                     </tr>
                   ) : (
@@ -381,16 +413,28 @@ export default function MetaUsagePage() {
                         key={`${row.userId || "_"}:${row.adAccountId}`}
                         className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60"
                       >
-                        <td className="px-5 py-3 font-medium text-slate-800 tabular-nums">
-                          act_{row.adAccountId}
+                        <td className="px-5 py-3">
+                          <div className="font-medium text-slate-800">
+                            {row.adAccountName || (
+                              <span className="text-slate-400">Unnamed account</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-500 tabular-nums">
+                            act_{row.adAccountId}
+                          </div>
                         </td>
                         <td className="px-5 py-3">
                           {row.userId ? (
                             <Link
                               to={`/meta-usage/users/${encodeURIComponent(row.userId)}`}
-                              className="text-indigo-600 hover:underline"
+                              className="block"
                             >
-                              {row.userId}
+                              <div className="font-medium text-indigo-600 hover:underline">
+                                {row.userName || row.userId}
+                              </div>
+                              {row.userEmail ? (
+                                <div className="text-xs text-slate-500">{row.userEmail}</div>
+                              ) : null}
                             </Link>
                           ) : (
                             <span className="text-slate-400">unattributed</span>

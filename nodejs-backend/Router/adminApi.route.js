@@ -130,6 +130,14 @@ router.get("/meta-usage/overview", requireAdmin, (req, res, next) => {
   metaUsageDashboard.overview(req, res, next);
 });
 
+router.get("/meta-usage/filter-options", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get filter dropdown options for Meta API usage'
+  */
+  metaUsageDashboard.filterOptions(req, res, next);
+});
+
 router.get("/meta-usage/users/:userId", requireAdmin, (req, res, next) => {
   /*
     #swagger.tags = ['Admin']

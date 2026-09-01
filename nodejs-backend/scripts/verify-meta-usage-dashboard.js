@@ -25,6 +25,7 @@ const mongoose = require("mongoose");
 const { randomUUID } = require("node:crypto");
 
 const MetaApiUsage = require("../Module/metaUsage/metaApiUsage");
+const MetaAdAccountName = require("../Module/metaUsage/metaAdAccountName");
 const controller = require("../controllers/admin/metaUsageDashboard.controller");
 
 const TAG = `mudash_${randomUUID().slice(0, 8)}`;
@@ -83,6 +84,12 @@ async function callOverview(query = {}) {
   const res = fakeRes();
   await controller.overview({ query }, res);
   assertEq(res.statusCode, 200, `overview status (${JSON.stringify(res.body)})`);
+  return res.body;
+}
+async function callFilterOptions(query = {}) {
+  const res = fakeRes();
+  await controller.filterOptions({ query }, res);
+  assertEq(res.statusCode, 200, `filterOptions status (${JSON.stringify(res.body)})`);
   return res.body;
 }
 async function callUserDetail(userId, query = {}) {
@@ -247,6 +254,97 @@ async function callUserDetail(userId, query = {}) {
       assert(Array.isArray(body.byAccount), "byAccount should be an array");
     });
 
+    console.log("\nnames and filters");
+
+    await check("an account with a known name gets it attached", async () => {
+      await MetaAdAccountName.updateOne(
+        { adAccountId: ACCT_A },
+        { $set: { name: "Fixture Account A" } },
+        { upsert: true },
+      );
+      const body = await callUserDetail(USER);
+      const a = body.byAccount.find((r) => r.adAccountId === ACCT_A);
+      assertEq(a.adAccountName, "Fixture Account A", "adAccountName");
+    });
+
+    await check("an unnamed account gets an empty string, not its id", async () => {
+      // The UI decides how to fall back; presenting an id as a name would be
+      // a lie the page has no way to detect.
+      const body = await callUserDetail(USER);
+      const b = body.byAccount.find((r) => r.adAccountId === ACCT_B);
+      assertEq(b.adAccountName, "", "adAccountName for an unnamed account");
+    });
+
+    await check("search matches an account NAME, not just its id", async () => {
+      const body = await callUserDetail(USER, { search: "Fixture Account" });
+      assertEq(body.byAccount.length, 1, "rows matching the name");
+      assertEq(body.byAccount[0].adAccountId, ACCT_A, "matched account");
+    });
+
+    await check("search matches an id with or without the act_ prefix", async () => {
+      const withPrefix = await callUserDetail(USER, { search: "act_" + ACCT_B });
+      const without = await callUserDetail(USER, { search: ACCT_B });
+      assertEq(withPrefix.byAccount.length, 1, "act_ form");
+      assertEq(without.byAccount.length, 1, "bare form");
+    });
+
+    await check("a search matching nothing returns nothing, not everything", async () => {
+      const body = await callUserDetail(USER, { search: "zzz-no-such-thing" });
+      assertEq(body.byAccount.length, 0, "rows");
+    });
+
+    await check("onlyThrottled keeps just the rows Meta refused", async () => {
+      const body = await callUserDetail(USER, { onlyThrottled: "true" });
+      assertEq(body.totals.throttles, 1, "throttles");
+      assertEq(body.totals.calls, 10, "only the refused hour's calls");
+    });
+
+    await check("sort is whitelisted — an unknown field falls back to calls", async () => {
+      // `$sort` takes a field path; passing the query string straight through
+      // would let a caller sort by anything in the document.
+      const spec = controller._internals.buildSort({ sort: "$where; drop", order: "desc" });
+      assertEq(Object.keys(spec)[0], "calls", "sort field");
+    });
+
+    await check("sort order can be reversed", async () => {
+      const body = await callOverview({ sort: "calls", order: "asc" });
+      const mine = body.topAccounts.filter((r) => r.userId === USER).map((r) => r.calls);
+      const sorted = [...mine].sort((x, y) => x - y);
+      assert(
+        JSON.stringify(mine) === JSON.stringify(sorted),
+        "ascending sort expected, got " + JSON.stringify(mine),
+      );
+    });
+
+    await check("an `all` filter value means no filter", async () => {
+      // The UI sends "all" for an unset dropdown; treating it as a literal
+      // source name would return an empty page.
+      const body = await callUserDetail(USER, { source: "all", adAccountId: "all" });
+      assertEq(body.totals.calls, 35, "calls");
+    });
+
+    await check("filter options are derived from the data", async () => {
+      const body = await callFilterOptions();
+      assert(body.sources.includes("audit"), "sources should include audit");
+      assert(body.sources.includes("ads-manager"), "sources should include ads-manager");
+      const acct = body.accounts.find((o) => o.value === ACCT_A);
+      assert(acct, "account A should be offered");
+      assert(
+        acct.label.includes("Fixture Account A"),
+        "account label should carry the name, got " + acct.label,
+      );
+    });
+
+    await check("filter options are NOT narrowed by the filters they set", async () => {
+      // A source dropdown that only offers the source already chosen is a
+      // dropdown you can never leave.
+      const body = await callFilterOptions({ source: "audit" });
+      assert(
+        body.sources.length >= 2,
+        "expected every source, got " + JSON.stringify(body.sources),
+      );
+    });
+
     console.log("\noverview");
 
     await check("overview includes this user's accounts in topAccounts", async () => {
@@ -277,6 +375,7 @@ async function callUserDetail(userId, query = {}) {
       assert(days <= 31.01, `range should clamp to ~31 days, got ${days}`);
     });
   } finally {
+    await MetaAdAccountName.deleteMany({ adAccountId: { $in: [ACCT_A, ACCT_B] } });
     const removed = await MetaApiUsage.deleteMany({ userId: USER });
     console.log(`\ncleanup: removed ${removed.deletedCount} fixture rows`);
     await mongoose.disconnect();

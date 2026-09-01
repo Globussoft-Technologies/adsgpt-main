@@ -20,6 +20,8 @@
  * by anyone. The overview keeps them apart for that reason.
  */
 const MetaApiUsage = require("../../Module/metaUsage/metaApiUsage");
+const MetaAdAccountName = require("../../Module/metaUsage/metaAdAccountName");
+const UserProfile = require("../../Module/user/userProfileModel");
 const {
   sharedUsageRecorder,
 } = require("../../services/meta/metaUsageRecorder");
@@ -96,14 +98,127 @@ function resolveRange(query = {}) {
   return { from, to };
 }
 
+/** Treat "all" and "" the same as absent — the UI sends "all" for no filter. */
+function filterValue(v) {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim();
+  if (!s || s === "all") return null;
+  return s;
+}
+
 function buildMatch(query = {}, extra = {}) {
   const { from, to } = resolveRange(query);
   const match = { hourStart: { $gte: from, $lte: to }, ...extra };
-  if (query.source) match.source = query.source;
-  if (query.adAccountId) {
-    match.adAccountId = String(query.adAccountId).replace(/^act_/, "");
-  }
+
+  const source = filterValue(query.source);
+  if (source) match.source = source;
+
+  const account = filterValue(query.adAccountId);
+  if (account) match.adAccountId = account.replace(/^act_/, "");
+
+  const user = filterValue(query.userId);
+  if (user && !extra.userId) match.userId = user;
+
+  // "Show me only what Meta actually refused" — the fastest way to get from
+  // an alert to the rows that caused it.
+  if (String(query.onlyThrottled) === "true") match.throttles = { $gt: 0 };
+
   return { match, from, to };
+}
+
+const SORTABLE = new Set([
+  "calls",
+  "failures",
+  "throttles",
+  "peakApp",
+  "peakBuc",
+  "peakInsightsAcc",
+  "peakInsightsApp",
+  "peakAcc",
+]);
+
+/**
+ * Sort spec for the account/user tables.
+ *
+ * Whitelisted rather than passed through: `$sort` takes a field path, and an
+ * unchecked one from the query string lets a caller sort by anything in the
+ * document — cheap to guard, awkward to notice if left open.
+ */
+function buildSort(query = {}) {
+  const field = SORTABLE.has(String(query.sort)) ? String(query.sort) : "calls";
+  const dir = String(query.order).toLowerCase() === "asc" ? 1 : -1;
+  return { [field]: dir };
+}
+
+function parseLimit(value, fallback, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.floor(n), max);
+}
+
+/**
+ * Attach display names to rows that only carry ids.
+ *
+ * Two lookups rather than a `$lookup` in each aggregation: the pipelines run
+ * in parallel and would each repeat the join, and the id sets are small
+ * enough (a page of rows) that one batched query per collection is cheaper
+ * and far easier to read.
+ */
+async function decorate(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+
+  const accountIds = [...new Set(rows.map((r) => r.adAccountId).filter(Boolean))];
+  const userIds = [...new Set(rows.map((r) => r.userId).filter(Boolean))];
+
+  const [names, profiles] = await Promise.all([
+    accountIds.length
+      ? MetaAdAccountName.find({ adAccountId: { $in: accountIds } })
+          .select("adAccountId name")
+          .lean()
+      : [],
+    userIds.length
+      ? UserProfile.find({ user_id: { $in: userIds } })
+          .select("user_id name name_f name_l email")
+          .lean()
+      : [],
+  ]);
+
+  const nameById = new Map(names.map((n) => [n.adAccountId, n.name]));
+  const profileById = new Map(profiles.map((p) => [p.user_id, p]));
+
+  return rows.map((r) => {
+    const p = r.userId ? profileById.get(r.userId) : null;
+    const full = p
+      ? p.name || [p.name_f, p.name_l].filter(Boolean).join(" ") || ""
+      : "";
+    return {
+      ...r,
+      // Empty string, not the id — the UI decides how to fall back, and
+      // conflating "unnamed" with "named after its id" would be a lie.
+      adAccountName: r.adAccountId ? nameById.get(r.adAccountId) || "" : "",
+      userName: full,
+      userEmail: p?.email || "",
+    };
+  });
+}
+
+/**
+ * Text search across ids and names.
+ *
+ * Applied AFTER decoration rather than as a `$match`, because the thing being
+ * searched — the account name — lives in a different collection and is
+ * attached only at the end. The candidate set is one page of rollups, so
+ * filtering in memory here is bounded and avoids a join in five pipelines.
+ */
+function applySearch(rows, term) {
+  const q = filterValue(term);
+  if (!q) return rows;
+  const needle = q.toLowerCase().replace(/^act_/, "");
+  return rows.filter((r) =>
+    [r.adAccountId, r.adAccountName, r.userId, r.userName, r.userEmail, r.source]
+      .filter(Boolean)
+      .some((v) => String(v).toLowerCase().includes(needle)),
+  );
 }
 
 /**
@@ -127,6 +242,8 @@ function recorderHealth() {
 exports.overview = async (req, res) => {
   try {
     const { match, from, to } = buildMatch(req.query);
+    const sort = buildSort(req.query);
+    const limit = parseLimit(req.query.limit, 25, 200);
 
     const [totalsAgg, hourly, bySource, topAccounts, topUsers] =
       await Promise.all([
@@ -163,27 +280,34 @@ exports.overview = async (req, res) => {
               ...projectAll(),
             },
           },
-          { $sort: { calls: -1 } },
-          { $limit: 25 },
+          { $sort: sort },
+          // Over-fetch so a search term still has rows to match against
+          // after the in-memory filter below narrows them.
+          { $limit: Math.max(limit * 4, 100) },
         ]),
         MetaApiUsage.aggregate([
           { $match: { ...match, userId: { $ne: null } } },
           { $group: { _id: "$userId", ...COUNT_SUMS, ...PEAK_MAXES } },
           { $project: { _id: 0, userId: "$_id", ...projectAll() } },
-          { $sort: { calls: -1 } },
-          { $limit: 25 },
+          { $sort: sort },
+          { $limit: Math.max(limit * 4, 100) },
         ]),
       ]);
 
     const totals = stripId(totalsAgg[0]) || { ...EMPTY_TOTALS };
+    const accounts = applySearch(await decorate(topAccounts), req.query.search);
+    const users = applySearch(await decorate(topUsers), req.query.search);
 
     return res.json({
       range: { from, to },
       totals,
       hourly,
       bySource,
-      topAccounts,
-      topUsers,
+      topAccounts: accounts.slice(0, limit),
+      topUsers: users.slice(0, limit),
+      // So the table can say "showing 25 of 140" rather than implying the
+      // list is complete.
+      counts: { accounts: accounts.length, users: users.length },
       recorder: recorderHealth(),
     });
   } catch (err) {
@@ -238,11 +362,25 @@ exports.userDetail = async (req, res) => {
       ]),
     ]);
 
+    const [profile] = await UserProfile.find({ user_id: userId })
+      .select("user_id name name_f name_l email")
+      .lean();
+
     return res.json({
       userId,
+      user: profile
+        ? {
+            userId,
+            name:
+              profile.name ||
+              [profile.name_f, profile.name_l].filter(Boolean).join(" ") ||
+              "",
+            email: profile.email || "",
+          }
+        : null,
       range: { from, to },
       totals: stripId(totalsAgg[0]) || { ...EMPTY_TOTALS },
-      byAccount,
+      byAccount: applySearch(await decorate(byAccount), req.query.search),
       hourly,
       bySource,
       recorder: recorderHealth(),
@@ -251,6 +389,71 @@ exports.userDetail = async (req, res) => {
     return res
       .status(500)
       .json({ message: "Failed to load Meta usage detail", error: err.message });
+  }
+};
+
+/**
+ * What the filter dropdowns should offer.
+ *
+ * Derived from the data rather than hardcoded: the source list grows whenever
+ * a new product surface starts making Meta calls, and a fixed list would
+ * quietly omit exactly the new thing someone is trying to investigate. Scoped
+ * to the selected range so the options describe what is actually there.
+ */
+exports.filterOptions = async (req, res) => {
+  try {
+    const { match, from, to } = buildMatch(
+      // Only the range applies — the options must not narrow themselves by
+      // the filters they exist to set.
+      { from: req.query.from, to: req.query.to },
+    );
+
+    const [sources, accountIds, userIds] = await Promise.all([
+      MetaApiUsage.distinct("source", match),
+      MetaApiUsage.distinct("adAccountId", { ...match, adAccountId: { $ne: null } }),
+      MetaApiUsage.distinct("userId", { ...match, userId: { $ne: null } }),
+    ]);
+
+    const [names, profiles] = await Promise.all([
+      accountIds.length
+        ? MetaAdAccountName.find({ adAccountId: { $in: accountIds } })
+            .select("adAccountId name")
+            .lean()
+        : [],
+      userIds.length
+        ? UserProfile.find({ user_id: { $in: userIds } })
+            .select("user_id name name_f name_l email")
+            .lean()
+        : [],
+    ]);
+
+    const nameById = new Map(names.map((n) => [n.adAccountId, n.name]));
+    const profileById = new Map(profiles.map((p) => [p.user_id, p]));
+
+    const byLabel = (a, b) => a.label.localeCompare(b.label);
+
+    return res.json({
+      range: { from, to },
+      sources: sources.filter(Boolean).sort(),
+      accounts: accountIds
+        .map((id) => ({
+          value: id,
+          label: nameById.get(id) ? `${nameById.get(id)} (act_${id})` : `act_${id}`,
+        }))
+        .sort(byLabel),
+      users: userIds
+        .map((id) => {
+          const p = profileById.get(id);
+          const name =
+            p?.name || [p?.name_f, p?.name_l].filter(Boolean).join(" ") || "";
+          return { value: id, label: name ? `${name} (${id})` : id };
+        })
+        .sort(byLabel),
+    });
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ message: "Failed to load Meta usage filters", error: err.message });
   }
 };
 
@@ -268,4 +471,12 @@ function stripId(doc) {
   return rest;
 }
 
-exports._internals = { resolveRange, buildMatch, COUNT_SUMS, PEAK_MAXES };
+exports._internals = {
+  resolveRange,
+  buildMatch,
+  buildSort,
+  applySearch,
+  filterValue,
+  COUNT_SUMS,
+  PEAK_MAXES,
+};

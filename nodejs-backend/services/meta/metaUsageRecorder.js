@@ -34,6 +34,13 @@ try {
   MetaApiUsage = null;
 }
 
+let MetaAdAccountName = null;
+try {
+  MetaAdAccountName = require("../../Module/metaUsage/metaAdAccountName");
+} catch {
+  MetaAdAccountName = null;
+}
+
 const FLUSH_MS = Number(process.env.META_USAGE_FLUSH_MS) || 30000;
 
 // A hard ceiling on distinct buckets held in memory. Reaching it means either
@@ -98,6 +105,13 @@ class MetaUsageRecorder {
   constructor() {
     /** @type {Map<string, Object>} */
     this.pending = new Map();
+    // accountId -> { name, userId }. Names are learned far more often than
+    // they change, so this is deduped in memory and only written when the
+    // value is one we have not already flushed this process.
+    /** @type {Map<string, Object>} */
+    this.pendingNames = new Map();
+    /** @type {Map<string, string>} */
+    this.knownNames = new Map();
     this.timer = null;
     this.flushing = false;
     // Diagnostics for the admin page itself — if `droppedBatches` is climbing,
@@ -187,6 +201,28 @@ class MetaUsageRecorder {
     }
   }
 
+  /**
+   * Note the human name behind an ad account id.
+   *
+   * Deduped against `knownNames` so the account-picker call every user makes
+   * on page load does not turn into a write per request. A CHANGED name still
+   * gets through — the guard compares values, not just presence.
+   */
+  rememberAccountName(adAccountId, name, userId = null) {
+    if (!enabled() || !MetaAdAccountName) return;
+    try {
+      const id = normalizeAccountId(adAccountId);
+      const clean = typeof name === "string" ? name.trim() : "";
+      if (!id || !clean) return;
+      if (this.knownNames.get(id) === clean) return;
+      this.knownNames.set(id, clean);
+      this.pendingNames.set(id, { name: clean, userId: userId || null });
+      this._maybeFlush();
+    } catch (err) {
+      this._swallow(err, "rememberAccountName");
+    }
+  }
+
   _maybeFlush() {
     if (this.pending.size >= MAX_PENDING) {
       void this.flush();
@@ -216,10 +252,37 @@ class MetaUsageRecorder {
    * double-counted by it.
    */
   async flush() {
-    if (this.flushing || !enabled() || this.pending.size === 0) return;
+    if (this.flushing || !enabled()) return;
+    if (this.pending.size === 0 && this.pendingNames.size === 0) return;
     this.flushing = true;
     const batch = this.pending;
     this.pending = new Map();
+    const nameBatch = this.pendingNames;
+    this.pendingNames = new Map();
+
+    // Names are written on their own so a usage-write failure cannot lose
+    // them and vice versa — they are independent facts.
+    if (nameBatch.size > 0) {
+      try {
+        await MetaAdAccountName.bulkWrite(
+          [...nameBatch.entries()].map(([adAccountId, v]) => ({
+            updateOne: {
+              filter: { adAccountId },
+              update: {
+                $set: { name: v.name, lastSeenUserId: v.userId },
+              },
+              upsert: true,
+            },
+          })),
+          { ordered: false },
+        );
+      } catch (err) {
+        // Forget them so a later call re-learns and retries; a name is cheap
+        // to observe again, unlike a count.
+        for (const id of nameBatch.keys()) this.knownNames.delete(id);
+        this._swallow(err, "flush names");
+      }
+    }
 
     try {
       const ops = [];

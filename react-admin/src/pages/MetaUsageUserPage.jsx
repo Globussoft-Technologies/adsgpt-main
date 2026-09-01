@@ -21,22 +21,10 @@ import { AlertTriangle, ArrowLeft, Ban, Gauge, Loader2, PhoneCall } from "lucide
 import StatCard from "@/components/StatCard.jsx";
 import DateRangePicker from "@/components/DateRangePicker.jsx";
 import MeterBar, { meterTone } from "@/components/MeterBar.jsx";
+import { sourceLabel } from "@/components/UsageFilterBar.jsx";
 import { adminApi } from "@/lib/api";
 import { formatNumber } from "@/lib/utils";
 import { getStoredDateRange, setStoredDateRange } from "@/lib/dateRangeStore";
-
-const SOURCE_LABELS = {
-  audit: "Autopilot audit",
-  autopilot: "Autopilot",
-  "ads-manager": "Ads Manager",
-  "ad-posting": "Ad posting",
-  "ad-factory": "Ad Factory",
-  "partner-api": "Partner API",
-  admin: "Admin panel",
-  http: "Other HTTP",
-  unknown: "Unattributed",
-};
-const sourceLabel = (s) => SOURCE_LABELS[s] || s || "Unattributed";
 
 function hourLabel(value) {
   const d = new Date(value);
@@ -111,8 +99,13 @@ export default function MetaUsageUserPage() {
             <ArrowLeft className="h-3.5 w-3.5" />
             Meta API usage
           </Link>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{userId}</h1>
-          <p className="text-sm text-slate-500">Meta requests and rate-limit meters for this user.</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            {data?.user?.name || userId}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {[data?.user?.email, data?.user?.name ? userId : null].filter(Boolean).join(" · ") ||
+              "Meta requests and rate-limit meters for this user."}
+          </p>
         </div>
         <DateRangePicker
           from={range.from}
@@ -245,7 +238,12 @@ export default function MetaUsageUserPage() {
               title="By ad account"
               subtitle="Which account carries the cost"
               rows={byAccount}
-              nameOf={(r) => (r.adAccountId ? `act_${r.adAccountId}` : "unattributed")}
+              nameOf={(r) =>
+                r.adAccountId
+                  ? r.adAccountName || `act_${r.adAccountId}`
+                  : "unattributed"
+              }
+              subOf={(r) => (r.adAccountName && r.adAccountId ? `act_${r.adAccountId}` : "")}
               keyOf={(r) => r.adAccountId || "_"}
             />
             <TableCard
@@ -262,7 +260,7 @@ export default function MetaUsageUserPage() {
   );
 }
 
-function TableCard({ title, subtitle, rows, nameOf, keyOf }) {
+function TableCard({ title, subtitle, rows, nameOf, keyOf, subOf = () => "" }) {
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 px-5 py-4">
@@ -304,7 +302,12 @@ function TableCard({ title, subtitle, rows, nameOf, keyOf }) {
                     key={keyOf(r)}
                     className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60"
                   >
-                    <td className="px-5 py-3 font-medium text-slate-800">{nameOf(r)}</td>
+                    <td className="px-5 py-3">
+                      <div className="font-medium text-slate-800">{nameOf(r)}</div>
+                      {subOf(r) ? (
+                        <div className="text-xs text-slate-500 tabular-nums">{subOf(r)}</div>
+                      ) : null}
+                    </td>
                     <td className="px-5 py-3 text-right tabular-nums">{formatNumber(r.calls)}</td>
                     <td className="px-5 py-3 text-right tabular-nums">
                       {r.throttles ? (

@@ -632,6 +632,10 @@ async function runAuditForAccount({
   const account = new AdAccount(acctKey);
   const accountInfo = await account.read(["currency", "name"]);
   const currency = accountInfo.currency;
+  // This path opts out of the global wrapper, so the name sniff there never
+  // sees this response — report it directly. Autopilot audits most accounts
+  // on a schedule, which makes this the broadest source of names we have.
+  sharedUsageRecorder.rememberAccountName(adAccountId, accountInfo.name, userId);
 
   // Time ranges — current = `lookbackDays`-long window ENDING TODAY
   // (today inclusive); prev = the equivalent window immediately before.

@@ -67,6 +67,49 @@ function extractAccountId(path) {
   return m ? m[1] : null;
 }
 
+// A Meta ad-account node, as it appears in a response body.
+const ACT_ID = /^act_\d+$/;
+
+// A listing page is 100-500 entries; anything longer is not an account list
+// and is not worth walking.
+const MAX_SNIFF_ENTRIES = 600;
+
+/**
+ * Learn ad-account names from responses we were already making.
+ *
+ * WHY SNIFF RATHER THAN FETCH. The usage rows only ever see `act_<id>` from
+ * a request path, so the admin page could show ids and nothing else. Nothing
+ * in this codebase stores account names durably — they are fetched from Meta
+ * and cached in Redis under a per-connection key that cannot be looked up by
+ * account id. Adding a lookup call to name them would spend the very quota
+ * this feature exists to measure.
+ *
+ * The account picker every user loads already returns `{id, name}` for each
+ * account. Reading it on the way past costs one loop and no requests.
+ *
+ * Deliberately narrow: it matches only the exact shape Meta returns for an
+ * ad-account node, so an unrelated payload with an `id` and a `name` cannot
+ * be mistaken for one.
+ */
+function sniffAccountNames(response, userId) {
+  if (!response || typeof response !== "object") return;
+
+  const consider = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (typeof node.name !== "string" || !node.name) return;
+    const id = node.id ?? node.account_id;
+    if (typeof id !== "string") return;
+    if (!ACT_ID.test(id)) return;
+    sharedUsageRecorder.rememberAccountName(id, node.name, userId);
+  };
+
+  consider(response);
+  const list = response.data;
+  if (Array.isArray(list) && list.length <= MAX_SNIFF_ENTRIES) {
+    for (const node of list) consider(node);
+  }
+}
+
 /**
  * Declare that this api instance is accounted for elsewhere.
  *
@@ -138,6 +181,12 @@ function attachUsageTracking(api, { accessToken, logger = null } = {}) {
       }
       sharedUsageRecorder.recordFailure(usageCtx, { throttled });
       throw err; // unchanged — this wrapper observes, it does not intervene
+    }
+
+    try {
+      sniffAccountNames(response, userId);
+    } catch {
+      /* telemetry must never break the response */
     }
 
     if (response && typeof response === "object" && response.headers) {

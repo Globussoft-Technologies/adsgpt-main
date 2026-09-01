@@ -46,6 +46,7 @@ export const adminApi = {
   // Distinct from token usage above: that meters what we spend on models,
   // this meters what we spend against a third party's ceiling.
   metaUsageOverview: (params) => api.get("/meta-usage/overview", { params }),
+  metaUsageFilterOptions: (params) => api.get("/meta-usage/filter-options", { params }),
   metaUsageUserDetail: (userId, params) =>
     api.get(`/meta-usage/users/${encodeURIComponent(userId)}`, { params }),
   plans: () => api.get("/plans"),
