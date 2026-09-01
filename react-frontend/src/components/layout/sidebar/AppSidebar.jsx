@@ -496,7 +496,7 @@ const AppSidebar = () => {
 
             {/* LIBRARY group — Workspace + My Space */}
             {showLibraryGroup && (
-              <div>
+              <div className="mt-auto">
                 <SectionHeader label="LIBRARY" />
                 <div className={showExpanded ? 'space-y-1 px-2.5' : 'space-y-2 px-2'}>
 
@@ -626,9 +626,11 @@ const AppSidebar = () => {
               </div>
             )}
 
-            {/* Logout (members only) */}
+            {/* Logout (members only) — no mt-auto here: LIBRARY above already
+                claims the free space, so this just follows it immediately
+                rather than the two splitting the space into two gaps. */}
             {memberSession && (
-              <div className="mt-auto px-2.5 pb-2">
+              <div className="px-2.5 pb-2 pt-1">
                 <button
                   type="button"
                   onClick={() => {
