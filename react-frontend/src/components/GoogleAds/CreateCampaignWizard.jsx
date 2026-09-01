@@ -173,11 +173,18 @@ function seedCreated(mode, context) {
 const toMicros = (n) => Math.round(Number(n) * 1_000_000);
 
 function buildInitialForm(context) {
-  const ctx = normalizeWizardContext(context);
+  const rawObj = context?.objective;
+  const validObjective = ['SALES', 'LEADS', 'WEBSITE_TRAFFIC', 'APP_PROMOTION', 'LOCAL_STORE', 'YOUTUBE_REACH'].includes(rawObj)
+    ? rawObj
+    : 'SALES';
+
+  const validDestination = context?.destination || context?.channelType || 'SEARCH';
+  const defaultGoal = context?.goal || (validObjective === 'LEADS' ? 'FORM_FILL' : validObjective === 'WEBSITE_TRAFFIC' ? 'PAGE_VIEW' : 'PURCHASE');
+
   return {
-    objective:       ctx?.objective    || '',
-    destination:     ctx?.destination  || '',
-    goal:            ctx?.goal         || '',
+    objective:       validObjective,
+    destination:     validDestination,
+    goal:            defaultGoal,
     // website info
     websiteUrl:      context?.websiteUrl || context?.website_url || context?.finalUrl || context?.final_url || context?.landingPageUrl || context?.pmaxFinalUrl || '',
     businessName:    context?.businessName || context?.business_name || context?.pmaxBusinessName || context?.campaignName || context?.name || '',

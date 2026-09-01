@@ -580,8 +580,9 @@ function CampaignTable({
                             onLaunchWizard('edit-campaign', {
                               ...c,
                               campaignId: id,
-                              objective: c.objective,
-                              destination: c.channelType || c.objective,
+                              objective: ['SALES', 'LEADS', 'WEBSITE_TRAFFIC', 'APP_PROMOTION', 'LOCAL_STORE', 'YOUTUBE_REACH'].includes(c.objective) ? c.objective : 'SALES',
+                              destination: c.destination || c.channelType || 'SEARCH',
+                              goal: c.goal || (c.objective === 'LEADS' ? 'FORM_FILL' : c.objective === 'WEBSITE_TRAFFIC' ? 'PAGE_VIEW' : 'PURCHASE'),
                               campaignName: c.name,
                               dailyBudget: budget || '',
                               status: c.status,
