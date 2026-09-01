@@ -180,7 +180,12 @@ function briefGenerationView(campaign, opts = {}) {
   // The campaign owns generation state; the brief deliberately does not
   // duplicate it. `results.status` is what the orchestrator and the webhook
   // both write, so it is the one to read.
-  const running = results.status === "in-progress" || c.status === "in-progress";
+  const isStale =
+    c.updatedAt &&
+    Date.now() - new Date(c.updatedAt).getTime() > 4 * 60 * 1000;
+
+  const running =
+    (results.status === "in-progress" || c.status === "in-progress") && !isStale;
 
   // Skeletons are a promise that something is still coming. A run that has
   // stopped has nothing coming, whatever its slots look like — an empty slot

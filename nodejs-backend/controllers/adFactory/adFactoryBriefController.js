@@ -209,12 +209,29 @@ exports.getBrief = async (req, res) => {
     let history = [];
 
     if (brief.campaignId) {
-      const campaign = await Campaign.findOne({
+      let campaign = await Campaign.findOne({
         _id: brief.campaignId,
         userId: req.user.user_id,
       }).lean();
 
       if (campaign) {
+        // Auto-heal stuck in-progress campaigns if older than 4 minutes
+        const isStuckInProgress =
+          (campaign.status === "in-progress" || campaign.results?.status === "in-progress") &&
+          campaign.updatedAt &&
+          Date.now() - new Date(campaign.updatedAt).getTime() > 4 * 60 * 1000;
+
+        if (isStuckInProgress) {
+          const hasSuccess = (campaign.results?.image || []).some((img) => img?.status === 200);
+          const newStatus = hasSuccess ? "success" : "error";
+          await Campaign.updateOne(
+            { _id: campaign._id },
+            { $set: { status: newStatus, "results.status": newStatus } }
+          );
+          campaign.status = newStatus;
+          if (campaign.results) campaign.results.status = newStatus;
+        }
+
         // Snapshots hold the CUMULATIVE results as they stood at each
         // regenerate, so their lengths are boundaries between runs rather than
         // batch sizes. Ascending, because sliceRuns walks them in order.

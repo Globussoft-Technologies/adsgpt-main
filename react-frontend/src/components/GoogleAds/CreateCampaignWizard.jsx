@@ -28,7 +28,7 @@ import {
   Layers, Loader2, Target, X, AlertCircle, Plus, Trash2,
   Youtube, Search, Monitor, Zap, ShoppingBag, MapPin, TrendingUp,
   RefreshCw, Smartphone, Store, Key, MapPinned, Bookmark, BookmarkPlus, Users,
-  Info, Rocket, FolderOpen,
+  Info, Rocket, FolderOpen, Play,
 } from 'lucide-react';
 import MySpaceAdsPickerModal from '@/components/common/MySpaceAdsPickerModal';
 import MySpaceInlinePicker from '@/components/common/MySpaceInlinePicker';
@@ -1527,8 +1527,9 @@ function CampaignStep({ form, setField, setFields, errors, countryOptions, statu
             </div>
             <div>
               <Label>Location radius (km)</Label>
-              <Input type="number" value={form.locationRadius} onChange={(e) => setField('locationRadius', e.target.value)} placeholder="10" />
-              <p className="mt-1 text-10 text-gray-400 dark:text-white/30">Ads shown to users within this distance from the store</p>
+              <Input type="number" min="1" max="500" value={form.locationRadius} onChange={(e) => setField('locationRadius', e.target.value)} placeholder="10" />
+              <FieldError msg={errors.locationRadius} />
+              <p className="mt-1 text-10 text-gray-400 dark:text-white/30">Ads shown to users within this distance from the store (1–500 km)</p>
             </div>
           </div>
         </div>
@@ -1969,50 +1970,111 @@ function DisplayAdFields({ form, setField, errors, ctaOptions, uploadingImage, o
 
 // ─── Step: Ad (DEMAND_GEN / Video) ────────────────────────────────────────────
 
-function VideoAdFields({ form, setField, errors, ctaOptions, uploadingVideo, onVideoUpload }) {
+function VideoAdFields({ form, setField, errors, ctaOptions, uploadingVideo, onVideoUpload, onSelectMySpaceVideo }) {
+  const [sourceMode, setSourceMode] = useState('library'); // 'library' | 'upload'
+  const isLocalBlob = form.videoUrl?.startsWith('blob:');
+
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/12 dark:bg-white/4">
-        <p className="mb-2 text-10 font-semibold uppercase tracking-widest text-gray-400 dark:text-white/40">Video source (one required)</p>
-        <div className="flex flex-col gap-2">
-          {/* YouTube URL input */}
-          <div>
-            <Label>YouTube URL or video ID</Label>
-            <Input
-              value={form.videoUrl?.startsWith('blob:') ? '' : (form.videoUrl || '')}
-              onChange={(e) => { setField('videoUrl', e.target.value); if (form.videoFile) { setField('videoFile', null); } }}
-              placeholder="https://www.youtube.com/watch?v=… or 11-char ID"
-            />
-          </div>
-          {/* Upload row */}
-          <div className="flex items-center gap-2">
-            <span className="text-10 text-gray-400 dark:text-white/30">or upload a video file</span>
-            <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-2.5 py-1 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
-              <input type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo,.mp4,.webm,.mov,.avi" className="hidden" onChange={(e) => { if (e.target.files[0]) onVideoUpload(e.target.files[0]); }} />
-              {uploadingVideo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-              {uploadingVideo ? 'Uploading to YouTube…' : 'Upload video'}
-            </label>
-            {form.videoFile && (
-              <span className="max-w-[110px] truncate rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">
-                ✓ {form.videoFile.name}
-              </span>
-            )}
-          </div>
-          {form.videoFile && uploadingVideo && (
-            <p className="text-10 text-blue-400">Uploading to YouTube, please wait…</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-10 font-semibold uppercase tracking-widest text-gray-400 dark:text-white/40">Video source (one required)</p>
+          {(form.videoUrl || form.videoFile) && (
+            <span className="max-w-[180px] truncate rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">
+              ✓ {form.videoFile?.name || (form.videoUrl?.includes('youtube.com') || form.videoUrl?.includes('youtu.be') ? 'YouTube Video Set' : 'Video Set')}
+            </span>
           )}
         </div>
+
+        {/* Source Switcher: From My Space ⇄ Upload / YouTube URL */}
+        <div className="mb-2.5 flex items-stretch gap-2 max-w-xs">
+          <button
+            type="button"
+            onClick={() => setSourceMode('library')}
+            className={`flex-1 rounded-xl py-1.5 px-3 text-xs font-semibold transition-all ${
+              sourceMode === 'library'
+                ? 'bg-gray-900 text-white shadow-sm dark:bg-white dark:text-black'
+                : 'border border-gray-200 bg-gray-50 text-gray-600 hover:text-gray-900 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:text-white'
+            }`}
+          >
+            From My Space
+          </button>
+          <button
+            type="button"
+            onClick={() => setSourceMode('upload')}
+            className={`flex-1 rounded-xl py-1.5 px-3 text-xs font-semibold transition-all ${
+              sourceMode === 'upload'
+                ? 'bg-gray-900 text-white shadow-sm dark:bg-white dark:text-black'
+                : 'border border-gray-200 bg-gray-50 text-gray-600 hover:text-gray-900 dark:border-white/10 dark:bg-white/4 dark:text-white/60 dark:hover:text-white'
+            }`}
+          >
+            Upload / URL
+          </button>
+        </div>
+
+        {sourceMode === 'library' ? (
+          <div className="flex flex-col gap-2.5">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/3">
+              <MySpaceInlinePicker
+                mediaType="video"
+                selectedUrl={form.videoUrl}
+                onPick={(url) => onSelectMySpaceVideo?.(url, 'videoAd')}
+              />
+            </div>
+            {uploadingVideo && (
+              <p className="flex items-center gap-1.5 text-10 text-blue-500 dark:text-blue-400">
+                <Loader2 className="h-3 w-3 animate-spin" /> Uploading to YouTube, please wait…
+              </p>
+            )}
+            <div>
+              <Label>YouTube URL or video ID</Label>
+              <Input
+                value={isLocalBlob ? '' : (form.videoUrl || '')}
+                onChange={(e) => { setField('videoUrl', e.target.value); if (form.videoFile) { setField('videoFile', null); } }}
+                placeholder="https://www.youtube.com/watch?v=… or 11-char ID"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div>
+              <Label>YouTube URL or video ID</Label>
+              <Input
+                value={isLocalBlob ? '' : (form.videoUrl || '')}
+                onChange={(e) => { setField('videoUrl', e.target.value); if (form.videoFile) { setField('videoFile', null); } }}
+                placeholder="https://www.youtube.com/watch?v=… or 11-char ID"
+              />
+            </div>
+            <div className="flex items-center gap-2 pt-0.5">
+              <span className="text-10 text-gray-400 dark:text-white/30">or upload a video file</span>
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-dashed border-gray-300 px-2.5 py-1 text-xs text-gray-500 transition-all hover:border-[#4285F4]/50 hover:text-[#4285F4] dark:border-white/10 dark:text-[#BEBEBE]">
+                <input type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo,.mp4,.webm,.mov,.avi" className="hidden" onChange={(e) => { if (e.target.files[0]) onVideoUpload(e.target.files[0]); }} />
+                {uploadingVideo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                {uploadingVideo ? 'Uploading to YouTube…' : 'Upload video file'}
+              </label>
+              {form.videoFile && (
+                <span className="max-w-[120px] truncate rounded-full bg-[#4285F4]/10 px-2 py-0.5 text-10 font-semibold text-[#4285F4]">
+                  ✓ {form.videoFile.name}
+                </span>
+              )}
+            </div>
+            {form.videoFile && uploadingVideo && (
+              <p className="text-10 text-blue-400">Uploading to YouTube, please wait…</p>
+            )}
+          </div>
+        )}
+
         <FieldError msg={errors.videoUrl} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <div className="flex items-center justify-between"><Label>Headline</Label><CharCount val={form.headline} max={30} /></div>
-          <Input value={form.headline} onChange={(e) => setField('headline', e.target.value)} placeholder="Watch Our Story" maxLength={30} />
+          <div className="flex items-center justify-between mb-1"><Label required>Headline</Label><CharCount val={form.headline} max={30} /></div>
+          <Input value={form.headline} onChange={(e) => setField('headline', e.target.value)} placeholder="Watch & Learn" maxLength={30} />
           <FieldError msg={errors.headline} />
         </div>
         <div>
-          <div className="flex items-center justify-between"><Label>Long headline</Label><CharCount val={form.longHeadline} max={90} /></div>
+          <div className="flex items-center justify-between mb-1"><Label>Long headline</Label><CharCount val={form.longHeadline} max={90} /></div>
           <Input value={form.longHeadline} onChange={(e) => setField('longHeadline', e.target.value)} placeholder="Watch Our Story – Discover More Today" maxLength={90} />
           <FieldError msg={errors.longHeadline} />
         </div>
@@ -2393,7 +2455,7 @@ function AdStatusToggle({ form, setField }) {
   );
 }
 
-function AdStep({ form, setField, errors, ctaOptions, uploadingImage, onImageUpload, adType, uploadingVideo, onVideoUpload, onSelectMySpaceImage }) {
+function AdStep({ form, setField, errors, ctaOptions, uploadingImage, onImageUpload, adType, uploadingVideo, onVideoUpload, onSelectMySpaceImage, onOpenMySpacePicker }) {
   return (
     <div className="flex flex-col gap-4 max-w-2xl">
       {/* Ad type badge */}
@@ -2410,7 +2472,7 @@ function AdStep({ form, setField, errors, ctaOptions, uploadingImage, onImageUpl
       {/* Fields */}
       {adType === 'SEARCH'     && <SearchAdFields form={form} setField={setField} errors={errors} />}
       {adType === 'DISPLAY'    && <DisplayAdFields form={form} setField={setField} errors={errors} ctaOptions={ctaOptions} uploadingImage={uploadingImage} onImageUpload={onImageUpload} onSelectMySpaceImage={onSelectMySpaceImage} />}
-      {adType === 'DEMAND_GEN' && <VideoAdFields form={form} setField={setField} errors={errors} ctaOptions={ctaOptions} uploadingVideo={uploadingVideo} onVideoUpload={onVideoUpload} />}
+      {adType === 'DEMAND_GEN' && <VideoAdFields form={form} setField={setField} errors={errors} ctaOptions={ctaOptions} uploadingVideo={uploadingVideo} onVideoUpload={onVideoUpload} onSelectMySpaceVideo={onSelectMySpaceImage} />}
       {/* Status toggle — bottom of form */}
       <AdStatusToggle form={form} setField={setField} />
     </div>
@@ -2502,8 +2564,8 @@ function SaveAsTemplateChip({ form, adAccountId }) {
   );
 }
 
-// "Start from template" — shown on Objective step.
-function TemplatePicker({ onApply }) {
+// "Start from template" — shown on Objective / initial step.
+function TemplatePicker({ onApply, filterObjective, filterChannel, isPmax }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [applyingId, setApplyingId] = useState(null);
@@ -2530,6 +2592,30 @@ function TemplatePicker({ onApply }) {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [open]);
+
+  const filteredItems = useMemo(() => {
+    return items.filter((t) => {
+      const templateObj = t.objective || t.payload?.objective;
+      const templateDest = t.conversionLocation || t.payload?.destination || t.payload?.channelType;
+
+      // Filter by objective if specified (e.g. 'SALES')
+      if (filterObjective && templateObj && templateObj !== filterObjective) {
+        return false;
+      }
+
+      // Filter by Performance Max / Asset Group if in PMax context
+      if (isPmax) {
+        return templateDest === 'PERFORMANCE_MAX';
+      }
+
+      // Filter by channel/destination if specified (e.g. 'SEARCH', 'DISPLAY', 'DEMAND_GEN')
+      if (filterChannel && templateDest && templateDest !== filterChannel) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [items, filterObjective, filterChannel, isPmax]);
 
   const handlePick = async (t) => {
     setApplyingId(t.id);
@@ -2579,12 +2665,14 @@ function TemplatePicker({ onApply }) {
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
             </div>
           )}
-          {!loading && items.length === 0 && (
+          {!loading && filteredItems.length === 0 && (
             <div className="px-3 py-4 text-xs text-gray-500 dark:text-white/50">
-              No saved templates yet. Build a campaign and save it as a template on the Review step.
+              {items.length === 0
+                ? 'No saved templates yet. Build a campaign and save it as a template on the Review step.'
+                : `No templates match this ${filterObjective ? `${filterObjective.replace(/_/g, ' ')} ` : ''}${isPmax ? 'Performance Max ' : ''}campaign.`}
             </div>
           )}
-          {!loading && items.map((t) => (
+          {!loading && filteredItems.map((t) => (
             <button
               type="button"
               key={t.id}
@@ -2934,20 +3022,30 @@ export default function CreateCampaignWizard({
     const needsAccountSwitch = templateAccount && templateAccount !== adAccountId;
     // Clear account-scoped asset RNs — they are tied to the original account and will fail
     // if applied to a different account. URLs are kept so previews still show and re-upload happens.
-    setFormState((f) => ({
-      ...f,
-      ...payload,
-      adAccountId: undefined,
-      pmaxImageAssetRN: '',
-      pmaxSquareImageAssetRN: '',
-      pmaxLogoAssetRN: '',
-      assetResourceName: '',
-    }));
+    setFormState((f) => {
+      const merged = {
+        ...f,
+        ...payload,
+        adAccountId: undefined,
+        pmaxImageAssetRN: '',
+        pmaxSquareImageAssetRN: '',
+        pmaxLogoAssetRN: '',
+        assetResourceName: '',
+      };
+      // When adding an ad group / asset group to an existing campaign, preserve the parent campaign's objective, destination & campaignId
+      if (mode !== 'create-full') {
+        if (context?.objective) merged.objective = context.objective;
+        if (context?.destination) merged.destination = context.destination;
+        if (context?.channelType) merged.destination = context.channelType;
+        if (context?.campaignName) merged.campaignName = context.campaignName;
+      }
+      return merged;
+    });
     setTouched({});
     setErrors({});
     setStepIndex(0);
-    if (needsAccountSwitch) onChangeAccount?.(templateAccount);
-  }, [adAccountId, onChangeAccount]);
+    if (needsAccountSwitch && mode === 'create-full') onChangeAccount?.(templateAccount);
+  }, [adAccountId, onChangeAccount, mode, context]);
 
   // Auto-select when objective has only one valid destination
   useEffect(() => {
@@ -3053,7 +3151,50 @@ export default function CreateCampaignWizard({
   const handleMySpaceSelect = async (url, target) => {
     if (!url) return;
     const effectiveTarget = target || mySpaceTarget || 'displayImage';
-    if (effectiveTarget === 'displayImage') {
+    if (effectiveTarget === 'videoAd') {
+      setField('videoUrl', url);
+      setField('videoFile', null);
+      const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+      if (!ytMatch && adAccountId) {
+        setUploadingVideo(true);
+        try {
+          const res = await uploadGoogleVideo({ adAccountId, videoUrl: url, title: form.headline || 'Ad Video' });
+          if (res?.youtubeUrl) {
+            setField('videoUrl', res.youtubeUrl);
+            setField('youtubeVideoId', res.youtubeVideoId);
+            globalToast.success('Video uploaded to YouTube & URL generated ✓');
+          }
+        } catch (err) {
+          console.error('[VideoUpload error]', err);
+          globalToast.error(err?.response?.data?.error || err?.message || 'Failed to upload video to YouTube');
+        } finally {
+          setUploadingVideo(false);
+        }
+      } else {
+        globalToast.success('Selected video from My Space ✓');
+      }
+    } else if (effectiveTarget === 'pmaxVideo') {
+      setField('pmaxVideoUrl', url);
+      setField('pmaxVideoFile', null);
+      const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+      if (!ytMatch && adAccountId) {
+        setUploadingPmaxVideo(true);
+        try {
+          const res = await uploadGoogleVideo({ adAccountId, videoUrl: url, title: form.pmaxHeadline || 'PMax Video' });
+          if (res?.youtubeUrl) {
+            setField('pmaxVideoUrl', res.youtubeUrl);
+            globalToast.success('Video uploaded to YouTube & URL generated ✓');
+          }
+        } catch (err) {
+          console.error('[PMaxVideoUpload error]', err);
+          globalToast.error(err?.response?.data?.error || err?.message || 'Failed to upload video to YouTube');
+        } finally {
+          setUploadingPmaxVideo(false);
+        }
+      } else {
+        globalToast.success('Selected video from My Space ✓');
+      }
+    } else if (effectiveTarget === 'displayImage') {
       setField('imageUrl', url);
       setField('assetResourceName', '');
       setField('squareAssetResourceName', '');
@@ -3215,7 +3356,7 @@ export default function CreateCampaignWizard({
             appId:               form.appId               || undefined,
             appSubtype:          form.appSubtype          || undefined,
             storeAddress:        form.storeAddress        || undefined,
-            locationRadius:      form.locationRadius ? Number(form.locationRadius) : undefined,
+            locationRadius:      (form.locationRadius && !isNaN(Number(form.locationRadius)) && Number(form.locationRadius) >= 1) ? Number(form.locationRadius) : undefined,
             assetGroupName:      form.assetGroupName      || undefined,
             pmaxSearchThemes:    form.pmaxSearchThemes    || undefined,
             businessDescription: form.businessDescription || undefined,
@@ -3295,10 +3436,10 @@ export default function CreateCampaignWizard({
         const res = await createGoogleAdGroup({
           adAccountId,
           campaignId,
-          name:                   form.adGroupName || form.assetGroupName,
+          name:                   form.assetGroupName || form.adGroupName || 'Asset Group',
           status:                 'PAUSED',
-          assetGroupName:         form.assetGroupName      || undefined,
-          finalUrl:               form.pmaxFinalUrl        || undefined,
+          assetGroupName:         form.assetGroupName || form.adGroupName || 'Asset Group',
+          finalUrl:               form.pmaxFinalUrl   || form.finalUrl    || undefined,
           businessDescription:    form.businessDescription || undefined,
           pmaxBusinessName:       form.pmaxBusinessName    || undefined,
           pmaxHeadlines:          form.pmaxHeadlines?.filter(Boolean).length ? form.pmaxHeadlines.filter(Boolean) : undefined,
@@ -3450,7 +3591,14 @@ export default function CreateCampaignWizard({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {applyTemplate && stepIndex === 0 && <TemplatePicker onApply={applyTemplate} />}
+            {applyTemplate && stepIndex === 0 && (
+              <TemplatePicker
+                onApply={applyTemplate}
+                filterObjective={form.objective || context?.objective}
+                filterChannel={channel || context?.destination || context?.channelType}
+                isPmax={effectiveChannel(form) === 'PERFORMANCE_MAX' || form.isPmax || context?.isPmax}
+              />
+            )}
             {steps.length > 1 && <StepRail steps={steps} currentIndex={stepIndex} onJumpToStep={setStepIndex} />}
           </div>
         </div>
@@ -3494,7 +3642,7 @@ export default function CreateCampaignWizard({
                   <AdGroupStep form={form} setField={setField} errors={visibleStepErrors} keywordMatchTypes={keywordMatchTypes} videoFormatOptions={videoFormatOptions} genderOptions={genderOptions} countryOptions={countryOptions} biddingGoalOptions={biddingGoalOptions} />
                 )}
                 {currentStep?.id === 'ad' && (
-                  <AdStep form={form} setField={setField} errors={visibleStepErrors} ctaOptions={ctaOptions} adType={adType} uploadingImage={uploadingImage} onImageUpload={handleImageUpload} uploadingVideo={uploadingVideo} onVideoUpload={handleVideoUpload} onSelectMySpaceImage={handleMySpaceSelect} />
+                  <AdStep form={form} setField={setField} errors={visibleStepErrors} ctaOptions={ctaOptions} adType={adType} uploadingImage={uploadingImage} onImageUpload={handleImageUpload} uploadingVideo={uploadingVideo} onVideoUpload={handleVideoUpload} onSelectMySpaceImage={handleMySpaceSelect} onOpenMySpacePicker={setMySpaceTarget} />
                 )}
                 {currentStep?.id === 'review' && (
                   <ReviewStep form={form} mode={mode} stepErrors={stepErrors} adType={adType} schema={schema} objectives={objectives} adAccountId={adAccountId} account={account} />
@@ -3562,6 +3710,7 @@ export default function CreateCampaignWizard({
       {/* My Space Ads Picker Modal */}
       <MySpaceAdsPickerModal
         open={Boolean(mySpaceTarget)}
+        mediaType={mySpaceTarget === 'videoAd' || mySpaceTarget === 'pmaxVideo' ? 'video' : 'image'}
         onClose={() => setMySpaceTarget(null)}
         onSelect={handleMySpaceSelect}
       />

@@ -208,13 +208,22 @@ export const uploadGoogleImage = async ({ adAccountId, imageUrl, imageFile }) =>
   return data;
 };
 
-export const uploadGoogleVideo = async ({ adAccountId, videoFile }) => {
-  const form = new FormData();
-  form.append('adAccountId', adAccountId);
-  form.append('video', videoFile);
-  const { data } = await axios.post(`${BASE_URL}/adsgpt/google-ads/upload-video`, form, {
-    headers: authHeaders(), // no Content-Type override — let axios set multipart boundary automatically
-  });
+export const uploadGoogleVideo = async ({ adAccountId, videoFile, videoUrl, title }) => {
+  if (videoFile) {
+    const form = new FormData();
+    form.append('adAccountId', adAccountId);
+    form.append('video', videoFile);
+    if (title) form.append('title', title);
+    const { data } = await axios.post(`${BASE_URL}/adsgpt/google-ads/upload-video`, form, {
+      headers: authHeaders(), // let axios set multipart boundary automatically
+    });
+    return data;
+  }
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/google-ads/upload-video`,
+    { adAccountId, videoUrl, title },
+    { headers: authHeaders() },
+  );
   return data;
 };
 

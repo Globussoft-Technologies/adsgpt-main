@@ -111,7 +111,12 @@ const createCampaignSchema = Joi.object({
     appSubtype:          Joi.string().valid("APP_INSTALLS", "APP_ENGAGEMENT", "APP_PRE_REGISTRATION").optional(),
     // LOCAL_STORE
     storeAddress:        Joi.string().optional(),
-    locationRadius:      Joi.number().min(1).optional(),
+    locationRadius:      Joi.number().min(1).max(500).allow(null, '').optional().messages({
+      "number.base": "Please enter a valid location radius within the allowed range.",
+      "number.min": "Please enter a valid location radius within the allowed range.",
+      "number.max": "Please enter a valid location radius within the allowed range.",
+      "number.unsafe": "Please enter a valid location radius within the allowed range.",
+    }),
     // PERFORMANCE_MAX
     assetGroupName:      Joi.string().optional(),
     businessDescription: Joi.string().optional(),

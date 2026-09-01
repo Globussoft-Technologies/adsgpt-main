@@ -178,8 +178,12 @@ function validateCampaign(form) {
   if (form.objective === 'LOCAL_STORE') {
     if (isBlank(form.storeAddress))
       e.storeAddress = 'Store address is required for Local Store campaigns.';
-    if (!isBlank(form.locationRadius) && toNumber(form.locationRadius) < 1)
-      e.locationRadius = 'Location radius must be at least 1 km.';
+    if (!isBlank(form.locationRadius)) {
+      const num = toNumber(form.locationRadius);
+      if (isNaN(num) || num < 1 || num > 500) {
+        e.locationRadius = 'Please enter a valid location radius within the allowed range.';
+      }
+    }
   }
 
   if (channel === 'PERFORMANCE_MAX') {

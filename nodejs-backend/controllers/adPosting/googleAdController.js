@@ -79,6 +79,64 @@ function normalizeRequestCustomerId(res, id) {
   return tid;
 }
 
+async function isDestinationUrlReachable(url) {
+  if (!url || typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+    return { ok: false, error: 'Invalid URL format' };
+  }
+
+  const browserHeaders = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    Accept:
+      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+  };
+
+  try {
+    let res = await axios.head(url, {
+      headers: browserHeaders,
+      timeout: 7000,
+      maxRedirects: 5,
+      validateStatus: () => true,
+    });
+
+    if ([403, 405, 501].includes(res.status)) {
+      res = await axios.get(url, {
+        headers: browserHeaders,
+        timeout: 7000,
+        maxRedirects: 5,
+        responseType: 'stream',
+        validateStatus: () => true,
+      });
+      if (res.data && typeof res.data.destroy === 'function') {
+        res.data.destroy();
+      }
+    }
+
+    // 401/403/429 usually means Cloudflare/WAF bot-challenge or server auth;
+    // the website domain itself is live and Google's crawlers can access it.
+    if ([401, 403, 429].includes(res.status)) {
+      return { ok: true, status: res.status };
+    }
+
+    // Only genuine client/server 404/410/500+ errors fail reachability
+    if (res.status === 404 || res.status === 410 || res.status >= 500) {
+      return { ok: false, status: res.status };
+    }
+
+    return { ok: true, status: res.status };
+  } catch (err) {
+    // If it was just an HTTP response error with status code
+    if (err.response?.status) {
+      if ([401, 403, 429].includes(err.response.status)) {
+        return { ok: true, status: err.response.status };
+      }
+      return { ok: false, status: err.response.status };
+    }
+    return { ok: false, error: err.message };
+  }
+}
+
 function getQueryParam(query, names) {
   for (const name of names) {
     if (query[name] != null) return query[name];
@@ -265,12 +323,58 @@ function cleanGoogleErrorText(str) {
 
 function formatGoogleError(error) {
   // Try the nested Google Ads API error structure first
-  const apiErrors = error?.response?.data?.error?.details?.[0]?.errors || error?.errors || [];
+  const apiErrors =
+    error?.response?.data?.error?.details?.[0]?.errors ||
+    error?.response?.data?.error?.details?.flatMap?.((d) => d.errors || []) ||
+    error?.errors ||
+    [];
   const firstApiError = apiErrors[0] || {};
-  const errorCode = firstApiError?.errorCode
+  const errorCodeEntry = firstApiError?.errorCode
     ? Object.entries(firstApiError.errorCode).find(([, v]) => v != null)
     : null;
 
+  const errorKey = errorCodeEntry?.[0] || "";
+  const errorVal = String(errorCodeEntry?.[1] || errorCodeEntry?.[0] || error?.response?.data?.error?.status || "");
+  const trigger = String(firstApiError?.trigger?.stringValue || firstApiError?.trigger || "");
+
+  let friendlyMessage = firstApiError?.message;
+
+  // Specific, actionable translations for Google Ads API errors & limits
+  if (
+    trigger === "ENABLED_RESPONSIVE_SEARCH_CREATIVES_PER_AD_GROUP" ||
+    trigger.includes("SEARCH_CREATIVES") ||
+    (errorVal === "RESOURCE_LIMIT" && trigger.includes("SEARCH"))
+  ) {
+    friendlyMessage =
+      "Google Ads limits each Ad Group to a maximum of 3 active Responsive Search Ads. You already have 3 active ads in this ad group. Please pause or remove an existing ad first, or select/create another ad group.";
+  } else if (
+    trigger === "ENABLED_RESPONSIVE_DISPLAY_CREATIVES_PER_AD_GROUP" ||
+    trigger.includes("DISPLAY_CREATIVES") ||
+    (errorVal === "RESOURCE_LIMIT" && trigger.includes("DISPLAY"))
+  ) {
+    friendlyMessage =
+      "Google Ads limits each Ad Group to a maximum of 3 active Responsive Display Ads. Please pause or remove an existing ad first, or select/create another ad group.";
+  } else if (errorVal === "RESOURCE_LIMIT") {
+    friendlyMessage =
+      firstApiError?.message ||
+      "Google Ads limit reached for this ad group. Please pause or remove older active ads before creating new ones.";
+  } else if (errorVal === "DUPLICATE_ASSET") {
+    friendlyMessage =
+      "Duplicate headline or description found. Google Ads requires all headlines and descriptions in a Search ad to be unique.";
+  } else if (errorVal === "OPERATION_NOT_PERMITTED_FOR_REMOVED_RESOURCE") {
+    friendlyMessage =
+      "The selected campaign or ad group has been deleted in Google Ads. Please select an active one.";
+  } else if (
+    !friendlyMessage ||
+    friendlyMessage === "Request contains an invalid argument." ||
+    error?.response?.data?.error?.message === "Request contains an invalid argument."
+  ) {
+    friendlyMessage =
+      firstApiError?.message ||
+      error?.response?.data?.error?.message ||
+      error?.message ||
+      "Invalid argument sent to Google Ads API. Please verify your ad fields and limits.";
+  }
   // Google Ads API top-level message
   const rawMessage =
     error?.response?.data?.error?.message ||
@@ -281,8 +385,9 @@ function formatGoogleError(error) {
   const apiMessage = cleanGoogleErrorText(rawMessage);
 
   return {
-    message: apiMessage,
-    reason: errorCode?.[0] || error?.response?.data?.error?.status || null,
+    message: friendlyMessage,
+    reason: errorVal || errorKey || null,
+    trigger,
     details: firstApiError || error?.response?.data?.error || null,
   };
 }
@@ -4230,19 +4335,13 @@ class GoogleAdController {
       // DESTINATION_NOT_WORKING (PROHIBITED) if the URL returns an error or is unreachable.
       for (let i = 0; i < adsArray.length; i++) {
         const url = adsArray[i].finalUrl;
-        try {
-          const urlCheck = await axios.head(url, { timeout: 8000, maxRedirects: 5, validateStatus: (s) => s < 500 });
-          if (urlCheck.status >= 400) {
-            return res.status(400).json({
-              status: false,
-              error: `The destination URL for ad ${i + 1} is not reachable (HTTP ${urlCheck.status}). Please use a live, publicly accessible URL.`,
-              reason: "DESTINATION_NOT_WORKING",
-            });
-          }
-        } catch (urlErr) {
+        const check = await isDestinationUrlReachable(url);
+        if (!check.ok) {
           return res.status(400).json({
             status: false,
-            error: `The destination URL for ad ${i + 1} could not be reached: "${url}". Please use a live, publicly accessible URL.`,
+            error: check.status
+              ? `The destination URL for ad ${i + 1} is not reachable (HTTP ${check.status}). Please use a live, publicly accessible URL.`
+              : `The destination URL for ad ${i + 1} could not be reached: "${url}". Please use a live, publicly accessible URL.`,
             reason: "DESTINATION_NOT_WORKING",
           });
         }
@@ -4749,13 +4848,15 @@ class GoogleAdController {
       if (!finalUrl)    return res.status(400).json({ status: false, error: "finalUrl is required" });
 
       // Validate finalUrl reachability
-      try {
-        const urlCheck = await axios.head(finalUrl, { timeout: 8000, maxRedirects: 5, validateStatus: (s) => s < 500 });
-        if (urlCheck.status >= 400) {
-          return res.status(400).json({ status: false, error: `The destination URL is not reachable (HTTP ${urlCheck.status}). Please use a live, publicly accessible URL.`, reason: "DESTINATION_NOT_WORKING" });
-        }
-      } catch (urlErr) {
-        return res.status(400).json({ status: false, error: `The destination URL could not be reached: "${finalUrl}". Please use a live, publicly accessible URL.`, reason: "DESTINATION_NOT_WORKING" });
+      const check = await isDestinationUrlReachable(finalUrl);
+      if (!check.ok) {
+        return res.status(400).json({
+          status: false,
+          error: check.status
+            ? `The destination URL is not reachable (HTTP ${check.status}). Please use a live, publicly accessible URL.`
+            : `The destination URL could not be reached: "${finalUrl}". Please use a live, publicly accessible URL.`,
+          reason: "DESTINATION_NOT_WORKING",
+        });
       }
 
       const userId = req.user.user_id;
@@ -5137,14 +5238,39 @@ class GoogleAdController {
   async uploadVideoAPI(req, res) {
     try {
       const userId = req.user.user_id;
-      const { adAccountId } = req.body;
+      const { adAccountId, videoUrl } = req.body;
       const file = req.file;
 
       if (!adAccountId) return res.status(400).json({ status: false, error: "adAccountId is required" });
-      if (!file) return res.status(400).json({ status: false, error: "Video file is required" });
+      if (!file && !videoUrl) return res.status(400).json({ status: false, error: "Video file or videoUrl is required" });
 
       const { accessToken } = await initGoogleApiForUser(userId);
 
+      // If videoUrl is provided and already a YouTube link
+      if (videoUrl) {
+        const ytMatch = String(videoUrl).match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+        if (ytMatch) {
+          const youtubeVideoId = ytMatch[1];
+          return res.status(200).json({
+            status: true,
+            youtubeVideoId,
+            youtubeUrl: `https://www.youtube.com/watch?v=${youtubeVideoId}`,
+          });
+        }
+
+        // Upload S3 / remote video URL to YouTube
+        const youtubeVideoId = await this._uploadVideoToYouTube(accessToken, videoUrl, req.body.title || "Ad Video");
+        await this._waitForYouTubeVideo(accessToken, youtubeVideoId);
+
+        logger.info(`uploadVideoAPI: uploaded videoUrl to YouTube videoId=${youtubeVideoId} for user=${userId}`);
+        return res.status(201).json({
+          status: true,
+          youtubeVideoId,
+          youtubeUrl: `https://www.youtube.com/watch?v=${youtubeVideoId}`,
+        });
+      }
+
+      // Handle direct file buffer upload
       const title = (file.originalname || "Ad Video").replace(/\.[^.]+$/, "").slice(0, 100);
       const contentType = file.mimetype || "video/mp4";
       const fileSize = file.buffer.length;
@@ -5185,7 +5311,6 @@ class GoogleAdController {
 
       // Wait for video to be processed
       await this._waitForYouTubeVideo(accessToken, youtubeVideoId);
-
 
       logger.info(`uploadVideoAPI: uploaded videoId=${youtubeVideoId} for user=${userId}`);
       return res.status(201).json({
@@ -5532,6 +5657,21 @@ class GoogleAdController {
     const accountBusinessName = String(pmaxBusinessName || agName || "Brand").slice(0, 25);
 
 
+    // Helper: check if an asset exists in this customer
+    const checkAssetExists = async (rn) => {
+      if (!rn) return false;
+      try {
+        const resp = await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:searchStream`,
+          { query: `SELECT asset.resource_name FROM asset WHERE asset.resource_name = '${rn}' LIMIT 1` },
+          { headers: { Authorization: `Bearer ${accessToken}`, "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN, "login-customer-id": mccId, "Content-Type": "application/json" } }
+        );
+        return !!(resp.data?.[0]?.results?.[0]?.asset?.resourceName);
+      } catch (_) {
+        return false;
+      }
+    };
+
     // Helper: fetch image URL from a Google Ads asset RN (works for any customer this token has access to)
     const fetchAssetImageUrl = async (rn) => {
       if (!rn) return null;
@@ -5556,26 +5696,31 @@ class GoogleAdController {
       return null;
     };
 
-    // Resolve image assets — if RN belongs to a different customer, fetch its URL and re-upload
+    // Resolve image assets — verify they exist, or fetch their URL and re-upload to current account
     let imageAssetRN = null;
     let squareImageAssetRN = null;
-    const imgMatch = pmaxImageAssetRN?.match(/^customers\/(\d+)\//);
-    if (imgMatch && imgMatch[1] === String(customerId)) {
-      // Same account — use as-is
-      imageAssetRN = pmaxImageAssetRN;
-      const sqMatch = pmaxSquareImageAssetRN?.match(/^customers\/(\d+)\//);
-      squareImageAssetRN = (sqMatch && sqMatch[1] === String(customerId)) ? pmaxSquareImageAssetRN : null;
-    } else if (pmaxImageAssetRN) {
-      // Different account — fetch image URL and re-upload to target account
-      try {
-        const imageUrl = await fetchAssetImageUrl(pmaxImageAssetRN);
-        if (imageUrl) {
-          logger.info(`PMAX: re-uploading image from source account to ${customerId}`);
-          const r = await this._uploadImageFromUrl(accessToken, mccId, customerId, imageUrl);
-          imageAssetRN = r?.landscape || null;
-          squareImageAssetRN = r?.square || null;
+    if (pmaxImageAssetRN) {
+      const imgMatch = pmaxImageAssetRN.match(/^customers\/(\d+)\//);
+      if (imgMatch && imgMatch[1] === String(customerId)) {
+        const exists = await checkAssetExists(pmaxImageAssetRN);
+        if (exists) {
+          imageAssetRN = pmaxImageAssetRN;
+          if (pmaxSquareImageAssetRN && (await checkAssetExists(pmaxSquareImageAssetRN))) {
+            squareImageAssetRN = pmaxSquareImageAssetRN;
+          }
         }
-      } catch (e) { logger.warn(`PMAX: cross-account image copy failed: ${e.message}`); }
+      }
+      if (!imageAssetRN) {
+        try {
+          const imageUrl = await fetchAssetImageUrl(pmaxImageAssetRN);
+          if (imageUrl) {
+            logger.info(`PMAX: re-uploading image from source asset RN to ${customerId}`);
+            const r = await this._uploadImageFromUrl(accessToken, mccId, customerId, imageUrl);
+            imageAssetRN = r?.landscape || null;
+            squareImageAssetRN = r?.square || null;
+          }
+        } catch (e) { logger.warn(`PMAX: asset image copy failed: ${e.message}`); }
+      }
     }
     if (!imageAssetRN && pmaxImageUrl) {
       try {
@@ -5584,19 +5729,30 @@ class GoogleAdController {
         squareImageAssetRN = squareImageAssetRN || r?.square || null;
       } catch (e) { logger.warn(`PMAX image upload failed: ${e.message}`); }
     }
+
+    if (!squareImageAssetRN && pmaxSquareImageAssetRN) {
+      const sqMatch = pmaxSquareImageAssetRN.match(/^customers\/(\d+)\//);
+      if (sqMatch && sqMatch[1] === String(customerId)) {
+        const exists = await checkAssetExists(pmaxSquareImageAssetRN);
+        if (exists) squareImageAssetRN = pmaxSquareImageAssetRN;
+      }
+    }
+
     let logoAssetRN = null;
     if (pmaxLogoAssetRN) {
       const lMatch = pmaxLogoAssetRN.match(/^customers\/(\d+)\//);
       if (lMatch && lMatch[1] === String(customerId)) {
-        logoAssetRN = pmaxLogoAssetRN;
-      } else {
+        const exists = await checkAssetExists(pmaxLogoAssetRN);
+        if (exists) logoAssetRN = pmaxLogoAssetRN;
+      }
+      if (!logoAssetRN) {
         try {
           const logoUrl = await fetchAssetImageUrl(pmaxLogoAssetRN);
           if (logoUrl) {
             const r = await this._uploadImageFromUrl(accessToken, mccId, customerId, logoUrl);
             logoAssetRN = r?.square || r?.landscape || null;
           }
-        } catch (e) { logger.warn(`PMAX: cross-account logo copy failed: ${e.message}`); }
+        } catch (e) { logger.warn(`PMAX: logo asset copy failed: ${e.message}`); }
       }
     }
     if (!logoAssetRN && pmaxLogoUrl) {
@@ -5606,7 +5762,6 @@ class GoogleAdController {
       } catch (e) { logger.warn(`PMAX logo upload failed: ${e.message}`); }
     }
     // Auto-use the square image as logo if no dedicated logo was provided.
-    // Google allows the same asset resource name for both SQUARE_MARKETING_IMAGE and LOGO.
     if (!logoAssetRN && squareImageAssetRN) logoAssetRN = squareImageAssetRN;
 
     // Resolve YouTube video asset
@@ -5634,11 +5789,6 @@ class GoogleAdController {
       } catch (e) { logger.warn(`PMAX video asset failed: ${e.message}`); }
     }
 
-    // Google requires at least one marketing image, square image, and logo
-    if (!imageAssetRN || !squareImageAssetRN || !logoAssetRN) {
-      logger.warn(`_createPmaxAssetGroup: missing assets — imageRN=${imageAssetRN} squareRN=${squareImageAssetRN} logoRN=${logoAssetRN} — proceeding without them (Google will validate)`);
-    }
-
     try {
       logger.info(`_createPmaxAssetGroup: agName="${agName}" headlines=${headlines.length} descriptions=${descriptions.length} imageRN=${imageAssetRN} squareRN=${squareImageAssetRN} logoRN=${logoAssetRN}`);
 
@@ -5654,7 +5804,7 @@ class GoogleAdController {
       const textAssetResp = await axios.post(
         `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
         {
-          mutateOperations: textAssetDefs.map((def, i) => ({
+          mutateOperations: textAssetDefs.map((def) => ({
             assetOperation: { create: { text_asset: { text: def.text } } },
           })),
         },
@@ -5665,6 +5815,7 @@ class GoogleAdController {
 
       // Step 2: Create asset group + link all assets in one mutate
       const agTempRN = `customers/${customerId}/assetGroups/-1`;
+      const validFinalUrl = pmaxFinalUrl || "https://example.com";
       const agResp = await axios.post(
         `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
         {
@@ -5676,7 +5827,7 @@ class GoogleAdController {
                   campaign: campaignResource,
                   name: agName,
                   status: status || "PAUSED",
-                  ...(pmaxFinalUrl ? { final_urls: [pmaxFinalUrl] } : {}),
+                  final_urls: [validFinalUrl],
                 },
               },
             },

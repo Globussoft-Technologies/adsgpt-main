@@ -772,7 +772,7 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
           {onLaunchWizard && isPmax && (
             <AddButton
               label="New Asset Group"
-              onClick={() => onLaunchWizard('create-adgroup', { campaignId: campaign.campaignId || campaign.id, objective: campaign.objective, destination: campaign.channelType || campaign.objective })}
+              onClick={() => onLaunchWizard('create-adgroup', { campaignId: campaign.campaignId || campaign.id, objective: campaign.objective, destination: 'PERFORMANCE_MAX', channelType: 'PERFORMANCE_MAX', isPmax: true })}
             />
           )}
         </div>

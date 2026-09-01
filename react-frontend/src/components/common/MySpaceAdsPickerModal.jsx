@@ -13,6 +13,7 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  Play,
 } from 'lucide-react';
 import { getMySpaceImages } from '@/apis/image/imageApi';
 import { getMediaLibrary } from '@/apis/metaAds/metaAdsApi';
@@ -38,9 +39,12 @@ export default function MySpaceAdsPickerModal({
   open,
   onClose,
   onSelect,
-  title = 'Select from My Space Ads',
-  subtitle = 'Choose from your generated AI creatives, campaigns, and workspace assets',
+  mediaType = 'image', // 'image' | 'video'
+  title,
+  subtitle,
 }) {
+  const resolvedTitle = title || (mediaType === 'video' ? 'Select Video from My Space' : 'Select from My Space Ads');
+  const resolvedSubtitle = subtitle || (mediaType === 'video' ? 'Choose from your generated AI videos and workspace assets' : 'Choose from your generated AI creatives, campaigns, and workspace assets');
   const userId = useSelector((s) => s?.socket?.userData?.user_id) || null;
   const [selectedSource, setSelectedSource] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,7 +60,35 @@ export default function MySpaceAdsPickerModal({
     setLoading(true);
     setError(null);
     try {
-      // 1. Fetch from unified My Space endpoint
+      if (mediaType === 'video') {
+        if (userId) {
+          const libRes = await getMediaLibrary({
+            userId,
+            type: 'video',
+            page: 1,
+            limit: 100,
+          });
+          const libItems = Array.isArray(libRes?.data) ? libRes.data : [];
+          const valid = libItems
+            .map((doc) => ({
+              id: doc._id,
+              url: absolutize(doc.url),
+              source: 'library',
+              sourceLabel: doc.model ? `Ad Studio (${doc.model})` : 'My Space Video',
+              prompt: doc.prompt || doc.title || doc.model || 'Generated Video',
+              aspectRatio: doc.aspectRatio || '16:9',
+              createdAt: doc.createdAt,
+              isVideo: true,
+            }))
+            .filter((item) => Boolean(item.url));
+          setItems(valid);
+        } else {
+          setItems([]);
+        }
+        return;
+      }
+
+      // Image mode: unified My Space endpoint
       const res = await getMySpaceImages({
         source: selectedSource,
         skip: 0,
@@ -104,13 +136,13 @@ export default function MySpaceAdsPickerModal({
 
       setItems(valid);
     } catch (err) {
-      console.error('Failed to load My Space ads:', err);
+      console.error('Failed to load My Space media:', err);
       // Try fallback to media library on error
       if (userId) {
         try {
           const libRes = await getMediaLibrary({
             userId,
-            type: 'image',
+            type: mediaType,
             page: 1,
             limit: 50,
           });
@@ -121,9 +153,10 @@ export default function MySpaceAdsPickerModal({
               url: absolutize(doc.url),
               source: 'library',
               sourceLabel: 'Ad Studio',
-              prompt: doc.model || 'Generated Image',
-              aspectRatio: '1:1',
+              prompt: doc.model || (mediaType === 'video' ? 'Generated Video' : 'Generated Image'),
+              aspectRatio: mediaType === 'video' ? '16:9' : '1:1',
               createdAt: doc.createdAt,
+              isVideo: mediaType === 'video',
             }))
             .filter((item) => Boolean(item.url));
           setItems(valid);
@@ -138,7 +171,7 @@ export default function MySpaceAdsPickerModal({
     } finally {
       setLoading(false);
     }
-  }, [selectedSource, userId]);
+  }, [mediaType, selectedSource, userId]);
 
   useEffect(() => {
     if (open) {
@@ -215,11 +248,11 @@ export default function MySpaceAdsPickerModal({
           <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-white/8">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#4285F4]/20 to-[#15DCFF]/20 text-[#4285F4] dark:from-[#4285F4]/30 dark:to-[#15DCFF]/30 dark:text-[#15DCFF]">
-                <FolderOpen className="h-5 w-5" />
+                {mediaType === 'video' ? <Play className="h-5 w-5 fill-current ml-0.5" /> : <FolderOpen className="h-5 w-5" />}
               </div>
               <div>
-                <h2 className="text-base font-bold text-gray-900 dark:text-white sm:text-lg">{title}</h2>
-                <p className="text-xs text-gray-500 dark:text-white/50">{subtitle}</p>
+                <h2 className="text-base font-bold text-gray-900 dark:text-white sm:text-lg">{resolvedTitle}</h2>
+                <p className="text-xs text-gray-500 dark:text-white/50">{resolvedSubtitle}</p>
               </div>
             </div>
             <button
@@ -233,30 +266,38 @@ export default function MySpaceAdsPickerModal({
 
           {/* Sub-header Toolbar: Source tabs + Search input */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/50 px-6 py-3 dark:border-white/5 dark:bg-white/[0.02]">
-            {/* Tabs */}
-            <div className="flex items-center gap-1 rounded-xl bg-gray-200/60 p-1 dark:bg-white/5">
-              {SOURCE_TABS.map(({ id, label, icon: Icon }) => {
-                const active = selectedSource === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedSource(id);
-                      setPage(1);
-                    }}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                      active
-                        ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white'
-                        : 'text-gray-500 hover:text-gray-800 dark:text-white/60 dark:hover:text-white'
-                    }`}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+            {/* Tabs (only show for images or all) */}
+            {mediaType !== 'video' ? (
+              <div className="flex items-center gap-1 rounded-xl bg-gray-200/60 p-1 dark:bg-white/5">
+                {SOURCE_TABS.map(({ id, label, icon: Icon }) => {
+                  const active = selectedSource === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSource(id);
+                        setPage(1);
+                      }}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                        active
+                          ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white'
+                          : 'text-gray-500 hover:text-gray-800 dark:text-white/60 dark:hover:text-white'
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-[#4285F4]/10 px-2.5 py-1 text-xs font-bold text-[#4285F4]">
+                  My Space Videos
+                </span>
+              </div>
+            )}
 
             {/* Search + Refresh */}
             <div className="flex items-center gap-2">
@@ -269,7 +310,7 @@ export default function MySpaceAdsPickerModal({
                     setSearchQuery(e.target.value);
                     setPage(1);
                   }}
-                  placeholder="Search prompts or brands…"
+                  placeholder={mediaType === 'video' ? "Search videos…" : "Search prompts or brands…"}
                   className="w-48 rounded-xl border border-gray-200 bg-white py-1.5 pl-8 pr-3 text-xs text-gray-800 placeholder:text-gray-400 focus:border-[#4285F4] focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-white/30 sm:w-60"
                 />
                 {searchQuery && (
@@ -322,15 +363,19 @@ export default function MySpaceAdsPickerModal({
             ) : filteredItems.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-center">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 dark:bg-white/5">
-                  <ImageIcon className="h-7 w-7 text-gray-400 dark:text-white/30" />
+                  {mediaType === 'video' ? (
+                    <Play className="h-7 w-7 text-gray-400 dark:text-white/30" />
+                  ) : (
+                    <ImageIcon className="h-7 w-7 text-gray-400 dark:text-white/30" />
+                  )}
                 </div>
                 <h3 className="mt-2 text-sm font-bold text-gray-800 dark:text-white">
-                  {searchQuery ? 'No matching images found' : 'No My Space ads found yet'}
+                  {searchQuery ? 'No matching media found' : (mediaType === 'video' ? 'No My Space videos found yet' : 'No My Space ads found yet')}
                 </h3>
                 <p className="max-w-xs text-xs text-gray-500 dark:text-white/40">
                   {searchQuery
-                    ? 'Try searching with different keywords or switch the filter.'
-                    : 'Create and generate image ads from Ad Creative or Ad Factory, and they will automatically show up here.'}
+                    ? 'Try searching with different keywords or refresh the library.'
+                    : (mediaType === 'video' ? 'Generate videos in Ad Studio or AI Assistant to see them here.' : 'Create and generate image ads from Ad Creative or Ad Factory, and they will automatically show up here.')}
                 </p>
               </div>
             ) : (
@@ -338,6 +383,7 @@ export default function MySpaceAdsPickerModal({
                 {paginatedItems.map((item, idx) => {
                   const isSelected = selectedUrl === item.url;
                   const sourceLabel = item.sourceLabel || (item.source === 'adCreative' ? 'AdCreative' : item.source === 'adFactory' ? 'AdFactory' : 'My Space');
+                  const isVideoItem = item.isVideo || mediaType === 'video' || item.url?.match(/\.(mp4|webm|ogg|mov|avi)($|\?)/i);
 
                   return (
                     <div
@@ -350,14 +396,33 @@ export default function MySpaceAdsPickerModal({
                           : 'border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:shadow-sm dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/20'
                       }`}
                     >
-                      {/* Image Thumbnail Container */}
+                      {/* Media Container */}
                       <div className="relative aspect-square w-full overflow-hidden bg-gray-100 dark:bg-black/40">
-                        <img
-                          src={item.url}
-                          alt={item.prompt || 'My Space Ad'}
-                          loading="lazy"
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
+                        {isVideoItem ? (
+                          <>
+                            <video
+                              src={item.url}
+                              className="h-full w-full object-cover"
+                              muted
+                              playsInline
+                              preload="metadata"
+                              onMouseEnter={(e) => e.target.play().catch(() => {})}
+                              onMouseLeave={(e) => { e.target.pause(); e.target.currentTime = 0; }}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:opacity-0 transition-opacity">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md shadow-lg">
+                                <Play className="h-4 w-4 fill-white ml-0.5" />
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <img
+                            src={item.url}
+                            alt={item.prompt || 'My Space Ad'}
+                            loading="lazy"
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        )}
 
                         {/* Top badges */}
                         <div className="absolute inset-x-2 top-2 flex items-center justify-between pointer-events-none">
@@ -382,7 +447,7 @@ export default function MySpaceAdsPickerModal({
                       {/* Prompt / Meta label */}
                       <div className="p-2.5">
                         <p className="line-clamp-2 text-xs font-medium text-gray-700 dark:text-white/80" title={item.prompt || ''}>
-                          {item.prompt || 'Generated Ad Creative'}
+                          {item.prompt || (isVideoItem ? 'Generated Video Ad' : 'Generated Ad Creative')}
                         </p>
                       </div>
                     </div>
@@ -398,7 +463,7 @@ export default function MySpaceAdsPickerModal({
             {totalPages > 1 ? (
               <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-white/50">
                 <span>
-                  Page {page} of {totalPages} · {filteredItems.length} creatives
+                  Page {page} of {totalPages} · {filteredItems.length} {mediaType === 'video' ? 'videos' : 'creatives'}
                 </span>
                 <div className="flex items-center gap-1 ml-2">
                   <button
@@ -421,7 +486,7 @@ export default function MySpaceAdsPickerModal({
               </div>
             ) : (
               <span className="text-xs text-gray-400 dark:text-white/40">
-                {filteredItems.length} {filteredItems.length === 1 ? 'creative' : 'creatives'} available
+                {filteredItems.length} {filteredItems.length === 1 ? (mediaType === 'video' ? 'video' : 'creative') : (mediaType === 'video' ? 'videos' : 'creatives')} available
               </span>
             )}
 
@@ -441,7 +506,7 @@ export default function MySpaceAdsPickerModal({
                 className="flex items-center gap-1.5 rounded-xl bg-[#4285F4] px-5 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-[#3367D6] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Check className="h-3.5 w-3.5" />
-                Use Selected Ad
+                {mediaType === 'video' ? 'Use Selected Video' : 'Use Selected Ad'}
               </button>
             </div>
           </div>
