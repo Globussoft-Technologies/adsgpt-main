@@ -167,6 +167,21 @@ function parseLimit(value, fallback, max) {
 async function decorate(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return rows;
 
+  // Rows grouped by account carry a `userIds` set instead of a single user.
+  // Collapse it to the one we can link to, and keep the count so the table
+  // can say a shared account is shared rather than picking a winner silently.
+  for (const r of rows) {
+    if (Array.isArray(r.userIds)) {
+      const known = r.userIds.filter(Boolean);
+      r.userId = known[0] || null;
+      r.userCount = known.length;
+      // Traffic recorded before the user could be attributed. Worth showing:
+      // it explains a total that exceeds the named user's own activity.
+      r.hasUnattributed = r.userIds.some((u) => !u);
+      delete r.userIds;
+    }
+  }
+
   const accountIds = [...new Set(rows.map((r) => r.adAccountId).filter(Boolean))];
   const userIds = [...new Set(rows.map((r) => r.userId).filter(Boolean))];
 
@@ -266,17 +281,25 @@ exports.overview = async (req, res) => {
         MetaApiUsage.aggregate([
           { $match: { ...match, adAccountId: { $ne: null } } },
           {
+            // Grouped by ACCOUNT ALONE, not by (account, user). Including the
+            // user in the key splits one account into a row per user that
+            // touched it — and since unattributed traffic carries a null
+            // user, an account with any pre-attribution history appeared
+            // twice, reading as a duplicate rather than as two cohorts.
+            // Accounts are also genuinely shareable, so the account is the
+            // thing being ranked and the user is a property of it.
             $group: {
-              _id: { adAccountId: "$adAccountId", userId: "$userId" },
+              _id: "$adAccountId",
               ...COUNT_SUMS,
               ...PEAK_MAXES,
+              userIds: { $addToSet: "$userId" },
             },
           },
           {
             $project: {
               _id: 0,
-              adAccountId: "$_id.adAccountId",
-              userId: "$_id.userId",
+              adAccountId: "$_id",
+              userIds: 1,
               ...projectAll(),
             },
           },

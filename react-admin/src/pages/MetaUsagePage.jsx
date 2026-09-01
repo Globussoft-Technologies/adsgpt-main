@@ -425,17 +425,33 @@ export default function MetaUsagePage() {
                         </td>
                         <td className="px-5 py-3">
                           {row.userId ? (
-                            <Link
-                              to={`/meta-usage/users/${encodeURIComponent(row.userId)}`}
-                              className="block"
-                            >
-                              <div className="font-medium text-indigo-600 hover:underline">
-                                {row.userName || row.userId}
-                              </div>
-                              {row.userEmail ? (
-                                <div className="text-xs text-slate-500">{row.userEmail}</div>
+                            <>
+                              <Link
+                                to={`/meta-usage/users/${encodeURIComponent(row.userId)}`}
+                                className="block"
+                              >
+                                <div className="font-medium text-indigo-600 hover:underline">
+                                  {row.userName || row.userId}
+                                </div>
+                                {row.userEmail ? (
+                                  <div className="text-xs text-slate-500">{row.userEmail}</div>
+                                ) : null}
+                              </Link>
+                              {row.userCount > 1 ? (
+                                <span className="mt-0.5 inline-block text-xs text-slate-500">
+                                  +{row.userCount - 1} other user
+                                  {row.userCount > 2 ? "s" : ""}
+                                </span>
                               ) : null}
-                            </Link>
+                              {row.hasUnattributed ? (
+                                <span
+                                  title="Some of this account's traffic was recorded before requests carried a user."
+                                  className="mt-0.5 inline-block text-xs text-slate-400"
+                                >
+                                  + unattributed traffic
+                                </span>
+                              ) : null}
+                            </>
                           ) : (
                             <span className="text-slate-400">unattributed</span>
                           )}

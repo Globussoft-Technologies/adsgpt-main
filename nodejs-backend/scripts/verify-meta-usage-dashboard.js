@@ -355,6 +355,25 @@ async function callUserDetail(userId, query = {}) {
       assertEq(a.calls, 30, "account A calls in overview");
     });
 
+    await check("an account touched by several users is ONE row, not several", async () => {
+      // Grouping topAccounts by (account, user) split an account into a row
+      // per user — and since pre-attribution traffic carries a null user, any
+      // account with history appeared twice and read as a duplicate.
+      await MetaApiUsage.create({
+        userId: null,
+        adAccountId: ACCT_A,
+        source: "http",
+        hourStart: hour(2),
+        calls: 7,
+      });
+      const body = await callOverview();
+      const rows = body.topAccounts.filter((r) => r.adAccountId === ACCT_A);
+      assertEq(rows.length, 1, "rows for account A");
+      assertEq(rows[0].calls, 37, "calls should include the unattributed hour");
+      assertEq(rows[0].userId, USER, "should still link to the known user");
+      assertEq(rows[0].hasUnattributed, true, "unattributed traffic should be flagged");
+    });
+
     await check("overview reports recorder health so gaps are visible", async () => {
       const body = await callOverview();
       assert(body.recorder, "recorder health must be present");
@@ -376,7 +395,11 @@ async function callUserDetail(userId, query = {}) {
     });
   } finally {
     await MetaAdAccountName.deleteMany({ adAccountId: { $in: [ACCT_A, ACCT_B] } });
-    const removed = await MetaApiUsage.deleteMany({ userId: USER });
+    const removed = await MetaApiUsage.deleteMany({
+      // Not just `userId: USER` — some fixtures are deliberately
+      // unattributed, and those would survive a user-scoped delete.
+      $or: [{ userId: USER }, { adAccountId: { $in: [ACCT_A, ACCT_B] } }],
+    });
     console.log(`\ncleanup: removed ${removed.deletedCount} fixture rows`);
     await mongoose.disconnect();
   }
