@@ -5,6 +5,7 @@ const adminAuth = require("../controllers/admin/adminAuth.controller");
 const adminDashboard = require("../controllers/admin/adminDashboard.controller");
 const partnerApiKeys = require("../controllers/admin/partnerApiKey.controller");
 const tokenUsageDashboard = require("../controllers/admin/tokenUsageDashboard.controller");
+const metaUsageDashboard = require("../controllers/admin/metaUsageDashboard.controller");
 const planLimits = require("../controllers/admin/planLimits.controller");
 const modelConfiguration = require("../controllers/admin/modelConfiguration.controller");
 const multer = require("multer");
@@ -110,11 +111,31 @@ router.get("/token-usage/overview", requireAdmin, (req, res, next) => {
 });
 
 router.get("/token-usage/users/:userId", requireAdmin, (req, res, next) => {
-  /* 
+  /*
     #swagger.tags = ['Admin']
     #swagger.summary = 'Get AI token usage detail for a specific user'
   */
   tokenUsageDashboard.userDetail(req, res, next);
+});
+
+// Meta API usage — how much of Meta's shared per-app quota each account
+// consumes, and the utilisation percentages Meta reports back. Distinct from
+// token-usage above: that one meters what WE spend on models, this one meters
+// what we spend against a third party's ceiling.
+router.get("/meta-usage/overview", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get Meta API usage overview (calls and rate-limit meters)'
+  */
+  metaUsageDashboard.overview(req, res, next);
+});
+
+router.get("/meta-usage/users/:userId", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get Meta API usage detail for a specific user'
+  */
+  metaUsageDashboard.userDetail(req, res, next);
 });
 
 // Per-plan caps on managed ad accounts / campaigns (Meta Ads). See

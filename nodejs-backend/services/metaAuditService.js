@@ -38,6 +38,9 @@ const {
   sharedRateLimiter,
   hashToken,
 } = require("./autopilot/metaRateLimiter");
+const { sharedUsageRecorder } = require("./meta/metaUsageRecorder");
+const { optOutOfGlobalTracking } = require("./meta/attachUsageTracking");
+const { classifyMetaError } = require("./autopilot/metaRetry");
 
 // ---------------------------------------------------------------------------
 // Helpers (pure)
@@ -141,19 +144,63 @@ async function fetchAllPages(
  *
  * Costs no extra API calls — it reads headers off requests we already make,
  * unlike a separate probe.
+ *
+ * SECOND JOB: PERSISTENCE. The limiter keeps these readings in memory and
+ * decays them after an hour, which is right for throttling decisions and
+ * useless for answering "why did AstroLive fail at 09:31 yesterday". The same
+ * readings are therefore also handed to `sharedUsageRecorder`, which buffers
+ * them into hourly per-account rows. That recorder is best-effort by
+ * construction and swallows its own errors — nothing below may let telemetry
+ * turn a working Meta call into a failed one.
  */
-function attachRateLimiting(api, { adAccountId, accessToken, logger }) {
+function attachRateLimiting(
+  api,
+  { userId, adAccountId, accessToken, logger, source = "unknown" },
+) {
   const context = {
     tokenHash: hashToken(accessToken),
     accountId: String(adAccountId || "").replace(/^act_/, ""),
   };
+  // What the recorder needs to attribute a call. Separate from `context`
+  // because that one is the limiter's cache key and must not grow fields the
+  // limiter does not use.
+  const usageCtx = { userId, adAccountId, source };
+  // This wrapper does its own recording, and the global one installed on
+  // `FacebookAdsApi.init` would otherwise double every count — and worse,
+  // consume `response.headers` before the code below could read them, which
+  // would silently switch off the self-throttling this function exists for.
+  optOutOfGlobalTracking(api);
   api.setShowHeader(true);
   const originalCall = api.call.bind(api);
   api.call = async (...args) => {
     await sharedRateLimiter.waitIfNeeded(context, logger);
-    const response = await originalCall(...args);
+    sharedUsageRecorder.recordCall(usageCtx);
+    let response;
+    try {
+      response = await originalCall(...args);
+    } catch (err) {
+      // Count the failure, then rethrow UNCHANGED. Classification is only to
+      // separate "Meta refused us for capacity" from ordinary errors — a bad
+      // parameter says nothing about how much quota is left, and lumping the
+      // two together would make the throttle count meaningless.
+      let throttled = false;
+      try {
+        throttled = classifyMetaError(err).kind === "rate-limit";
+      } catch {
+        /* classification is a nicety; never let it mask the real error */
+      }
+      sharedUsageRecorder.recordFailure(usageCtx, { throttled });
+      throw err;
+    }
     if (response && typeof response === "object" && response.headers) {
       sharedRateLimiter.updateFromHeaders(response.headers, context);
+      // Read the meters back out of the limiter rather than re-parsing the
+      // headers here: one parser, and the limiter has already resolved which
+      // buckets actually apply to this account.
+      sharedUsageRecorder.recordHeaders(
+        usageCtx,
+        sharedRateLimiter.allFor(context),
+      );
       // Put the shape back exactly as callers expect.
       delete response.headers;
     }
@@ -561,8 +608,15 @@ async function runAuditForAccount({
   // Read Meta's five usage headers off every response and self-throttle when
   // any bucket runs hot. See services/autopilot/metaRateLimiter.js.
   const rateLimitContext = attachRateLimiting(api, {
+    userId,
     adAccountId,
     accessToken,
+    // Every caller of runAuditForAccount is an audit — Autopilot's cron, the
+    // HTTP audit endpoint, the v3 services. Distinguishing them further would
+    // need a parameter threaded through four call sites for a distinction
+    // nobody has asked to make; "audit" already separates the scheduled draw
+    // from the interactive one, which is the split that matters.
+    source: "audit",
     logger: (() => {
       try {
         return require("../utils/logger");

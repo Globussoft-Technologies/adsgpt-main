@@ -7,6 +7,7 @@ const IMAGE = require("../Module/adCreative/adCreativeImages");
 const { s3Client } = require('../storage/s3');
 const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { runUserRuleCycle } = require('../services/autopilot/userRuleOrchestrator');
+const { runWithUsageContext } = require('../services/meta/metaUsageContext');
 const UnifiedCreditController = require('../controllers/UnifiedCreditController');
 const oauthSigningKeyService = require('../services/oauth/signingKeyService');
 const { reconcileBillingCycles } = require('../services/billingReconciliation');
@@ -37,7 +38,17 @@ const registerAutopilotCron = () => {
       // AutopilotUserRule.find({ enabled: true }), grouped by user+account
       // off rule.attachments. The 37 backend rules are no longer evaluated
       // by autopilot (they remain in use by Ads Manager's audit endpoint).
-      await runUserRuleCycle({ dryRun });
+      //
+      // Wrapped in a usage context so every Meta call the cycle makes is
+      // attributed to "autopilot" rather than "unknown" — the audit itself
+      // accounts for its own traffic, but the cycle also calls target
+      // discovery and the rename service, which do not. `throttle: true`
+      // because nothing here is interactive: a scheduled job waiting out a
+      // hot rate-limit bucket is strictly better than one being refused.
+      await runWithUsageContext(
+        { userId: null, source: 'autopilot', throttle: true },
+        () => runUserRuleCycle({ dryRun }),
+      );
     } catch (err) {
       console.error('[autopilot] cron tick failed:', err.message);
     }

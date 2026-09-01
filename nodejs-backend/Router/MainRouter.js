@@ -62,8 +62,28 @@ const amemberSsoRoute = require("./auth/amemberSsoRoute");
 const mobileRoutes = require("./auth/mobileRoutes");
 const adsSearchRoutes = require("./adsSearchRoutes");
 const mySpaceRoutes = require("./mySpaceRoutes");
+const bizSdk = require("facebook-nodejs-business-sdk");
+const {
+  installGlobalUsageTracking,
+} = require("../services/meta/attachUsageTracking");
+const {
+  metaUsageContextMiddleware,
+} = require("../services/meta/metaUsageContext");
+const logger = require("../utils/logger");
+
+// Make every Meta SDK instance report what it costs, before any route can
+// create one. Patching `FacebookAdsApi.init` here rather than wrapping call
+// sites is deliberate: 47 of them re-init the SDK themselves and would
+// otherwise go unmeasured. See services/meta/attachUsageTracking.js.
+if (installGlobalUsageTracking(bizSdk, { logger })) {
+  logger.info("[meta usage] global API usage tracking installed");
+}
 
 const app = express();
+// Labels each request with its user and product surface so the Meta calls it
+// makes downstream can be attributed. Must precede the routes; costs nothing
+// when a request makes no Meta calls.
+app.use(metaUsageContextMiddleware);
 app.use("/mobile", mobileRoutes);
 app.use("/adcopy", authenticateJWT, adCopyRouter);
 app.use("/adCreative", authenticateJWT, adCretiveRouter);
