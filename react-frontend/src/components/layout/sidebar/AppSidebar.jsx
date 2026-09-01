@@ -496,7 +496,7 @@ const AppSidebar = () => {
 
             {/* LIBRARY group — Workspace + My Space */}
             {showLibraryGroup && (
-              <div className="mt-auto">
+              <div>
                 <SectionHeader label="LIBRARY" />
                 <div className={showExpanded ? 'space-y-1 px-2.5' : 'space-y-2 px-2'}>
 

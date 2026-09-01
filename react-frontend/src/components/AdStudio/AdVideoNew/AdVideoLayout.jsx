@@ -38,6 +38,7 @@ import MyAssistantImagesPage from './pages/MyAssistantImagesPage';
 import MyClaudeImagesPage from './pages/MyClaudeImagesPage';
 import CreativeFilterDropdown from '@/components/layout/header/AdStudio/AdCreative/CreativeFilterDropdown';
 import ThemeToggle from '@/components/layout/header/ThemeToggle';
+import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
 import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
 
@@ -486,6 +487,10 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   triggerClassName="adstudio-media-toolbar-control"
                 />
               ) : null}
+              {/* TopHeader's floating switcher is suppressed on this view (it
+                  would sit in the same top-right corner as this toolbar), so
+                  a workspace member gets it here instead. No-ops for owners. */}
+              <WorkspaceSwitcher />
               <div className="ml-1.5 2xl:ml-3">
                 <ThemeToggle />
               </div>

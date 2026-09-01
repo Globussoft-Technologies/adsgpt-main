@@ -430,7 +430,10 @@ export default function TopHeader() {
         {mobileNavigationControl}
         <div className="pointer-events-none fixed top-4 right-5 z-[60] flex items-center gap-2">
           <div className="pointer-events-auto flex items-center gap-2">
-            <WorkspaceSwitcher />
+            {/* My Space renders its own toolbar in this same top-right corner
+                (AdVideoLayout.jsx), so the switcher is placed inline there
+                instead — same reason ThemeToggle is already skipped here. */}
+            {!isMySpaceView && <WorkspaceSwitcher />}
             {SHOW_HIDDEN_HEADER_UI && !isMySpaceView && currentRoute !== '/autopilot/meta' && <ThemeToggle />}
           </div>
         </div>
