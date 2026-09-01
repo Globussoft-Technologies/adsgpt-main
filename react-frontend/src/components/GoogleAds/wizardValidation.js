@@ -119,6 +119,14 @@ function validateDestination(form, schema) {
   return {};
 }
 
+export const getTodayISO = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 // ── Campaign ───────────────────────────────────────────────────────────────────
 function validateCampaign(form) {
   const e = {};
@@ -129,6 +137,13 @@ function validateCampaign(form) {
     e.campaignName = 'Campaign name must be at least 2 characters.';
   } else if (form.campaignName.length > 120) {
     e.campaignName = 'Campaign name must be 120 characters or fewer.';
+  }
+
+  if (!isBlank(form.startDate)) {
+    const todayISO = getTodayISO();
+    if (form.startDate < todayISO) {
+      e.startDate = 'Start date cannot be in the past.';
+    }
   }
 
   if (!isBlank(form.endDate) && !isBlank(form.startDate)) {

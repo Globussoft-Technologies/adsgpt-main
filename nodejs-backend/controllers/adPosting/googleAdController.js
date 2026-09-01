@@ -250,6 +250,19 @@ async function invalidateAllUserGoogleCache(userId) {
   return invalidateGoogleCacheByPrefixes(userId, ALL_CACHE_PREFIXES);
 }
 
+function cleanGoogleErrorText(str) {
+  if (!str || typeof str !== 'string') return str;
+  let clean = str;
+  clean = clean.replace(/\.?\s*See the error's details\.[a-zA-Z0-9_.]+\s*field for more information\.?/gi, '');
+  clean = clean.replace(/details\.[a-zA-Z0-9_.]+/gi, (m) => m.replace(/^details\./i, '').replace(/_/g, ' '));
+  clean = clean.replace(/\b([A-Z0-9]+_[A-Z0-9_]+)\b/g, (m) => m.toLowerCase().replace(/_/g, ' '));
+  clean = clean.replace(/(\b[a-zA-Z0-9]+)_([a-zA-Z0-9_]+\b)/g, (m) => m.replace(/_/g, ' '));
+  clean = clean.replace(/\s+/g, ' ').trim();
+  if (clean.length > 0 && !/[.!?]$/.test(clean)) clean += '.';
+  if (clean.length > 0) clean = clean.charAt(0).toUpperCase() + clean.slice(1);
+  return clean;
+}
+
 function formatGoogleError(error) {
   // Try the nested Google Ads API error structure first
   const apiErrors = error?.response?.data?.error?.details?.[0]?.errors || error?.errors || [];
@@ -259,11 +272,13 @@ function formatGoogleError(error) {
     : null;
 
   // Google Ads API top-level message
-  const apiMessage =
+  const rawMessage =
     error?.response?.data?.error?.message ||
     firstApiError?.message ||
     error?.message ||
     "Unknown Google Ads API error";
+
+  const apiMessage = cleanGoogleErrorText(rawMessage);
 
   return {
     message: apiMessage,
@@ -2894,7 +2909,7 @@ class GoogleAdController {
   // * 12. PATCH update campaign (name, budget, dates, status)
   async updateCampaignAPI(req, res) {
     try {
-      const { adAccountId, campaignId, name, dailyBudgetMicros, status, startTime, endTime } = req.body;
+      const { adAccountId, campaignId, name, dailyBudgetMicros, status, startTime, endTime, finalUrlSuffix, trackingUrlTemplate } = req.body;
       if (!adAccountId) return res.status(400).json({ status: false, error: "adAccountId is required" });
       if (!campaignId)  return res.status(400).json({ status: false, error: "campaignId is required" });
 
@@ -2933,6 +2948,14 @@ class GoogleAdController {
       if (endTime) {
         updateBody.end_date_time = dayjs(endTime).format("YYYY-MM-DD 23:59:59");
         updateFields.push("end_date_time");
+      }
+      if (finalUrlSuffix) {
+        updateBody.final_url_suffix = finalUrlSuffix;
+        updateFields.push("final_url_suffix");
+      }
+      if (trackingUrlTemplate) {
+        updateBody.tracking_url_template = trackingUrlTemplate;
+        updateFields.push("tracking_url_template");
       }
 
       if (updateFields.length > 0) {

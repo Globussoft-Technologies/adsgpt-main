@@ -48,7 +48,7 @@ import {
 } from '@/apis/googleAds/googleAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import { getClipboardImageFiles } from '@/utils/clipboardImages';
-import { validateStep, validateAllSteps, deriveAdType, resolveCampaignObjective, effectiveChannel } from './wizardValidation';
+import { validateStep, validateAllSteps, deriveAdType, resolveCampaignObjective, effectiveChannel, getTodayISO } from './wizardValidation';
 import {
   getDestinationsForObjective,
   getDestinationsForGoal,
@@ -165,9 +165,9 @@ function buildInitialForm(context) {
     destination:     ctx?.destination  || '',
     goal:            ctx?.goal         || '',
     // website info
-    websiteUrl:      context?.websiteUrl    || '',
-    businessName:    context?.businessName  || '',
-    campaignName:    context?.campaignName || '',
+    websiteUrl:      context?.websiteUrl || context?.website_url || context?.finalUrl || context?.final_url || context?.landingPageUrl || context?.pmaxFinalUrl || '',
+    businessName:    context?.businessName || context?.business_name || context?.pmaxBusinessName || context?.campaignName || context?.name || '',
+    campaignName:    context?.campaignName || context?.name || '',
     dailyBudget:     context?.dailyBudget != null ? String(context.dailyBudget) : '',
     budgetType:      context?.budgetType      || 'DAILY',
     lifetimeBudget:  context?.lifetimeBudget != null ? String(context.lifetimeBudget) : '',
@@ -175,20 +175,22 @@ function buildInitialForm(context) {
     adStatus:        context?.adStatus     || 'ENABLED',
     startDate:       context?.startDate    || '',
     endDate:         context?.endDate      || '',
-    countries:       context?.countries    || [],
+    countries:       context?.countries || context?.targetCountries || context?.targeting?.countries || (Array.isArray(context?.locations) ? context.locations : []),
     adGroupName:     context?.adGroupName  || '',
     cpcBid:          context?.cpcBid != null ? String(context.cpcBid) : '',
     // Audience step fields
     ageMin:          context?.ageMin       || '',
     ageMax:          context?.ageMax       || '',
     genders:         context?.genders      || [],
-    targetCountries: context?.targetCountries || [],
+    targetCountries: context?.targetCountries || context?.countries || context?.targeting?.countries || [],
     headlines:       context?.headlines    || ['', '', ''],
     descriptions:    context?.descriptions || ['', ''],
     headline:        context?.headline     || '',
     longHeadline:    context?.longHeadline || '',
     description:     context?.description  || '',
-    finalUrl:        context?.finalUrl     || '',
+    finalUrl:        context?.finalUrl || context?.final_url || context?.websiteUrl || context?.website_url || context?.landingPageUrl || context?.pmaxFinalUrl || '',
+    finalUrlSuffix:  context?.finalUrlSuffix || context?.final_url_suffix || '',
+    trackingUrlTemplate: context?.trackingUrlTemplate || context?.tracking_url_template || '',
     callToAction:    context?.callToAction || '',
     imageUrl:        context?.imageUrl     || '',
     imageFile:       null,
@@ -226,8 +228,8 @@ function buildInitialForm(context) {
     assetGroupName:     context?.assetGroupName      || '',
     businessDescription:context?.businessDescription || '',
     finalUrlSuffix:     context?.finalUrlSuffix      || '',
-    pmaxFinalUrl:       context?.pmaxFinalUrl        || '',
-    pmaxBusinessName:   context?.pmaxBusinessName    || '',
+    pmaxFinalUrl:       context?.pmaxFinalUrl        || context?.finalUrl || context?.final_url || context?.websiteUrl || context?.website_url || context?.landingPageUrl || '',
+    pmaxBusinessName:   context?.pmaxBusinessName    || context?.businessName || context?.business_name || context?.campaignName || context?.name || '',
     pmaxHeadlines:      context?.pmaxHeadlines       || ['', '', ''],
     pmaxLongHeadline:   context?.pmaxLongHeadline    || '',
     pmaxDescriptions:   context?.pmaxDescriptions    || ['', ''],
@@ -325,10 +327,25 @@ function RadioCard({ active, onClick, label, desc }) {
 
 // ─── Launch error banner ──────────────────────────────────────────────────────
 
+export function cleanGoogleErrorText(str) {
+  if (!str || typeof str !== 'string') return str;
+  let clean = str;
+  clean = clean.replace(/\.?\s*See the error's details\.[a-zA-Z0-9_.]+\s*field for more information\.?/gi, '');
+  clean = clean.replace(/details\.[a-zA-Z0-9_.]+/gi, (m) => m.replace(/^details\./i, '').replace(/_/g, ' '));
+  clean = clean.replace(/\b([A-Z0-9]+_[A-Z0-9_]+)\b/g, (m) => m.toLowerCase().replace(/_/g, ' '));
+  clean = clean.replace(/(\b[a-zA-Z0-9]+)_([a-zA-Z0-9_]+\b)/g, (m) => m.replace(/_/g, ' '));
+  clean = clean.replace(/\s+/g, ' ').trim();
+  if (clean.length > 0 && !/[.!?]$/.test(clean)) clean += '.';
+  if (clean.length > 0) clean = clean.charAt(0).toUpperCase() + clean.slice(1);
+  return clean;
+}
+
 function LaunchErrorBanner({ error, onDismiss }) {
   if (!error) return null;
-  const title = typeof error === 'string' ? error : error.title;
-  const details = typeof error === 'string' ? null : error.details;
+  const rawTitle = typeof error === 'string' ? error : error.title;
+  const rawDetails = typeof error === 'string' ? null : error.details;
+  const title = cleanGoogleErrorText(rawTitle);
+  const details = cleanGoogleErrorText(rawDetails);
   return (
     <div className="shrink-0 border-t border-red-200/60 bg-red-50/90 px-5 py-3 dark:border-red-500/20 dark:bg-red-500/8">
       <div className="flex items-start gap-2">
@@ -934,11 +951,12 @@ function CampaignStep({ form, setField, setFields, errors, countryOptions, statu
             </div>
             <div>
               <Label>Start date</Label>
-              <Input type="date" value={form.startDate} onChange={(e) => setField('startDate', e.target.value)} />
+              <Input type="date" min={getTodayISO()} value={form.startDate} onChange={(e) => setField('startDate', e.target.value)} />
+              <FieldError msg={errors.startDate} />
             </div>
             <div>
               <Label>End date</Label>
-              <Input type="date" value={form.endDate} onChange={(e) => setField('endDate', e.target.value)} />
+              <Input type="date" min={form.startDate || getTodayISO()} value={form.endDate} onChange={(e) => setField('endDate', e.target.value)} />
               <FieldError msg={errors.endDate} />
             </div>
           </div>
@@ -1107,7 +1125,7 @@ function CampaignStep({ form, setField, setFields, errors, countryOptions, statu
         <div className="flex flex-wrap gap-1">
           {countryOptions.map(({ code, label }) => {
             const cur = form.countries || [];
-            const active = cur.includes(code);
+            const active = code === 'WW' ? (cur.length === 0 || cur.includes('WW')) : cur.includes(code);
             return (
               <div key={code} className={`rounded-full transition-all ${active ? 'ring-2 ring-[#4285F4]' : 'ring-1 ring-gray-200 hover:ring-gray-300 dark:ring-white/8 dark:hover:ring-white/15'}`}>
                 <button
@@ -2492,7 +2510,13 @@ export default function CreateCampaignWizard({
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [touched, setTouched]       = useState({});
 
-  const handleClose = () => setShowDiscardConfirm(true);
+  const handleClose = () => {
+    if (Object.keys(touched).length > 0) {
+      setShowDiscardConfirm(true);
+    } else {
+      onClose?.();
+    }
+  };
   const confirmDiscard = () => { setShowDiscardConfirm(false); onClose?.(); };
   const [errors, setErrors]         = useState({});
   const [launched, setLaunched]     = useState({ loading: false, error: null });
@@ -2825,6 +2849,11 @@ export default function CreateCampaignWizard({
           status:            form.status || undefined,
           startTime:         form.startDate || undefined,
           endTime:           form.endDate   || undefined,
+          websiteUrl:        form.websiteUrl || undefined,
+          businessName:      form.businessName || undefined,
+          finalUrl:          form.finalUrl || form.websiteUrl || undefined,
+          finalUrlSuffix:    form.finalUrlSuffix || undefined,
+          trackingUrlTemplate: form.trackingUrlTemplate || undefined,
         });
       } else if (!campaignId && mode === 'create-full') {
         const res = await createGoogleCampaign({
@@ -2998,11 +3027,12 @@ export default function CreateCampaignWizard({
 
       // data.error is now always a plain-English message from parseGoogleError() on the backend.
       // data.validations is an optional array of field-level hints (also plain text).
-      const title = data.error || e?.message || 'Something went wrong. Please retry.';
+      const rawTitle = data.error || e?.message || 'Something went wrong. Please retry.';
+      const title = cleanGoogleErrorText(rawTitle);
 
       // Show field-level validation hints as supplementary detail only when they add new info
       const fieldHints = (data.validations || [])
-        .map((v) => v.message)
+        .map((v) => cleanGoogleErrorText(v.message))
         .filter(Boolean)
         .filter((m) => m !== title);
       const details = fieldHints.length ? fieldHints.join(' ') : '';

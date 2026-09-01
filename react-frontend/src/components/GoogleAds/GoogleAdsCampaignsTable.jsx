@@ -414,7 +414,7 @@ function CampaignTable({
       // the real derived status after a toggle. Clear any stale override
       // and let the refetch below supply the truth.
       setPrimaryStatuses((p) => { const n = { ...p }; delete n[id]; return n; });
-      globalToast.success('Campaign status updated');
+      globalToast.success(next === 'ENABLED' ? 'Campaign active successfully' : 'Campaign paused successfully');
       // The optimistic override above only lives in this component's local
       // state — it's lost if the table unmounts (e.g. switching tabs and
       // back). Refetch so the underlying campaigns data actually reflects
@@ -575,7 +575,26 @@ function CampaignTable({
                       )}
                       {onLaunchWizard && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); onLaunchWizard('edit-campaign', { campaignId: id, objective: c.objective, destination: c.channelType || c.objective, campaignName: c.name, dailyBudget: budget || '', status: c.status, startDate: c.startDate || c.start_time, endDate: c.endDate || c.end_time }); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onLaunchWizard('edit-campaign', {
+                              ...c,
+                              campaignId: id,
+                              objective: c.objective,
+                              destination: c.channelType || c.objective,
+                              campaignName: c.name,
+                              dailyBudget: budget || '',
+                              status: c.status,
+                              startDate: c.startDate || c.start_time,
+                              endDate: c.endDate || c.end_time,
+                              websiteUrl: c.websiteUrl || c.website_url || c.finalUrl || c.final_url || c.landingPageUrl || '',
+                              businessName: c.businessName || c.business_name || '',
+                              finalUrl: c.finalUrl || c.final_url || c.websiteUrl || c.website_url || c.landingPageUrl || '',
+                              finalUrlSuffix: c.finalUrlSuffix || c.final_url_suffix || '',
+                              trackingUrlTemplate: c.trackingUrlTemplate || c.tracking_url_template || '',
+                              countries: c.countries || c.targetCountries || [],
+                            });
+                          }}
                           title="Edit campaign"
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white"
                         >

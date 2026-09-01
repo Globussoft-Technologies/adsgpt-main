@@ -26,6 +26,7 @@ import {
   getGoogleAnalyticsData,
   disconnectGoogleAccount,
   getGoogleAdGroupAds,
+  getGoogleAdGroups,
 } from '@/apis/googleAds/googleAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import { DATE_PRESETS } from '@/components/MetaAds/metaAdsUtils';
@@ -94,6 +95,58 @@ export default function GoogleAdsDashboard() {
   const [manageNonce, setManageNonce] = useState(0);
 
   const openWizard  = async (mode, context = null) => {
+    if (mode === 'edit-campaign' && context?.campaignId) {
+      setWizard({ open: true, mode, context: { ...context, _loadingAssets: true } });
+      try {
+        const agRes = await getGoogleAdGroups({
+          adAccountId: context.adAccountId || selectedAccount?.id,
+          campaignId: context.campaignId || context.id,
+          channelType: context.channelType || context.objective,
+          refresh: true,
+        });
+        const adGroups = agRes?.adGroups || [];
+        let fetchedFinalUrl = context.finalUrl || context.websiteUrl || '';
+        let fetchedWebsiteUrl = context.websiteUrl || context.finalUrl || '';
+        let fetchedBusinessName = context.businessName || '';
+
+        if (adGroups.length > 0) {
+          const agId = adGroups[0].adGroupId || adGroups[0].id;
+          const adsRes = await getGoogleAdGroupAds({
+            adAccountId: context.adAccountId || selectedAccount?.id,
+            adGroupId: agId,
+            refresh: true,
+          });
+          const firstAd = (adsRes?.ads || [])[0] || null;
+          if (firstAd) {
+            const url = firstAd.finalUrls?.[0] || firstAd.finalUrl || firstAd.websiteUrl || firstAd.url || '';
+            if (url) {
+              fetchedFinalUrl = url;
+              fetchedWebsiteUrl = url;
+            }
+            if (firstAd.businessName || firstAd.pmaxBusinessName) {
+              fetchedBusinessName = firstAd.businessName || firstAd.pmaxBusinessName;
+            }
+          }
+        }
+        setWizard({
+          open: true,
+          mode,
+          context: {
+            ...context,
+            websiteUrl: fetchedWebsiteUrl,
+            finalUrl: fetchedFinalUrl,
+            pmaxFinalUrl: fetchedFinalUrl,
+            businessName: fetchedBusinessName,
+            pmaxBusinessName: fetchedBusinessName,
+            countries: context.countries || context.targetCountries || context.targeting?.countries || [],
+            _loadingAssets: false,
+          },
+        });
+      } catch (e) {
+        setWizard({ open: true, mode, context: { ...context, _loadingAssets: false } });
+      }
+      return;
+    }
     if (mode === 'edit-adgroup' && context?.isPmax) {
       setWizard({ open: true, mode, context: { ...context, _loadingAssets: true } });
       try {
