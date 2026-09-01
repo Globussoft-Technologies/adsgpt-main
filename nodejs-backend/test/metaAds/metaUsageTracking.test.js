@@ -186,6 +186,23 @@ function fakeApi({ response = {}, throws = null } = {}) {
     test("a prefix only matches on a segment boundary", () => {
       assert.equal(src("/meta-ads-something-else"), "http");
     });
+
+    test("the /adsgpt mount prefix does not defeat matching", () => {
+      // The whole router is mounted at /adsgpt (index.js), so originalUrl
+      // reads /adsgpt/meta-ads/... . The first deploy labelled every single
+      // request "http" because of this, and nothing errored.
+      assert.equal(src("/adsgpt/meta-ads/campaigns"), "ads-manager");
+      assert.equal(src("/adsgpt/ad-posting/launch"), "ad-posting");
+      assert.equal(src("/adsgpt/partner-api/v1/meta-ads/x"), "partner-api");
+    });
+
+    test("a query string does not defeat matching", () => {
+      assert.equal(src("/meta-ads/campaigns?limit=50"), "ads-manager");
+    });
+
+    test("only one mount segment is stripped", () => {
+      assert.equal(src("/a/b/meta-ads/x"), "http");
+    });
   });
 
   await group("wrapping one instance", async () => {
@@ -406,6 +423,42 @@ function fakeApi({ response = {}, throws = null } = {}) {
       assert.equal(seen.userId, "GPT-435");
       assert.equal(seen.source, "ads-manager");
       assert.equal(seen.throttle, false, "interactive requests must not wait");
+    });
+
+    await testAsync("the user is resolved AFTER auth runs, not at middleware time", async () => {
+      // This middleware is mounted before the routes, and the routes are what
+      // apply authenticateJWT — so req.user does not exist yet when the
+      // context is created. Reading it eagerly recorded a null user for every
+      // request in the first deploy.
+      const req = { originalUrl: "/adsgpt/meta-ads/x", url: "/meta-ads/x" };
+      let early = null;
+      let late = null;
+      await new Promise((resolve) => {
+        metaUsageContextMiddleware(req, {}, async () => {
+          early = currentUsageContext().userId;
+          req.user = { user_id: "GPT-435" }; // auth middleware runs here
+          late = currentUsageContext().userId;
+          resolve();
+        });
+      });
+      assert.equal(early, null, "nothing to read before auth");
+      assert.equal(late, "GPT-435", "must pick the user up once auth has run");
+    });
+
+    await testAsync("a resolved user is cached rather than re-read", async () => {
+      const req = { url: "/meta-ads/x", user: { user_id: "u1" } };
+      await new Promise((resolve) => {
+        metaUsageContextMiddleware(req, {}, () => {
+          assert.equal(currentUsageContext().userId, "u1");
+          req.user = { user_id: "somebody-else" };
+          assert.equal(
+            currentUsageContext().userId,
+            "u1",
+            "auth cannot change mid-request",
+          );
+          resolve();
+        });
+      });
     });
 
     await testAsync("an unauthenticated request is still labelled", async () => {

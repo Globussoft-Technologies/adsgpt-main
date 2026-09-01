@@ -58,9 +58,25 @@ const EMPTY_TOTALS = {
   maxBlockedMs: 0,
 };
 
-function parseDate(value) {
+/**
+ * A bare `YYYY-MM-DD` is a DAY, not an instant — and which instant it means
+ * depends on which end of the range it is.
+ *
+ * The admin date picker sends date-only strings. Parsing the end as
+ * `new Date("2026-09-01")` yields midnight UTC, so `hourStart <= that`
+ * excludes everything recorded during the day the user actually selected —
+ * the page renders empty while the data sits in the collection. Mirrors
+ * parseRangeStart/parseRangeEnd in adminDashboard.controller.js.
+ */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseDate(value, edge) {
   if (!value) return null;
-  const d = new Date(value);
+  const raw = String(value);
+  const iso = DATE_ONLY.test(raw)
+    ? `${raw}T${edge === "end" ? "23:59:59.999" : "00:00:00.000"}Z`
+    : raw;
+  const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -70,8 +86,8 @@ function parseDate(value) {
  * scan and can only return the same rows.
  */
 function resolveRange(query = {}) {
-  const to = parseDate(query.to) || new Date();
-  let from = parseDate(query.from);
+  const to = parseDate(query.to, "end") || new Date();
+  let from = parseDate(query.from, "start");
   if (!from) from = new Date(to.getTime() - DEFAULT_WINDOW_HOURS * HOUR_MS);
   const maxSpan = MAX_WINDOW_HOURS * HOUR_MS;
   if (to.getTime() - from.getTime() > maxSpan) {

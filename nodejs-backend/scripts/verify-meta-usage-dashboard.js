@@ -222,6 +222,25 @@ async function callUserDetail(userId, query = {}) {
       assertEq(body.totals.peakApp, 0, "peakApp outside the range");
     });
 
+    await check("a date-only `to` covers the WHOLE of that day", async () => {
+      // The admin picker sends `YYYY-MM-DD`. Parsed as an instant that is
+      // midnight, so `hourStart <= to` excluded everything recorded during
+      // the day the user selected — the page rendered empty while the rows
+      // sat in the collection. This is that bug, pinned.
+      const day = BASE.toISOString().slice(0, 10);
+      const body = await callUserDetail(USER, { from: day, to: day });
+      assert(
+        body.totals.calls > 0,
+        `a same-day range must include that day's rows, got ${body.totals.calls}`,
+      );
+    });
+
+    await check("a date-only `from` starts at midnight, not now", async () => {
+      const day = BASE.toISOString().slice(0, 10);
+      const { from } = controller._internals.resolveRange({ from: day, to: day });
+      assertEq(from.toISOString(), `${day}T00:00:00.000Z`, "from");
+    });
+
     await check("an unknown user returns zeros rather than an error", async () => {
       const body = await callUserDetail(`${TAG}_nobody`);
       assertEq(body.totals.calls, 0, "calls");

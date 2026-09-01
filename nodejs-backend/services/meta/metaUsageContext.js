@@ -43,12 +43,39 @@ const SORTED_PREFIXES = Object.keys(ROUTE_SOURCES).sort(
   (a, b) => b.length - a.length,
 );
 
-function sourceForPath(urlPath) {
-  if (!urlPath) return "http";
+function matchPrefix(urlPath) {
   for (const prefix of SORTED_PREFIXES) {
     if (urlPath === prefix || urlPath.startsWith(`${prefix}/`)) {
       return ROUTE_SOURCES[prefix];
     }
+  }
+  return null;
+}
+
+/**
+ * Map a request path to the product surface that owns it.
+ *
+ * THE MOUNT PREFIX IS WHY THIS RETRIES. The whole router is mounted at
+ * `/adsgpt` (index.js), so `req.originalUrl` reads `/adsgpt/meta-ads/...` and
+ * a naive prefix test against `/meta-ads` matches nothing — which is exactly
+ * what happened: every request in the first deploy was labelled "http".
+ * Callers pass `req.url`, which Express has already made mount-relative, but
+ * dropping one leading segment and retrying makes this correct under either
+ * value and under a future mount point nobody remembered to update here.
+ */
+function sourceForPath(urlPath) {
+  if (!urlPath) return "http";
+  // Query strings and hashes are not part of the routing decision.
+  const clean = String(urlPath).split(/[?#]/)[0];
+
+  const direct = matchPrefix(clean);
+  if (direct) return direct;
+
+  // Retry once without the mount segment: "/adsgpt/meta-ads/x" → "/meta-ads/x".
+  const withoutMount = clean.replace(/^\/[^/]+/, "");
+  if (withoutMount && withoutMount !== clean) {
+    const nested = matchPrefix(withoutMount);
+    if (nested) return nested;
   }
   return "http";
 }
@@ -63,9 +90,28 @@ function runWithUsageContext(ctx, fn) {
   return storage.run({ ...ctx }, fn);
 }
 
-/** The context for the currently-running operation, or an empty object. */
+/**
+ * The context for the currently-running operation, or an empty object.
+ *
+ * THE USER IS RESOLVED HERE, NOT AT MIDDLEWARE TIME. This middleware is
+ * mounted before the routes, and the routes are what apply `authenticateJWT`
+ * — so `req.user` does not exist yet when the context is created. Reading it
+ * eagerly is why the first deploy recorded every request with a null user.
+ * Holding the request and reading `req.user` at CALL time works because a
+ * Meta call always happens after the route's auth has run.
+ */
 function currentUsageContext() {
-  return storage.getStore() || {};
+  const store = storage.getStore();
+  if (!store) return {};
+  if (store.userId) return store;
+
+  const req = store.req;
+  if (!req) return store;
+  const userId = req.user?.user_id || req.user?.userId || null;
+  // Cache it: auth cannot change mid-request, and a request can make
+  // hundreds of Meta calls.
+  if (userId) store.userId = userId;
+  return store;
 }
 
 /**
@@ -75,12 +121,17 @@ function currentUsageContext() {
  * middleware has already run and tolerates its absence — an unauthenticated
  * or partner request is still traffic worth counting.
  */
-function metaUsageContextMiddleware(req, res, next) {
+function metaUsageContextMiddleware(req, _res, next) {
   let ctx;
   try {
     ctx = {
-      userId: req.user?.user_id || req.user?.userId || null,
-      source: sourceForPath(req.originalUrl || req.url),
+      // Deliberately null here — resolved from `req` on first read, once the
+      // route's auth middleware has actually run. See currentUsageContext.
+      userId: null,
+      req,
+      // `req.url` is mount-relative; sourceForPath also copes with the full
+      // `/adsgpt/...` form in case a caller passes originalUrl.
+      source: sourceForPath(req.url || req.originalUrl),
       // Interactive requests are never made to wait on a rate-limit bucket;
       // see attachUsageTracking. Someone is watching a spinner.
       throttle: false,
