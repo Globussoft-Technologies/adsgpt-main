@@ -138,14 +138,36 @@ export const activateBrief = async (briefId, connection, cadence = null, google 
 // introduce anything.
 export const publishBrief = async (
   briefId,
-  { connection, mode = 'auto', campaignId, adSetId, imageUrls },
+  {
+    platform = 'meta',
+    connection,
+    mode = 'auto',
+    campaignId,
+    adSetId,
+    adGroupId,
+    adAccountId,
+    imageUrls,
+    googleConnection,
+    googleTarget,
+  },
 ) => {
   const { data } = await axios.post(
     `${BRIEFS}/${briefId}/publish`,
     {
+      platform,
       connection,
       mode,
-      ...(mode === 'existing' ? { campaignId, adSetId } : {}),
+      ...(platform === 'google'
+        ? {
+            adAccountId: adAccountId || googleTarget?.adAccountId || googleConnection?.adAccountId,
+            campaignId: campaignId || googleTarget?.campaignId || googleConnection?.campaignId,
+            adGroupId: adGroupId || googleTarget?.adGroupId || googleConnection?.adGroupId,
+            googleConnection,
+            googleTarget,
+          }
+        : mode === 'existing'
+          ? { campaignId, adSetId }
+          : {}),
       ...(imageUrls?.length ? { imageUrls } : {}),
     },
     { headers: authHeaders() },

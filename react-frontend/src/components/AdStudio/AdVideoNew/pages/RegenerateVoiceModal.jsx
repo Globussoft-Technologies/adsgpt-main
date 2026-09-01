@@ -42,7 +42,7 @@ import {
 
 const S3_BASE_URL = (import.meta.env.VITE_S3_BASE_URL || '').replace(/\/$/, '');
 const GLASS_DIALOG_CLASS =
-  "border border-blue-300/20 bg-[radial-gradient(circle_at_78%_0%,rgba(47,86,145,0.28),transparent_42%),linear-gradient(145deg,rgba(25,27,31,0.90),rgba(8,11,16,0.84))] text-white shadow-[0_28px_100px_rgba(0,0,0,0.62),0_0_38px_rgba(59,130,246,0.08),inset_0_1px_0_rgba(255,255,255,0.09)] backdrop-blur-2xl backdrop-saturate-125";
+  "!border-gray-200/90 !bg-white !text-gray-900 shadow-[0_24px_60px_rgba(0,0,0,0.12)] backdrop-blur-2xl dark:!border-blue-300/20 dark:!bg-[#141722] dark:!bg-[radial-gradient(circle_at_78%_0%,rgba(47,86,145,0.35),transparent_45%),linear-gradient(145deg,#181b24,#0e1118)] dark:!text-white dark:shadow-[0_28px_100px_rgba(0,0,0,0.7),0_0_38px_rgba(59,130,246,0.12),inset_0_1px_0_rgba(255,255,255,0.1)]";
 
 const resolveMediaUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
@@ -734,20 +734,20 @@ export default function RegenerateVoiceModal({
           onEscapeKeyDown={blockOutsideClose}
         >
           {submitting && (
-            <div role="status" aria-live="polite" className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[#111]/90 backdrop-blur-sm">
-              <RefreshCw aria-hidden="true" className="h-7 w-7 animate-spin text-blue-300" />
-              <p className="text-sm font-semibold text-white">Starting final merge…</p>
-              <p className="text-xs text-white/45">Your approved preview is being prepared.</p>
+            <div role="status" aria-live="polite" className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-white/90 backdrop-blur-sm dark:bg-[#111]/90">
+              <RefreshCw aria-hidden="true" className="h-7 w-7 animate-spin text-blue-600 dark:text-blue-300" />
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Starting final merge…</p>
+              <p className="text-xs text-gray-500 dark:text-white/45">Your approved preview is being prepared.</p>
             </div>
           )}
           <DialogHeader>
             <div className="flex flex-wrap items-center gap-2">
-              <DialogTitle>Preview voice-over</DialogTitle>
-              <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
+              <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-white">Preview voice-over</DialogTitle>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                 Preview
               </span>
             </div>
-            <DialogDescription className="text-white/55">
+            <DialogDescription className="text-sm text-gray-500 dark:text-white/60">
               Review the synchronized video and audio before creating the final version.
             </DialogDescription>
           </DialogHeader>
@@ -758,7 +758,7 @@ export default function RegenerateVoiceModal({
               muted
               playsInline
               aria-label="Muted video used with the regenerated voice-over preview"
-              className="min-h-0 w-full flex-1 rounded-xl border border-white/10 bg-black object-contain"
+              className="min-h-0 w-full flex-1 rounded-xl border border-gray-200 bg-black object-contain dark:border-white/10"
               onPlay={() => { setIsPreviewPlaying(true); syncAudio(); audioRef.current?.play(); }}
               onPause={(event) => {
                 // Reaching the end fires `pause` before `ended`; pausing the audio
@@ -772,7 +772,7 @@ export default function RegenerateVoiceModal({
               onEnded={() => {}}
             />
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-white/10 bg-black text-sm text-white/55">
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 text-sm text-gray-600 dark:border-white/10 dark:bg-black dark:text-white/60">
               Video preview is unavailable. You can still review the regenerated audio.
             </div>
           )}
@@ -785,7 +785,7 @@ export default function RegenerateVoiceModal({
             onPause={() => setIsPreviewPlaying(false)}
             onEnded={() => { setIsPreviewPlaying(false); videoRef.current?.pause(); }}
           />
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/15 dark:bg-white/[0.04]">
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -793,7 +793,7 @@ export default function RegenerateVoiceModal({
                 aria-pressed={isPreviewPlaying}
                 aria-label={isPreviewPlaying ? 'Pause synchronized preview' : 'Play synchronized preview'}
                 title={isPreviewPlaying ? 'Pause synchronized preview' : 'Play synchronized preview'}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-400/10 text-blue-300 transition hover:bg-blue-400/20"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 transition hover:bg-blue-100 dark:border-blue-300/25 dark:bg-blue-400/15 dark:text-blue-300 dark:hover:bg-blue-400/25"
               >
                 {isPreviewPlaying ? (
                   <Pause className="h-4 w-4 fill-current" />
@@ -802,10 +802,10 @@ export default function RegenerateVoiceModal({
                 )}
               </button>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-white/45">Regenerated voice audio</p>
-                <p className="truncate text-sm font-semibold text-white">{audioFileName}</p>
+                <p className="text-xs font-medium text-gray-500 dark:text-white/50">Regenerated voice audio</p>
+                <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{audioFileName}</p>
               </div>
-              <span className="shrink-0 text-xs tabular-nums text-white/45">
+              <span className="shrink-0 text-xs tabular-nums text-gray-500 dark:text-white/50">
                 {formatPreviewTime(previewCurrentTime)} / {formatPreviewTime(totalPreviewDuration)}
               </span>
             </div>
@@ -818,12 +818,12 @@ export default function RegenerateVoiceModal({
               onChange={seekPreview}
               disabled={!totalPreviewDuration}
               aria-label="Voice preview position"
-              className="mt-3 h-1.5 w-full cursor-pointer accent-blue-400 disabled:cursor-not-allowed"
+              className="mt-3 h-1.5 w-full cursor-pointer accent-blue-500 dark:accent-blue-400 disabled:cursor-not-allowed"
             />
           </div>
           <DialogFooter>
-            <button type="button" onClick={discardVoicePreview} disabled={busy} className="rounded-md border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/5 disabled:opacity-50">Try again</button>
-            <button type="button" onClick={acceptVoicePreview} disabled={busy} className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50">{submitting ? 'Starting merge…' : 'Accept & merge'}</button>
+            <button type="button" onClick={discardVoicePreview} disabled={busy} className="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 dark:border-white/20 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/10 dark:hover:border-white/30">Try again</button>
+            <button type="button" onClick={acceptVoicePreview} disabled={busy} className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-black disabled:opacity-50 dark:border dark:border-white/20 dark:bg-white dark:text-black dark:hover:bg-white/90">{submitting ? 'Starting merge…' : 'Accept & merge'}</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -841,15 +841,15 @@ export default function RegenerateVoiceModal({
         >
           <DialogHeader>
             <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/10 text-red-300">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-300">
                 <AlertTriangle className="h-4 w-4" />
               </span>
-              <DialogTitle>Voice preview failed</DialogTitle>
+              <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-white">Voice preview failed</DialogTitle>
             </div>
-            <DialogDescription role="alert" className="text-white/55">{voicePreview.error}</DialogDescription>
+            <DialogDescription role="alert" className="text-sm text-red-600 dark:text-red-300">{voicePreview.error}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <button type="button" onClick={discardVoicePreview} className="rounded-md border border-white/20 bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90">
+            <button type="button" onClick={discardVoicePreview} className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-black dark:border dark:border-white/20 dark:bg-white dark:text-black dark:hover:bg-white/90">
               Try again
             </button>
           </DialogFooter>
@@ -876,31 +876,31 @@ export default function RegenerateVoiceModal({
         >
           <DialogHeader>
             <div className="flex flex-wrap items-center gap-2">
-              <DialogTitle>Preparing voice preview</DialogTitle>
-              <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
+              <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-white">Preparing voice preview</DialogTitle>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                 Generating audio
               </span>
             </div>
-            <DialogDescription className="text-white/55">{loadingMessage}</DialogDescription>
+            <DialogDescription className="text-sm text-gray-500 dark:text-white/60">{loadingMessage}</DialogDescription>
           </DialogHeader>
           <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <div role="status" aria-live="polite" className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-white/10 bg-black">
-              <div className="flex flex-col items-center gap-3 text-white/55">
-                <Loader2 aria-hidden="true" className="h-7 w-7 animate-spin text-blue-300" />
-                <p className="text-sm">Preparing synchronized video preview…</p>
+            <div role="status" aria-live="polite" className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-black">
+              <div className="flex flex-col items-center gap-3 text-gray-600 dark:text-white/60">
+                <Loader2 aria-hidden="true" className="h-7 w-7 animate-spin text-blue-600 dark:text-blue-300" />
+                <p className="text-sm font-medium">Preparing synchronized video preview…</p>
               </div>
             </div>
-            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-400/10 text-blue-300">
+            <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/15 dark:bg-white/[0.04]">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-300/25 dark:bg-blue-400/15 dark:text-blue-300">
                 <Music2 className="h-4 w-4 animate-pulse" />
               </div>
               <div className="flex-1 space-y-2">
-                <div className="h-2.5 w-32 animate-pulse rounded bg-white/10" />
-                <div className="h-1.5 w-full animate-pulse rounded bg-white/10" />
+                <div className="h-2.5 w-32 animate-pulse rounded bg-gray-200 dark:bg-white/10" />
+                <div className="h-1.5 w-full animate-pulse rounded bg-gray-200 dark:bg-white/10" />
               </div>
             </div>
           </div>
-          <p className="text-center text-xs text-white/45">
+          <p className="text-center text-xs text-gray-400 dark:text-white/50">
             Keep this window open. The preview will appear here automatically.
           </p>
         </DialogContent>
@@ -990,7 +990,7 @@ export default function RegenerateVoiceModal({
 
         return (
           <div key={`${sceneIndex}-${line.id ?? lineIndex}`} className="flex gap-3">
-            <span className="mt-2.5 w-20 shrink-0 text-right text-xs tabular-nums leading-tight text-white/40">
+            <span className="mt-2.5 w-20 shrink-0 text-right text-xs tabular-nums leading-tight text-gray-500 dark:text-white/40">
               {shortTs(line.start)}
               {line.end ? (
                 <>
@@ -1005,21 +1005,21 @@ export default function RegenerateVoiceModal({
                 value={line.text}
                 onChange={(event) => updateLine(sceneIndex, lineIndex, event.target.value)}
                 aria-label={`Script line ${line.id ?? lineIndex + 1}${timingLabel}`}
-                className={`w-full resize-none rounded-lg border bg-white/[0.06] px-3 py-2 text-sm text-white outline-none ${
+                className={`w-full resize-none rounded-lg border bg-white px-3 py-2 text-sm text-gray-900 shadow-xs outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-gray-400 dark:bg-white/[0.07] dark:text-white dark:placeholder:text-white/40 ${
                   invalid
-                    ? 'border-red-500'
-                    : 'border-white/10 focus:border-blue-400/35'
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                    : 'border-gray-200 focus:border-blue-500 dark:border-white/15 dark:focus:border-blue-400/50'
                 }`}
               />
               {(line.maxWords || line.maxChars) && (
                 <div className="mt-1 flex gap-3 text-[11px]">
                   {line.maxWords ? (
-                    <span className={overWords ? 'text-red-500' : 'text-white/40'}>
+                    <span className={overWords ? 'text-red-500 font-medium' : 'text-gray-500 dark:text-white/40'}>
                       {words}/{line.maxWords} words
                     </span>
                   ) : null}
                   {line.maxChars ? (
-                    <span className={overChars ? 'text-red-500' : 'text-white/40'}>
+                    <span className={overChars ? 'text-red-500 font-medium' : 'text-gray-500 dark:text-white/40'}>
                       {chars}/{line.maxChars} chars
                     </span>
                   ) : null}
@@ -1044,17 +1044,17 @@ export default function RegenerateVoiceModal({
           onInteractOutside={blockOutsideClose}
           onEscapeKeyDown={blockOutsideClose}
         >
-          <div className="flex items-start justify-between border-b border-white/10 px-6 py-4">
+          <div className="flex items-start justify-between border-b border-gray-100 px-6 py-4 dark:border-white/10">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold text-white">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
                   {stepTitle}
                 </h2>
-                <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                   Script step 2 of 2
                 </span>
               </div>
-              <p className="mt-0.5 text-xs text-white/55">
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-white/60">
                 {mode === 'rewrite'
                   ? 'Compare and edit the recreated script before generating its voice-over.'
                   : 'Review and edit the translated script before generating its voice-over.'}
@@ -1067,7 +1067,7 @@ export default function RegenerateVoiceModal({
               onClick={() => onOpenChange(false)}
               disabled={busy}
               aria-label="Close"
-              className="shrink-0 rounded-sm p-1 text-white/70 opacity-70 transition hover:text-white hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
+              className="shrink-0 rounded-sm p-1 text-gray-400 opacity-70 transition hover:text-gray-900 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-30 dark:text-white/70 dark:hover:text-white"
             >
               <X className="h-5 w-5" />
             </button>
@@ -1076,11 +1076,11 @@ export default function RegenerateVoiceModal({
           <div className="flex-1 space-y-3 overflow-y-auto px-6 py-4">
             {mode === 'translate' && scriptReady && (
               <div className="flex flex-wrap items-center gap-2 pb-1">
-                <span className="rounded-full bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/55">
+                <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 dark:border-white/15 dark:bg-white/[0.06] dark:text-white/70">
                   {currentScriptLanguageLabel}
                 </span>
-                <span className="text-sm text-white/35">→</span>
-                <span className="rounded-full bg-blue-400/10 px-3 py-1.5 text-xs font-semibold text-blue-300">
+                <span className="text-sm text-gray-400">→</span>
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                   {labelForLanguage(translateLang)}
                 </span>
               </div>
@@ -1088,8 +1088,8 @@ export default function RegenerateVoiceModal({
             {/* Loading state — card is open immediately on click; the script
                 fills in when the socket delivers it. */}
             {!scriptReady ? (
-              <div className="flex h-40 flex-col items-center justify-center gap-3 text-white/55">
-                <Loader2 className="h-6 w-6 animate-spin" />
+              <div className="flex h-40 flex-col items-center justify-center gap-3 text-gray-600 dark:text-white/70">
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600 dark:text-blue-300" />
                 <p className="text-sm">
                   {mode === 'translate'
                     ? `Generating the ${labelForLanguage(translateLang)} script…`
@@ -1098,42 +1098,42 @@ export default function RegenerateVoiceModal({
               </div>
             ) : mode === 'rewrite' ? (
               <div className="grid gap-4 md:grid-cols-2">
-                <section className="min-w-0 rounded-xl border border-white/5 bg-white/[0.025] p-4">
+                <section className="min-w-0 rounded-xl border border-gray-200/80 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.035]">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold tracking-wide text-white/55">
+                    <span className="rounded-full bg-gray-200/80 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-gray-700 dark:bg-white/[0.08] dark:text-white/70">
                       CURRENT
                     </span>
-                    <span className="text-[11px] text-white/35">Read only</span>
+                    <span className="text-[11px] text-gray-400 dark:text-white/45">Read only</span>
                   </div>
                   <div className="space-y-3">
                     {currentScriptLines.length ? (
                       currentScriptLines.map((line) => (
-                        <div key={line.key} className="rounded-lg bg-white/[0.035] p-3">
+                        <div key={line.key} className="rounded-lg border border-gray-200/60 bg-white p-3 shadow-xs dark:border-white/5 dark:bg-white/[0.05]">
                           {(line.start || line.end) && (
-                            <p className="mb-1.5 text-[11px] tabular-nums text-white/35">
+                            <p className="mb-1.5 text-[11px] tabular-nums text-gray-400 dark:text-white/45">
                               {shortTs(line.start)}
                               {line.end ? ` – ${shortTs(line.end)}` : ''}
                             </p>
                           )}
-                          <p className="text-sm leading-relaxed text-white/60">
+                          <p className="text-sm leading-relaxed text-gray-800 dark:text-white/80">
                             {line.text || line.voice || 'No script text available.'}
                           </p>
                         </div>
                       ))
                     ) : (
-                      <p className="rounded-lg bg-white/[0.035] p-3 text-sm text-white/45">
+                      <p className="rounded-lg bg-white p-3 text-sm text-gray-500 shadow-xs dark:bg-white/[0.05] dark:text-white/60">
                         The current script is unavailable for this legacy version.
                       </p>
                     )}
                   </div>
                 </section>
 
-                <section className="min-w-0 rounded-xl border border-blue-400/35 bg-blue-400/[0.035] p-4">
+                <section className="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-4 dark:border-blue-400/40 dark:bg-blue-400/[0.05]">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-blue-300">
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                       NEW · EDITABLE
                     </span>
-                    <span className="text-[11px] text-white/35">Timing retained</span>
+                    <span className="text-[11px] text-gray-400 dark:text-white/45">Timing retained</span>
                   </div>
                   <div className="space-y-3">{renderEditableScriptLines()}</div>
                 </section>
@@ -1141,10 +1141,10 @@ export default function RegenerateVoiceModal({
             ) : (
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-white/80">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white/90">
                     Translated script · editable
                   </p>
-                  <span className="text-[11px] text-white/35">
+                  <span className="text-[11px] text-gray-400 dark:text-white/45">
                     Video timing retained
                   </span>
                 </div>
@@ -1153,13 +1153,13 @@ export default function RegenerateVoiceModal({
             )}
             {scriptReady && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="rounded-full bg-blue-400/10 px-3 py-1.5 text-xs font-semibold text-blue-300">
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                   {reviewWordCount} words
                 </span>
-                <span className="rounded-full bg-blue-400/10 px-3 py-1.5 text-xs font-semibold text-blue-300">
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                   ≈ {reviewDurationSeconds} sec
                 </span>
-                <span className="rounded-full bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/60">
+                <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 dark:border-white/15 dark:bg-white/[0.06] dark:text-white/70">
                   {mode === 'translate'
                     ? labelForLanguage(translateLang)
                     : currentScriptLanguageLabel}
@@ -1167,7 +1167,7 @@ export default function RegenerateVoiceModal({
               </div>
             )}
             {mode === 'translate' && scriptReady && (
-              <section className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+              <section className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/15 dark:bg-white/[0.04]">
                 <button
                   type="button"
                   onClick={toggleVoiceSample}
@@ -1180,7 +1180,7 @@ export default function RegenerateVoiceModal({
                         : 'Play narrator preview'
                       : 'Preview unavailable'
                   }
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-400/10 text-blue-300 transition hover:bg-blue-400/20 disabled:cursor-not-allowed disabled:text-white/25"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-600 transition hover:bg-blue-100 dark:border-blue-300/25 dark:bg-blue-400/15 dark:text-blue-300 dark:hover:bg-blue-400/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {voiceSamplePlaying ? (
                     <Pause className="h-4 w-4 fill-current" />
@@ -1189,12 +1189,12 @@ export default function RegenerateVoiceModal({
                   )}
                 </button>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-white">
+                  <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
                     {defaultVoiceLoading
                       ? `Selecting a ${activeVoiceLanguageLabel} narrator…`
                       : voice.voiceName || `Choose a ${activeVoiceLanguageLabel} narrator`}
                   </p>
-                  <p className="mt-0.5 truncate text-xs capitalize text-white/45">
+                  <p className="mt-0.5 truncate text-xs capitalize text-gray-500 dark:text-white/60">
                     {mode === 'translate'
                       ? `${activeVoiceLanguageLabel} script · ${
                           defaultVoiceLoading
@@ -1217,24 +1217,24 @@ export default function RegenerateVoiceModal({
                   type="button"
                   onClick={continueToVoiceSelection}
                   disabled={busy || defaultVoiceLoading}
-                  className="shrink-0 rounded-md border border-white/15 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  className="shrink-0 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-xs transition hover:bg-gray-100 hover:text-gray-900 dark:border-white/20 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/10 dark:hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Change voice
                 </button>
               </section>
             )}
             {mode === 'translate' && voiceError && (
-              <p className="text-sm text-red-400">{voiceError}</p>
+              <p className="text-sm text-red-500 dark:text-red-400">{voiceError}</p>
             )}
-            {langError && <p className="text-sm text-red-500">{langError}</p>}
+            {langError && <p className="text-sm text-red-500 dark:text-red-400">{langError}</p>}
           </div>
 
-          <div className="flex items-center justify-between border-t border-white/10 px-6 py-4">
+          <div className="flex items-center justify-between border-t border-gray-100 px-6 py-4 dark:border-white/10">
             <button
               type="button"
               onClick={backToStart}
               disabled={busy}
-              className="rounded-md border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-100 hover:text-gray-900 dark:border-white/20 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/10 dark:hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               ← Back
             </button>
@@ -1247,7 +1247,7 @@ export default function RegenerateVoiceModal({
                 scriptHasErrors ||
                 (mode === 'translate' && (defaultVoiceLoading || !hasSelectedVoice))
               }
-              className="rounded-md border border-white/20 bg-white px-5 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md bg-gray-900 px-5 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50 dark:border dark:border-white/20 dark:bg-white dark:text-black dark:hover:bg-white/90"
             >
               {submitting
                 ? 'Starting…'
@@ -1273,28 +1273,28 @@ export default function RegenerateVoiceModal({
         >
           <DialogHeader>
             <div className="flex flex-wrap items-center gap-2">
-              <DialogTitle>Change voice</DialogTitle>
-              <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
+              <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-white">Change voice</DialogTitle>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                 Regenerate voice-over
               </span>
             </div>
-            <DialogDescription className="text-white/55">
+            <DialogDescription className="text-sm text-gray-500 dark:text-white/60">
               {mode === 'translate'
                 ? 'Choose a narrator, then return to the translation review before generating.'
                 : 'Choose a narrator for the approved script before generating its audio preview.'}
             </DialogDescription>
           </DialogHeader>
 
-          <section className="rounded-xl border border-white/5 bg-white/[0.035] p-3">
+          <section className="rounded-xl border border-gray-200/80 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-white/55">
+              <span className="rounded-full bg-gray-200/80 px-2.5 py-1 text-[11px] font-semibold text-gray-700 dark:bg-white/[0.08] dark:text-white/70">
                 LOCKED
               </span>
-              <span className="truncate text-xs font-medium text-white/65">
+              <span className="truncate text-xs font-medium text-gray-600 dark:text-white/70">
                 {voiceSelectionScriptLabel}
               </span>
             </div>
-            <p className="line-clamp-3 text-sm leading-relaxed text-white/50">
+            <p className="line-clamp-3 text-sm leading-relaxed text-gray-600 dark:text-white/60">
               {voiceSelectionScriptText || 'Script preview is unavailable for this legacy version.'}
             </p>
           </section>
@@ -1325,7 +1325,7 @@ export default function RegenerateVoiceModal({
               type="button"
               onClick={backFromVoiceSelection}
               disabled={busy}
-              className="rounded-md border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/10 dark:hover:border-white/30"
             >
               Back
             </button>
@@ -1339,7 +1339,7 @@ export default function RegenerateVoiceModal({
                     : submitScript
               }
               disabled={busy}
-              className="rounded-md border border-white/20 bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50 dark:border dark:border-white/20 dark:bg-white dark:text-black dark:hover:bg-white/90"
             >
               {submitting
                 ? 'Starting…'
@@ -1363,9 +1363,9 @@ export default function RegenerateVoiceModal({
           onInteractOutside={blockOutsideClose}
           onEscapeKeyDown={blockOutsideClose}
         >
-          <DialogHeader className="border-b border-blue-300/10 bg-[linear-gradient(90deg,transparent,rgba(59,130,246,0.05))] px-4 pt-6 pb-5 sm:px-6">
-            <DialogTitle className="text-xl">What would you like to change?</DialogTitle>
-            <DialogDescription className="text-white/55">
+          <DialogHeader className="border-b border-gray-100 bg-gradient-to-r from-blue-50/60 to-transparent px-4 pt-6 pb-5 sm:px-6 dark:border-blue-300/15 dark:bg-[linear-gradient(90deg,transparent,rgba(59,130,246,0.08))]">
+            <DialogTitle className="text-xl font-bold text-gray-900 dark:text-white">What would you like to change?</DialogTitle>
+            <DialogDescription className="text-sm text-gray-500 dark:text-white/60">
               Choose one option. You can review all changes before applying them.
             </DialogDescription>
           </DialogHeader>
@@ -1379,24 +1379,27 @@ export default function RegenerateVoiceModal({
                   type="button"
                   disabled={busy}
                   onClick={() => chooseAction(action.id)}
-                  className="group flex w-full items-start gap-3 rounded-xl border border-white/12 bg-[#25282E]/60 p-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md transition duration-200 hover:-translate-y-0.5 hover:border-blue-300/40 hover:bg-[#293141]/75 hover:shadow-[0_12px_30px_rgba(59,130,246,0.09),inset_0_1px_0_rgba(255,255,255,0.08)] disabled:cursor-not-allowed disabled:opacity-50 sm:gap-4 sm:p-4"
+                  className="group flex w-full items-start gap-3 rounded-xl border border-gray-200/90 bg-gray-50/70 p-3 text-left shadow-xs transition duration-200 hover:-translate-y-0.5 hover:border-blue-400/60 hover:bg-white hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 sm:gap-4 sm:p-4 dark:border-white/15 dark:bg-[#25282E]/80 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:hover:border-blue-300/50 dark:hover:bg-[#293141] dark:hover:shadow-[0_12px_30px_rgba(59,130,246,0.16),inset_0_1px_0_rgba(255,255,255,0.1)]"
                 >
-                  <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-300/15 bg-blue-400/15 text-blue-300 shadow-[0_0_22px_rgba(59,130,246,0.10)]">
+                  <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 shadow-xs dark:border-blue-300/25 dark:bg-blue-500/20 dark:text-blue-300 dark:shadow-[0_0_22px_rgba(59,130,246,0.15)]">
                     <Icon className="h-5 w-5" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="flex h-6 min-w-6 items-center justify-center rounded-full border border-blue-300/10 bg-blue-400/15 px-2 text-xs font-semibold text-blue-300">
+                      <span className="flex h-6 min-w-6 items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-2 text-xs font-semibold text-blue-700 dark:border-blue-300/20 dark:bg-blue-500/20 dark:text-blue-300">
                         {action.number}
                       </span>
-                      <span className="text-base font-semibold text-white">{action.label}</span>
+                      <span className="text-base font-semibold text-gray-900 dark:text-white">{action.label}</span>
                     </span>
-                    <span className="mt-2 block text-sm text-white/55">{action.description}</span>
-                    <span className="mt-3 inline-flex rounded-full border border-white/10 bg-black/15 px-2.5 py-1 text-xs font-medium text-white/60">
+                    <span className="mt-2 block text-sm text-gray-600 dark:text-white/60">{action.description}</span>
+                    <span className="mt-3 inline-flex rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 dark:border-white/15 dark:bg-black/30 dark:text-white/70">
                       {action.impact}
                     </span>
                   </span>
-                  <span aria-hidden="true" className="mt-0.5 hidden shrink-0 rounded-lg border border-white/20 bg-white/[0.07] px-4 py-2 text-sm font-semibold text-white transition group-hover:border-blue-300/50 group-hover:bg-blue-300/10 group-hover:text-blue-100 sm:inline-flex">
+                  <span
+                    aria-hidden="true"
+                    className="mt-0.5 hidden shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs transition duration-150 group-hover:border-gray-400 group-hover:bg-gray-100 group-hover:text-gray-900 sm:inline-flex dark:border-white/20 dark:bg-white/[0.08] dark:text-white/80 dark:group-hover:border-white/30 dark:group-hover:bg-white/15 dark:group-hover:text-white"
+                  >
                     Choose
                   </span>
                 </button>
@@ -1404,8 +1407,8 @@ export default function RegenerateVoiceModal({
             })}
           </div>
 
-          <div className="mx-4 mb-6 flex items-center gap-2 rounded-lg border border-blue-300/15 bg-[#172033]/70 px-3 py-3 text-xs text-blue-50/70 backdrop-blur-md sm:mx-6">
-            <Info aria-hidden="true" className="h-4 w-4 shrink-0 text-blue-300" />
+          <div className="mx-4 mb-6 flex items-center gap-2.5 rounded-lg border border-blue-200 bg-blue-50/70 px-3.5 py-3 text-xs text-blue-900 backdrop-blur-md sm:mx-6 dark:border-blue-300/20 dark:bg-[#172033]/90 dark:text-blue-100">
+            <Info aria-hidden="true" className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
             Nothing changes until you review and confirm.
           </div>
         </DialogContent>
@@ -1434,16 +1437,16 @@ export default function RegenerateVoiceModal({
         onInteractOutside={blockOutsideClose}
         onEscapeKeyDown={blockOutsideClose}
       >
-        <DialogHeader className={mode === 'translate' ? 'border-b border-white/10 pb-4 pr-10' : ''}>
+        <DialogHeader className={mode === 'translate' ? 'border-b border-gray-100 pb-4 pr-10 dark:border-white/10' : ''}>
           <div className="flex items-center justify-between gap-3">
-            <DialogTitle>{modeHeader.title}</DialogTitle>
+            <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-white">{modeHeader.title}</DialogTitle>
             {mode === 'translate' && (
-              <span className="shrink-0 rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
+              <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                 Script step 1 of 2
               </span>
             )}
           </div>
-          <DialogDescription>{modeHeader.description}</DialogDescription>
+          <DialogDescription className="text-sm text-gray-500 dark:text-white/60">{modeHeader.description}</DialogDescription>
         </DialogHeader>
 
         {/* Mode content */}
@@ -1452,15 +1455,15 @@ export default function RegenerateVoiceModal({
             <div className="flex flex-col gap-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-white/70">
+                  <p className="text-xs font-medium text-gray-600 dark:text-white/70">
                     Current language
                   </p>
-                  <div className="flex min-h-10 items-center rounded-lg border border-white/10 bg-white/[0.035] px-3 text-sm text-white/70">
+                  <div className="flex min-h-10 items-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm font-medium text-gray-800 dark:border-white/15 dark:bg-white/[0.06] dark:text-white">
                     {currentScriptLanguageLabel}
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-white/70">
+                  <p className="text-xs font-medium text-gray-600 dark:text-white/70">
                     Translate to
                   </p>
                   <CommonDropdown
@@ -1473,20 +1476,20 @@ export default function RegenerateVoiceModal({
                     }}
                     side="bottom"
                     triggerVariant="field"
-                    className="!border-blue-400/55 !bg-blue-400/[0.06] shadow-[0_0_0_1px_rgba(96,165,250,0.08)] hover:!bg-blue-400/[0.09] focus-visible:!border-blue-400/70 focus-visible:!ring-blue-400/20"
+                    className="!border-blue-400/55 !bg-blue-50 text-gray-900 shadow-[0_0_0_1px_rgba(96,165,250,0.12)] hover:!bg-blue-100/70 focus-visible:!border-blue-400/70 focus-visible:!ring-blue-400/20 dark:!bg-blue-400/[0.1] dark:!text-white dark:hover:!bg-blue-400/[0.15]"
                   />
                 </div>
               </div>
 
-              <div className="flex items-start gap-2 rounded-lg border border-blue-400/20 bg-blue-400/[0.06] px-3 py-3 text-xs text-blue-100">
-                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-400" />
+              <div className="flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 text-xs text-blue-800 dark:border-blue-400/25 dark:bg-blue-400/[0.1] dark:text-blue-100">
+                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
                 <p>The meaning, tone, and video timing will be preserved.</p>
               </div>
 
-              {langError && <p className="text-xs text-red-500">{langError}</p>}
+              {langError && <p className="text-xs text-red-500 dark:text-red-400">{langError}</p>}
               {previewing && (
-                <div className="flex items-center gap-2 text-xs text-white/55">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-white/70">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 dark:text-blue-300" />
                   Generating the {labelForLanguage(translateLang)} script…
                 </div>
               )}
@@ -1496,32 +1499,28 @@ export default function RegenerateVoiceModal({
           {mode === 'rewrite' && (
             <div className="flex flex-col gap-4">
               <div className="flex justify-end">
-                <span className="rounded-full bg-blue-400/10 px-2.5 py-1 text-[11px] font-semibold text-blue-300">
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                   Script step 1 of 2
                 </span>
               </div>
-              <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.035] p-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/65">
+              <div className="flex items-start gap-3.5 rounded-xl border border-gray-200 bg-gray-50/70 p-3.5 dark:border-white/15 dark:bg-white/[0.06]">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-300/25 dark:bg-blue-500/20 dark:text-blue-300">
                   <RotateCcw className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-sm font-medium text-white">Language stays the same</p>
-                  <p className="mt-1 text-xs text-white/45">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Language stays the same</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-white/60">
                     {currentScriptLanguageLabel} · Video timing retained
                   </p>
                 </div>
               </div>
-              {/* <div className="flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                <span>The video visuals will remain unchanged.</span>
-              </div> */}
               {previewing && (
-                <div className="flex items-center gap-2 text-xs text-white/55">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-white/70">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 dark:text-blue-300" />
                   Writing a fresh script…
                 </div>
               )}
-              {langError && <p className="text-xs text-red-500">{langError}</p>}
+              {langError && <p className="text-xs text-red-500 dark:text-red-400">{langError}</p>}
             </div>
           )}
         </div>
@@ -1531,7 +1530,7 @@ export default function RegenerateVoiceModal({
             type="button"
             onClick={backToActionSelector}
             disabled={busy}
-            className="rounded-md border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs transition hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/10 dark:hover:border-white/30"
           >
             Back
           </button>
@@ -1544,7 +1543,7 @@ export default function RegenerateVoiceModal({
               type="button"
               onClick={startPreview}
               disabled={busy || (mode === 'translate' && !translateLang)}
-              className="rounded-md border border-white/20 bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50 dark:border dark:border-white/20 dark:bg-white dark:text-black dark:hover:bg-white/90"
             >
               {previewing
                 ? 'Generating…'

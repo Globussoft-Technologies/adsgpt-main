@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { Check, Download, Eye, ImageOff, Loader2, Rocket, X } from 'lucide-react';
 
 import { downloadMediaFromUrl } from '@/store/actions/adVideoNew/Advideoactions';
@@ -11,6 +11,11 @@ import {
   PublishTargetFields,
   usePublishTarget,
 } from './ShipTheseAds';
+import {
+  isGoogleAccountConnected,
+  isGoogleConnectionComplete,
+} from './GoogleLaunchConnection';
+import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 import { GhostBtn, PrimaryBtn } from './Panel';
 import { CARD, FAINT, MUTED, NUM, RULE_BORDER, SECTION, TITLE } from './_tokens';
 
@@ -94,6 +99,9 @@ export default function RunGallery({
   linkUrl,
   connection,
   onConnectionChange,
+  platforms = [],
+  googleConnection,
+  onGoogleConnectionChange,
   onPublish,
   publishing = false,
   publishResult = null,
@@ -104,8 +112,22 @@ export default function RunGallery({
   // across a refetch that hands back new pair objects.
   const [selected, setSelected] = useState(() => new Set());
   const [previewing, setPreviewing] = useState(null);
+  const [platform, setPlatform] = useState('meta');
+
+  const { googleUser } = useSelector((state) => state.adFactoryNew) || {};
+
+  const googleChosen =
+    IS_GOOGLE_AUTOMATION_ENABLED &&
+    (Array.isArray(platforms) ? platforms : []).includes('google');
+
+  useEffect(() => {
+    if (!googleChosen && platform === 'google') setPlatform('meta');
+  }, [googleChosen, platform]);
 
   const target = usePublishTarget({ connection, publishing });
+
+  const isGoogleConnected = isGoogleAccountConnected(googleUser);
+  const isGoogleReady = isGoogleConnectionComplete(googleConnection, isGoogleConnected);
 
   const total = useMemo(() => runs.reduce((sum, r) => sum + (r.pairs?.length || 0), 0), [runs]);
   const pendingTotal = useMemo(
@@ -148,22 +170,46 @@ export default function RunGallery({
 
   const count = selected.size;
   const allSelected = total > 0 && count === total;
-  const canPost = target.canPublish(count);
+  const canPost =
+    platform === 'google'
+      ? isGoogleConnected && isGoogleReady && count > 0 && !publishing
+      : target.canPublish(count);
 
-  const handlePublish = useCallback(
-    () => onPublish?.({ ...target.publishArgs, imageUrls: [...selected] }),
-    [onPublish, target.publishArgs, selected]
-  );
+  const handlePublish = useCallback(() => {
+    if (platform === 'google') {
+      onPublish?.({
+        platform: 'google',
+        mode: 'existing',
+        adAccountId: googleConnection?.adAccountId,
+        campaignId: googleConnection?.campaignId,
+        adGroupId: googleConnection?.adGroupId,
+        googleConnection,
+        imageUrls: [...selected],
+      });
+    } else {
+      onPublish?.({
+        platform: 'meta',
+        ...target.publishArgs,
+        imageUrls: [...selected],
+      });
+    }
+  }, [platform, onPublish, googleConnection, target.publishArgs, selected]);
 
   // What the action bar's button says, in the order the user hits the reasons:
-  // nothing picked → no Meta → no ad set → go.
+  // nothing picked → no Meta/Google → no ad set/template → go.
   const blocker = !count
     ? 'Select ads to post'
-    : !target.connected
-      ? 'Connect Meta to post'
-      : !target.targeted
-        ? 'Choose a campaign & ad set'
-        : '';
+    : platform === 'google'
+      ? !isGoogleConnected
+        ? 'Connect Google to post'
+        : !isGoogleReady
+          ? 'Select account, campaign & ad group'
+          : ''
+      : !target.connected
+        ? 'Connect Meta to post'
+        : !target.targeted
+          ? 'Choose a campaign & ad set'
+          : '';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -309,6 +355,12 @@ export default function RunGallery({
                     onConnectionChange={onConnectionChange}
                     publishing={publishing}
                     stacked
+                    platforms={platforms}
+                    googleValue={googleConnection}
+                    onGoogleChange={onGoogleConnectionChange}
+                    activePlatform={platform}
+                    onActivePlatformChange={setPlatform}
+                    hideWhereTitle
                   />
                 </>
               )}

@@ -247,9 +247,35 @@ export const runNow = createAsyncThunk(
 // UI show "starting deliveries…" over a one-off post.
 export const publishNow = createAsyncThunk(
   'adFactoryBrief/publish',
-  async ({ briefId, connection, mode, campaignId, adSetId, imageUrls }, { rejectWithValue }) => {
+  async (
+    {
+      briefId,
+      connection,
+      mode,
+      campaignId,
+      adSetId,
+      adGroupId,
+      adAccountId,
+      imageUrls,
+      platform,
+      googleTarget,
+      googleConnection,
+    },
+    { rejectWithValue }
+  ) => {
     try {
-      return await publishBrief(briefId, { connection, mode, campaignId, adSetId, imageUrls });
+      return await publishBrief(briefId, {
+        platform,
+        connection,
+        mode,
+        campaignId,
+        adSetId,
+        adGroupId,
+        adAccountId,
+        imageUrls,
+        googleTarget,
+        googleConnection,
+      });
     } catch (err) {
       // The server reports WHICH step failed (`step: 'campaign' | 'adset' |
       // 'ads'`) because a half-finished launch leaves real objects in the
@@ -262,6 +288,7 @@ export const publishNow = createAsyncThunk(
         field: body.field || null,
         campaignId: body.campaignId || null,
         adSetId: body.adSetId || null,
+        adGroupId: body.adGroupId || null,
       });
     }
   },

@@ -271,10 +271,10 @@ function TabButton({ active, done, icon: Icon, label, onClick }) {
       onClick={onClick}
       aria-selected={active}
       role="tab"
-      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-all duration-200 ${
         active
-          ? 'bg-[#F7E8CD] text-[#8A4E0D] dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]'
-          : 'text-[#7A6F62] hover:text-[#2C241B] dark:text-[#8B939E] dark:hover:text-[#ECEFF3]'
+          ? 'bg-[#15DCFF]/15 text-[#00829B] dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]'
+          : 'text-gray-500 hover:text-gray-900 dark:text-[#8B939E] dark:hover:text-[#ECEFF3]'
       }`}
     >
       <Icon className="h-3.5 w-3.5" />
@@ -295,19 +295,23 @@ export default function LaunchConnection({
   platforms = [],
   googleValue,
   onGoogleChange,
+  activeTab,
+  onTabChange,
 }) {
   const googleChosen =
     IS_GOOGLE_AUTOMATION_ENABLED &&
     (Array.isArray(platforms) ? platforms : []).includes('google');
 
-  const [tab, setTab] = React.useState('meta');
+  const [internalTab, setInternalTab] = React.useState('meta');
+  const tab = activeTab !== undefined ? activeTab : internalTab;
+  const setTab = onTabChange || setInternalTab;
   const { googleUser } = useSelector((state) => state.adFactoryNew) || {};
 
   // Untick Google in Output while sitting on its tab and the tab vanishes
   // underneath you — fall back rather than render an empty panel.
   React.useEffect(() => {
     if (!googleChosen && tab === 'google') setTab('meta');
-  }, [googleChosen, tab]);
+  }, [googleChosen, tab, setTab]);
 
   const metaDone = isConnectionComplete(value);
   const googleDone = isGoogleConnectionComplete(googleValue, isGoogleAccountConnected(googleUser));

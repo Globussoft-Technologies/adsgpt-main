@@ -703,11 +703,23 @@ export default function AdFactoryV2Page() {
   // that can span several runs. Omitted — which is what "Ship these ads" on the
   // preview screen sends — the server posts the whole run being viewed.
   const handlePublish = useCallback(
-    ({ mode, campaignId, adSetId, imageUrls }) => {
+    ({ platform = 'meta', mode, campaignId, adSetId, imageUrls, googleTarget, googleConnection: gConn }) => {
       if (!briefId) return;
-      dispatch(publishNow({ briefId, connection, mode, campaignId, adSetId, imageUrls }));
+      dispatch(
+        publishNow({
+          briefId,
+          connection,
+          googleConnection: gConn || googleConnection,
+          platform,
+          mode,
+          campaignId,
+          adSetId,
+          imageUrls,
+          googleTarget,
+        })
+      );
     },
-    [dispatch, briefId, connection]
+    [dispatch, briefId, connection, googleConnection]
   );
 
   const handlePause = useCallback(
@@ -1178,6 +1190,9 @@ export default function AdFactoryV2Page() {
                   adCount={run?.pairs?.length || 0}
                   connection={connection}
                   onConnectionChange={setConnection}
+                  platforms={briefPlatforms}
+                  googleConnection={googleConnection}
+                  onGoogleConnectionChange={setGoogleConnection}
                   objectiveLabel={objectiveLabel}
                   budget={budget}
                   onPublish={handlePublish}
@@ -1437,6 +1452,9 @@ export default function AdFactoryV2Page() {
         linkUrl={brief?.offer?.cta?.url || brief?.source?.url || ''}
         connection={connection}
         onConnectionChange={setConnection}
+        platforms={briefPlatforms}
+        googleConnection={googleConnection}
+        onGoogleConnectionChange={setGoogleConnection}
         onPublish={handlePublish}
         publishing={publishing}
         publishResult={publishResult}

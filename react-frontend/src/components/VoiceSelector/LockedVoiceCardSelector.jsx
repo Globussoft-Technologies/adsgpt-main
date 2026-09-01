@@ -259,14 +259,11 @@ export default function LockedVoiceCardSelector({
   return (
     <div className="space-y-4">
       <div>
-        <label className="flex items-center gap-1.5 text-sm font-medium text-[#afafaf]">
+        <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-[#afafaf]">
           <Mic2 className="h-4 w-4" />
           Narrator Voice <span className="text-red-400">*</span>
         </label>
-        {/* <p className="mt-0.5 text-[11px] text-white/40">
-          Choose a narrator for this locked script language.
-        </p> */}
-        <p className="mt-0.5 text-[11px] text-white/40">{PROVIDER_RECOMMENDATION}</p>
+        <p className="mt-0.5 text-[11px] text-gray-500 dark:text-white/40">{PROVIDER_RECOMMENDATION}</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -274,16 +271,16 @@ export default function LockedVoiceCardSelector({
           <button
             type="button"
             onClick={() => setProviderOpen((current) => !current)}
-            className="flex items-center gap-1.5 rounded-full bg-[#3A3A3A] px-3 py-1.5 text-xs font-medium text-white"
+            className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-800 shadow-xs transition hover:bg-gray-200/80 dark:border-white/10 dark:bg-[#3A3A3A] dark:text-white"
           >
             <ChevronDown className="h-3 w-3" />
             Voice Model
-            <span className="text-white/60">
+            <span className="text-gray-500 dark:text-white/60">
               : {PROVIDERS.find((item) => item.id === provider)?.label}
             </span>
           </button>
           {providerOpen && (
-            <div className="absolute left-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-xl border border-white/10 bg-[#1A1A1A] py-1 shadow-2xl">
+            <div className="absolute left-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-xl border border-black/10 bg-white py-1 shadow-xl dark:border-white/10 dark:bg-[#1A1A1A] dark:shadow-2xl">
               {PROVIDERS.map((item) => (
                 <button
                   key={item.id}
@@ -291,19 +288,19 @@ export default function LockedVoiceCardSelector({
                   onClick={() => changeProvider(item.id)}
                   className={`flex w-full flex-col items-start px-3 py-2 text-left text-sm transition ${
                     item.id === provider
-                      ? 'bg-white/10 text-white'
-                      : 'text-white/70 hover:bg-white/5 hover:text-white'
+                      ? 'bg-gray-100 text-gray-900 font-medium dark:bg-white/10 dark:text-white'
+                      : 'text-gray-700 hover:bg-gray-50 dark:text-white/70 dark:hover:bg-white/5 dark:hover:text-white'
                   }`}
                 >
                   {item.label}
-                  <span className="text-[10px] text-white/45">{item.hint}</span>
+                  <span className="text-[10px] text-gray-400 dark:text-white/45">{item.hint}</span>
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-white/80">
+        <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/80">
           Locked language: {displayLanguage}
         </span>
 
@@ -317,7 +314,7 @@ export default function LockedVoiceCardSelector({
                 onClick={() =>
                   setOpenFilter((current) => (current === field ? null : field))
                 }
-                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/70 transition hover:text-white"
+                className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/70 dark:hover:text-white"
               >
                 {selected ? (
                   <span
@@ -341,7 +338,7 @@ export default function LockedVoiceCardSelector({
                   <Plus className="h-3 w-3" />
                 )}
                 {prettify(field)}
-                {selected && <span className="text-white/50">: {prettify(selected)}</span>}
+                {selected && <span className="text-gray-400 dark:text-white/50">: {prettify(selected)}</span>}
               </button>
               <ChipDropdown
                 field={field}
@@ -361,18 +358,18 @@ export default function LockedVoiceCardSelector({
 
       <div className="h-[260px] space-y-2 overflow-y-auto pr-1">
         {voicesLoading && (
-          <div className="flex h-full items-center justify-center gap-2 rounded-xl border border-white/10 text-sm text-white/50">
-            <Loader2 className="h-4 w-4 animate-spin" />
+          <div className="flex h-full items-center justify-center gap-2 rounded-xl border border-gray-200 text-sm text-gray-500 dark:border-white/10 dark:text-white/50">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-500 dark:text-blue-300" />
             Loading voices…
           </div>
         )}
         {!voicesLoading && voicesError && (
-          <div className="flex h-full items-center rounded-xl border border-red-400/20 bg-red-400/5 px-4 py-5 text-sm text-red-300">
+          <div className="flex h-full items-center rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-sm text-red-600 dark:border-red-400/20 dark:bg-red-400/5 dark:text-red-300">
             {voicesError}
           </div>
         )}
         {!voicesLoading && !voicesError && voices.length === 0 && (
-          <div className="flex h-full items-center rounded-xl border border-white/10 px-4 py-5 text-sm text-white/45">
+          <div className="flex h-full items-center rounded-xl border border-gray-200 px-4 py-5 text-sm text-gray-400 dark:border-white/10 dark:text-white/45">
             No voices match the locked language and selected filters.
           </div>
         )}
@@ -390,8 +387,8 @@ export default function LockedVoiceCardSelector({
                 key={voiceId}
                 className={`flex items-center gap-3 rounded-xl border px-3 py-3 transition ${
                   selected
-                    ? 'border-blue-400 bg-blue-400/[0.07] shadow-[0_0_14px_rgba(59,130,246,0.14)]'
-                    : 'border-white/10 bg-white/[0.025] hover:border-white/20'
+                    ? 'border-blue-500 bg-blue-50/70 shadow-sm dark:border-blue-400 dark:bg-blue-400/[0.07] dark:shadow-[0_0_14px_rgba(59,130,246,0.14)]'
+                    : 'border-gray-200 bg-gray-50/60 hover:border-gray-300 hover:bg-gray-100/70 dark:border-white/10 dark:bg-white/[0.025] dark:hover:border-white/20'
                 }`}
               >
                 <button
@@ -400,8 +397,8 @@ export default function LockedVoiceCardSelector({
                   disabled={!catalogVoice.preview_url}
                   className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${
                     catalogVoice.preview_url
-                      ? 'bg-blue-400/10 text-blue-300 hover:bg-blue-400/20'
-                      : 'cursor-not-allowed bg-white/5 text-white/20'
+                      ? 'border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:border-transparent dark:bg-blue-400/10 dark:text-blue-300 dark:hover:bg-blue-400/20'
+                      : 'cursor-not-allowed bg-gray-100 text-gray-300 dark:bg-white/5 dark:text-white/20'
                   }`}
                   aria-label={`${playing ? 'Pause' : 'Play'} ${catalogVoice.name} preview`}
                 >
@@ -412,10 +409,10 @@ export default function LockedVoiceCardSelector({
                   onClick={() => selectVoice(catalogVoice)}
                   className="min-w-0 flex-1 text-left"
                 >
-                  <span className="block truncate text-sm font-semibold text-white">
+                  <span className="block truncate text-sm font-semibold text-gray-900 dark:text-white">
                     {catalogVoice.name}
                   </span>
-                  <span className="mt-0.5 block truncate text-xs text-white/45">
+                  <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-white/45">
                     {voiceDetails(catalogVoice) || displayLanguage}
                   </span>
                 </button>
@@ -424,8 +421,8 @@ export default function LockedVoiceCardSelector({
                   onClick={() => selectVoice(catalogVoice)}
                   className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
                     selected
-                      ? 'border-blue-400/30 bg-blue-400/10 text-blue-300'
-                      : 'border-white/15 text-white/75 hover:bg-white/5 hover:text-white'
+                      ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-300'
+                      : 'border-gray-200 bg-white text-gray-700 shadow-xs hover:bg-gray-100 hover:text-gray-900 dark:border-white/15 dark:bg-transparent dark:text-white/75 dark:hover:bg-white/5 dark:hover:text-white'
                   }`}
                 >
                   {selected ? (
@@ -442,7 +439,7 @@ export default function LockedVoiceCardSelector({
           })}
       </div>
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="text-xs text-red-500 dark:text-red-400">{error}</p>}
     </div>
   );
 }

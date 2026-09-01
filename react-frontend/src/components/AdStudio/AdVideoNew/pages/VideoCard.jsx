@@ -983,14 +983,26 @@ export default function VideoCard({
 
           {/* Controls Bar */}
           <div
-            className={`absolute right-0 bottom-0 left-0 z-20 flex flex-col gap-3 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 transition-opacity duration-300 ${isThisFullscreen ? (showControls ? 'opacity-100' : 'opacity-0 pointer-events-none') : 'opacity-0 group-hover:opacity-100'}`}
+            className={`absolute right-0 bottom-0 left-0 z-20 flex flex-col gap-2.5 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 pt-8 transition-opacity duration-300 ${isThisFullscreen ? (showControls ? 'opacity-100' : 'opacity-0 pointer-events-none') : 'opacity-0 group-hover:opacity-100'}`}
           >
+            {/* Timeline Progress Bar (Fullscreen only) */}
             {isThisFullscreen && (
-              <div className="flex items-center gap-3 px-2">
-                <span className="min-w-[32px] text-[10px] font-medium text-white/80 tabular-nums">
+              <div className="flex items-center gap-2.5 px-2">
+                <span className="min-w-[34px] text-[11px] font-semibold text-white/90 tabular-nums">
                   {formatTime(currentTime)}
                 </span>
-                <div className="group/seek relative flex flex-grow items-center">
+                <div className="group/seek relative flex flex-grow items-center py-2 cursor-pointer">
+                  {/* Background Track */}
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/35 transition-all duration-150 group-hover/seek:h-2.5 shadow-inner">
+                    {/* Filled Progress Bar */}
+                    <div
+                      className="h-full rounded-full bg-blue-500 transition-all duration-75"
+                      style={{
+                        width: `${duration ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%`,
+                      }}
+                    />
+                  </div>
+                  {/* Interactive Slider Input */}
                   <input
                     type="range"
                     min="0"
@@ -999,17 +1011,11 @@ export default function VideoCard({
                     value={currentTime}
                     onChange={handleSeek}
                     onClick={(e) => e.stopPropagation()}
-                    style={{
-                      background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${
-                        (currentTime / (duration || 1)) * 100
-                      }%, rgba(255, 255, 255, 0.2) ${
-                        (currentTime / (duration || 1)) * 100
-                      }%, rgba(255, 255, 255, 0.2) 100%)`,
-                    }}
-                    className="h-1 w-full cursor-pointer appearance-none rounded-lg accent-white transition-all group-hover/seek:h-1.5"
+                    aria-label="Video progression"
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                   />
                 </div>
-                <span className="min-w-[32px] text-right text-[10px] font-medium text-white/80 tabular-nums">
+                <span className="min-w-[34px] text-right text-[11px] font-semibold text-white/90 tabular-nums">
                   {formatTime(duration)}
                 </span>
               </div>
@@ -1070,22 +1076,25 @@ export default function VideoCard({
                   >
                     {isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
                   </button>
-                  {/* Vertical (up/down) volume slider — same thin white slider
-                      as before, just oriented vertically and floated above the
-                      mute icon on hover. `pb-2` is an invisible hover bridge so
-                      the slider doesn't vanish when the cursor moves up to it. */}
-                  <div className="invisible absolute bottom-full left-1/2 z-20 flex -translate-x-1/2 justify-center pb-2 opacity-0 transition-opacity duration-200 group-hover/volume:visible group-hover/volume:opacity-100">
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      value={isMuted ? 0 : volume}
-                      onChange={handleVolumeChange}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
-                      className="h-24 w-1 cursor-pointer appearance-none rounded-lg bg-white/30 accent-white"
-                    />
+                  {/* Vertical (up/down) volume slider inside a sleek dark glass pill container */}
+                  <div className="invisible absolute bottom-full left-1/2 z-30 flex -translate-x-1/2 flex-col items-center pb-2 opacity-0 transition-all duration-200 group-hover/volume:visible group-hover/volume:opacity-100">
+                    <div className="flex flex-col items-center rounded-2xl border border-white/20 bg-black/80 px-2 py-3 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-md">
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={isMuted ? 0 : volume}
+                        onChange={handleVolumeChange}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          writingMode: 'vertical-lr',
+                          direction: 'rtl',
+                        }}
+                        className="h-24 w-1.5 cursor-pointer rounded-full accent-white"
+                        aria-label="Volume"
+                      />
+                    </div>
                   </div>
                 </div>
 

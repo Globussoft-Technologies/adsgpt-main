@@ -45,6 +45,7 @@ const CampaignHistory = require("../../Module/adFactory/adFactoryHistory");
 // same objects, with the same validation, on the same code path.
 const metaAdControllerV2 = require("../adPosting/metaAdLauncherV2");
 const adControllerV2 = require("../adPosting/adControllerV2");
+const googleAdController = require("../adPosting/googleAdController");
 const UnifiedCreditController = require("../UnifiedCreditController");
 const Campaign = require("../../Module/adFactory/adFactory");
 // Runs createJob/deleteJob in-process and captures what they sent, so a
@@ -519,12 +520,86 @@ exports.publishBrief = async (req, res) => {
       const run = await loadCurrentRun(brief, userId);
       pairs = run ? run.pairs : [];
       if (pairs.length === 0) {
-      return res.status(409).json({
-        success: false,
-        code: "NOTHING_TO_POST",
-        error: "There are no finished ads to post yet — generate some first.",
-      });
+        return res.status(409).json({
+          success: false,
+          code: "NOTHING_TO_POST",
+          error: "There are no finished ads to post yet — generate some first.",
+        });
       }
+    }
+
+    if (body.platform === 'google') {
+      const adAccountId = body.adAccountId || body.googleConnection?.adAccountId || body.googleTarget?.adAccountId;
+      const campaignId = body.campaignId || body.googleConnection?.campaignId || body.googleTarget?.campaignId;
+      const adGroupId = body.adGroupId || body.googleConnection?.adGroupId || body.googleTarget?.adGroupId;
+
+      if (!adAccountId) {
+        return res.status(400).json({ success: false, error: "Please select a Google Ad Account.", field: "adAccountId" });
+      }
+      if (!campaignId) {
+        return res.status(400).json({ success: false, error: "Please select a Google Campaign.", field: "campaignId" });
+      }
+      if (!adGroupId) {
+        return res.status(400).json({ success: false, error: "Please select a Google Ad Group.", field: "adGroupId" });
+      }
+
+      const s3Base = (process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "");
+      const destinationUrl = brief?.offer?.cta?.destination || brief?.source?.url || "https://example.com";
+
+      const adsArray = pairs.map((pair) => {
+        const rawImg = pair.imageUrl || "";
+        const imageUrl = rawImg.startsWith("http")
+          ? rawImg
+          : `${s3Base}${rawImg.startsWith("/") ? "" : "/"}${rawImg}`;
+
+        const headline = (pair.headline || pair.text || brief?.offer?.hook || brief?.source?.title || "Special Offer").slice(0, 90);
+        const description = (pair.body || pair.text || brief?.offer?.primaryBenefit || brief?.source?.description || "Check out our latest offerings.").slice(0, 90);
+
+        return {
+          headline,
+          description,
+          imageUrl,
+          finalUrl: destinationUrl,
+          status: "ENABLED",
+        };
+      });
+
+      const adsRes = await callController(googleAdController.createAdAPI, {
+        ...req,
+        body: {
+          adAccountId: String(adAccountId),
+          campaignId: String(campaignId),
+          adGroupId: String(adGroupId),
+          ads: adsArray,
+        },
+        user: req.user,
+      });
+
+      if (adsRes.statusCode >= 400) {
+        return res.status(adsRes.statusCode).json({
+          ...adsRes.body,
+          success: false,
+          step: "ads",
+          campaignId,
+          adGroupId,
+        });
+      }
+
+      brief.lastPublishedAt = new Date();
+      await brief.save();
+
+      return res.status(201).json({
+        success: true,
+        data: {
+          platform: 'google',
+          mode: 'existing',
+          campaignId: String(campaignId),
+          adGroupId: String(adGroupId),
+          adAccountId: String(adAccountId),
+          requested: adsArray.length,
+          ...(adsRes.body?.data || adsRes.body || {}),
+        },
+      });
     }
 
     const connection = body.connection || {};

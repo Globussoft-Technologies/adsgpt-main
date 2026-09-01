@@ -1,155 +1,183 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { AlertTriangle, CheckCircle2, ExternalLink, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 import { toast } from 'react-toastify';
 
-import { SelectField } from './briefFields';
-import { CONTROL, CONTROL_H, FAINT, INPUT, LABEL, MUTED, VALUE } from './_tokens';
+import { CONTROL, CONTROL_H, FAINT, LABEL, VALUE } from './_tokens';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import getCookies from '@/utils/getCookies';
-import { checkGoogleUser } from '@/store/actions/adFactoryNew/adFactoryActions';
 import {
-  fetchGoogleAdsTemplates,
-  fetchGoogleAdsTemplateById,
-} from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
-import {
-  selectGoogleAdsTemplates,
-  selectGoogleAdsTemplatesLoading,
-  selectGoogleAdsTemplatesError,
-  selectGoogleAdsTemplateById,
-} from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
-
-// ----------------------------------------------------------------------------
-// GoogleLaunchConnection — the Google half of "Where these publish".
-//
-// The Meta half can be a two-picker affair because the backend SYNTHESIZES a
-// Meta template from the objective and budget. Google has no such path:
-// `googleTargetSchema` (Validations/adsFactoryAuto) requires a real `payload`
-// object, so a Google job can only ever run off a template the user already
-// saved in the Google Ads wizard. That single asymmetry is why this component
-// asks for a template first and everything else second.
-//
-// It asks for TWO things, where Full control's TemplatePicker asks for four:
-//
-//   template          which saved campaign we clone
-//   campaign name     overrides the template's own (written to name AND
-//                     campaignName at build time, since the Google wizard
-//                     stores the label under both)
-//
-// The other two are deliberately NOT here, because Quick setup already has
-// them and asking twice on one screen is how a user ends up with two different
-// answers to one question:
-//
-//   daily budget      the schedule's own "Daily budget" field, six inches to
-//                     the left of this one. Passed into buildGoogleTarget and
-//                     converted to dailyBudgetMicros there.
-//   CTA + destination the brief's `offer.cta`, already collected for Meta.
-//                     Only the URL crosses over — see buildGoogleTarget.
-//
-// The conversion to micros deliberately does not live in state. The caller
-// hands over whole rupees; the build step owns the units.
-//
-// THERE IS NO AD ACCOUNT PICKER, and that is a backend limit, not a choice.
-// `GET /google-ads/templates` projects `payload` away
-// (googleCampaignTemplate.controller.listTemplates), so the account a template
-// was saved against never reaches the browser — there is nothing to filter or
-// group by without either a projection change or one fetch per template.
-// Picking the template picks the account, exactly as Full control does.
-// ----------------------------------------------------------------------------
+  fetchGoogleAdAccounts,
+  fetchGoogleCampaignsMySpace,
+  fetchGoogleAdGroups,
+  checkGoogleUser,
+} from '@/store/actions/adFactoryNew/adFactoryActions';
 
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 
-const NAME_MAX = 120;
+const channelHumanName = (t) => {
+  switch (t) {
+    case 'SEARCH': return 'Search';
+    case 'DISPLAY': return 'Display';
+    case 'VIDEO': return 'Video';
+    case 'PERFORMANCE_MAX': return 'Performance Max';
+    case 'SHOPPING': return 'Shopping';
+    case 'MULTI_CHANNEL': return 'Multi-channel';
+    case 'DEMAND_GEN': return 'Demand Gen';
+    default: return t || 'Unknown';
+  }
+};
 
 export const emptyGoogleConnection = () => ({
+  adAccountId: '',
+  adAccountName: '',
+  campaignId: '',
+  campaignName: '',
+  channelType: '',
+  adGroupId: '',
+  adGroupName: '',
   templateId: null,
   templateName: '',
   objective: null,
   conversionLocation: null,
   customerId: null,
   payload: null,
-  campaignName: '',
 });
 
 export const isGoogleAccountConnected = (googleUser) =>
-  !!(googleUser?.email || googleUser?.googleId || googleUser?.sub);
+  !!(googleUser?.email || googleUser?.googleId || googleUser?.sub || googleUser?._id);
 
-// Ready to publish = OAuth done, a template picked, and its payload actually
-// resolved. The payload is the part that matters: without it there is nothing
-// to send, and the job would be rejected by the schema rather than by us.
+// Ready to publish = OAuth connected, and all 3 required Google Ads fields are selected.
 export const isGoogleConnectionComplete = (g, connected) => {
   if (!connected) return false;
-  return !!(g?.templateId && g?.payload);
+  return Boolean(g?.adAccountId && g?.campaignId && g?.adGroupId);
 };
 
-// The `targets.google` block the autopilot job schema expects, built from what
-// this component collected. A straight port of Full control's
-// buildGoogleTemplateForJob (store/actions/adFactoryAutomation) — same overlay
-// keys, same micros conversion, same dual name/campaignName and
-// finalUrl/linkUrl writes — so a Quick setup Google job is byte-identical to a
-// Full control one and the backend never has to tell them apart.
-//
-// Returns null when there is nothing postable, which is the caller's cue to
-// omit `google` from the activation body entirely rather than send an empty
-// target the schema would reject.
-//
-// `dailyBudget` is the schedule's budget in whole rupees, and `ctaUrl` the
-// brief's destination — both passed in rather than read off `g`, because
-// neither is asked for on the Google form.
 export const buildGoogleTarget = (g, { dailyBudget, ctaUrl } = {}) => {
-  if (!g?.templateId || !g?.payload) return null;
-
-  const overlay = {};
-
-  const budget = Number(dailyBudget);
-  if (Number.isFinite(budget) && budget > 0) {
-    // Whole rupees -> micros for the Google Ads API.
-    overlay.dailyBudgetMicros = Math.round(budget * 1_000_000);
-  }
-
-  const name = typeof g.campaignName === 'string' ? g.campaignName.trim() : '';
-  if (name) {
-    // The Google wizard stores the campaign label under BOTH keys; set both so
-    // the backend's `name || campaignName` fallback hits whichever it reads.
-    overlay.name = name;
-    overlay.campaignName = name;
-  }
-
-  // The brief's CTA URL, and ONLY the URL. A destination is platform-neutral;
-  // the button is not — `offer.cta.button` is resolved against Meta's
-  // wizardSchema cell, and Google's enum is a different list, so forwarding it
-  // would hand Google a button it may not accept. The Google template's own
-  // button stands.
-  if (ctaUrl) {
-    overlay.finalUrl = ctaUrl;
-    overlay.linkUrl = ctaUrl;
-  }
+  if (!g?.adAccountId || !g?.campaignId || !g?.adGroupId) return null;
 
   return {
-    template: {
-      name: g.templateName || 'Google campaign',
-      objective: g.objective || null,
-      conversionLocation: g.conversionLocation || null,
-      customerId: g.customerId || g.payload.customerId || g.payload.adAccountId || null,
-      payload: { ...g.payload, templateId: g.templateId, ...overlay },
-    },
+    adAccountId: g.adAccountId,
+    campaignId: g.campaignId,
+    adGroupId: g.adGroupId,
+    customerId: g.customerId || g.adAccountId,
   };
 };
+
+function PlainDropdown({ value, onChange, options, placeholder, disabled }) {
+  const selected = options.find((o) => o.value === value);
+  return (
+    <Select value={value || ''} onValueChange={(v) => onChange?.(v)} disabled={disabled}>
+      <SelectTrigger
+        className={`${CONTROL_H}! w-full ${CONTROL} px-3 shadow-none ${VALUE} ${
+          disabled ? 'cursor-not-allowed opacity-60' : ''
+        }`}
+        disabled={disabled}
+      >
+        <SelectValue placeholder={placeholder}>
+          {selected?.label ?? placeholder}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent className="z-9999 max-h-72 min-w-[340px] border border-gray-200 bg-white text-gray-800 shadow-xl dark:border-white/20 dark:bg-[#1A1A1A] dark:text-white dark:backdrop-blur-md">
+        {options.length === 0 ? (
+          <div className="m-3 h-8 w-full text-center text-sm text-gray-400 dark:text-gray-300">
+            No options found
+          </div>
+        ) : (
+          options.map((opt) => (
+            <SelectItem
+              key={opt.value}
+              value={opt.value}
+              className="cursor-pointer pr-4! text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white"
+            >
+              {opt.label}
+            </SelectItem>
+          ))
+        )}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function CampaignDropdown({ value, onChange, options, placeholder, disabled }) {
+  const selected = options.find((o) => o.value === value);
+  return (
+    <Select value={value || ''} onValueChange={(v) => onChange?.(v)} disabled={disabled}>
+      <SelectTrigger
+        className={`${CONTROL_H}! w-full ${CONTROL} px-3 shadow-none ${VALUE} ${
+          disabled ? 'cursor-not-allowed opacity-60' : ''
+        }`}
+        disabled={disabled}
+      >
+        <SelectValue placeholder={placeholder}>
+          {selected?.label ?? placeholder}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent className="z-9999 max-h-72 min-w-[340px] border border-gray-200 bg-white text-gray-800 shadow-xl dark:border-white/20 dark:bg-[#1A1A1A] dark:text-white dark:backdrop-blur-md">
+        {options.length === 0 ? (
+          <div className="m-3 h-8 w-full text-center text-sm text-gray-400 dark:text-gray-300">
+            No campaigns found
+          </div>
+        ) : (
+          options.map((opt) => (
+            <SelectItem
+              key={opt.value}
+              value={opt.value}
+              disabled={opt.disabled}
+              title={opt.disabled ? opt.disabledReason : undefined}
+              className={`cursor-pointer pr-4! text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
+                opt.disabled ? 'cursor-not-allowed opacity-40' : ''
+              }`}
+            >
+              <div className="flex w-full items-center justify-between gap-3">
+                <span className={`truncate ${opt.disabled ? 'text-gray-400 dark:text-gray-500' : 'font-medium text-gray-900 dark:text-white'}`}>
+                  {opt.label}
+                </span>
+                <span
+                  className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                    opt.channelType === 'DISPLAY'
+                      ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-300'
+                      : 'border-gray-200 bg-gray-100 text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-white/55'
+                  }`}
+                >
+                  {opt.channelLabel}
+                </span>
+              </div>
+            </SelectItem>
+          ))
+        )}
+      </SelectContent>
+    </Select>
+  );
+}
 
 export default function GoogleLaunchConnection({ value, onChange, disabled = false }) {
   const dispatch = useDispatch();
   const g = value || emptyGoogleConnection();
 
   const { userData } = useSelector((state) => state.socket) || {};
-  const { googleUser } = useSelector((state) => state.adFactoryNew) || {};
+  const {
+    googleUser,
+    googleAdAccounts = [],
+    googleCampaigns = [],
+    googleAdGroups = [],
+  } = useSelector((state) => state.adFactoryNew || {});
   const connected = isGoogleAccountConnected(googleUser);
 
-  const templates = useSelector(selectGoogleAdsTemplates);
-  const templatesLoading = useSelector(selectGoogleAdsTemplatesLoading);
-  const templatesError = useSelector(selectGoogleAdsTemplatesError);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+  const [loadingAdGroups, setLoadingAdGroups] = useState(false);
 
-  const pickedBucket = useSelector((state) => selectGoogleAdsTemplateById(state, g.templateId));
-  const pickedTemplate = pickedBucket?.template;
+  const [accountsError, setAccountsError] = useState('');
+  const [campaignsError, setCampaignsError] = useState('');
+  const [adGroupsError, setAdGroupsError] = useState('');
 
   // ── Fetches ──────────────────────────────────────────────────────────────
 
@@ -159,42 +187,54 @@ export default function GoogleLaunchConnection({ value, onChange, disabled = fal
   }, [dispatch, userData?.user_id]);
 
   useEffect(() => {
-    if (!connected) return;
-    dispatch(fetchGoogleAdsTemplates());
-  }, [dispatch, connected]);
+    if (!connected || !googleUser?._id) return;
+    if (googleAdAccounts.length === 0) {
+      setLoadingAccounts(true);
+      setAccountsError('');
+      dispatch(fetchGoogleAdAccounts(googleUser._id))
+        .unwrap()
+        .catch((err) => setAccountsError(err || "We couldn't load your Google ad accounts."))
+        .finally(() => setLoadingAccounts(false));
+    }
+  }, [connected, googleUser?._id, googleAdAccounts.length, dispatch]);
 
-  // The wizard opens in a NEW TAB, so a template created there only appears
-  // here on focus — without this the user comes back to the same empty list
-  // the deep link just told them to go fix.
+  // Load campaigns when ad account is chosen
   useEffect(() => {
-    if (!connected) return undefined;
-    const onFocus = () => dispatch(fetchGoogleAdsTemplates());
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [dispatch, connected]);
+    if (!g.adAccountId) return;
+    let cancelled = false;
+    setLoadingCampaigns(true);
+    setCampaignsError('');
+    dispatch(fetchGoogleCampaignsMySpace({ adAccountId: g.adAccountId }))
+      .unwrap()
+      .catch((err) => {
+        if (!cancelled) setCampaignsError(err || "We couldn't load your Google campaigns.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCampaigns(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [g.adAccountId, dispatch]);
 
+  // Load ad groups when campaign is chosen
   useEffect(() => {
-    if (!g.templateId) return;
-    if (pickedTemplate) return;
-    dispatch(fetchGoogleAdsTemplateById(g.templateId));
-  }, [dispatch, g.templateId, pickedTemplate]);
-
-  // Mirror the resolved template onto the connection. Guarded on `payload`
-  // already being present so this can't loop: onChange feeds straight back in.
-  useEffect(() => {
-    if (!pickedTemplate || !g.templateId) return;
-    if (g.payload) return;
-    const p = pickedTemplate.payload || {};
-    onChange?.({
-      ...g,
-      templateName: pickedTemplate.name || g.templateName,
-      objective: pickedTemplate.objective || null,
-      conversionLocation: pickedTemplate.conversionLocation || null,
-      customerId: p.customerId || p.adAccountId || null,
-      payload: pickedTemplate.payload || null,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickedTemplate, g.templateId]);
+    if (!g.campaignId || !g.adAccountId) return;
+    let cancelled = false;
+    setLoadingAdGroups(true);
+    setAdGroupsError('');
+    dispatch(fetchGoogleAdGroups({ adAccountId: g.adAccountId, campaignId: g.campaignId }))
+      .unwrap()
+      .catch((err) => {
+        if (!cancelled) setAdGroupsError(err || "We couldn't load your Google ad groups.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAdGroups(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [g.campaignId, g.adAccountId, dispatch]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -209,35 +249,94 @@ export default function GoogleLaunchConnection({ value, onChange, disabled = fal
 
   const patch = useCallback((next) => onChange?.({ ...g, ...next }), [g, onChange]);
 
-  const handleTemplate = useCallback(
-    (templateId) => {
-      if (!templateId) return;
-      const item = (templates || []).find((t) => (t._id || t.id) === templateId);
-      // Swapping templates drops the resolved payload AND the objective it
-      // came with — both belong to the template being replaced.
+  const adAccountOptions = useMemo(
+    () =>
+      (googleAdAccounts || []).map((a) => ({
+        value: String(a.id || a.customerId),
+        label: a.name ? `${a.name} (${a.id})` : String(a.id || 'Ad account'),
+      })),
+    [googleAdAccounts],
+  );
+
+  const campaignOptions = useMemo(
+    () =>
+      (googleCampaigns || []).map((c) => {
+        const channelType = c.channelType || c.advertisingChannelType || null;
+        const compatible = channelType === 'DISPLAY';
+        return {
+          value: String(c.id || c.campaignId),
+          label: c.name || c.campaignName || String(c.id || c.campaignId),
+          channelLabel: channelHumanName(channelType),
+          channelType,
+          disabled: !compatible,
+          disabledReason: compatible
+            ? undefined
+            : channelType
+              ? `Not compatible — ${channelHumanName(channelType)} campaigns can't post an image asset. Pick a Display campaign instead.`
+              : `Missing campaign type — can't determine compatibility. Pick a Display campaign.`,
+        };
+      }),
+    [googleCampaigns],
+  );
+
+  const selectedCampaignRow = useMemo(
+    () => campaignOptions.find((c) => c.value === g.campaignId) || null,
+    [campaignOptions, g.campaignId],
+  );
+  const selectedIsIncompatible = Boolean(
+    g.campaignId && selectedCampaignRow?.disabled,
+  );
+
+  const adGroupOptions = useMemo(
+    () =>
+      (googleAdGroups || []).map((a) => ({
+        value: String(a.id || a.adGroupId),
+        label: a.name || a.adGroupName || String(a.id || a.adGroupId),
+      })),
+    [googleAdGroups],
+  );
+
+  const handleAdAccount = useCallback(
+    (adAccountId) => {
+      const item = (adAccountOptions || []).find((a) => String(a.value) === String(adAccountId));
       patch({
-        templateId,
-        templateName: item?.name || '',
-        objective: item?.objective || null,
-        conversionLocation: item?.conversionLocation || null,
-        customerId: null,
-        payload: null,
+        adAccountId,
+        adAccountName: item?.label || '',
+        customerId: adAccountId,
+        campaignId: '',
+        campaignName: '',
+        channelType: '',
+        adGroupId: '',
+        adGroupName: '',
       });
     },
-    [templates, patch],
+    [adAccountOptions, patch],
   );
 
-  const templateOptions = useMemo(
-    () =>
-      (templates || []).map((t) => ({
-        value: t._id || t.id,
-        label: t.name || t._id || 'Template',
-      })),
-    [templates],
+  const handleCampaign = useCallback(
+    (campaignId) => {
+      const item = (campaignOptions || []).find((c) => String(c.value) === String(campaignId));
+      patch({
+        campaignId,
+        campaignName: item?.label || '',
+        channelType: item?.channelType || 'DISPLAY',
+        adGroupId: '',
+        adGroupName: '',
+      });
+    },
+    [campaignOptions, patch],
   );
 
-  const noTemplates =
-    connected && !templatesLoading && templateOptions.length === 0 && !templatesError;
+  const handleAdGroup = useCallback(
+    (adGroupId) => {
+      const item = (adGroupOptions || []).find((a) => String(a.value) === String(adGroupId));
+      patch({
+        adGroupId,
+        adGroupName: item?.label || '',
+      });
+    },
+    [adGroupOptions, patch],
+  );
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -245,16 +344,16 @@ export default function GoogleLaunchConnection({ value, onChange, disabled = fal
     return (
       <div className="flex flex-col gap-2">
         <span className={LABEL}>Google account</span>
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#F59E0B]/45 bg-[#F7E8CD] px-3 py-2 dark:border-[#F59E0B]/35 dark:bg-[#F59E0B]/10">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#B45309] dark:text-[#E8A33D]" />
-          <span className="text-[12px] text-[#8A4E0D] dark:text-[#E8A33D]">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span className="text-xs font-medium">
             Google not connected — required to publish here
           </span>
           <button
             type="button"
             onClick={handleConnect}
             disabled={disabled}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-1 text-[12px] font-medium text-gray-900 transition hover:bg-gray-100 disabled:opacity-50"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-800 shadow-xs transition hover:bg-gray-50 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15 disabled:opacity-50"
           >
             <FcGoogle className="h-3.5 w-3.5" />
             Connect
@@ -269,89 +368,95 @@ export default function GoogleLaunchConnection({ value, onChange, disabled = fal
       <div className="flex flex-col gap-2">
         <span className={LABEL}>Google account</span>
         <div
-          className={`flex ${CONTROL_H} items-center gap-2 self-start rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3`}
+          className={`flex ${CONTROL_H} items-center gap-2 self-start rounded-md border border-gray-200 bg-gray-50 px-3 text-gray-800 dark:border-white/10 dark:bg-white/5 dark:text-gray-100`}
         >
           <FcGoogle className="h-4 w-4 shrink-0" />
-          <span className={VALUE}>{googleUser?.name || googleUser?.email || 'Connected'}</span>
+          <span className="text-xs font-medium">{googleUser?.name || googleUser?.email || 'Connected'}</span>
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className={LABEL}>Google campaign template</span>
-
-        {templatesLoading ? (
-          <div
-            className={`flex ${CONTROL_H} items-center gap-2 rounded-md px-3 text-[13px] ${CONTROL} ${MUTED}`}
-          >
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Loading templates…
-          </div>
-        ) : noTemplates ? (
-          // Google has no synthesize path, so an empty list is a dead end
-          // until they build one — say that, and hand them the way out
-          // rather than a disabled dropdown with no explanation.
-          <div className="flex flex-col gap-1.5 rounded-md border border-[#F59E0B]/45 bg-[#F7E8CD] px-3 py-2.5 dark:border-[#F59E0B]/35 dark:bg-[#F59E0B]/10">
-            <span className="text-[12px] font-medium text-[#8A4E0D] dark:text-[#E8A33D]">
-              No saved Google templates yet.
-            </span>
-            <span className="text-[11px] text-[#8A4E0D]/85 dark:text-[#E8A33D]/85">
-              Unlike Meta, Google campaigns run from a template you save first.
-            </span>
-            <a
-              href="/google-ads?openWizard=create-full"
-              target="_blank"
-              rel="noreferrer"
-              className="mt-0.5 inline-flex items-center gap-1.5 self-start text-[12px] font-medium text-[#8A4E0D] underline-offset-2 hover:underline dark:text-[#E8A33D]"
-            >
-              Create a Google template
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </div>
-        ) : (
-          <SelectField
-            value={g.templateId || ''}
-            options={templateOptions}
-            onChange={handleTemplate}
-            placeholder="Select a Google template"
-            disabled={disabled}
-          />
-        )}
-
-        {templatesError && (
-          <span className="text-[11px] text-[#B45309] dark:text-[#E8A33D]">{templatesError}</span>
-        )}
-        {g.templateId && !g.payload && !templatesLoading && (
-          <span className={`inline-flex items-center gap-1.5 ${FAINT}`}>
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Loading template…
-          </span>
+        <span className={LABEL}>Select Ad Account *</span>
+        <PlainDropdown
+          value={g.adAccountId || ''}
+          options={adAccountOptions}
+          onChange={handleAdAccount}
+          placeholder={
+            loadingAccounts
+              ? 'Loading ad accounts…'
+              : adAccountOptions.length === 0
+                ? 'No Google ad accounts found'
+                : 'Choose Ad Account'
+          }
+          disabled={disabled || loadingAccounts || adAccountOptions.length === 0}
+        />
+        {accountsError && (
+          <span className="text-[11px] text-[#B45309] dark:text-[#E8A33D]">{accountsError}</span>
         )}
       </div>
 
-      {/* The ONE override this panel asks for. Budget comes from the
-          schedule's own "Daily budget" field — asking twice on one screen
-          invited two different numbers for the same ad set — and the CTA
-          button and destination URL come from the brief (offer.cta), which
-          already collected them for Meta. Neither is a Google-specific
-          decision, so neither is a Google-specific field. */}
-      {g.templateId && (
-        <>
-          <div className="flex flex-col gap-2">
-            <span className={LABEL}>Campaign name</span>
-            <input
-              type="text"
-              maxLength={NAME_MAX}
-              value={g.campaignName || ''}
-              disabled={disabled}
-              onChange={(e) => patch({ campaignName: e.target.value })}
-              placeholder={g.templateName || "Leave blank to use the template's name"}
-              className={INPUT}
-            />
-          </div>
+      <div className="flex flex-col gap-2">
+        <span className={LABEL}>Select Campaign *</span>
+        <CampaignDropdown
+          value={g.campaignId || ''}
+          options={campaignOptions}
+          onChange={handleCampaign}
+          placeholder={
+            !g.adAccountId
+              ? 'Pick an ad account first'
+              : loadingCampaigns
+                ? 'Loading campaigns…'
+                : campaignOptions.length === 0
+                  ? 'No campaigns found'
+                  : 'Choose Campaign'
+          }
+          disabled={disabled || loadingCampaigns || !g.adAccountId || campaignOptions.length === 0}
+        />
+        {campaignsError && (
+          <span className="text-[11px] text-[#B45309] dark:text-[#E8A33D]">{campaignsError}</span>
+        )}
+      </div>
 
-        </>
+      <div className="flex flex-col gap-2">
+        <span className={LABEL}>Select Ad Group *</span>
+        <PlainDropdown
+          value={g.adGroupId || ''}
+          options={adGroupOptions}
+          onChange={handleAdGroup}
+          placeholder={
+            !g.campaignId
+              ? 'Pick a campaign first'
+              : loadingAdGroups
+                ? 'Loading ad groups…'
+                : adGroupOptions.length === 0
+                  ? 'No ad groups found on this campaign'
+                  : 'Choose Ad Group'
+          }
+          disabled={disabled || loadingAdGroups || !g.campaignId || selectedIsIncompatible || adGroupOptions.length === 0}
+        />
+        {adGroupsError && (
+          <span className="text-[11px] text-[#B45309] dark:text-[#E8A33D]">{adGroupsError}</span>
+        )}
+      </div>
+
+      {selectedIsIncompatible && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-100">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
+          <div>
+            <p className="font-semibold text-amber-900 dark:text-amber-100">
+              This campaign cannot post an image asset
+            </p>
+            <p className="mt-1 text-xs text-amber-800 dark:text-amber-100/80">
+              {selectedCampaignRow?.disabledReason || "Only Display campaigns can post an image asset. Please select a Display campaign."}
+            </p>
+          </div>
+        </div>
       )}
+
+      <p className={FAINT}>
+        Select your Google Ads customer account, campaign, and ad group. Only <span className="font-semibold text-gray-700 dark:text-white/80">Display</span> campaigns can post an image asset.
+      </p>
     </div>
   );
 }

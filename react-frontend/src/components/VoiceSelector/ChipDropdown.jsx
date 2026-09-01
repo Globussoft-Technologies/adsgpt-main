@@ -40,16 +40,23 @@ const ChipDropdown = ({
       const rect = anchorRef.current?.getBoundingClientRect();
       if (!rect) return;
       const dropdownWidth = 260;
+
+      const dialogEl = anchorRef.current?.closest('[role="dialog"]');
+      const containerRect = dialogEl ? dialogEl.getBoundingClientRect() : null;
+      const rightBoundary = containerRect ? containerRect.right - 16 : window.innerWidth - 12;
+      const leftBoundary = containerRect ? containerRect.left + 16 : 12;
+
       let left = rect.left;
-      if (field === 'voice') {
+      if (field === 'voice' || left + dropdownWidth > rightBoundary) {
         left = rect.right - dropdownWidth;
       }
-      // Keep within screen horizontally
-      if (left + dropdownWidth > window.innerWidth - 12) {
-        left = window.innerWidth - dropdownWidth - 12;
+
+      // Keep within boundaries
+      if (left + dropdownWidth > rightBoundary) {
+        left = rightBoundary - dropdownWidth;
       }
-      if (left < 12) {
-        left = 12;
+      if (left < leftBoundary) {
+        left = leftBoundary;
       }
 
       // Calculate available space between button bottom and window bottom (leaving 24px margin)

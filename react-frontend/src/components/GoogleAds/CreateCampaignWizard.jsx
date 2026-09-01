@@ -498,6 +498,7 @@ const EU_CONSENT_COUNTRY_CODES = new Set([
 ]);
 
 function isEuTargeted(countries = []) {
+  if (countries.includes('WW')) return true;
   return countries.some((c) => EU_CONSENT_COUNTRY_CODES.has(c));
 }
 
@@ -878,7 +879,7 @@ function AssetsStep({ form, setField, errors, uploadingPmaxImage, onPmaxImageUpl
 
 // ─── Step: Campaign (includes Budget & Bidding) ───────────────────────────────
 
-function CampaignStep({ form, setField, setFields, errors, countryOptions, statusOptions, appPlatformOptions, appSubtypeOptions, videoGoalOptions, videoSubtypeOptions, objectives, goalOptions, schema, filteredDestinations, applyTemplate }) {
+function CampaignStep({ form, setField, setFields, errors, countryOptions, statusOptions, appPlatformOptions, appSubtypeOptions, videoGoalOptions, videoSubtypeOptions, objectives, goalOptions, schema, filteredDestinations, applyTemplate, schemaLoading }) {
   const channel = effectiveChannel(form);
 
   const handleGoalSelect = (value) => {
@@ -948,35 +949,34 @@ function CampaignStep({ form, setField, setFields, errors, countryOptions, statu
       {(() => {
         const isVideoChannel = ['VIDEO', 'YOUTUBE_REACH', 'DEMAND_GEN'].includes(channel);
         if (!isVideoChannel && form.budgetType === 'CAMPAIGN_TOTAL') setField('budgetType', 'DAILY');
+
         return (
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/12 dark:bg-white/4">
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-2 flex items-center justify-between">
               <p className="text-10 font-semibold uppercase tracking-widest text-gray-400 dark:text-white/40">Budget</p>
               {isVideoChannel && (
-                <div className="ml-auto flex overflow-hidden rounded-lg border border-gray-200 dark:border-white/10">
-                  {[
-                    { value: 'DAILY', label: 'Daily' },
-                    { value: 'CAMPAIGN_TOTAL', label: 'Campaign Total' },
-                  ].map((t) => (
-                    <button
-                      key={t.value}
-                      type="button"
-                      onClick={() => setField('budgetType', t.value)}
-                      className={`px-3 py-1 text-10 font-semibold transition-all ${
-                        form.budgetType === t.value
-                          ? 'bg-[#4285F4] text-white'
-                          : 'bg-transparent text-gray-400 hover:text-gray-700 dark:text-white/30 dark:hover:text-white/60'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
+                <div className="flex rounded-lg border border-gray-200 bg-white p-0.5 dark:border-white/10 dark:bg-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setField('budgetType', 'DAILY')}
+                    className={`rounded-md px-2 py-0.5 text-10 font-semibold transition-all ${form.budgetType !== 'CAMPAIGN_TOTAL' ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:text-gray-900 dark:text-white/60 dark:hover:text-white'}`}
+                  >
+                    Daily
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setField('budgetType', 'CAMPAIGN_TOTAL')}
+                    className={`rounded-md px-2 py-0.5 text-10 font-semibold transition-all ${form.budgetType === 'CAMPAIGN_TOTAL' ? 'bg-[#4285F4] text-white' : 'text-gray-500 hover:text-gray-900 dark:text-white/60 dark:hover:text-white'}`}
+                  >
+                    Lifetime
+                  </button>
                 </div>
               )}
             </div>
+
             {form.budgetType === 'CAMPAIGN_TOTAL' ? (
               <div>
-                <Label required>Campaign total budget</Label>
+                <Label required>Lifetime budget</Label>
                 <div className="relative">
                   <span className="absolute top-1/2 left-3 -translate-y-1/2 text-xs font-semibold text-gray-400 dark:text-white/40">₹</span>
                   <Input type="number" value={form.lifetimeBudget} onChange={(e) => setField('lifetimeBudget', e.target.value)} placeholder="500" className="pl-6" min="1" step="1" />
@@ -1002,29 +1002,40 @@ function CampaignStep({ form, setField, setFields, errors, countryOptions, statu
       {/* ── Objective selection ── */}
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-white/12 dark:bg-white/4">
         <p className="mb-2 text-10 font-semibold uppercase tracking-widest text-gray-400 dark:text-white/40">Objective <span className="text-red-400">*</span></p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {objectives.map(({ value, label, description }) => {
-            const Icon = OBJECTIVE_ICONS[value] || Target;
-            const active = form.objective === value;
-            return (
-              <div key={value} className={`rounded-xl transition-all ${active ? 'ring-2 ring-[#4285F4]' : 'ring-1 ring-gray-200 hover:ring-gray-300 dark:ring-white/8 dark:hover:ring-white/15'}`}>
-                <button
-                  type="button"
-                  onClick={() => setFields({ objective: value, destination: '', goal: '', biddingGoal: 'MAXIMIZE_CLICKS' })}
-                  className="flex h-full w-full items-start gap-2.5 rounded-xl bg-white p-2.5 text-left transition-all hover:bg-gray-50 dark:bg-white/4 dark:hover:bg-white/6"
-                >
-                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${active ? 'bg-[#4285F4] text-white' : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-white/55'}`}>
-                    <Icon className="h-3.5 w-3.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold leading-tight text-gray-900 dark:text-white">{label}</p>
-                    {description && <p className="mt-0.5 text-10 leading-snug text-gray-500 dark:text-white/55">{description}</p>}
-                  </div>
-                </button>
-              </div>
-            );
-          })}
-        </div>
+        {schemaLoading ? (
+          <div className="flex items-center justify-center py-6 text-xs text-gray-400 dark:text-white/40">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin text-[#4285F4]" />
+            Loading campaign objectives…
+          </div>
+        ) : objectives.length === 0 ? (
+          <div className="py-4 text-center text-xs text-gray-400 dark:text-white/40">
+            No objectives found. Please refresh or reopen the wizard.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {objectives.map(({ value, label, description }) => {
+              const Icon = OBJECTIVE_ICONS[value] || Target;
+              const active = form.objective === value;
+              return (
+                <div key={value} className={`rounded-xl transition-all ${active ? 'ring-2 ring-[#4285F4]' : 'ring-1 ring-gray-200 hover:ring-gray-300 dark:ring-white/8 dark:hover:ring-white/15'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setFields({ objective: value, destination: '', goal: '', biddingGoal: 'MAXIMIZE_CLICKS' })}
+                    className="flex h-full w-full items-start gap-2.5 rounded-xl bg-white p-2.5 text-left transition-all hover:bg-gray-50 dark:bg-white/4 dark:hover:bg-white/6"
+                  >
+                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${active ? 'bg-[#4285F4] text-white' : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-white/55'}`}>
+                      <Icon className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold leading-tight text-gray-900 dark:text-white">{label}</p>
+                      {description && <p className="mt-0.5 text-10 leading-snug text-gray-500 dark:text-white/55">{description}</p>}
+                    </div>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <FieldError msg={errors.objective} />
         {/* Goal selection — shown when objective has conversion goals */}
       </div>
@@ -1095,13 +1106,24 @@ function CampaignStep({ form, setField, setFields, errors, countryOptions, statu
         </div>
         <div className="flex flex-wrap gap-1">
           {countryOptions.map(({ code, label }) => {
-            const active = (form.countries || []).includes(code);
+            const cur = form.countries || [];
+            const active = cur.includes(code);
             return (
               <div key={code} className={`rounded-full transition-all ${active ? 'ring-2 ring-[#4285F4]' : 'ring-1 ring-gray-200 hover:ring-gray-300 dark:ring-white/8 dark:hover:ring-white/15'}`}>
                 <button
+                  type="button"
                   onClick={() => {
-                    const cur = form.countries || [];
-                    setField('countries', active ? cur.filter((c) => c !== code) : [...cur, code]);
+                    if (code === 'WW') {
+                      // Clicking Worldwide clears all other specific countries
+                      setField('countries', active ? [] : ['WW']);
+                    } else {
+                      // Clicking a specific country clears Worldwide and toggles this country
+                      const withoutWw = cur.filter((c) => c !== 'WW');
+                      setField(
+                        'countries',
+                        active ? withoutWw.filter((c) => c !== code) : [...withoutWw, code]
+                      );
+                    }
                   }}
                   className="flex items-center gap-0.5 rounded-full bg-white px-2 py-0.5 text-10 font-medium transition-all dark:bg-white/8 text-gray-700 dark:text-white/80"
                 >
@@ -2438,12 +2460,30 @@ export default function CreateCampaignWizard({
 
   // ── schema (fetched once, cached at module level) ─────────────────────────
   const [schema, setSchema] = useState(() => getSchemaCache());
-  const schemaLoading = false;
-  const schemaError = null;
+  const [schemaLoading, setSchemaLoading] = useState(() => !getSchemaCache());
+  const [schemaError, setSchemaError] = useState(null);
 
-  // Sync from cache when modal opens (cache may have been populated after first mount)
+  // Fetch or sync schema when modal opens
   useEffect(() => {
-    if (open && !schema && getSchemaCache()) setSchema(getSchemaCache());
+    if (!open) return;
+    const cached = getSchemaCache();
+    if (cached) {
+      setSchema(cached);
+      setSchemaLoading(false);
+      return;
+    }
+    setSchemaLoading(true);
+    setSchemaError(null);
+    fetchSchemaOnce()
+      .then((s) => {
+        setSchema(s);
+      })
+      .catch((err) => {
+        setSchemaError(err?.response?.data?.error || err?.message || 'Failed to load campaign settings');
+      })
+      .finally(() => {
+        setSchemaLoading(false);
+      });
   }, [open]);
 
 
@@ -2797,7 +2837,7 @@ export default function CreateCampaignWizard({
           status:            form.status || 'PAUSED',
           startTime:         form.startDate || undefined,
           endTime:           form.endDate   || undefined,
-          targeting:         form.countries?.length ? { countries: form.countries } : undefined,
+          targeting:         form.countries?.filter((c) => c !== 'WW').length ? { countries: form.countries.filter((c) => c !== 'WW') } : undefined,
           objectiveExtras: {
             merchantCenterId:    form.merchantCenterId    || undefined,
             productCategory:     form.productCategory     || undefined,
@@ -3072,7 +3112,7 @@ export default function CreateCampaignWizard({
             <AnimatePresence mode="wait">
               <motion.div key={currentStep?.id} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.18 }}>
                 {currentStep?.id === 'campaign' && (
-                  <CampaignStep form={form} setField={setField} setFields={setFields} errors={visibleStepErrors} countryOptions={countryOptions} statusOptions={statusOptions} appPlatformOptions={appPlatformOptions} appSubtypeOptions={appSubtypeOptions} videoGoalOptions={videoGoalOptions} videoSubtypeOptions={videoSubtypeOptions} objectives={objectives} goalOptions={goalOptions} schema={schema} filteredDestinations={filteredDestinations} applyTemplate={applyTemplate} />
+                  <CampaignStep form={form} setField={setField} setFields={setFields} errors={visibleStepErrors} countryOptions={countryOptions} statusOptions={statusOptions} appPlatformOptions={appPlatformOptions} appSubtypeOptions={appSubtypeOptions} videoGoalOptions={videoGoalOptions} videoSubtypeOptions={videoSubtypeOptions} objectives={objectives} goalOptions={goalOptions} schema={schema} filteredDestinations={filteredDestinations} applyTemplate={applyTemplate} schemaLoading={schemaLoading} />
                 )}
                 {currentStep?.id === 'assetGroup' && (
                   <AssetGroupStep form={form} setField={setField} errors={visibleStepErrors} genderOptions={genderOptions} />
