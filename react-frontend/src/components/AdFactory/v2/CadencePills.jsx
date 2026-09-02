@@ -113,6 +113,27 @@ export function browserTimezone() {
   }
 }
 
+function todayInputValue(timezone) {
+  const now = new Date();
+  try {
+    const parts = new Intl.DateTimeFormat('en', {
+      timeZone: timezone || undefined,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    const yyyy = parts.find((p) => p.type === 'year').value;
+    const mm = parts.find((p) => p.type === 'month').value;
+    const dd = parts.find((p) => p.type === 'day').value;
+    return `${yyyy}-${mm}-${dd}`;
+  } catch {
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+}
+
 export default function CadencePills({
   frequency = 'weekly',
   hour = 9,
@@ -189,6 +210,7 @@ export default function CadencePills({
             value={startDate ? String(startDate).slice(0, 10) : ''}
             disabled={disabled}
             onChange={(value) => set({ startDate: value || null })}
+            min={todayInputValue(tz)}
             placeholder="today"
             align="end"
           />

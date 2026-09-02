@@ -45,21 +45,21 @@ export default function GoogleStatusPill() {
 
   if (isConnected) {
     return (
-      <div className="flex items-center gap-2 self-start rounded-full border border-emerald-500/30 bg-emerald-500/10 py-1 pr-3 pl-1">
+      <div className="flex items-center gap-2 self-start rounded-full border border-[#A7E3D0] bg-[#E8F7F2] hover:bg-[#DDF3EC] py-1 pr-3 pl-1 transition-colors">
         <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white">
           <FcGoogle className="size-4" />
         </div>
-        <span className="text-xs font-medium text-white">
+        <span className="text-xs font-medium text-[#344054]">
           Google{' '}
           {googleUser?.name || googleUser?.email ? (
             <>
-              · <span className="text-[#E3E3E3]">{googleUser.name || googleUser.email}</span>
+              · <span className="text-[#344054]">{googleUser.name || googleUser.email}</span>
             </>
           ) : (
             'connected'
           )}
         </span>
-        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-400" />
+        <CheckCircle2 className="size-3.5 shrink-0 text-[#12B76A]" />
       </div>
     );
   }
