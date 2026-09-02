@@ -84,7 +84,7 @@ const ACTIONS = [
   {
     id: 'translate',
     number: 2,
-    label: 'Translate Script',
+    label: ' Translate Script / Audio Localization',
     description: 'Translate the current script and create matching audio.',
     impact: 'Changes: language + voice-over',
     icon: Languages,
@@ -1418,7 +1418,7 @@ export default function RegenerateVoiceModal({
 
   const modeHeader = {
     translate: {
-      title: 'Translate script',
+      title: ' Translate Script / Audio Localization',
       description: 'Choose a new language for both the script and voice-over.',
     },
     rewrite: {
