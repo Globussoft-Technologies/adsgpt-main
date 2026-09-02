@@ -11,6 +11,8 @@ import PlansPage from "./pages/PlansPage.jsx";
 import ModelsPage from "./pages/ModelsPage.jsx";
 import MetaUsagePage from "./pages/MetaUsagePage.jsx";
 import MetaUsageUserPage from "./pages/MetaUsageUserPage.jsx";
+import IpManagerPage from "./pages/IpManagerPage.jsx";
+import DatabaseMonitorPage from "./pages/DatabaseMonitorPage.jsx";
 
 export default function App() {
   return (
@@ -26,6 +28,8 @@ export default function App() {
         <Route path="/" element={<OverviewPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/users/:userId" element={<UserDetailPage />} />
+        <Route path="/ip-manager" element={<IpManagerPage />} />
+        <Route path="/database" element={<DatabaseMonitorPage />} />
         <Route path="/calculator" element={<CalculatorPage />} />
         <Route path="/partner-api-keys" element={<PartnerApiKeysPage />} />
         <Route path="/plans" element={<PlansPage />} />

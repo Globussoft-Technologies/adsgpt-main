@@ -8,6 +8,8 @@ const tokenUsageDashboard = require("../controllers/admin/tokenUsageDashboard.co
 const metaUsageDashboard = require("../controllers/admin/metaUsageDashboard.controller");
 const planLimits = require("../controllers/admin/planLimits.controller");
 const modelConfiguration = require("../controllers/admin/modelConfiguration.controller");
+const dbMonitor = require("../controllers/admin/dbMonitor.controller");
+const ipAccessRules = require("../controllers/admin/ipAccessRule.controller");
 const multer = require("multer");
 
 const modelIconUpload = multer({
@@ -34,6 +36,11 @@ router.get("/me", requireAdmin, (req, res, next) => {
   */
   adminAuth.me(req, res, next);
 });
+
+router.get("/ip-rules", requireAdmin, ipAccessRules.listRules);
+router.post("/ip-rules", requireAdmin, ipAccessRules.createRule);
+router.patch("/ip-rules/:id", requireAdmin, ipAccessRules.updateRule);
+router.delete("/ip-rules/:id", requireAdmin, ipAccessRules.deleteRule);
 
 router.get("/overview", requireAdmin, (req, res, next) => {
   /* 
@@ -238,11 +245,46 @@ router.delete("/models/:canonicalKey/icon", requireAdmin, (req, res, next) => {
 });
 
 router.delete("/models/:canonicalKey", requireAdmin, (req, res, next) => {
-  /* 
+  /*
     #swagger.tags = ['Admin']
     #swagger.summary = 'Archive an AI model entry'
   */
   modelConfiguration.archiveModel(req, res, next);
+});
+
+// MongoDB monitoring. Read-only by design — see the header of
+// controllers/admin/dbMonitor.controller.js for why nothing here kills an
+// operation or changes a server setting.
+router.get("/db/health", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'MongoDB connection, pool and server health with sample history'
+  */
+  dbMonitor.health(req, res, next);
+});
+
+router.get("/db/stats", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'MongoDB storage stats per database and collection'
+  */
+  dbMonitor.stats(req, res, next);
+});
+
+router.get("/db/ops", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'MongoDB in-flight operations (query shapes redacted)'
+  */
+  dbMonitor.ops(req, res, next);
+});
+
+router.get("/db/slow-queries", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'MongoDB profiler status and recorded slow operations'
+  */
+  dbMonitor.slowQueries(req, res, next);
 });
 
 module.exports = router;

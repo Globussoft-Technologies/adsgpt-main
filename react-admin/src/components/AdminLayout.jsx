@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Activity, Calculator, Cpu, KeyRound, LayoutDashboard, Layers, LogOut, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { Activity, Calculator, Cpu, Database, KeyRound, LayoutDashboard, Layers, LogOut, Network, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { clearAdminToken } from "@/lib/auth";
 import { resetStoredDateRange } from "@/lib/dateRangeStore";
 import { cn } from "@/lib/utils";
@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/users", label: "Users", icon: Users },
+  { to: "/ip-manager", label: "IP Manager", icon: Network },
+  { to: "/database", label: "Database Monitor", icon: Database },
   { to: "/calculator", label: "Calculator", icon: Calculator },
   { to: "/partner-api-keys", label: "Partner API Keys", icon: KeyRound },
   { to: "/plans", label: "Plans & Limits", icon: Layers },

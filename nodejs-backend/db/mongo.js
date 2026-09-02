@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { attachPoolMonitor } = require("../services/mongoMonitor");
 
 const connectMongoDB = async () => {
   try {
@@ -9,6 +10,12 @@ const connectMongoDB = async () => {
     });
 
     console.log("MongoDB connected successfully");
+
+    // Pool telemetry for the admin DB monitor. Attached here, immediately
+    // after the first connect, because a listener registered later would see
+    // check-ins for check-outs it never saw and report a negative in-use
+    // count. Listeners only, no polling — nothing runs unless an admin looks.
+    attachPoolMonitor(mongoose.connection);
 
     // Events
     mongoose.connection.on("connected", () => {
