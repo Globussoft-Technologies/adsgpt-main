@@ -4,7 +4,10 @@ import { Handle, Position } from '@xyflow/react';
 import { CheckCircle, Info } from 'lucide-react';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 
+import { useSelector } from 'react-redux';
+
 const AdFactoryStepCard = ({ data, dragging }) => {
+  const activeForm = useSelector((state) => state.adFactory?.activeForm);
   const {
     title,
     subtitle,
@@ -103,6 +106,7 @@ const AdFactoryStepCard = ({ data, dragging }) => {
 
   const handleClick = (e) => {
     e.stopPropagation();
+    if (activeForm) return;
     if (isEnabled && onNodeClick) {
       onNodeClick(id);
     } else if (!isEnabled) {

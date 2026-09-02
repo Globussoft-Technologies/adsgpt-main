@@ -739,6 +739,7 @@ export default function AdFactoryWorkflowDarkReal() {
           isEnabled,
           workflowStatus: isActive ? 'running' : 'idle',
           onNodeClick: (id) => {
+            if (activeForm) return;
             if (!isEnabled) {
               // Show message about why node is disabled
               let message = 'Complete previous steps first.';
@@ -928,7 +929,10 @@ export default function AdFactoryWorkflowDarkReal() {
           progress: 0,
           isEnabled: true,
           handle: { target: 'left', source: '' },
-          onNodeClick: () => dispatch(openPublishedAds(queryCampaignId)),
+          onNodeClick: () => {
+            if (activeForm) return;
+            dispatch(openPublishedAds(queryCampaignId));
+          },
         },
       });
     }

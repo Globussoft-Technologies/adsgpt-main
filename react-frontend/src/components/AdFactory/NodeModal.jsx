@@ -114,10 +114,12 @@ export default function NodeModal({ open, nodeId, onClose, onProgressUpdate }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={() => {
-          // dispatch(fetchCampaignById(payload));
-          // onClose();
+        onClick={(e) => {
+          e.stopPropagation();
         }}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
       >
         <AdFactoryBgEffect />
 
@@ -127,6 +129,9 @@ export default function NodeModal({ open, nodeId, onClose, onProgressUpdate }) {
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.8, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           <button
             onClick={() => dispatch(setActiveForm(null))}

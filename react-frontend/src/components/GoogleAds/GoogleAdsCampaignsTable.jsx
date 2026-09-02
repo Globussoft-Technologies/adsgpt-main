@@ -33,6 +33,7 @@ import {
   removeAssetFromAssetGroup,
 } from '@/apis/googleAds/googleAdsApi';
 import { globalToast } from '@/utils/globalToast';
+import { GA4Events } from '@/utils/ga4';
 import { Spinner, EmptyState } from '@/components/MetaAds/MetaAdsAtoms';
 import {
   adCopyText,
@@ -414,6 +415,11 @@ function CampaignTable({
       // the real derived status after a toggle. Clear any stale override
       // and let the refetch below supply the truth.
       setPrimaryStatuses((p) => { const n = { ...p }; delete n[id]; return n; });
+      if (next === 'ENABLED') {
+        GA4Events.adFactoryCampaignStarted(['google'], { source: 'google_ads_manager', campaignId: id, success: true });
+      } else {
+        GA4Events.adFactoryCampaignStopped(['google'], { source: 'google_ads_manager', campaignId: id, success: true });
+      }
       globalToast.success(next === 'ENABLED' ? 'Campaign active successfully' : 'Campaign paused successfully');
       // The optimistic override above only lives in this component's local
       // state — it's lost if the table unmounts (e.g. switching tabs and

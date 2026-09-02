@@ -29,6 +29,8 @@ const InputCommonDropdown = ({
     >
       <SelectTrigger
         hideIcon
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         className={`group placeholder:sm relative flex h-10! w-full items-center gap-0 rounded-full border border-gray-300 bg-gray-100 dark:border-none dark:bg-[#383838]/50 px-4! py-2.5 text-[9px] text-gray-900 shadow-none backdrop-blur-md transition duration-200 ease-in outline-none placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] hover:border-gray-400 hover:bg-gray-100 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] 2xl:text-base 2xl:placeholder:text-base dark:text-[#AFAFAF] ${
           disabled ? 'cursor-not-allowed opacity-50' : ''
         }`}
@@ -44,7 +46,11 @@ const InputCommonDropdown = ({
         </div>
       </SelectTrigger>
 
-      <SelectContent className="z-[9999] min-w-fit border border-black/10 bg-white text-gray-900 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white">
+      <SelectContent
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="z-[9999] min-w-fit border border-black/10 bg-white text-gray-900 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white"
+      >
         <div className="flex flex-col 2xl:gap-1">
           {options?.length === 0 ? (
             <div className="bg-black-500 2xl:text-15 m-3 h-8 w-full text-center text-sm text-gray-500 dark:text-gray-300">
@@ -68,6 +74,8 @@ const InputCommonDropdown = ({
                 <SelectItem
                   key={optionValue}
                   value={optionValue}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
                   className={`group cursor-pointer text-base hover:bg-[#DFDFDF] dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
                     isSelected ? 'bg-gray-100 dark:bg-[#0D0D0D]/50' : 'bg-transparent'
                   } focus:bg-transparent focus:text-inherit`}

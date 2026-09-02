@@ -108,11 +108,16 @@ export default function TimezoneSelect({ value, onChange, disabled }) {
   const triggerName = value || 'Select timezone';
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         className={`flex h-10 w-full items-center justify-between gap-2 rounded-full border border-black/10 bg-gray-200 px-4 text-sm backdrop-blur-md transition outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#383838]/50 dark:disabled:opacity-50 ${
           value ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#AFAFAF]'
         }`}
@@ -141,6 +146,9 @@ export default function TimezoneSelect({ value, onChange, disabled }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.12 }}
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
             className="absolute top-full right-0 z-50 mt-1 flex w-[min(22rem,90vw)] flex-col overflow-hidden rounded-xl border border-black/15 bg-[#e8edf2]/98 shadow-xl backdrop-blur-xl dark:border-white/15 dark:bg-[#0D0D0D]/95 dark:shadow-2xl"
           >
             <div className="flex items-center gap-2 border-b border-black/10 px-3 py-2 dark:border-white/10">

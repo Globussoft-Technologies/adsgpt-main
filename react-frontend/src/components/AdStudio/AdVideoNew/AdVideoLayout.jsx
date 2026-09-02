@@ -1,5 +1,6 @@
 import { useSelector, useDispatch } from 'react-redux';
-import { ChevronLeft, PlayCircle, Library, Images, Video } from 'lucide-react';
+import { ChevronLeft, PlayCircle, Library, Images, Video, PanelLeft } from 'lucide-react';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 
@@ -405,10 +406,17 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
       ) : displayedActivePage === 'myVideos' ? (
         <>
           {/* Header */}
-          <div className="flex w-full items-center justify-between gap-2 p-4 pl-12 pr-5 sm:pl-14 lg:pl-4 2xl:pr-8 text-gray-900 dark:text-white">
-            <div className="flex items-center gap-3">
+          <div className="-mt-2.5 -mx-4 flex h-[64px] w-[calc(100%+2rem)] items-center justify-between gap-2 px-1 md:px-2.5 2xl:px-6 text-gray-900 dark:text-white">
+            <div className="left_header_container flex items-center">
+              <SidebarTrigger
+                aria-label="Open navigation"
+                aria-controls="app-sidebar-navigation"
+                className="close_open_ flex h-9 w-9 cursor-pointer items-center justify-center rounded-full p-1 hover:bg-[#EAE5DC] lg:hidden mr-0 sm:mr-1.5"
+              >
+                <PanelLeft className="h-5" aria-hidden="true" />
+              </SidebarTrigger>
               {location.pathname === '/my-space' ? (
-                <h1 className="text-lg font-semibold whitespace-nowrap text-[#24211D] md:text-xl 2xl:text-[30px] dark:text-white">
+                <h1 className="mr-4 text-lg font-semibold whitespace-nowrap text-[#24211D] md:text-xl lg:mr-4 2xl:mr-6 2xl:text-[30px] dark:text-white">
                   My Space
                 </h1>
               ) : !libraryOnly && (

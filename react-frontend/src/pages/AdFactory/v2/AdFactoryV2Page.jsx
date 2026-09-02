@@ -977,7 +977,7 @@ export default function AdFactoryV2Page() {
   // point is that the price of the press is on screen while you are still
   // deciding what to press it with.
   const sidebar = (
-    <aside className="flex flex-col gap-3 lg:sticky lg:top-3 lg:self-start">
+    <aside className="flex flex-col gap-3 lg:sticky lg:top-3 lg:self-start lg:pt-[34px]">
       <OutputPanel brief={brief} onEditField={handleEdit} onEditFields={handleEditMany} />
 
       <div className={`${CARD} px-4 py-4`}>
@@ -1110,34 +1110,6 @@ export default function AdFactoryV2Page() {
       {/* ── 3, 4 ── */}
       {step === STEP.BRIEF && brief && (
         <div className="mx-auto flex w-full max-w-375 flex-col gap-3 px-4 2xl:px-8">
-          <div>
-            <button
-              type="button"
-              onClick={handleStartOver}
-              className="text-13 inline-flex items-center gap-1.5 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              All briefs
-            </button>
-          </div>
-          {brief.status === BRIEF_STATUS.NEEDS_INPUT && (
-            <Notice tone="warn" icon={AlertCircle}>
-              <span className="flex flex-col items-start gap-1">
-                <span>
-                  {brief.failureReason ||
-                    "We couldn't read much from that page. Fill in what's missing, or start from a saved brand."}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setAdjustOpen(true)}
-                  className="font-semibold underline underline-offset-2"
-                >
-                  Fill it in
-                </button>
-              </span>
-            </Notice>
-          )}
-
           {/* Two columns from the first paint, not only once ads exist. The
               rail holds Output and the price of the press, and both of those
               are decisions made BEFORE the first generate — a layout that
@@ -1145,6 +1117,33 @@ export default function AdFactoryV2Page() {
               exact moment their ads arrive. */}
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="flex min-w-0 flex-col gap-3">
+              <div className="sticky top-0 z-10 bg-[var(--ws-bg)] py-1 dark:bg-[#0f0f0f]">
+                <button
+                  type="button"
+                  onClick={handleStartOver}
+                  className="text-13 inline-flex items-center gap-1.5 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  All briefs
+                </button>
+              </div>
+              {brief.status === BRIEF_STATUS.NEEDS_INPUT && (
+                <Notice tone="warn" icon={AlertCircle}>
+                  <span className="flex flex-col items-start gap-1">
+                    <span>
+                      {brief.failureReason ||
+                        "We couldn't read much from that page. Fill in what's missing, or start from a saved brand."}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAdjustOpen(true)}
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      Fill it in
+                    </button>
+                  </span>
+                </Notice>
+              )}
               <BriefSummary
                 brief={brief}
                 budget={budget}
@@ -1301,18 +1300,18 @@ export default function AdFactoryV2Page() {
       {/* ── 5 ── Deliveries are the page once a brief is live. */}
       {step === STEP.DELIVERIES && brief && (
         <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 px-3 py-3 sm:px-4 2xl:px-5">
-          <div>
-            <button
-              type="button"
-              onClick={handleStartOver}
-              className="text-13 inline-flex items-center gap-1.5 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              All briefs
-            </button>
-          </div>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex min-w-0 flex-col gap-3">
+              <div className="sticky top-0 z-10 bg-[var(--ws-bg)] py-1 dark:bg-[#0f0f0f]">
+                <button
+                  type="button"
+                  onClick={handleStartOver}
+                  className="text-13 inline-flex items-center gap-1.5 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  All briefs
+                </button>
+              </div>
               <BriefSummary
                 brief={brief}
                 budget={budget}
