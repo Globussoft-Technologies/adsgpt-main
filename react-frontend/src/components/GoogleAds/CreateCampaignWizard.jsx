@@ -43,6 +43,7 @@ import {
   uploadGoogleImage,
   uploadGoogleVideo,
   addAssetToAssetGroup,
+  syncAssetGroupAssets,
   removeAssetFromAssetGroup,
   getGoogleWizardSchema,
   listGoogleCampaignTemplates,
@@ -248,7 +249,6 @@ function buildInitialForm(context) {
     _originalPmaxAssets: context?._originalPmaxAssets || null,
     assetGroupName:     context?.assetGroupName      || '',
     businessDescription:context?.businessDescription || '',
-    finalUrlSuffix:     context?.finalUrlSuffix      || '',
     pmaxFinalUrl:       context?.pmaxFinalUrl        || context?.finalUrl || context?.final_url || context?.websiteUrl || context?.website_url || context?.landingPageUrl || '',
     pmaxBusinessName:   context?.pmaxBusinessName    || context?.businessName || context?.business_name || context?.campaignName || context?.name || '',
     pmaxHeadlines:      context?.pmaxHeadlines       || ['', '', ''],
@@ -3401,27 +3401,51 @@ export default function CreateCampaignWizard({
         const imageChanged = form.pmaxImageUrl && form.pmaxImageUrl !== (original.images.find((i) => i.fieldType === 'MARKETING_IMAGE')?.url || '');
         const logoChanged = form.pmaxLogoUrl && form.pmaxLogoUrl !== (original.logos?.[0]?.url || '');
 
-        for (const h of headlinesToRemove) {
-          if (h.assetRN) await removeAssetFromAssetGroup({ adAccountId, assetGroupId: adGroupId, assetResourceName: h.assetRN, fieldType: 'HEADLINE' });
+        const additions = [];
+        const removals = [];
+
+        const origLongHeadline = (original.longHeadline?.text || '').trim();
+        const newLongHeadline = (form.pmaxLongHeadline || '').trim();
+        if (newLongHeadline && newLongHeadline !== origLongHeadline) {
+          additions.push({ fieldType: 'LONG_HEADLINE', text: newLongHeadline });
+          if (original.longHeadline?.assetRN) {
+            removals.push({ assetResourceName: original.longHeadline.assetRN, fieldType: 'LONG_HEADLINE' });
+          }
         }
+
         for (const text of headlinesToAdd) {
-          await addAssetToAssetGroup({ adAccountId, assetGroupId: adGroupId, fieldType: 'HEADLINE', text });
+          additions.push({ fieldType: 'HEADLINE', text });
+        }
+        for (const h of headlinesToRemove) {
+          if (h.assetRN) removals.push({ assetResourceName: h.assetRN, fieldType: h.fieldType || 'HEADLINE' });
+        }
+
+        for (const text of descriptionsToAdd) {
+          additions.push({ fieldType: 'DESCRIPTION', text });
         }
         for (const d of descriptionsToRemove) {
-          if (d.assetRN) await removeAssetFromAssetGroup({ adAccountId, assetGroupId: adGroupId, assetResourceName: d.assetRN, fieldType: 'DESCRIPTION' });
+          if (d.assetRN) removals.push({ assetResourceName: d.assetRN, fieldType: d.fieldType || 'DESCRIPTION' });
         }
-        for (const text of descriptionsToAdd) {
-          await addAssetToAssetGroup({ adAccountId, assetGroupId: adGroupId, fieldType: 'DESCRIPTION', text });
-        }
+
         if (imageChanged && form.pmaxImageAssetRN) {
+          additions.push({ fieldType: 'MARKETING_IMAGE', imageAssetRN: form.pmaxImageAssetRN });
           const oldImage = original.images.find((i) => i.fieldType === 'MARKETING_IMAGE');
-          if (oldImage?.assetRN) await removeAssetFromAssetGroup({ adAccountId, assetGroupId: adGroupId, assetResourceName: oldImage.assetRN, fieldType: 'MARKETING_IMAGE' });
-          await addAssetToAssetGroup({ adAccountId, assetGroupId: adGroupId, fieldType: 'MARKETING_IMAGE', imageAssetRN: form.pmaxImageAssetRN });
+          if (oldImage?.assetRN) removals.push({ assetResourceName: oldImage.assetRN, fieldType: 'MARKETING_IMAGE' });
         }
+
         if (logoChanged && form.pmaxLogoAssetRN) {
+          additions.push({ fieldType: 'LOGO', imageAssetRN: form.pmaxLogoAssetRN });
           const oldLogo = original.logos?.[0];
-          if (oldLogo?.assetRN) await removeAssetFromAssetGroup({ adAccountId, assetGroupId: adGroupId, assetResourceName: oldLogo.assetRN, fieldType: 'LOGO' });
-          await addAssetToAssetGroup({ adAccountId, assetGroupId: adGroupId, fieldType: 'LOGO', imageAssetRN: form.pmaxLogoAssetRN });
+          if (oldLogo?.assetRN) removals.push({ assetResourceName: oldLogo.assetRN, fieldType: 'LOGO' });
+        }
+
+        if (additions.length > 0 || removals.length > 0) {
+          await syncAssetGroupAssets({
+            adAccountId,
+            assetGroupId: adGroupId,
+            additions,
+            removals,
+          });
         }
       } else if (mode === 'edit-adgroup') {
         await updateGoogleAdGroup({

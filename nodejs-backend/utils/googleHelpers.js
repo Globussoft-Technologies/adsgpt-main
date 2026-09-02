@@ -103,7 +103,8 @@ function deriveGoogleBillingType(biddingStrategyType, adGroupType) {
 
 function sanitizeId(val) {
   if (val == null) return null;
-  const numeric = Number(String(val).replace(/[^\d]/g, ""));
+  const lastPart = String(val).split("/").pop();
+  const numeric = Number(lastPart.replace(/[^\d]/g, ""));
   return Number.isNaN(numeric) ? null : numeric;
 }
 

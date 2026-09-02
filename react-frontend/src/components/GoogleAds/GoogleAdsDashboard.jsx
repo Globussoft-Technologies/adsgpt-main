@@ -155,6 +155,7 @@ export default function GoogleAdsDashboard() {
         const originalAssets = {
           headlines: item?.headlines || [],
           descriptions: item?.descriptions || [],
+          longHeadline: item?.longHeadline || null,
           images: item?.images || [],
           logos: item?.logos || [],
         };
@@ -169,6 +170,7 @@ export default function GoogleAdsDashboard() {
             assetGroupName: item?.name || context.adGroupName,
             pmaxFinalUrl: item?.finalUrls?.[0] || '',
             pmaxHeadlines: (item?.headlines || []).map((h) => h.text || h).filter(Boolean),
+            pmaxLongHeadline: item?.longHeadline?.text || '',
             pmaxDescriptions: (item?.descriptions || []).map((d) => d.text || d).filter(Boolean),
             pmaxImageUrl: marketingImage?.url || '',
             pmaxImageAssetRN: marketingImage?.assetRN || '',

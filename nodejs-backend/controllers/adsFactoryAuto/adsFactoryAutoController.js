@@ -75,6 +75,30 @@ async function enforceProactiveCompletion(job) {
 
 const { trackBackendGA4Event } = require("../../utils/ga4");
 
+function formatPlatformString(targets) {
+  const PREFERRED_PLATFORM_ORDER = ['meta', 'google', 'tiktok'];
+  let rawList = [];
+  if (Array.isArray(targets)) {
+    rawList = targets;
+  } else if (targets && typeof targets === 'object') {
+    if (targets.meta) rawList.push('meta');
+    if (targets.google) rawList.push('google');
+    if (targets.tiktok) rawList.push('tiktok');
+  }
+  const cleanList = [...new Set(rawList
+    .map((p) => String(p || '').toLowerCase().trim())
+    .filter(Boolean))];
+  const sorted = cleanList.sort((a, b) => {
+    const idxA = PREFERRED_PLATFORM_ORDER.indexOf(a);
+    const idxB = PREFERRED_PLATFORM_ORDER.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
+  return sorted.length > 0 ? sorted.join('_') : 'meta';
+}
+
 // ─── Controller ───────────────────────────────────────────────────────────────
 
 class AdsFactoryAutoController {
@@ -196,30 +220,6 @@ class AdsFactoryAutoController {
         { $set: { "metadata.jobId": job._id.toString() } }
       );
       campaignLinked = true;
-
-function formatPlatformString(targets) {
-  const PREFERRED_PLATFORM_ORDER = ['meta', 'google', 'tiktok'];
-  let rawList = [];
-  if (Array.isArray(targets)) {
-    rawList = targets;
-  } else if (targets && typeof targets === 'object') {
-    if (targets.meta) rawList.push('meta');
-    if (targets.google) rawList.push('google');
-    if (targets.tiktok) rawList.push('tiktok');
-  }
-  const cleanList = [...new Set(rawList
-    .map((p) => String(p || '').toLowerCase().trim())
-    .filter(Boolean))];
-  const sorted = cleanList.sort((a, b) => {
-    const idxA = PREFERRED_PLATFORM_ORDER.indexOf(a);
-    const idxB = PREFERRED_PLATFORM_ORDER.indexOf(b);
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    if (idxA !== -1) return -1;
-    if (idxB !== -1) return 1;
-    return a.localeCompare(b);
-  });
-  return sorted.length > 0 ? sorted.join('_') : 'meta';
-}
 
       const platformStr = formatPlatformString(value.targets);
 

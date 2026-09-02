@@ -855,6 +855,18 @@ export default function AdFactoryV2Page() {
     ]
   );
 
+  const costPerPair = useMemo(() => {
+    if (estimate?.counts?.image && estimate?.total) {
+      return estimate.total / estimate.counts.image;
+    }
+    return 7;
+  }, [estimate]);
+
+  const creditsPerCycle = useMemo(() => {
+    if (estimate?.total == null) return null;
+    return Math.round(costPerPair * (cadence.pairsPerCycle || 1));
+  }, [costPerPair, estimate?.total, cadence.pairsPerCycle]);
+
   // Google is a destination only when it is one of the brief's own platforms —
   // the same tick in Output that decides whether we render Google sizes.
   const briefPlatforms = useMemo(
@@ -1264,7 +1276,7 @@ export default function AdFactoryV2Page() {
                     hour={cadence.hour}
                     timezone={cadence.timezone}
                     objectiveLabel={objectiveLabel}
-                    creditsPerCycle={estimate?.total ?? null}
+                    creditsPerCycle={creditsPerCycle}
                     firstRunLabel={nextRunLabel}
                     activationError={activationError}
                     status={
@@ -1399,7 +1411,7 @@ export default function AdFactoryV2Page() {
                     hour={cadence.hour}
                     timezone={cadence.timezone}
                     objectiveLabel={objectiveLabel}
-                    creditsPerCycle={estimate?.total ?? null}
+                    creditsPerCycle={creditsPerCycle}
                     firstRunLabel={nextRunLabel}
                     activationError={activationError}
                     busy={pausing}
@@ -1438,7 +1450,7 @@ export default function AdFactoryV2Page() {
                 summary={timeline?.summary}
                 rows={timeline?.rows}
                 loading={timeline?.loading}
-                onRetry={handleGenerate}
+                onRetry={handleRunNow}
                 brandName={brief.brand?.name}
                 pairsPerCycle={cadence.pairsPerCycle}
               />

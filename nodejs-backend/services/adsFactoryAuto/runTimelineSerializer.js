@@ -106,8 +106,8 @@ function serializeRun(run, index, context = {}) {
       return {
         creativeId: c.creativeId,
         imageUrl: c.imageUrl || "",
-        headline: c.headline || c.platformText?.meta?.headline || "",
-        message: c.message || c.platformText?.meta?.message || "",
+        headline: c.headline || c.platformText?.google?.headline || c.platformText?.meta?.headline || c.title || "",
+        message: c.message || c.platformText?.google?.message || c.platformText?.meta?.message || c.body || c.description || "",
         platform: c.platform || "",
         postedAdIds,
         // Per-ad outcome and deep links, so a published-ads view can show WHICH

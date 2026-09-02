@@ -141,6 +141,7 @@ export default function RunTimeline({
               row={row}
               last={i === rows.length - 1}
               onRetry={onRetry}
+              brandName={brandName}
               motionProps={M.staggerItem}
             />
           ))}
@@ -209,7 +210,7 @@ const PILL = {
   next: 'bg-[#F3F4F6] text-[#6B7280] dark:bg-[#22272F] dark:text-[#AFB6C0]',
 };
 
-function Cycle({ row, last, onRetry, motionProps }) {
+function Cycle({ row, last, onRetry, brandName, motionProps }) {
   const [open, setOpen] = useState(false);
   const [previewCreative, setPreviewCreative] = useState(null);
   const scheduled = row.scheduled || row.status === 'scheduled';
@@ -321,13 +322,13 @@ function Cycle({ row, last, onRetry, motionProps }) {
             </AnimatePresence>
           </>
         )}
-
-        <TimelinePreviewDialog
+             <TimelinePreviewDialog
           creative={previewCreative}
           open={Boolean(previewCreative)}
           onOpenChange={(next) => {
             if (!next) setPreviewCreative(null);
           }}
+          brandName={brandName}
         />
 
         {row.error && (
@@ -346,71 +347,52 @@ function Cycle({ row, last, onRetry, motionProps }) {
   );
 }
 
-// One published ad: what it says, whether it went live, and where to see it.
-//
-// `posted` is per-creative and comes from that creative's own `postedAdIds`, so
-// a partial run shows exactly which pair failed rather than a count. `posted`
-// is checked against `false` explicitly — an older timeline payload has no such
-// field, and treating undefined as "failed" would mark every historical ad red.
 function PublishedAd({ creative, onPreview }) {
   const failed = creative.posted === false;
   const link = (creative.adLinks || [])[0];
 
   return (
     <li
-      role="button"
-      tabIndex={0}
-      onClick={onPreview}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onPreview?.();
-        }
-      }}
-      className={`flex cursor-pointer items-center gap-2.5 p-2 transition-colors hover:bg-white/3 ${CONTROL}`}
+      onClick={() => onPreview?.(creative)}
+      className="group relative flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200/80 bg-white/60 p-2.5 transition-all hover:border-gray-300 hover:bg-white dark:border-white/8 dark:bg-white/3 dark:hover:border-white/15 dark:hover:bg-white/6"
     >
-      {creative.imageUrl ? (
-        <img
-          src={srcOf(creative.imageUrl)}
-          alt=""
-          loading="lazy"
-          className="h-11 w-9 shrink-0 rounded-md object-cover"
-        />
-      ) : (
-        <span className="h-11 w-9 shrink-0 rounded-md bg-[#F3F4F6] dark:bg-[#22272F]" />
-      )}
-
-      <span className="flex min-w-0 flex-1 flex-col">
-        <b className="truncate text-13 font-medium text-[#111827] dark:text-[#ECEFF3]">
-          {creative.headline || 'Untitled ad'}
-        </b>
-        {creative.message && (
-          <span className={`truncate ${FAINT}`}>
-            {creative.message}
-          </span>
+      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-white/5">
+        {creative.imageUrl ? (
+          <img
+            src={srcOf(creative.imageUrl)}
+            alt={creative.headline || 'Ad creative'}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs text-gray-400 dark:text-white/30">
+            —
+          </div>
         )}
-      </span>
+      </div>
 
-      <span
-        className={`shrink-0 rounded-md px-2 py-0.5 text-13 font-medium ${
-          failed ? PILL.fail : PILL.live
-        }`}
-      >
-        {failed ? 'Not posted' : 'Live'}
-      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-semibold text-gray-900 dark:text-white">
+          {creative.headline || creative.message || 'Ad Creative'}
+        </p>
+        <p className="truncate text-10 text-gray-400 dark:text-white/40">
+          {creative.message || creative.headline || 'Creative ready'}
+        </p>
+      </div>
 
-      {link && (
-        <a
-          href={link.url}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="inline-flex shrink-0 items-center gap-1 text-13 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
-        >
-          View
-          <ExternalLink className="h-3 w-3" />
-        </a>
-      )}
+      <div className="flex shrink-0 items-center gap-1.5">
+        {link?.url && (
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-10 font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
+          >
+            <span>View</span>
+            <ExternalLink className="h-2.5 w-2.5" />
+          </a>
+        )}
+      </div>
     </li>
   );
 }
@@ -437,26 +419,26 @@ function shortZone(tz) {
   }
 }
 
-function TimelinePreviewDialog({ creative, open, onOpenChange }) {
+function TimelinePreviewDialog({ creative, open, onOpenChange, brandName }) {
   const failed = creative?.posted === false;
   const link = (creative?.adLinks || [])[0];
-  const platformLabel = link?.platform || creative?.platform || 'Meta';
-  const accountName = creative?.accountName || creative?.pageName || 'Preview account';
+  const platformLabel = link?.platform || creative?.platform || 'Google';
+  const accountName = creative?.accountName || creative?.pageName || (platformLabel.toLowerCase() === 'google' ? 'Google Ads' : platformLabel.toLowerCase() === 'meta' ? 'Meta Ads' : 'Ad Account');
   const postedAt = creative?.postedAt || creative?.createdAt || creative?.timestamp;
-  const initial = (creative?.brandName || creative?.headline || 'A').slice(0, 1).toUpperCase();
+  const initial = (creative?.brandName || brandName || creative?.headline || 'A').slice(0, 1).toUpperCase();
   const ctaLabel = formatCta(creative?.cta || creative?.callToAction);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(420px,92vw)] max-w-[400px] overflow-hidden rounded-[24px] border border-white/10 bg-[#0F1115] p-0 text-white shadow-2xl [&>button]:top-5 [&>button]:right-5 [&>button]:z-20 [&>button]:rounded-md [&>button]:border [&>button]:border-white/10 [&>button]:bg-[#171A20] [&>button]:p-1 [&>button]:text-white/80 [&>button]:opacity-100 [&>button]:transition-colors [&>button]:hover:bg-[#1E222B] [&>button]:hover:text-white [&>button]:focus:ring-0 [&>button_svg]:h-3.5 [&>button_svg]:w-3.5">
-        <DialogHeader className="border-b border-white/8 px-5 py-4 pr-16 text-left">
-          <DialogTitle className="text-[16px] font-semibold text-white">
+      <DialogContent className="w-[min(420px,92vw)] max-w-[400px] overflow-hidden rounded-[24px] border border-gray-200 bg-white p-0 text-gray-900 shadow-2xl dark:border-white/10 dark:bg-[#0F1115] dark:text-white [&>button]:top-5 [&>button]:right-5 [&>button]:z-20 [&>button]:rounded-md [&>button]:border [&>button]:border-gray-200 [&>button]:bg-gray-100 [&>button]:p-1 [&>button]:text-gray-700 dark:[&>button]:border-white/10 dark:[&>button]:bg-[#171A20] dark:[&>button]:text-white/80 [&>button]:opacity-100 [&>button]:transition-colors hover:[&>button]:bg-gray-200 dark:hover:[&>button]:bg-[#1E222B] dark:hover:[&>button]:text-white [&>button]:focus:ring-0 [&>button_svg]:h-3.5 [&>button_svg]:w-3.5">
+        <DialogHeader className="border-b border-gray-100 px-5 py-4 pr-16 text-left dark:border-white/8">
+          <DialogTitle className="text-[16px] font-semibold text-gray-900 dark:text-white">
             Ad Preview
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex justify-center p-5">
-          <div className="w-full max-w-[360px] overflow-hidden rounded-xl border border-white/10 bg-white text-gray-800 shadow-sm">
+          <div className="w-full max-w-[360px] overflow-hidden rounded-xl border border-gray-200 bg-white text-gray-800 shadow-sm dark:border-white/10">
             <div className="flex items-start justify-between gap-2 px-3 pt-3">
               <div className="flex min-w-0 flex-1 items-start gap-2">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#167beb] text-xs font-bold text-white">
@@ -465,7 +447,7 @@ function TimelinePreviewDialog({ creative, open, onOpenChange }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="truncate text-[12px] leading-tight font-semibold text-gray-900">
-                      {creative?.brandName || 'Brand'}
+                      {creative?.brandName || brandName || 'Brand'}
                     </span>
                     <span className="truncate rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
                       {platformLabel} · {accountName}

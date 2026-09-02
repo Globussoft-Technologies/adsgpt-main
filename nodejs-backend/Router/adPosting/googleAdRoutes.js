@@ -41,6 +41,9 @@ router.patch("/update-ad-group", googleAdController.updateAdGroupAPI);
 router.delete("/delete-ad-group", googleAdController.deleteAdGroupAPI);
 router.post("/asset-group-asset", googleAdController.addAssetToAssetGroupAPI);
 router.delete("/asset-group-asset", googleAdController.removeAssetFromAssetGroupAPI);
+router.post("/remove-asset-group-asset", googleAdController.removeAssetFromAssetGroupAPI);
+router.post("/asset-group-asset/remove", googleAdController.removeAssetFromAssetGroupAPI);
+router.post("/sync-asset-group-assets", googleAdController.syncAssetGroupAssetsAPI);
 
 
 // ─── Ads Posting ────────────────────────────────────────────────

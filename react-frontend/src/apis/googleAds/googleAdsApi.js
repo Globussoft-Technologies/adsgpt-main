@@ -254,12 +254,27 @@ export const addAssetToAssetGroup = async (body) => {
   return data;
 };
 
-export const removeAssetFromAssetGroup = async (body) => {
-  const { data } = await axios.delete(`${BASE_URL}/adsgpt/google-ads/asset-group-asset`, {
-    data: body,
-    headers: authHeaders(),
-  });
+export const syncAssetGroupAssets = async (body) => {
+  const { data } = await axios.post(`${BASE_URL}/adsgpt/google-ads/sync-asset-group-assets`, body, { headers: authHeaders() });
   return data;
+};
+
+export const removeAssetFromAssetGroup = async (body) => {
+  try {
+    const { data } = await axios.post(`${BASE_URL}/adsgpt/google-ads/remove-asset-group-asset`, body, {
+      headers: authHeaders(),
+    });
+    return data;
+  } catch (err) {
+    if (err.response?.status === 404) {
+      const { data } = await axios.delete(`${BASE_URL}/adsgpt/google-ads/asset-group-asset`, {
+        data: body,
+        headers: authHeaders(),
+      });
+      return data;
+    }
+    throw err;
+  }
 };
 
 export const deleteGoogleAdGroup = async ({ adAccountId, adGroupId, campaignId, isPmax }) => {

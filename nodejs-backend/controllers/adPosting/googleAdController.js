@@ -737,6 +737,7 @@ class GoogleAdController {
     this.deleteAdGroupAPI = this.deleteAdGroupAPI.bind(this);
     this.addAssetToAssetGroupAPI = this.addAssetToAssetGroupAPI.bind(this);
     this.removeAssetFromAssetGroupAPI = this.removeAssetFromAssetGroupAPI.bind(this);
+    this.syncAssetGroupAssetsAPI = this.syncAssetGroupAssetsAPI.bind(this);
     this.getWizardSchema = this.getWizardSchema.bind(this);
     this.getCtaOptions = this.getCtaOptions.bind(this);
   }
@@ -1848,6 +1849,7 @@ class GoogleAdController {
               finalUrls: agFinalUrls,
               headlines: [],
               descriptions: [],
+              longHeadline: null,
               images: [],
               logos: [],
             };
@@ -1862,7 +1864,8 @@ class GoogleAdController {
           const imageUrl = imgData?.fullSize?.url || imgData?.full_size?.url;
           const mimeType = imgData?.mimeType || imgData?.mime_type || "";
           if (fieldType === "HEADLINE" && text) byGroup[gid].headlines.push({ text, assetRN, assetId, fieldType });
-          else if ((fieldType === "DESCRIPTION" || fieldType === "LONG_HEADLINE") && text) byGroup[gid].descriptions.push({ text, assetRN, assetId, fieldType });
+          else if (fieldType === "LONG_HEADLINE" && text) byGroup[gid].longHeadline = { text, assetRN, assetId, fieldType };
+          else if (fieldType === "DESCRIPTION" && text) byGroup[gid].descriptions.push({ text, assetRN, assetId, fieldType });
           else if ((fieldType === "MARKETING_IMAGE" || fieldType === "SQUARE_MARKETING_IMAGE" || fieldType === "PORTRAIT_MARKETING_IMAGE") && imageUrl) {
             byGroup[gid].images.push({ url: imageUrl, mimeType, fieldType, assetRN, assetId });
           } else if ((fieldType === "LOGO" || fieldType === "LANDSCAPE_LOGO") && imageUrl) {
@@ -2004,7 +2007,7 @@ class GoogleAdController {
 
       if (isPmax) {
         const results = pmaxResults;
-        const grouped = { id: String(adGroupId), type: "ASSET_GROUP", isPmax: true, finalUrls: [], headlines: [], descriptions: [], images: [], logos: [] };
+        const grouped = { id: String(adGroupId), type: "ASSET_GROUP", isPmax: true, finalUrls: [], headlines: [], descriptions: [], longHeadline: null, images: [], logos: [] };
         results.forEach(r => {
           const asset = r.asset || {};
           const aga = r.assetGroupAsset || r.asset_group_asset || {};
@@ -2030,7 +2033,8 @@ class GoogleAdController {
           const assetMetrics = assetMetricsMap[assetRN] || { impressions: 0, clicks: 0, cost: 0, conversions: 0 };
           const assetStatus = robustFormatStatus(aga.status);
           if (fieldType === "HEADLINE" && text) grouped.headlines.push({ text, assetRN, assetId, fieldType, status: assetStatus, metrics: assetMetrics });
-          else if ((fieldType === "DESCRIPTION" || fieldType === "LONG_HEADLINE") && text) grouped.descriptions.push({ text, assetRN, assetId, fieldType, status: assetStatus, metrics: assetMetrics });
+          else if (fieldType === "LONG_HEADLINE" && text) grouped.longHeadline = { text, assetRN, assetId, fieldType, status: assetStatus, metrics: assetMetrics };
+          else if (fieldType === "DESCRIPTION" && text) grouped.descriptions.push({ text, assetRN, assetId, fieldType, status: assetStatus, metrics: assetMetrics });
           else if (fieldType === "BUSINESS_NAME" && text) grouped.businessName = { text, assetRN, assetId, fieldType, status: assetStatus, metrics: assetMetrics };
           else if ((fieldType === "MARKETING_IMAGE" || fieldType === "SQUARE_MARKETING_IMAGE" || fieldType === "PORTRAIT_MARKETING_IMAGE") && imageUrl) {
             grouped.images.push({ url: imageUrl, mimeType, fieldType, assetRN, assetId, status: assetStatus, metrics: assetMetrics });
@@ -3318,7 +3322,10 @@ class GoogleAdController {
 
   async removeAssetFromAssetGroupAPI(req, res) {
     try {
-      const { adAccountId, assetGroupId, assetResourceName, fieldType } = req.body;
+      const { adAccountId, assetGroupId, assetResourceName, fieldType } = {
+        ...(req.query || {}),
+        ...(req.body || {}),
+      };
       if (!adAccountId || !assetGroupId || !assetResourceName || !fieldType) {
         return res.status(400).json({ status: false, error: "adAccountId, assetGroupId, assetResourceName and fieldType are required" });
       }
@@ -3349,14 +3356,16 @@ class GoogleAdController {
         TALL_PORTRAIT_MARKETING_IMAGE: 32, RELATED_YOUTUBE_VIDEOS: 33,
         LANDING_PAGE_PREVIEW: 38, LONG_DESCRIPTION: 39, CALL_TO_ACTION: 40,
       };
-      const fieldTypeNum = FIELD_TYPE_ENUM[fieldType];
-      if (!fieldTypeNum) {
+      const fieldTypeEnumKey = Object.keys(FIELD_TYPE_ENUM).find(
+        (k) => k.toLowerCase() === String(fieldType).toLowerCase()
+      );
+      if (!fieldTypeEnumKey) {
         return res.status(400).json({ status: false, error: `Unknown fieldType: ${fieldType}` });
       }
 
-      // asset_group_asset resource name format: customers/{cid}/assetGroupAssets/{agId}~{assetId}~{fieldTypeNum}
+      // asset_group_asset resource name format: customers/{cid}/assetGroupAssets/{agId}~{assetId}~{fieldType}
       const assetId = assetResourceName.split('/').pop();
-      const assetGroupAssetRN = `customers/${customerId}/assetGroupAssets/${sanitizeId(assetGroupId)}~${assetId}~${fieldTypeNum}`;
+      const assetGroupAssetRN = `customers/${customerId}/assetGroupAssets/${sanitizeId(assetGroupId)}~${assetId}~${fieldTypeEnumKey}`;
 
       await axios.post(
         `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
@@ -3370,6 +3379,106 @@ class GoogleAdController {
       const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
       logger.error(`removeAssetFromAssetGroupAPI failed: ${detail}`);
       return res.status(e.response?.status || 500).json({ status: false, error: parseGoogleError(e, "Failed to remove asset") });
+    }
+  }
+
+  async syncAssetGroupAssetsAPI(req, res) {
+    try {
+      const { adAccountId, assetGroupId, additions = [], removals = [] } = req.body;
+      if (!adAccountId || !assetGroupId) {
+        return res.status(400).json({ status: false, error: "adAccountId and assetGroupId are required" });
+      }
+      const userId = req.user.user_id;
+      const { accessToken } = await initGoogleApiForUser(userId);
+      const tid = normalizeRequestCustomerId(res, adAccountId);
+      if (!tid) return;
+      const resolvedMcc = await resolveManagerForAccount(tid, accessToken, userId);
+      const mccId = normalizeCustomerId(resolvedMcc || tid);
+      const customerId = sanitizeId(adAccountId);
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+        "login-customer-id": mccId,
+        "Content-Type": "application/json",
+      };
+
+      const FIELD_TYPE_ENUM = {
+        HEADLINE: 2, DESCRIPTION: 3, MANDATORY_AD_TEXT: 4, MARKETING_IMAGE: 5,
+        MEDIA_BUNDLE: 6, YOUTUBE_VIDEO: 7, BOOK_ON_GOOGLE: 8, LEAD_FORM: 9,
+        PROMOTION: 10, CALLOUT: 11, STRUCTURED_SNIPPET: 12, SITELINK: 13,
+        MOBILE_APP: 14, HOTEL_CALLOUT: 15, CALL: 16, LONG_HEADLINE: 17,
+        BUSINESS_NAME: 18, SQUARE_MARKETING_IMAGE: 19, PORTRAIT_MARKETING_IMAGE: 20,
+        LOGO: 21, LANDSCAPE_LOGO: 22, VIDEO: 23, PRICE: 24,
+        CALL_TO_ACTION_SELECTION: 25, AD_IMAGE: 26, BUSINESS_LOGO: 27,
+        HOTEL_PROPERTY: 28, DEMAND_GEN_CAROUSEL_CARD: 30, BUSINESS_MESSAGE: 31,
+        TALL_PORTRAIT_MARKETING_IMAGE: 32, RELATED_YOUTUBE_VIDEOS: 33,
+        LANDING_PAGE_PREVIEW: 38, LONG_DESCRIPTION: 39, CALL_TO_ACTION: 40,
+      };
+
+      const cleanAssetGroupId = String(assetGroupId).split("/").pop().replace(/[^\d]/g, "");
+      const agResource = `customers/${customerId}/assetGroups/${cleanAssetGroupId}`;
+      const mutateOperations = [];
+
+      // 1. Prepare creations
+      for (const item of additions) {
+        let assetRN = item.imageAssetRN || null;
+        if (!assetRN && item.imageUrl) {
+          const uploaded = await this._uploadImageFromUrl(accessToken, mccId, customerId, item.imageUrl);
+          assetRN = item.fieldType === 'SQUARE_MARKETING_IMAGE' || item.fieldType === 'LOGO'
+            ? (uploaded?.square || uploaded?.landscape)
+            : (uploaded?.landscape || uploaded?.square);
+        }
+        if (!assetRN && item.text) {
+          const assetResp = await axios.post(
+            `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+            { mutateOperations: [{ assetOperation: { create: { text_asset: { text: String(item.text).slice(0, item.fieldType === 'HEADLINE' ? 30 : 90) } } } }] },
+            { headers }
+          );
+          assetRN = assetResp.data?.mutateOperationResponses?.[0]?.assetResult?.resourceName;
+        }
+        if (assetRN) {
+          mutateOperations.push({
+            assetGroupAssetOperation: {
+              create: {
+                asset_group: agResource,
+                asset: assetRN,
+                field_type: item.fieldType,
+              },
+            },
+          });
+        }
+      }
+
+      // 2. Prepare removals
+      for (const item of removals) {
+        if (!item.assetResourceName) continue;
+        const fieldTypeEnumKey = Object.keys(FIELD_TYPE_ENUM).find(
+          (k) => k.toLowerCase() === String(item.fieldType || '').toLowerCase()
+        ) || item.fieldType;
+        const assetId = String(item.assetResourceName).split("/").pop().replace(/[^\d]/g, "");
+        const assetGroupAssetRN = `customers/${customerId}/assetGroupAssets/${cleanAssetGroupId}~${assetId}~${fieldTypeEnumKey}`;
+        mutateOperations.push({
+          assetGroupAssetOperation: {
+            remove: assetGroupAssetRN,
+          },
+        });
+      }
+
+      // 3. Atomically execute all operations in ONE Google mutate request
+      if (mutateOperations.length > 0) {
+        await axios.post(
+          `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:mutate`,
+          { mutateOperations },
+          { headers }
+        );
+      }
+
+      await invalidateUserGoogleCache(userId);
+      return res.status(200).json({ status: true, message: "Asset group synchronized successfully" });
+    } catch (e) {
+      const detail = e.response?.data ? JSON.stringify(e.response.data) : e.message;
+      logger.error(`syncAssetGroupAssetsAPI failed: ${detail}`);
+      return res.status(e.response?.status || 500).json({ status: false, error: parseGoogleError(e, "Failed to sync asset group") });
     }
   }
 
