@@ -242,6 +242,11 @@ const AppSidebar = () => {
     const cls = expanded ? 'h-[26px] w-[26px] flex-shrink-0' : 'h-[24px] w-[24px] flex-shrink-0';
     const LightIcon = item.lightIcon;
 
+    // Ad Studio keeps its Sparkles mark in both themes for a consistent identity.
+    if (item.id === 'adstudio' && LightIcon) {
+      return <LightIcon className={`${cls} sidebar-nav-icon`} aria-hidden="true" />;
+    }
+
     if (LightIcon && item.icon) {
       return (
         <>
@@ -448,7 +453,7 @@ const AppSidebar = () => {
               >
                 <SidebarLogoMark className="sidebar-compact-logo-mark w-10 h-10 2xl:h-12 2xl:w-12 object-contain" />
                 <ChevronRight
-                  className="pointer-events-none absolute -right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400 transition-colors group-hover:text-zinc-900 dark:text-[#888888] dark:group-hover:text-white"
+                  className="pointer-events-none absolute -right-2 2xl:-right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400 transition-colors group-hover:text-zinc-900 dark:text-[#888888] dark:group-hover:text-white"
                   aria-hidden="true"
                 />
               </button>
