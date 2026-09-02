@@ -57,19 +57,29 @@ function deriveDisplayItem(item, now) {
 function normalizeToImageCardItem(row) {
   const status = normalizeStatus(row?.status);
   const url = row?.url || '';
+  // Start from the generation's own inputs so "Recreate" can rehydrate the
+  // form: the source images (productImages, keyVisualImages, modelReference
+  // Images, brandLogo, ...) live only there. Building this object from the
+  // flattened row alone kept the prompt and brand but dropped every image the
+  // user had picked. The per-card fields below still win — a result's own
+  // prompt and aspect ratio describe THIS card, where inputs describe the
+  // whole batch — and each falls back to inputs rather than blanking it.
+  const src = row?.inputs || {};
+  const aspectRatio = row?.aspectRatio || src.aspectRatio || '';
   const inputs = {
-    type: row?.type || row?.source || '',
-    model: row?.model || '',
-    modelLabel: row?.modelLabel || '',
-    quality: row?.metadata?.quality || '',
-    brandName: row?.metadata?.brandName || '',
-    userPrompt: row?.prompt || '',
-    prompt: row?.prompt || '',
-    aspectRatio: row?.aspectRatio || '',
+    ...src,
+    type: row?.type || src.type || row?.source || '',
+    model: row?.model || src.model || '',
+    modelLabel: row?.modelLabel || src.modelLabel || '',
+    quality: row?.metadata?.quality || src.quality || '',
+    brandName: row?.metadata?.brandName || src.brandName || '',
+    userPrompt: row?.prompt || src.userPrompt || '',
+    prompt: row?.prompt || src.prompt || '',
+    aspectRatio,
     numberOfImages: 1,
     aspectRatioPerImage: [
       {
-        aspectRatio: row?.aspectRatio || '',
+        aspectRatio,
         numberOfImages: 1,
       },
     ],
@@ -109,8 +119,14 @@ function normalizeAdCreativeHistoryRecord(record) {
   const effectiveStatus = record?.status || 'failed';
   const requested = Math.max(1, Number(record?.inputs?.numberOfImages) || 1);
 
-  if ((effectiveStatus === 'pending' || effectiveStatus === 'processing') && results.length === 0) {
-    return Array.from({ length: requested }, (_, index) =>
+  // Mirrors the server adapter: a record that ends with no results at all is a
+  // failure, not an absence. Without this the live merge produced no rows for a
+  // just-failed generation, so the placeholders it replaced kept spinning.
+  if (results.length === 0) {
+    const inFlight = effectiveStatus === 'pending' || effectiveStatus === 'processing';
+    const rows = inFlight ? requested : 1;
+    const rowStatus = inFlight ? effectiveStatus : 'failed';
+    return Array.from({ length: rows }, (_, index) =>
       normalizeToImageCardItem({
         id: `${record._id}:pending:${index}`,
         source: 'adCreative',
@@ -118,7 +134,7 @@ function normalizeAdCreativeHistoryRecord(record) {
         imageId: record._id,
         resultIndex: index,
         url: '',
-        status: effectiveStatus,
+        status: rowStatus,
         prompt: record.inputs?.userPrompt || record.inputs?.prompt || '',
         model: record.inputs?.model,
         modelLabel: record.inputs?.modelLabel,
@@ -127,6 +143,10 @@ function normalizeAdCreativeHistoryRecord(record) {
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
         timestamp: record.updatedAt || record.createdAt,
+        // Same reason as the server DTO: mergeMatchingAdCreative REPLACES the
+        // fetched card with this one, so omitting inputs here would strip the
+        // Recreate images back off a freshly generated image.
+        inputs: record.inputs,
         metadata: {
           quality: record.inputs?.quality,
           brandName: record.inputs?.brandName,
@@ -152,6 +172,8 @@ function normalizeAdCreativeHistoryRecord(record) {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       timestamp: result?.completedAt || record.completedAt || record.updatedAt || record.createdAt,
+      // See the note above — carried so Recreate survives a live merge.
+      inputs: record.inputs,
       metadata: {
         quality: record.inputs?.quality,
         brandName: record.inputs?.brandName,

@@ -51,11 +51,20 @@ function buildDateFilter({ startDate, endDate }) {
 
 function normalizeAdCreativeRecord(record) {
   const results = record.results || [];
-  if (
-    results.length === 0 &&
-    (record.status === "pending" || record.status === "processing")
-  ) {
-    const requested = Math.max(1, Number(record.inputs?.numberOfImages) || 1);
+  // A record can reach a terminal state without ever producing a result: a hard
+  // failure returns no images at all, and "completed with zero images" is a
+  // failure upstream too (the credit freeze is released either way). Those
+  // generations used to fall through to results.map() over [] and vanish from
+  // My Space entirely — the AdCreative tab shows them only because it renders
+  // one card per record rather than one per result.
+  if (results.length === 0) {
+    const inFlight = record.status === "pending" || record.status === "processing";
+    // In flight: one placeholder per requested image, so the loader count
+    // matches what the user asked for. Terminal: a single failure tile.
+    const requested = inFlight
+      ? Math.max(1, Number(record.inputs?.numberOfImages) || 1)
+      : 1;
+    const rowStatus = inFlight ? record.status : "failed";
     return Array.from({ length: requested }, (_, index) => ({
       id: `${record._id}:pending:${index}`,
       source: "adCreative",
@@ -63,7 +72,7 @@ function normalizeAdCreativeRecord(record) {
       imageId: String(record._id),
       resultIndex: index,
       url: "",
-      status: record.status,
+      status: rowStatus,
       prompt: record.inputs?.userPrompt || record.inputs?.prompt || "",
       model: record.inputs?.model || record.model || null,
       modelLabel: record.inputs?.modelLabel || null,
@@ -72,9 +81,16 @@ function normalizeAdCreativeRecord(record) {
       createdAt: record.createdAt || null,
       updatedAt: record.updatedAt || null,
       timestamp: record.createdAt || record.updatedAt || null,
+      // The generation inputs ride along so My Space's "Recreate" can refill the
+      // form. Everything else here is flattened for display, which drops the
+      // source images (productImages, keyVisualImages, brandLogo, ...) the
+      // AdCreative form needs to rehydrate — prompt and brand would come back
+      // but the images the user picked would not.
+      inputs: record.inputs || null,
       metadata: {
         quality: record.inputs?.quality || null,
         brandName: record.inputs?.brandName || null,
+        error: record.error || null,
       },
     }));
   }
@@ -104,6 +120,8 @@ function normalizeAdCreativeRecord(record) {
       createdAt: record.createdAt || null,
       updatedAt: record.updatedAt || null,
       timestamp: batchTimestamp,
+      // See the note above — carried for the Recreate flow.
+      inputs: record.inputs || null,
       metadata: {
         quality: record.inputs?.quality || null,
         brandName: record.inputs?.brandName || null,

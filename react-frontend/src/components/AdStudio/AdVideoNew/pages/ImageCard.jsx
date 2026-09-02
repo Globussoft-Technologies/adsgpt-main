@@ -546,7 +546,13 @@ export default function ImageCard({
             src={resolveImageUrl(activeImageUrl)}
             alt="Generated"
             onClick={handleFullscreen}
-            className={`h-full w-full cursor-pointer object-cover transition-opacity duration-300 max-h-[800px] rounded-2xl ${
+            // `h-full` resolves to auto here (the card sizes to its content, it
+            // has no definite height), so a wide creative rendered at its
+            // natural height — well under the card's 250px floor — and left a
+            // band of empty card below it. min-h matches that floor so
+            // object-cover has a box to fill and crops instead of letterboxing;
+            // taller images still size to their own height and are untouched.
+            className={`w-full min-h-[250px] max-h-[800px] cursor-pointer object-cover transition-opacity duration-300 rounded-2xl ${
               imageLoaded ? 'opacity-100' : 'opacity-0'
             }`}
             onLoad={() => setImageLoaded(true)}
