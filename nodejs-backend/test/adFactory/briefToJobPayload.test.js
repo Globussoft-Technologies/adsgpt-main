@@ -136,6 +136,23 @@ group("output validates against the LIVE createJobSchema", () => {
       assert.equal(error, undefined, `${preset}: ${msgs(error)}`);
     }
   });
+
+  test("valid with Quick Setup Google target and no Meta connection", () => {
+    const googleConn = {
+      adAccountId: "7138174374",
+      campaignId: "12345678901",
+      adGroupId: "9988776655",
+      customerId: "7138174374",
+      channelType: "DISPLAY",
+    };
+    const payload = briefToJobPayload(brief(), {}, { google: googleConn });
+    assert.equal(payload.targets.meta, undefined);
+    assert.ok(payload.targets.google);
+    assert.equal(payload.targets.google.createdCampaignId, "12345678901");
+    assert.equal(payload.targets.google.template.payload.adGroupId, "9988776655");
+    const { error } = validate(payload);
+    assert.equal(error, undefined, msgs(error));
+  });
 });
 
 // ─── End to end into a real template ─────────────────────────────────────────

@@ -92,10 +92,12 @@ const metaTemplateSchema = Joi.alternatives().conditional(
 const metaTargetSchema = Joi.object({
   facebookId: Joi.string().trim().required(),
   connectionId: Joi.string().length(24).hex().required(),
+  createdCampaignId: Joi.string().allow("", null).optional(),
   template: metaTemplateSchema.required(),
 });
 
 const googleTargetSchema = Joi.object({
+  createdCampaignId: Joi.string().allow("", null).optional(),
   template: Joi.object({
     name: Joi.string().trim().required(),
     objective: Joi.string().allow("", null).optional(),

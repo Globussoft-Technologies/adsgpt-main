@@ -544,7 +544,7 @@ exports.publishBrief = async (req, res) => {
       }
 
       const s3Base = (process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "");
-      const destinationUrl = brief?.offer?.cta?.destination || brief?.source?.url || "https://example.com";
+      const destinationUrl = brief?.offer?.cta?.destination || brief?.offer?.cta?.url || brief?.source?.url || "https://example.com";
 
       const adsArray = pairs.map((pair) => {
         const rawImg = pair.imageUrl || "";

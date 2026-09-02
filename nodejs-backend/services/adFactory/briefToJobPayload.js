@@ -165,41 +165,65 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
     );
   }
 
-  // A job needs at least one destination, not specifically Meta.
-  //
-  // These three checks used to be unconditional, which is what made a
-  // Google-only schedule fail with "Connect a Facebook account first" — an
-  // error about a platform the user had deliberately left blank. Meta is
-  // validated only when Meta is actually one of the destinations.
-  const googleTarget = opts.google && opts.google.template ? opts.google : null;
-  const wantsMeta = !!(
-    connection.facebookId ||
-    connection.connectionId ||
-    connection.adAccountId ||
-    !googleTarget
-  );
-
-  if (wantsMeta) {
-  if (!connection.facebookId) {
-    throw new BriefJobPayloadError("Connect a Facebook account first", "facebookId");
-  }
-  if (!/^[a-f\d]{24}$/i.test(String(connection.connectionId || ""))) {
-    throw new BriefJobPayloadError(
-      "Connect a Facebook account first",
-      "connectionId",
-    );
-  }
-  if (!connection.adAccountId) {
-    throw new BriefJobPayloadError("Select an ad account", "adAccountId");
-    }
-  }
-
   // Budget is required and must be positive. A missing budget silently
   // becoming 0 would create a campaign that never delivers — worse than an
   // error, because it fails quietly and looks like it worked.
   const daily = Number(budget.daily);
   if (!Number.isFinite(daily) || daily <= 0) {
     throw new BriefJobPayloadError("Set a daily budget", "budget.daily");
+  }
+
+  // A job needs at least one destination, not specifically Meta.
+  //
+  // Google target can arrive as an already-built saved template OR as a Quick Setup
+  // selection with adAccountId, campaignId, and adGroupId.
+  let googleTarget = null;
+  if (opts.google && opts.google.template) {
+    googleTarget = opts.google;
+  } else if (opts.google && opts.google.adAccountId && opts.google.campaignId && opts.google.adGroupId) {
+    const custId = String(opts.google.customerId || opts.google.adAccountId);
+    const destination = opts.google.channelType || "DISPLAY";
+    googleTarget = {
+      createdCampaignId: String(opts.google.campaignId),
+      template: {
+        name: opts.google.campaignName || "Quick Setup Google Campaign",
+        objective: destination,
+        customerId: custId,
+        payload: {
+          adAccountId: String(opts.google.adAccountId),
+          customerId: custId,
+          campaignId: String(opts.google.campaignId),
+          adGroupId: String(opts.google.adGroupId),
+          adGroupName: opts.google.adGroupName || "",
+          destination,
+          finalUrl: offer.cta?.url || b.source?.url || "https://example.com",
+          dailyBudget: daily,
+          ...(opts.google.cpcBid ? { cpcBid: opts.google.cpcBid } : {}),
+        },
+      },
+    };
+  }
+
+  const hasMetaFields = !!(
+    connection.facebookId ||
+    connection.connectionId ||
+    connection.adAccountId
+  );
+  const wantsMeta = hasMetaFields || !googleTarget;
+
+  if (wantsMeta) {
+    if (!connection.facebookId) {
+      throw new BriefJobPayloadError("Connect a Facebook account first", "facebookId");
+    }
+    if (!/^[a-f\d]{24}$/i.test(String(connection.connectionId || ""))) {
+      throw new BriefJobPayloadError(
+        "Connect a Facebook account first",
+        "connectionId",
+      );
+    }
+    if (!connection.adAccountId) {
+      throw new BriefJobPayloadError("Select an ad account", "adAccountId");
+    }
   }
 
   const objective = offer.primaryObjective;
