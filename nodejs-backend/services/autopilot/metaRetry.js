@@ -104,6 +104,28 @@ function classifyMetaError(err) {
       reason: "network error",
     };
   }
+  // No response at all. The SDK throws this from its axios `error.request`
+  // branch (facebook-nodejs-business-sdk/src/exceptions.js) when the request
+  // went out and nothing came back — timeout, socket hang up, DNS, reset.
+  //
+  // It needs its own branch because it arrives with code, status AND headers
+  // all null: `FacebookRequestError` never copies axios's `code`, so the
+  // ECONNABORTED/ETIMEDOUT that would have matched TRANSIENT_NETWORK above is
+  // discarded before we see it, and every check below reads NaN. Without this
+  // the most retryable class there is falls through to "permanent".
+  //
+  // Meta never rendered a verdict here, so there is nothing permanent to
+  // respect. Observed in production 2026-09-02: one ad account dropped for a
+  // whole hourly cycle because this was classified permanent and not retried.
+  if (/no response was received/i.test(message || "")) {
+    return {
+      kind: "transient",
+      retryable: true,
+      retryAfterMs: 0,
+      code: null,
+      reason: "no response from Meta",
+    };
+  }
 
   const numeric = Number(code);
   if (RATE_LIMIT_CODES.has(numeric)) {

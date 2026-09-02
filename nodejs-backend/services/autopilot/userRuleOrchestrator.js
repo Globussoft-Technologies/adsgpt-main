@@ -565,7 +565,7 @@ async function evaluateRuleAtAccount({
 
       if (isPause && !finalDryRun) {
         try {
-          await metaWrite(
+          await metaCall(
             () =>
               pauseEntity({
                 level: rule.evaluateOn,
@@ -617,14 +617,20 @@ async function evaluateRuleAtAccount({
 }
 
 /**
- * Wrap one Meta write with a single transient retry, feeding any throttle Meta
- * reports in the ERROR BODY into the rate limiter.
+ * Wrap one Meta call — read or write — with a single transient retry, feeding
+ * any throttle Meta reports in the ERROR BODY into the rate limiter.
  *
  * Headers cover the usual case, but a refusal sometimes carries
  * `estimated_time_to_regain_access` in the body instead — and without this the
  * limiter would never learn about it and would keep sending into the block.
+ *
+ * Was `metaWrite`, and the name was load-bearing in the wrong direction: it
+ * left the per-account AUDIT — by far the largest read, and the one whose
+ * failure costs the account its entire cycle — as the only Meta traffic here
+ * with no retry and no body-throttle feedback at all. Nothing in the body was
+ * ever write-specific.
  */
-function metaWrite(fn, { acctKey, accessToken, label }) {
+function metaCall(fn, { acctKey, accessToken, label }) {
   return withRetry(fn, {
     onRetry: (err, cls, attempt) => {
       getLogger().warn(
@@ -829,7 +835,7 @@ async function applyScale({
 
   let budgets;
   try {
-    budgets = await metaWrite(() => readBudget({ level, entityId }), {
+    budgets = await metaCall(() => readBudget({ level, entityId }), {
       acctKey,
       accessToken: scaleContext.accessToken,
       label: `budget read ${level}`,
@@ -958,7 +964,7 @@ async function applyScale({
   let error = null;
   if (!finalDryRun) {
     try {
-      await metaWrite(() => writeBudget({ level, entityId, newBudget }), {
+      await metaCall(() => writeBudget({ level, entityId, newBudget }), {
         acctKey,
         accessToken: scaleContext.accessToken,
         label: `budget write ${level}`,
@@ -1342,7 +1348,7 @@ async function resumeAtAccount({
     let error = null;
     if (!finalDryRun) {
       try {
-        await metaWrite(() => resumeEntity({ level, entityId }), {
+        await metaCall(() => resumeEntity({ level, entityId }), {
           acctKey,
           accessToken,
           label: `resume ${level}`,
@@ -1779,30 +1785,45 @@ async function runUserRuleCycle({
             // encode their own spend floors via conditions, no service-
             // level guard needed). prevLookbackDays mirrors the current
             // window so prev_* fields compare apples-to-apples.
-            const audit = await runAuditForAccount({
-              userId,
-              adAccountId: acctKey,
-              accessToken: accountAccessToken,
-              options: {
-                enforceAgeGuard: false,
-                enforceSpendFloor: false,
-                ...(effectiveLookback === "maximum"
-                  ? { lookbackPreset: "maximum" }
-                  : {
-                      lookbackDays: effectiveLookback,
-                      prevLookbackDays: effectiveLookback,
-                    }),
-                campaignIds,
-                // Ask for the 16 fields the normalisers read, not the ~37 the
-                // shared list carries. The omitted ones (video breakdowns,
-                // action values, outbound clicks, uniques) were fetched and
-                // discarded, and they are where the server-side cost lives.
-                slimInsights: true,
-                // Skip the three previous-period queries unless a rule here
-                // actually reads a `prev_*` field.
-                needsPrevious: batchNeedsPreviousPeriod(rulesAtLookback),
+            // Under `metaCall` so a bare network blip does not cost this
+            // account its whole cycle. The retry re-issues all 6-9 of the
+            // audit's requests, which is real cost — but a failed audit
+            // returns nothing, so the alternative is skipping every rule at
+            // this account until the next tick. `withRetry` refuses to retry
+            // a rate-limit inline, so this cannot walk into a throttle.
+            const audit = await metaCall(
+              () =>
+                runAuditForAccount({
+                  userId,
+                  adAccountId: acctKey,
+                  accessToken: accountAccessToken,
+                  options: {
+                    enforceAgeGuard: false,
+                    enforceSpendFloor: false,
+                    ...(effectiveLookback === "maximum"
+                      ? { lookbackPreset: "maximum" }
+                      : {
+                          lookbackDays: effectiveLookback,
+                          prevLookbackDays: effectiveLookback,
+                        }),
+                    campaignIds,
+                    // Ask for the 16 fields the normalisers read, not the ~37
+                    // the shared list carries. The omitted ones (video
+                    // breakdowns, action values, outbound clicks, uniques)
+                    // were fetched and discarded, and they are where the
+                    // server-side cost lives.
+                    slimInsights: true,
+                    // Skip the three previous-period queries unless a rule
+                    // here actually reads a `prev_*` field.
+                    needsPrevious: batchNeedsPreviousPeriod(rulesAtLookback),
+                  },
+                }),
+              {
+                acctKey,
+                accessToken: accountAccessToken,
+                label: `audit ${acctKey} (${effectiveLookback}d)`,
               },
-            });
+            );
             // Account name is a constant for the (user, account) — first
             // window's response is fine.
             if (!acctSummary.name) acctSummary.name = audit.account_name;
