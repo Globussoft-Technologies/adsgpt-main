@@ -65,6 +65,9 @@ const {
 // Real (unstubbed) module — required before `Module._load` is patched below,
 // so this captures the actual implementation the controller uses in prod.
 const { parseAdAccountIdFilter } = require("../../config/autopilotConfig");
+const {
+  isFieldAvailable,
+} = require("../../services/autopilot/fieldAvailability");
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const validRule = (overrides = {}) => ({
@@ -374,10 +377,20 @@ group("createRuleSchema — field types & operators", () => {
       }),
     );
   });
-  test("every NUMERIC_FIELDS entry accepted with numeric value", () => {
+  // Each field is asserted at a level that MEASURES it. A field is no longer
+  // valid everywhere: a rule whose level cannot produce its field is inert
+  // (the evaluator fails the condition closed), so the validator now refuses
+  // the combination. See services/autopilot/fieldAvailability.js.
+  const levelThatMeasures = (field) =>
+    ["campaign", "adset", "ad"].find((lvl) => isFieldAvailable(field, lvl));
+
+  test("every NUMERIC_FIELDS entry accepted at a level that measures it", () => {
     for (const f of NUMERIC_FIELDS) {
+      const evaluateOn = levelThatMeasures(f);
+      if (!evaluateOn) continue; // covered by the no-level-measures-it test
       assertValid(
         validRule({
+          evaluateOn,
           conditions: {
             operator: "AND",
             rules: [{ field: f, op: ">", value: 1 }],
@@ -386,13 +399,44 @@ group("createRuleSchema — field types & operators", () => {
       );
     }
   });
-  test("every STRING_FIELDS entry accepted with string value", () => {
+  test("every STRING_FIELDS entry accepted at a level that measures it", () => {
     for (const f of STRING_FIELDS) {
+      const evaluateOn = levelThatMeasures(f);
+      if (!evaluateOn) continue;
       assertValid(
         validRule({
+          evaluateOn,
           conditions: {
             operator: "AND",
             rules: [{ field: f, op: "==", value: "ANY_VALUE" }],
+          },
+        }),
+      );
+    }
+  });
+
+  test("a field the level cannot measure is REJECTED", () => {
+    // The bug this gate exists for: an ad-level rule on a campaign-only
+    // field saved fine and then never fired, silently, forever.
+    assertInvalid(
+      validRule({
+        evaluateOn: "ad",
+        conditions: {
+          operator: "AND",
+          rules: [{ field: "budget_pacing", op: ">", value: 1 }],
+        },
+      }),
+    );
+  });
+
+  test("a field NO level measures is rejected everywhere", () => {
+    for (const evaluateOn of ["campaign", "adset", "ad"]) {
+      assertInvalid(
+        validRule({
+          evaluateOn,
+          conditions: {
+            operator: "AND",
+            rules: [{ field: "audience_size", op: ">", value: 1 }],
           },
         }),
       );

@@ -23,7 +23,6 @@ export const NUMERIC_FIELDS = [
   { value: "conversion_rate", label: "Conversion rate", hint: "Conversions / clicks (%)." },
   { value: "engagement_rate", label: "Engagement rate", hint: "Engagement / impressions (%)." },
   { value: "budget_pacing", label: "Budget pacing", hint: "1.0 = on track, >1 overpacing." },
-  { value: "audience_size", label: "Audience size", hint: "Estimated reachable audience." },
   { value: "add_to_cart", label: "Add-to-cart count" },
   { value: "ad_spend_share", label: "Ad spend share", hint: "Share of campaign spend." },
   { value: "historical_roas", label: "Historical ROAS" },
@@ -169,6 +168,59 @@ export const EVALUATE_ON = [
   { value: "adset", label: "Ad set", hint: "Walk every ad set under the attached campaign." },
   { value: "ad", label: "Ad", hint: "Walk every ad under the attached campaign." },
 ];
+
+/**
+ * Which metrics actually exist at which level.
+ *
+ * NOT COSMETIC. The three audit normalizers emit three different shapes, and
+ * the cron's evaluator fails a condition closed on a missing field — so a rule
+ * using a field its level does not produce never matches, never errors, and
+ * looks perfectly healthy here forever. That shipped: eight of one account's
+ * ten enabled rules were ad-level rules on `cpa` / `purchases` and sat at zero
+ * fires for weeks.
+ *
+ * Mirrors nodejs-backend/services/autopilot/fieldAvailability.js, which the
+ * validator enforces — so an out-of-sync entry here shows up as a server
+ * rejection rather than a silently dead rule.
+ */
+export const FIELDS_BY_LEVEL = {
+  campaign: [
+    "spend", "impressions", "clicks", "ctr", "cpc", "cpm", "roas", "cpa",
+    "installs", "cpi", "purchases", "add_to_cart", "conversion_rate",
+    "engagement_rate", "budget_pacing", "status",
+    "prev_spend", "prev_installs", "prev_cpi", "prev_ctr", "prev_cpc",
+    "prev_cpm", "prev_roas", "prev_conversion_rate",
+  ],
+  adset: [
+    "spend", "impressions", "clicks", "ctr", "cpc", "cpm", "roas", "cpa",
+    "installs", "cpi", "purchases", "add_to_cart", "conversion_rate",
+    "engagement_rate", "frequency", "status", "historical_roas",
+    "learning_status", "prev_cpa", "prev_installs", "prev_cpi",
+  ],
+  ad: [
+    "spend", "impressions", "clicks", "ctr", "cpc", "cpm", "roas", "cpa",
+    "installs", "cpi", "purchases", "add_to_cart", "conversion_rate",
+    "engagement_rate", "frequency", "ad_spend_share", "status",
+    "review_status", "effective_status", "relevance_score",
+    "prev_spend", "prev_ctr", "prev_installs", "prev_cpi", "prev_cpc",
+    "prev_cpm", "prev_roas", "prev_cpa", "prev_conversion_rate",
+  ],
+};
+
+/** True when `field` is measured at `level`. Unknown level allows everything. */
+export function isFieldAvailable(fieldValue, level) {
+  const list = FIELDS_BY_LEVEL[level];
+  if (!list) return true;
+  return list.includes(fieldValue);
+}
+
+/** The numeric/string field lists filtered to what `level` can measure. */
+export function fieldsForLevel(level) {
+  return {
+    numeric: NUMERIC_FIELDS.filter((f) => isFieldAvailable(f.value, level)),
+    string: STRING_FIELDS.filter((f) => isFieldAvailable(f.value, level)),
+  };
+}
 
 /**
  * Helpers for the form: pick the right ops list + value-input shape

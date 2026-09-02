@@ -1082,6 +1082,83 @@ function seedHighRow({ userId, adAccountId, runId = 'r-1' } = {}) {
     );
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Telegram splitting — replaces the old "…(truncated)" behaviour, which
+  // dropped rows precisely on the runs where the most had happened.
+  // ─────────────────────────────────────────────────────────────────────────
+  await group("splitTelegramHtml", async () => {
+    const { splitTelegramHtml } = alertService;
+    const CAP = 4096;
+    const stripMarker = (p) => p.replace(/^<i>\(\d+\/\d+\)<\/i>\n/, "");
+
+    // A body of `n` lines, each a self-contained balanced-HTML row of the
+    // shape buildTelegramHtml actually emits.
+    const bodyOf = (n) =>
+      Array.from({ length: n }, (_, i) => "<b>Row " + i + "</b> — <i>spend 123</i>").join("\n");
+
+    await testAsync("a short body stays a single message and is untouched", async () => {
+      const body = bodyOf(3);
+      assert.deepEqual(splitTelegramHtml(body), [body]);
+    });
+
+    await testAsync("a long body is split rather than truncated", async () => {
+      const parts = splitTelegramHtml(bodyOf(400));
+      assert.ok(parts.length > 1, "should have split");
+      for (const p of parts) {
+        assert.ok(p.length <= CAP, "part of " + p.length + " exceeds Telegram's cap");
+      }
+    });
+
+    await testAsync("no content is lost across the split", async () => {
+      // The whole point: every row that happened must reach the operator.
+      const body = bodyOf(400);
+      const rejoined = splitTelegramHtml(body).map(stripMarker).join("\n");
+      assert.equal(rejoined, body);
+    });
+
+    await testAsync("every part has balanced tags", async () => {
+      // A cut through a tag pair makes Telegram reject the message outright,
+      // so a mid-line split would lose MORE than truncation did.
+      for (const p of splitTelegramHtml(bodyOf(400))) {
+        for (const tag of ["b", "i"]) {
+          const open = (p.match(new RegExp("<" + tag + ">", "g")) || []).length;
+          const close = (p.match(new RegExp("</" + tag + ">", "g")) || []).length;
+          assert.equal(open, close, "unbalanced <" + tag + "> in a part");
+        }
+      }
+    });
+
+    await testAsync("continuations are numbered so the reader knows there is more", async () => {
+      const parts = splitTelegramHtml(bodyOf(400));
+      assert.match(parts[0], /^<i>\(1\/\d+\)<\/i>\n/);
+      assert.match(parts[1], /^<i>\(2\/\d+\)<\/i>\n/);
+    });
+
+    await testAsync("a single oversized line is split without breaking HTML", async () => {
+      // Only reachable via a pathological entity name. Tags are stripped
+      // rather than cut, because half a tag rejects the whole message.
+      const giant = "<b>" + "x".repeat(9000) + "</b>";
+      const parts = splitTelegramHtml(giant);
+      assert.ok(parts.length > 1);
+      for (const p of parts) {
+        assert.ok(p.length <= CAP);
+        assert.equal(/<\/?b>/.test(stripMarker(p)), false);
+      }
+    });
+
+    await testAsync("an absurd body is capped and says so", async () => {
+      const parts = splitTelegramHtml(bodyOf(20000));
+      assert.ok(parts.length <= 10, "expected <=10 parts, got " + parts.length);
+      assert.match(parts[parts.length - 1], /further messages? omitted/);
+    });
+
+    await testAsync("empty and non-string input do not throw", async () => {
+      assert.deepEqual(splitTelegramHtml(""), [""]);
+      assert.deepEqual(splitTelegramHtml(null), [""]);
+      assert.deepEqual(splitTelegramHtml(undefined), [""]);
+    });
+  });
+
   Module._load = originalLoad;
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) {

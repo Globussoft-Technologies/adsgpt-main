@@ -1003,11 +1003,94 @@ function buildTelegramHtml(summary, rows = []) {
     }
   }
 
-  let body = lines.join("\n");
-  if (body.length > 4000) {
-    body = body.slice(0, 3990) + "\n…(truncated)";
+  // NOT truncated here. Telegram caps a single sendMessage at 4096 chars, so
+  // this used to end with "…(truncated)" — which silently dropped exactly the
+  // rows an operator most needed on the busiest runs, when the most had
+  // happened. `splitTelegramHtml` + `postTelegramParts` send the whole thing
+  // as numbered messages instead.
+  return lines.join("\n");
+}
+
+// Telegram's hard cap on one sendMessage. The budget below leaves room for
+// the "(2/3)" part marker prepended to continuations.
+const TELEGRAM_MAX_CHARS = 4096;
+const TELEGRAM_PART_BUDGET = 3900;
+
+// A group chat accepts roughly 20 messages/minute. Ten parts is ~39k
+// characters — far beyond any useful alert — so hitting this cap means
+// something is wrong with the run, not with the formatting.
+const TELEGRAM_MAX_PARTS = 10;
+
+/**
+ * Break one long line into chunks that cannot produce invalid HTML.
+ *
+ * Only reachable when a SINGLE line exceeds the budget — an entity name of a
+ * few thousand characters, essentially. Cutting such a line at an arbitrary
+ * offset would split a tag pair across two messages and Telegram would reject
+ * both with a parse error, so the tags are stripped first and the remainder
+ * sent as plain (already-escaped) text. Losing bold on a pathological line
+ * beats losing the message.
+ */
+function hardSplitLine(line, budget) {
+  const plain = line.replace(/<\/?[a-zA-Z][^>]*>/g, "");
+  const out = [];
+  for (let i = 0; i < plain.length; i += budget) {
+    out.push(plain.slice(i, i + budget));
   }
-  return body;
+  return out;
+}
+
+/**
+ * Split an HTML alert body into messages Telegram will accept.
+ *
+ * Splits on LINE boundaries. Every line `buildTelegramHtml` emits carries its
+ * own balanced tags, so a line-aligned cut always leaves well-formed HTML —
+ * which a character-aligned cut would not.
+ *
+ * @returns {string[]} one or more message bodies, each within the cap
+ */
+function splitTelegramHtml(body, { budget = TELEGRAM_PART_BUDGET, maxParts = TELEGRAM_MAX_PARTS } = {}) {
+  const text = typeof body === "string" ? body : "";
+  if (text.length <= budget) return [text];
+
+  const parts = [];
+  let current = "";
+
+  const flush = () => {
+    if (current.length) parts.push(current);
+    current = "";
+  };
+
+  for (const rawLine of text.split("\n")) {
+    const pieces =
+      rawLine.length > budget ? hardSplitLine(rawLine, budget) : [rawLine];
+    for (const piece of pieces) {
+      const candidate = current.length ? `${current}\n${piece}` : piece;
+      if (candidate.length > budget) {
+        flush();
+        current = piece;
+      } else {
+        current = candidate;
+      }
+    }
+  }
+  flush();
+
+  if (parts.length > maxParts) {
+    const kept = parts.slice(0, maxParts);
+    const dropped = parts.length - maxParts;
+    kept[maxParts - 1] +=
+      `\n\n<i>${dropped} further message${dropped === 1 ? "" : "s"} omitted — open Autopilot for the full run.</i>`;
+    return kept.map((p, i) => withPartMarker(p, i, maxParts));
+  }
+
+  return parts.map((p, i) => withPartMarker(p, i, parts.length));
+}
+
+/** Prefix continuations so a reader knows the alert spans several messages. */
+function withPartMarker(part, index, total) {
+  if (total <= 1) return part;
+  return `<i>(${index + 1}/${total})</i>\n${part}`;
 }
 
 /**
@@ -1056,6 +1139,48 @@ async function postTelegram(
       error: err && err.message ? err.message : String(err),
     };
   }
+}
+
+/**
+ * Send a body of any length as one or more Telegram messages.
+ *
+ * Sequential, not parallel: Telegram delivers concurrent sends to the same
+ * chat in arbitrary order, and an alert whose parts arrive shuffled is worse
+ * than a truncated one. The small gap between parts keeps a multi-part alert
+ * clear of the ~20-messages-per-minute group limit.
+ *
+ * Reports success only when EVERY part landed — a half-delivered alert is a
+ * failure the operator needs to know about, even though the first message
+ * looks fine in the chat.
+ *
+ * @returns {{sent: boolean, parts: number, delivered: number, reason?: string, error?: string}}
+ */
+async function postTelegramParts(
+  { text, botToken, chatId, parseMode = "HTML", timeoutMs = 10000, gapMs = 350 } = {},
+) {
+  const parts = splitTelegramHtml(text);
+  let delivered = 0;
+
+  for (let i = 0; i < parts.length; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const r = await postTelegram({
+      text: parts[i],
+      botToken,
+      chatId,
+      parseMode,
+      timeoutMs,
+    });
+    if (!r.sent) {
+      return { ...r, sent: false, parts: parts.length, delivered };
+    }
+    delivered += 1;
+    if (i < parts.length - 1 && gapMs > 0) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, gapMs));
+    }
+  }
+
+  return { sent: true, parts: parts.length, delivered };
 }
 
 // ---------------------------------------------------------------------------
@@ -1269,7 +1394,7 @@ async function notifyAutopilotCycle(summary) {
           cooldownMinutes: throttleMin,
         });
       } else {
-        const r = await postTelegram({
+        const r = await postTelegramParts({
           text: buildTelegramHtml(userSlice, matchingRows),
           botToken: sharedTelegramToken,
           chatId: telegramChatId,
@@ -1333,6 +1458,8 @@ module.exports = {
   metaAdsManagerUrl,
   postSlack,
   postTelegram,
+  postTelegramParts,
+  splitTelegramHtml,
   sendEmail,
   parseEmailRecipients,
   MAX_EMAIL_RECIPIENTS,

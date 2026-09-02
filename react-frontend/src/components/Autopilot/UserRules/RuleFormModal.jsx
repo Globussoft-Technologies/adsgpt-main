@@ -18,6 +18,8 @@ import {
   opsForField,
   fieldMeta,
   isNumericField,
+  fieldsForLevel,
+  isFieldAvailable,
   isStringField,
 } from './ruleFieldsCatalog';
 import { createUserRule, updateUserRule, testUserRule } from '@/apis/autopilot/autopilotApi';
@@ -635,6 +637,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
                   <ConditionRow
                     key={i}
                     index={i}
+                    level={form.evaluateOn}
                     condition={c}
                     onChange={(patch) => setCondition(i, patch)}
                     onRemove={form.conditions.rules.length > 1 ? () => removeCondition(i) : null}
@@ -1202,7 +1205,16 @@ function SelectMenuItem({ option, isSelected, onPick }) {
 }
 
 // ─── condition row ─────────────────────────────────────────────────────────
-function ConditionRow({ index, condition, onChange, onRemove, errors }) {
+function ConditionRow({ index, level, condition, onChange, onRemove, errors }) {
+  // Only offer metrics this level actually measures. A field the level does
+  // not produce makes the rule INERT — the cron's evaluator fails the
+  // condition closed on a missing value, so the rule never fires and never
+  // errors. See FIELDS_BY_LEVEL in ruleFieldsCatalog.
+  const available = fieldsForLevel(level);
+  // A rule saved before this gate existed can hold a field that is now
+  // filtered out. Keep showing it (flagged) rather than silently blanking
+  // the row — the author needs to see what is wrong to fix it.
+  const fieldUnavailable = !!condition.field && !isFieldAvailable(condition.field, level);
   const ops = opsForField(condition.field);
   const meta = fieldMeta(condition.field);
   const isString = isStringField(condition.field);
@@ -1232,12 +1244,12 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
         <SelectInput
           value={condition.field}
           onChange={(v) => onChange({ field: v, op: '', value: '' })}
-          invalid={!!fieldErr}
+          invalid={!!fieldErr || fieldUnavailable}
           placeholder="Pick a field…"
           options={[
             {
               groupLabel: 'Numeric',
-              items: NUMERIC_FIELDS.map((f) => ({
+              items: available.numeric.map((f) => ({
                 value: f.value,
                 label: f.label,
                 hint: f.hint,
@@ -1245,7 +1257,7 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
             },
             {
               groupLabel: 'Status / enum',
-              items: STRING_FIELDS.map((f) => ({
+              items: available.string.map((f) => ({
                 value: f.value,
                 label: f.label,
               })),
@@ -1302,7 +1314,13 @@ function ConditionRow({ index, condition, onChange, onRemove, errors }) {
           order (field → op → value) so the user fixes the upstream issue
           first. */}
       {fieldErr && <FieldError>{fieldErr}</FieldError>}
-      {!fieldErr && opErr && <FieldError>{opErr}</FieldError>}
+      {!fieldErr && fieldUnavailable && (
+        <FieldError>
+          {fieldMeta(condition.field)?.label || condition.field} isn&rsquo;t measured at this
+          level, so this rule can never match. Pick another field, or change the level above.
+        </FieldError>
+      )}
+      {!fieldErr && !fieldUnavailable && opErr && <FieldError>{opErr}</FieldError>}
       {!fieldErr && !opErr && valueErr && <FieldError>{valueErr}</FieldError>}
       {!fieldErr && !opErr && !valueErr && meta?.hint && (
         <p className="mt-2 text-[11px] text-gray-400 dark:text-white/45">{meta.hint}</p>

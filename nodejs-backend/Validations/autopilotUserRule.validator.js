@@ -6,6 +6,9 @@ const {
   MIN_RULE_STEP_PCT,
   MAX_RULE_STEP_PCT,
 } = require("../services/autopilot/scalePolicy");
+const {
+  unavailableFields,
+} = require("../services/autopilot/fieldAvailability");
 
 /**
  * Validators for the user-defined Autopilot rules feature (v4).
@@ -44,7 +47,8 @@ const NUMERIC_FIELDS = [
   "conversion_rate",
   "engagement_rate",
   "budget_pacing",
-  "audience_size",
+  // NOTE: `audience_size` was removed — normalizeAdset hardcoded it to null,
+  // so every rule using it was inert. See fieldAvailability.js.
   "add_to_cart",
   "ad_spend_share",
   "historical_roas",
@@ -238,9 +242,27 @@ const rejectAdsetWithCampaignLevel = (value, helpers) => {
   return value;
 };
 
+// A field the chosen level does not produce makes the rule INERT, not wrong:
+// the evaluator fails a condition closed on an undefined value, so the rule
+// never matches, never errors, and looks healthy in the UI forever. Refusing
+// the save is the only point at which anyone finds out.
+const rejectFieldsMissingAtLevel = (value, helpers) => {
+  if (!value || !value.evaluateOn || !value.conditions) return value;
+  const missing = unavailableFields(value.conditions, value.evaluateOn);
+  if (missing.length > 0) {
+    return helpers.error("rule.fieldsMissingAtLevel", {
+      fields: missing.join(", "),
+      level: value.evaluateOn,
+    });
+  }
+  return value;
+};
+
 const CROSS_FIELD_MESSAGES = {
   "rule.adsetWithCampaignLevel":
     "This rule is attached to a specific ad set, so it can't evaluate at campaign level. Pick Ad set or Ad, or attach the whole campaign instead.",
+  "rule.fieldsMissingAtLevel":
+    "{{#fields}} isn't measured at {{#level}} level, so this rule could never match. Choose a different level, or a field that exists at this one.",
 };
 
 // ─── full schemas ──────────────────────────────────────────────────────────
@@ -282,6 +304,7 @@ const createRuleSchema = Joi.object({
     }),
 })
   .custom(rejectAdsetWithCampaignLevel)
+  .custom(rejectFieldsMissingAtLevel)
   .messages(CROSS_FIELD_MESSAGES);
 
 // PATCH semantics: every field optional, but body must contain at least
@@ -313,6 +336,7 @@ const updateRuleSchema = Joi.object({
   // Only checkable when the patch carries BOTH fields; a patch that changes
   // one of them alone is validated against the stored rule in the controller.
   .custom(rejectAdsetWithCampaignLevel)
+  .custom(rejectFieldsMissingAtLevel)
   .messages({
     "object.min":
       "PATCH body must contain at least one field to update.",

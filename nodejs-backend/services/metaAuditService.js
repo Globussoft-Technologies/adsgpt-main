@@ -215,11 +215,44 @@ const getActionValue = (actions, type) => {
   return a ? parseFloat(a.value) : 0;
 };
 
+/**
+ * ROAS from Meta's `purchase_roas` array.
+ *
+ * Meta reports the same conversion under two action types — `purchase` (the
+ * legacy pixel-scoped count) and `omni_purchase` (the omnichannel-aware one)
+ * — and WHICH ONE APPEARS VARIES BY ACCOUNT. Looking only for `purchase` is
+ * why `roas` read 0 for every entity on every account: the live rows carry
+ * `[{"action_type":"omni_purchase","value":"0.632837"}]` and nothing else.
+ *
+ * `Math.max` mirrors `getInstallCount` below, and for the same reason: when
+ * both are present they describe the same conversions and agree, so taking
+ * the larger is right in every case — only one present, both present, or
+ * neither (a non-commerce campaign, correctly 0).
+ */
 const getRoas = (roas) => {
-  if (!roas) return 0;
-  const r = roas.find((x) => x.action_type === "purchase");
-  return r ? parseFloat(r.value) : 0;
+  if (!Array.isArray(roas)) return 0;
+  const pick = (type) => {
+    const r = roas.find((x) => x.action_type === type);
+    const n = r ? parseFloat(r.value) : 0;
+    return Number.isFinite(n) ? n : 0;
+  };
+  return Math.max(pick("purchase"), pick("omni_purchase"));
 };
+
+/**
+ * Purchase count, deduped across Meta's two names for it.
+ *
+ * Same dual-reporting as ROAS and installs. Both keys usually carry the
+ * identical number, so `max` (not sum) is the dedupe — summing would double
+ * every purchase and halve every CPA. An account reporting only
+ * `omni_purchase` previously read as zero purchases, which would make a
+ * `purchases == 0` pause rule fire on ads that were in fact converting.
+ */
+const getPurchaseCount = (actions) =>
+  Math.max(
+    getActionValue(actions, "purchase"),
+    getActionValue(actions, "omni_purchase"),
+  );
 
 // ---------------------------------------------------------------------------
 // Normalisers (pure — ported verbatim from metaAdLauncher.runAudit)
@@ -304,7 +337,7 @@ function buildNormalisers({
     const spend = parseFloat(i.spend || 0);
     const clicks = parseFloat(i.clicks || 0);
     const impressions = parseFloat(i.impressions || 0);
-    const purchases = getActionValue(i.actions, "purchase");
+    const purchases = getPurchaseCount(i.actions);
     const addToCart = getActionValue(i.actions, "add_to_cart");
     const installs = getInstallCount(i.actions);
     const cpi = getCpi(i.cost_per_action_type);
@@ -325,7 +358,7 @@ function buildNormalisers({
     const prev = prevCampaignMap.get(i.campaign_id);
     const prev_spend = prev ? parseFloat(prev.spend || 0) : null;
     const prev_purchases = prev
-      ? getActionValue(prev.actions, "purchase")
+      ? getPurchaseCount(prev.actions)
       : null;
     const prev_installs = prev ? getInstallCount(prev.actions) : null;
     const prev_cpi = prev ? getCpi(prev.cost_per_action_type) : null;
@@ -393,11 +426,25 @@ function buildNormalisers({
   const normalizeAdset = (i) => {
     const spend = parseFloat(i.spend || 0);
     const clicks = parseFloat(i.clicks || 0);
-    const purchases = getActionValue(i.actions, "purchase");
+    const purchases = getPurchaseCount(i.actions);
     const installs = getInstallCount(i.actions);
     const cpa = purchases > 0 ? spend / purchases : 0;
     const cpi = getCpi(i.cost_per_action_type);
     const frequency = parseFloat(i.frequency || 0);
+
+    // Same omission as normalizeAd had, one level up: the adset row carried
+    // no impressions/ctr/cpc/cpm/roas, so a rule on those fields silently
+    // never matched at adset level either.
+    const impressions = parseFloat(i.impressions || 0);
+    const ctr = parseFloat(i.ctr || 0);
+    const cpc = parseFloat(i.cpc || 0);
+    const cpm = parseFloat(i.cpm || 0);
+    const roas = getRoas(i.purchase_roas);
+    const addToCart = getActionValue(i.actions, "add_to_cart");
+    const engagement_rate =
+      impressions > 0
+        ? (getActionValue(i.actions, "post_engagement") / impressions) * 100
+        : 0;
 
     const adSet = adSetMap.get(i.adset_id);
 
@@ -405,7 +452,7 @@ function buildNormalisers({
     const prev_cpa = prev
       ? (() => {
           const ps = parseFloat(prev.spend || 0);
-          const pp = getActionValue(prev.actions, "purchase");
+          const pp = getPurchaseCount(prev.actions);
           return pp > 0 ? ps / pp : null;
         })()
       : null;
@@ -421,7 +468,16 @@ function buildNormalisers({
       spend,
       currency,
       clicks,
+      impressions,
+      ctr,
+      cpc,
+      cpm,
+      roas,
       purchases,
+      conversions: purchases,
+      add_to_cart: addToCart,
+      conversion_rate: clicks > 0 ? (purchases / clicks) * 100 : 0,
+      engagement_rate,
       cpa,
       installs,
       cpi,
@@ -433,7 +489,11 @@ function buildNormalisers({
 
       learning_status: adSet?._data?.learning_stage_info?.status || null,
 
-      audience_size: adSet?._data?.targeting?.age_min ? null : null,
+      // audience_size intentionally absent: both branches of the old
+      // expression returned null, so the field was always null and any rule
+      // on it silently never matched. Meta exposes audience size only via the
+      // per-adset `delivery_estimate` edge, which would be one extra request
+      // per ad set on the quota-sensitive cron path.
 
       prev_cpa,
       prev_installs,
@@ -456,6 +516,28 @@ function buildNormalisers({
     const cpi = getCpi(i.cost_per_action_type);
     const engagement_rate =
       impressions > 0 ? (engagement / impressions) * 100 : 0;
+
+    // Conversion + cost metrics, derived exactly as normalizeCampaign does.
+    //
+    // These were MISSING here while the campaign and adset levels had them,
+    // and the omission was silent: the evaluator fails a condition closed on
+    // an undefined field, so an ad-level rule using `cpa` or `purchases`
+    // never matched and never errored. For GPT-435 that was eight of ten
+    // enabled rules sitting at zero fires. The raw `actions`,
+    // `cost_per_action_type` and `purchase_roas` were being fetched the whole
+    // time — only this function dropped them.
+    const clicks = parseFloat(i.clicks || 0);
+    const cpc = parseFloat(i.cpc || 0);
+    const cpm = parseFloat(i.cpm || 0);
+    const frequency = parseFloat(i.frequency || 0);
+    const purchases = getPurchaseCount(i.actions);
+    const addToCart = getActionValue(i.actions, "add_to_cart");
+    const roas = getRoas(i.purchase_roas);
+    // Zero (not Infinity) when nothing converted, matching the other two
+    // levels: a `cpa > x` rule must not fire on an ad that has no purchases
+    // at all — that is what the `purchases == 0` rules are for.
+    const cpa = purchases > 0 ? spend / purchases : 0;
+    const conversions = purchases;
 
     const ad = adMap.get(i.ad_id);
 
@@ -482,6 +564,22 @@ function buildNormalisers({
     const prev_impressions = prev ? parseFloat(prev.impressions || 0) : null;
     const prev_installs = prev ? getInstallCount(prev.actions) : null;
     const prev_cpi = prev ? getCpi(prev.cost_per_action_type) : null;
+    const prev_purchases = prev
+      ? getPurchaseCount(prev.actions)
+      : null;
+    const prev_cpc = prev ? parseFloat(prev.cpc || 0) : null;
+    const prev_cpm = prev ? parseFloat(prev.cpm || 0) : null;
+    const prev_roas = prev ? getRoas(prev.purchase_roas) : null;
+    const prev_cpa = prev
+      ? (() => {
+          const ps = parseFloat(prev.spend || 0);
+          return prev_purchases > 0 ? ps / prev_purchases : null;
+        })()
+      : null;
+    const prev_conversion_rate =
+      prev && parseFloat(prev.clicks || 0) > 0
+        ? (prev_purchases / parseFloat(prev.clicks)) * 100
+        : null;
 
     return {
       campaign_id: i.campaign_id,
@@ -495,9 +593,19 @@ function buildNormalisers({
       currency,
       ctr,
       impressions,
+      clicks,
+      cpc,
+      cpm,
+      frequency,
       engagement_rate,
       installs,
       cpi,
+      roas,
+      cpa,
+      conversions,
+      purchases,
+      add_to_cart: addToCart,
+      conversion_rate: clicks > 0 ? (purchases / clicks) * 100 : 0,
       ad_spend_share,
       is_top_performer,
 
@@ -507,6 +615,12 @@ function buildNormalisers({
 
       review_status: ad?._data?.effective_status || null,
 
+      // Same value under the name the rule catalog offers. `review_status`
+      // predates it and is kept so existing rules keep working; without this
+      // alias every `effective_status` rule was inert, because no normaliser
+      // emitted that key at any level.
+      effective_status: ad?._data?.effective_status || null,
+
       relevance_score: ad?._data?.quality_ranking || null,
 
       prev_spend,
@@ -514,6 +628,12 @@ function buildNormalisers({
       prev_impressions,
       prev_installs,
       prev_cpi,
+      prev_cpc,
+      prev_cpm,
+      prev_roas,
+      prev_cpa,
+      prev_conversions: prev_purchases,
+      prev_conversion_rate,
 
       _created_time: ad?._data?.created_time || null,
       _age_gate_failed: failsAgeGuard(ad?._data?.created_time),
@@ -828,7 +948,7 @@ async function runAuditForAccount({
     0,
   );
   const allConversions = campaignInsights.reduce(
-    (s, i) => s + getActionValue(i.actions, "purchase"),
+    (s, i) => s + getPurchaseCount(i.actions),
     0,
   );
   const account_avg_cpa =
@@ -949,6 +1069,7 @@ module.exports = {
   _internals: {
     getActionValue,
     getRoas,
+    getPurchaseCount,
     buildNormalisers,
     resolveInsightTimeOptions,
   },

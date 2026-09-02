@@ -276,28 +276,14 @@ const TEMPLATES = [
       action: { type: "pause" },
     },
   },
-  {
-    id: "tmpl-tiny-audience",
-    category: "Delivery",
-    headline: "Alert on too-small audiences",
-    blurb: "Alert when an ad-set's audience is below a useful learning threshold.",
-    template: {
-      name: "Audience too small",
-      description:
-        "Alert me when an ad-set's audience size is below 100,000 — too narrow for Meta's algorithm to optimise efficiently.",
-      severity: "low",
-      enabled: true,
-      evaluateOn: "adset",
-      conditions: {
-        operator: "AND",
-        rules: [
-          { field: "audience_size", op: "<", value: 100000 },
-        ],
-      },
-      action: { type: "alert" },
-    },
-  },
 ];
+
+// REMOVED: "tmpl-tiny-audience" (audience_size < 100000, adset level).
+// `normalizeAdset` hardcodes `audience_size` to null — Meta returns audience
+// size only from the per-adset `delivery_estimate` edge, which this codebase
+// never requests — so the template could never fire and was offering users a
+// rule that does nothing. Restore it only alongside a real source for the
+// field, and add `audience_size` back to fieldAvailability at the same time.
 
 /**
  * Returns the catalog as a plain array for the GET /rule-templates

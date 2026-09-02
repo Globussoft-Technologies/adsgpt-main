@@ -45,6 +45,11 @@ function getAdSetFields() {
     AdSet.Fields.billing_event,
     AdSet.Fields.optimization_goal,
     AdSet.Fields.issues_info,
+    // `normalizeAdset` reads `learning_stage_info.status` to populate the
+    // `learning_status` rule field — but this list never requested it, so the
+    // value was always null and every rule on `learning_status` silently
+    // never matched. An entity field, so it costs no extra request.
+    AdSet.Fields.learning_stage_info,
   ];
 }
 

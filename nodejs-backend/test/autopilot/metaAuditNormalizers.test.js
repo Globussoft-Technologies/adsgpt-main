@@ -20,6 +20,8 @@ const { _internals } = require('../../services/metaAuditService');
 const {
   buildNormalisers,
   getActionValue,
+  getRoas,
+  getPurchaseCount,
   resolveInsightTimeOptions,
 } = _internals;
 
@@ -145,6 +147,55 @@ function makeNormalisers({
     });
     test('missing action_type returns 0 (no throw)', () => {
       assert.equal(getActionValue(actions({}), 'mobile_app_install'), 0);
+    });
+  });
+
+  // Meta reports the same conversion under two action types and WHICH ONE
+  // APPEARS VARIES BY ACCOUNT. This had already been solved for installs
+  // (getInstallCount) and then not applied to ROAS or purchases — so `roas`
+  // read 0 for every entity on every account, and an account reporting only
+  // `omni_purchase` looked like it had zero purchases, which a
+  // `purchases == 0` PAUSE rule would act on.
+  await group('omni_* dedupe — roas and purchases', () => {
+    const roasArr = (o) =>
+      Object.entries(o).map(([action_type, value]) => ({
+        action_type,
+        value: String(value),
+      }));
+
+    test('roas reads omni_purchase when that is the only key present', () => {
+      // Exactly the live shape: [{"action_type":"omni_purchase", ...}]
+      assert.equal(getRoas(roasArr({ omni_purchase: 0.632837 })), 0.632837);
+    });
+    test('roas still reads the legacy purchase key', () => {
+      assert.equal(getRoas(roasArr({ purchase: 2.5 })), 2.5);
+    });
+    test('roas takes the max when both are present, never the sum', () => {
+      // They describe the same conversions; summing would double ROAS.
+      assert.equal(getRoas(roasArr({ purchase: 2.5, omni_purchase: 2.5 })), 2.5);
+      assert.equal(getRoas(roasArr({ purchase: 1, omni_purchase: 3 })), 3);
+    });
+    test('roas is 0 for a non-commerce campaign, and never throws', () => {
+      assert.equal(getRoas([]), 0);
+      assert.equal(getRoas(null), 0);
+      assert.equal(getRoas(undefined), 0);
+      assert.equal(getRoas('not-an-array'), 0);
+      assert.equal(getRoas(roasArr({ purchase: 'nonsense' })), 0);
+    });
+
+    test('purchases reads omni_purchase when purchase is absent', () => {
+      assert.equal(getPurchaseCount(actions({ omni_purchase: 149 })), 149);
+    });
+    test('purchases takes the max, so CPA is not halved', () => {
+      // Summing would double the count and halve every CPA.
+      assert.equal(
+        getPurchaseCount(actions({ purchase: 149, omni_purchase: 149 })),
+        149,
+      );
+    });
+    test('purchases is 0 when neither key is present', () => {
+      assert.equal(getPurchaseCount(actions({ link_click: 5 })), 0);
+      assert.equal(getPurchaseCount(null), 0);
     });
   });
 
