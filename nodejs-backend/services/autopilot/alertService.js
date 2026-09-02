@@ -891,93 +891,6 @@ async function sendEmail({ to, subject, text, html }) {
  * Truncates at the cap with an ellipsis so a very chatty cycle never
  * throws "MESSAGE_TOO_LONG".
  */
-/**
- * Human duration. "108828ms" is a machine's answer to "how long did it take".
- */
-function fmtDuration(ms) {
-  const n = Number(ms);
-  if (!Number.isFinite(n) || n <= 0) return "—";
-  if (n < 1000) return `${Math.round(n)}ms`;
-  const secs = Math.round(n / 1000);
-  if (secs < 60) return `${secs}s`;
-  const m = Math.floor(secs / 60);
-  const r = secs % 60;
-  return r ? `${m}m ${r}s` : `${m}m`;
-}
-
-/**
- * Compact metric value for a fixed-width column.
- *
- * A table only reads as a table when the columns line up, and they only line
- * up when every cell is short and predictable. "₹68,189.18" and "₹8.93"
- * cannot share a column at a phone's width, so large numbers collapse to
- * k / M. Precision beyond that is not what an alert is for — it is a prompt
- * to go and look, and the link is right there.
- */
-function compactNum(v, { currency = null, decimals = 2 } = {}) {
-  const n = Number(v);
-  if (!Number.isFinite(n) || n === 0) return "";
-  const sym = currency ? CURRENCY_SYMBOL[currency] || "" : "";
-  const abs = Math.abs(n);
-  if (abs >= 1e6) return `${sym}${(n / 1e6).toFixed(1)}M`;
-  if (abs >= 1e4) return `${sym}${Math.round(n / 1e3)}k`;
-  if (abs >= 100) return `${sym}${Math.round(n)}`;
-  return `${sym}${n.toFixed(decimals).replace(/\.?0+$/, "")}`;
-}
-
-/**
- * The metrics worth a column for THIS set of rows.
- *
- * Chosen from the data rather than fixed, because the right columns differ by
- * campaign objective: an App Promotion account needs installs and CPI, a
- * Sales account needs purchases and CPA, and neither should be given a column
- * of zeroes. Three columns is what fits a phone beside the values.
- */
-function pickMetricColumns(rows, max = 3) {
-  const CANDIDATES = [
-    { key: "spend", head: "spend", currency: true },
-    { key: "cpi", head: "cpi", currency: true },
-    { key: "installs", head: "inst", currency: false },
-    { key: "cpa", head: "cpa", currency: true },
-    { key: "purchases", head: "purch", currency: false },
-    { key: "roas", head: "roas", currency: false },
-    { key: "ctr", head: "ctr", currency: false },
-  ];
-  const filled = new Map();
-  for (const r of rows || []) {
-    const m = r && r.metricsSnapshot;
-    if (!m) continue;
-    for (const c of CANDIDATES) {
-      const n = Number(m[c.key]);
-      if (Number.isFinite(n) && n !== 0) {
-        filled.set(c.key, (filled.get(c.key) || 0) + 1);
-      }
-    }
-  }
-  // `spend` leads whenever present — "how much did this cost" is the first
-  // thing anyone looks for, so it should not move column to column.
-  return CANDIDATES.filter((c) => filled.has(c.key))
-    .sort((a, b) => {
-      if (a.key === "spend") return -1;
-      if (b.key === "spend") return 1;
-      return (filled.get(b.key) || 0) - (filled.get(a.key) || 0);
-    })
-    .slice(0, max);
-}
-
-/** Shorten without padding — for text that is not in a column. */
-function truncate(text, width) {
-  const t = String(text == null ? "" : text);
-  return t.length > width ? `${t.slice(0, Math.max(1, width - 1))}…` : t;
-}
-
-/** Pad to `width`, truncating with an ellipsis when too long. */
-function cell(text, width, align = "left") {
-  let t = String(text == null ? "" : text);
-  if (t.length > width) t = `${t.slice(0, Math.max(1, width - 1))}…`;
-  return align === "right" ? t.padStart(width) : t.padEnd(width);
-}
-
 function buildTelegramHtml(summary, rows = []) {
   const escape = (s) =>
     String(s == null ? "" : s)
@@ -994,31 +907,27 @@ function buildTelegramHtml(summary, rows = []) {
     return escape(clean);
   };
 
-  const dryLabel = summary.dryRun ? "  ·  DRY RUN" : "";
-  const grouped = groupActionsByAccountAndType(rows);
-  const totalActions = (rows || []).length;
-  const acctCount = grouped.size;
-
+  const dryLabel = summary.dryRun ? " (DRY RUN)" : "";
   const lines = [
-    `🤖 <b>AdsGPT Autopilot</b>${escape(dryLabel)}`,
-    `<i>${totalActions} action${totalActions === 1 ? "" : "s"} · ${acctCount} account${acctCount === 1 ? "" : "s"} · ${fmtDuration(summary.durationMs)}</i>`,
+    `<b>AdsGPT Autopilot${escape(dryLabel)}</b>`,
+    `run <code>${escape(summary.runId || "—")}</code> · ${summary.durationMs || 0}ms`,
   ];
 
-  // ── Why it fired ─────────────────────────────────────────────────────────
-  // Genuinely tabular — a count against a label — and narrow enough for a
-  // phone. `<pre>` is the only Telegram tag that preserves alignment.
-  const topRules = topFiringRules(rows, 6);
+  // Top firing rules
+  const topRules = topFiringRules(rows, 5);
   if (topRules.length) {
     lines.push("");
-    lines.push("<b>Why it fired</b>");
-    const table = topRules.map((r) => {
+    lines.push("<b>Top firing rules</b>");
+    for (const r of topRules) {
       const emoji = SEVERITY_EMOJI[r.severity] || "•";
-      return `${String(r.count).padStart(3)}x ${emoji} ${cell(r.ruleMessage || r.ruleId || "—", 26)}`;
-    });
-    lines.push(`<pre>${escape(table.join("\n"))}</pre>`);
+      lines.push(
+        `${emoji} <b>${r.count}×</b> ${escape(r.ruleMessage || r.ruleId)}`,
+      );
+    }
   }
 
-  // ── Per-account detail ───────────────────────────────────────────────────
+  // Per-account / per-action — only accounts that had rows this cycle.
+  const grouped = groupActionsByAccountAndType(rows);
   const nameByAccount = new Map();
   for (const acc of summary.accounts || []) {
     if (acc && acc.adAccountId) {
@@ -1033,32 +942,14 @@ function buildTelegramHtml(summary, rows = []) {
     for (const [adAccountId, byAction] of grouped.entries()) {
       const acctName = nameByAccount.get(adAccountId) || adAccountId;
       const acctLink = metaAdsManagerUrl({ adAccountId });
-      const acctTotal = [...byAction.values()].reduce((n, l) => n + l.length, 0);
-
       lines.push("");
-      lines.push("─────────────────────");
       lines.push(
-        `<b><a href="${escapeUrlAttr(acctLink)}">${escape(acctName)}</a></b> <i>· ${acctTotal}</i>`,
+        `<b><a href="${escapeUrlAttr(acctLink)}">${escape(acctName)}</a></b>`,
       );
 
       for (const [action, list] of byAction.entries()) {
         const label = ACTION_LABELS[action] || action;
-        lines.push(`<b>${escape(label)}</b> <i>(${list.length})</i>`);
-
-        // Columns are chosen from THIS group's rows, so an app-install
-        // account shows installs/CPI and a sales account shows purchases/CPA.
-        // A column every row leaves blank is noise costing width a phone
-        // does not have.
-        const cols = pickMetricColumns(list, 3);
-        if (cols.length) {
-          // Inline <code>, not <pre>. Both are monospace so the columns
-          // still line up, but <pre> draws a shaded block — one per row
-          // would turn the alert into a stack of grey boxes.
-          lines.push(
-            `<code>${escape(cols.map((c) => cell(c.head, 8, "right")).join(" "))}</code>`,
-          );
-        }
-
+        lines.push(`<b>${escape(label)}</b> (${list.length})`);
         for (const row of list) {
           const entityLink = metaAdsManagerUrl({
             adAccountId: row.adAccountId,
@@ -1070,46 +961,27 @@ function buildTelegramHtml(summary, rows = []) {
             ? `<a href="${escapeUrlAttr(entityLink)}">${escape(entityName)}</a>`
             : `<b>${escape(entityName)}</b>`;
           const sevEmoji = SEVERITY_EMOJI[row.ruleSeverity] || "•";
-          // The header already says DRY RUN for a dry cycle; repeating it on
-          // every row is noise. Only mark a dry row inside a LIVE run, where
-          // it genuinely distinguishes that row from its neighbours.
-          const dryTag = row.dryRun && !summary.dryRun ? " <i>·dry</i>" : "";
+          const dryTag = row.dryRun ? " <i>(dry-run)</i>" : "";
           const outTag =
             row.outcome === "failed"
               ? " ❌"
               : row.outcome === "skipped"
                 ? " ⏭"
                 : "";
-
-          // The NAME stays OUTSIDE <pre>: Telegram does not render links
-          // inside a preformatted block, and losing the jump straight into
-          // Ads Manager costs more than perfect alignment gains.
           lines.push(`${sevEmoji} ${linked}${outTag}${dryTag}`);
-
           const parentCrumb = buildParentCrumb(row);
           if (parentCrumb) {
-            lines.push(`<i>${escape(truncate(parentCrumb, 38))}</i>`);
+            lines.push(`  <i>${escape(parentCrumb)}</i>`);
           }
-
-          const snap = row.metricsSnapshot || {};
-          const cur = snap.currency;
-          const cells = cols.map((c) =>
-            compactNum(snap[c.key], { currency: c.currency ? cur : null }),
-          );
-          if (cols.length && cells.some(Boolean)) {
-            lines.push(
-              `<code>${escape(cells.map((v) => cell(v || "–", 8, "right")).join(" "))}</code>`,
-            );
-          } else {
-            // This row shares no metric with the group's columns — a sales ad
-            // among app-install ads, say. Rendering "– – –" would drop its
-            // numbers entirely, so fall back to the labelled prose form.
-            const prose = formatKeyMetrics(snap);
-            if (prose) lines.push(`<i>${escape(truncate(prose, 44))}</i>`);
+          if (row.ruleMessage) {
+            lines.push(`  ${escape(row.ruleMessage)}`);
           }
-
+          const metricsLine = formatKeyMetrics(row.metricsSnapshot);
+          if (metricsLine) {
+            lines.push(`  <i>${escape(metricsLine)}</i>`);
+          }
           if (row.error) {
-            lines.push(`   ⚠ <i>${escape(row.error)}</i>`);
+            lines.push(`  ⚠ ${escape(row.error)}`);
           }
         }
       }
@@ -1117,24 +989,19 @@ function buildTelegramHtml(summary, rows = []) {
   }
 
   // Account-level errors (e.g. token expired, API request limit reached) —
-  // these don't appear in the per-action detail because no rows were written
-  // for them, so surface them as their own footer section. Mirrors the email
-  // + Slack "Errors" block.
+  // these don't appear in the per-action detail because no rows were
+  // written for them, so surface them as their own footer section. Mirrors
+  // the email + Slack "Errors" block.
   const errored = (summary.accounts || []).filter((a) => a && !a.ok);
   if (errored.length) {
     lines.push("");
-    lines.push("<b>⚠ Errors</b>");
+    lines.push("<b>Errors</b>");
     for (const acc of errored) {
       lines.push(
-        `❌ <b>${escape(acc.name || acc.adAccountId)}</b>\n<i>${escape(acc.error || "unknown error")}</i>`,
+        `❌ <b>${escape(acc.name || acc.adAccountId)}</b> — ${escape(acc.error || "unknown error")}`,
       );
     }
   }
-
-  lines.push("");
-  lines.push(
-    `<i>run <code>${escape(String(summary.runId || "—").slice(0, 8))}</code></i>`,
-  );
 
   // NOT truncated here. Telegram caps a single sendMessage at 4096 chars, so
   // this used to end with "…(truncated)" — which silently dropped exactly the
@@ -1164,27 +1031,24 @@ const TELEGRAM_MAX_PARTS = 10;
  * sent as plain (already-escaped) text. Losing bold on a pathological line
  * beats losing the message.
  */
-// How many strip passes before we give up and fall back to deleting angle
-// brackets outright. Two passes clear every shape we generate; the loop is
-// insurance, not an expectation.
+// How many strip passes before we give up and delete angle brackets outright.
+// Two passes clear every shape we generate; the loop is insurance.
 const MAX_STRIP_PASSES = 5;
 
 /**
  * Remove markup from a line, leaving text Telegram's HTML parser cannot
  * misread.
  *
- * A SINGLE `replace` PASS IS NOT ENOUGH, which is what CodeQL's
- * `js/incomplete-multi-character-sanitization` rule is about: removing one
- * tag can splice its neighbours into a NEW one, so `<scr<b>ipt>` becomes
- * `<script>` after a single pass. Repeating until the string stops changing
- * closes that.
+ * A SINGLE `replace` PASS IS NOT ENOUGH — the point of CodeQL's
+ * `js/incomplete-multi-character-sanitization` rule. Removing one tag can
+ * splice its neighbours into a NEW one, so `<scr<b>ipt>` becomes `<script>`
+ * after one pass. Repeating until the string stops changing closes that.
  *
- * The final sweep deletes any `<` still standing. It cannot be part of a tag
- * we emitted (those are gone by then) and it cannot be user text (that was
- * escaped to `&lt;` before it ever reached here) — so deleting it loses
- * nothing real. Deleting rather than re-escaping matters: the surrounding
- * text is ALREADY escaped, and running it through an escaper again would
- * turn `&lt;` into `&amp;lt;` and show the reader raw entities.
+ * The final sweep deletes any `<` still standing. It cannot be a tag we
+ * emitted (those are gone) and cannot be user text (escaped to `&lt;` long
+ * before this point), so deleting loses nothing real. Deleting rather than
+ * re-escaping matters: the surrounding text is ALREADY escaped, and escaping
+ * it again would turn `&lt;` into `&amp;lt;` and show the reader raw entities.
  */
 function stripMarkup(line) {
   let out = String(line == null ? "" : line);
