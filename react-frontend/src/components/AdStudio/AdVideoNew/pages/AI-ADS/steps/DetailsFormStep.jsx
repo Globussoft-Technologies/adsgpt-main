@@ -936,7 +936,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
             </div>
 
             <div className="mt-3 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className={`flex w-full items-center justify-between gap-2 rounded-xl border border-black/10 bg-gray-100 px-3 py-2 dark:border-white/5 dark:bg-[#909294]/10 sm:w-[245px] sm:flex-none ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+            {/* <div className={`flex w-full items-center justify-between gap-2 rounded-xl border border-black/10 bg-gray-100 px-3 py-2 dark:border-white/5 dark:bg-[#909294]/10 sm:w-[245px] sm:flex-none ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
                   Captions
@@ -963,7 +963,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                   }`}
                 />
               </button>
-            </div>
+            </div> */}
 
             <div className="flex min-w-0 flex-col sm:ml-auto">
               <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">

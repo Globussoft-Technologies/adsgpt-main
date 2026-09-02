@@ -33,26 +33,28 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
       </button>
 
       {/* Cards */}
-      <div className="mx-auto mb-10 flex w-full justify-center gap-2.5">
+      <div className="mx-auto mb-10 flex w-full justify-center gap-3 sm:gap-4">
         {/* Brand Card */}
         <div
           onClick={() => setSelected('brand')}
           onDoubleClick={() => handleDoubleClick('brand')}
-          className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[20px] border-2 transition-all duration-200 ${
+          className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[22px] border-2 transition-all duration-300 ease-out hover:-translate-y-1 active:scale-[0.99] ${
             selected === 'brand'
-              ? 'border-[#3F51B5] dark:border-white/40 shadow-[0_0_20px_rgba(63,81,181,0.25)] dark:shadow-[0_0_15px_rgba(255,255,255,0.1)]'
-              : 'border-transparent hover:border-black/20 dark:hover:border-white/20'
+              ? 'border-indigo-500 dark:border-white ring-2 ring-indigo-500/30 dark:ring-white/30 shadow-[0_12px_30px_rgba(99,102,241,0.35)] dark:shadow-[0_12px_30px_rgba(255,255,255,0.15)] -translate-y-1'
+              : 'border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/40 hover:shadow-xl'
           }`}
         >
           <img
             src={adBrandImg}
             alt="Brand"
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent transition-opacity duration-300 group-hover:opacity-95" />
 
           <div className="absolute right-0 bottom-6 left-0 flex justify-center">
-            <h3 className="text-xl font-bold tracking-wide text-white 2xl:text-2xl">Brand</h3>
+            <h3 className="text-xl font-bold tracking-wide text-white transition-transform duration-300 group-hover:scale-105 2xl:text-2xl">
+              Brand
+            </h3>
           </div>
         </div>
 
@@ -60,21 +62,23 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
         <div
           onClick={() => setSelected('product')}
           onDoubleClick={() => handleDoubleClick('product')}
-          className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[20px] border-2 transition-all duration-200 ${
+          className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[22px] border-2 transition-all duration-300 ease-out hover:-translate-y-1 active:scale-[0.99] ${
             selected === 'product'
-              ? 'border-[#3F51B5] dark:border-white/40 shadow-[0_0_20px_rgba(63,81,181,0.25)] dark:shadow-[0_0_15px_rgba(255,255,255,0.1)]'
-              : 'border-transparent hover:border-black/20 dark:hover:border-white/20'
+              ? 'border-indigo-500 dark:border-white ring-2 ring-indigo-500/30 dark:ring-white/30 shadow-[0_12px_30px_rgba(99,102,241,0.35)] dark:shadow-[0_12px_30px_rgba(255,255,255,0.15)] -translate-y-1'
+              : 'border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/40 hover:shadow-xl'
           }`}
         >
           <img
             src={adProductImg}
             alt="Product"
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent transition-opacity duration-300 group-hover:opacity-95" />
 
           <div className="absolute right-0 bottom-6 left-0 flex justify-center">
-            <h3 className="text-xl font-bold tracking-wide text-white 2xl:text-2xl">Product</h3>
+            <h3 className="text-xl font-bold tracking-wide text-white transition-transform duration-300 group-hover:scale-105 2xl:text-2xl">
+              Product
+            </h3>
           </div>
         </div>
       </div>

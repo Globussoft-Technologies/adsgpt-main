@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, X, Mic2, Search, Play, Pause, Loader2, ChevronDown } from 'lucide-react';
+import { Plus, X, Mic2, Search, Play, Pause, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   getLanguages,
   getGenders,
@@ -414,7 +414,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
             onClick={() => setProviderOpen((o) => !o)}
             className="group flex items-center gap-1.5 rounded-full border border-transparent bg-gray-200 px-3 py-1 text-[12px] font-medium text-gray-900 transition dark:bg-[#3A3A3A] dark:text-white sm:text-13"
           >
-            <ChevronDown className="h-3 w-3" />
+            <ChevronUp className="h-3 w-3" />
             <span>
              Voice Model
               <span className="ml-1 text-gray-500 dark:text-white/60">
@@ -423,7 +423,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
             </span>
           </button>
           {providerOpen && (
-            <div className="absolute left-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-xl border border-black/10 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]">
+            <div className="absolute left-0 bottom-full z-50 mb-2 w-52 overflow-hidden rounded-xl border border-black/10 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]">
               {PROVIDERS.map((p) => (
                 <button
                   key={p.id}
@@ -521,13 +521,12 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
         {rightSlot && <div className="shrink-0">{rightSlot}</div>}
 
         {/* Free-text search — a floating dropdown sized like the chip dropdowns
-            and absolutely positioned, so it overlays instead of growing the form
-            (no extra scroll). Auto-searches /search as you type; picking a result
-            sets the voice exactly like the Voice chip does. */}
+            and positioned upward so it never clips. Auto-searches /search as you type;
+            picking a result sets the voice exactly like the Voice chip does. */}
         {isOtherLanguage && searchOpen && (
           <div
             ref={searchRef}
-            className="absolute left-0 top-full z-[99] mt-2 w-64 overflow-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1C1C1E]/95"
+            className="absolute left-0 bottom-full z-[99] mb-2 w-64 overflow-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1C1C1E]/95"
           >
             {/* Single capped scroll container */}
             <div className="mb-1 px-1 pt-0.5">
