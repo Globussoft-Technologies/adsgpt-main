@@ -143,12 +143,10 @@ export default function VideoCard({
   const committedVersion = typeof item?.version === 'number' ? item.version : 0;
   const shownVersion = item?.previewVersion ?? committedVersion;
   const shownResult = item?.results?.[shownVersion] || item?.results?.[0];
-  const canEditAiAdsOriginal =
+  const canEditAiAdsVoice =
     IS_AI_ADS_CUSTOMIZE_SCRIPT_VOICE_ENABLED &&
     isAiAds &&
-    item?.status === 'completed' &&
-    committedVersion === 0 &&
-    shownVersion === 0;
+    item?.status === 'completed';
   // Idempotent for server results (which keep waterMarkUrl); correct for the
   // socket-appended version (raw url).
   const pickUrl = (r) => (hasPlan8 ? r?.waterMarkUrl || r?.url : r?.url);
@@ -902,7 +900,7 @@ export default function VideoCard({
               isThisFullscreen
                 ? 'h-full object-contain'
                 : isAiAds
-                  ? 'h-auto max-h-[800px] object-cover'
+                  ? 'h-auto min-h-[250px] max-h-[800px] object-cover'
                   : 'h-full max-h-[800px] object-cover'
             } ${videoLoaded ? 'opacity-100' : 'opacity-0'} ${
               !isThisFullscreen ? 'rounded-2xl' : ''
@@ -1057,7 +1055,7 @@ export default function VideoCard({
                     <Megaphone size={18} />
                   </button>
                 )}
-                {canEditAiAdsOriginal && isThisFullscreen && (
+                {canEditAiAdsVoice && isThisFullscreen && (
                   <button
                     title="Customize Script & Voice-over"
                     onClick={(e) => {
@@ -1122,7 +1120,7 @@ export default function VideoCard({
               </div>
             </div>
 
-            {canEditAiAdsOriginal && !isThisFullscreen && (
+            {canEditAiAdsVoice && !isThisFullscreen && (
               <button
                 type="button"
                 onClick={(event) => {
@@ -1158,7 +1156,7 @@ export default function VideoCard({
         </div>
       )}
 
-      {canEditAiAdsOriginal && (
+      {canEditAiAdsVoice && (
         <RegenerateVoiceModal
           open={regenOpen}
           onOpenChange={setRegenOpen}
