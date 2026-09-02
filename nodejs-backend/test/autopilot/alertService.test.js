@@ -1086,6 +1086,51 @@ function seedHighRow({ userId, adAccountId, runId = 'r-1' } = {}) {
   // Telegram splitting — replaces the old "…(truncated)" behaviour, which
   // dropped rows precisely on the runs where the most had happened.
   // ─────────────────────────────────────────────────────────────────────────
+  // CodeQL js/incomplete-multi-character-sanitization flagged the original
+  // single-pass tag strip. It was right: removing one tag can splice its
+  // neighbours into a NEW one.
+  await group("stripMarkup", async () => {
+    const { stripMarkup } = alertService;
+
+    await testAsync("removes ordinary tags", async () => {
+      assert.equal(stripMarkup("<b>plain</b>"), "plain");
+      assert.equal(stripMarkup('<a href="https://x">link</a>'), "link");
+    });
+
+    await testAsync("a spliced tag does not survive one pass", async () => {
+      // <scr<b>ipt> becomes <script> after a single replace. Looping until
+      // stable is what closes it.
+      const out = stripMarkup("<scr<b>ipt>alert(1)</scr<b>ipt>");
+      assert.equal(out.includes("<"), false, `left markup behind: ${out}`);
+      assert.equal(/script/i.test(out), false, `reassembled a script tag: ${out}`);
+    });
+
+    await testAsync("no input leaves a bare < behind", async () => {
+      for (const s of [
+        "<<b>b>bold<</b>/b>",
+        "a < b",
+        "<<<<b>>>>",
+        "<img src=x onerror=1>",
+        "<".repeat(50),
+      ]) {
+        assert.equal(stripMarkup(s).includes("<"), false, `< survived: ${s}`);
+      }
+    });
+
+    await testAsync("already-escaped text is NOT escaped again", async () => {
+      // Everything reaching here has been through `escape()`. Re-escaping
+      // would turn &lt; into &amp;lt; and show the reader raw entities.
+      assert.equal(stripMarkup("Chingari &amp; Co"), "Chingari &amp; Co");
+      assert.equal(stripMarkup("&lt;script&gt;"), "&lt;script&gt;");
+    });
+
+    await testAsync("handles empty and non-string input", async () => {
+      assert.equal(stripMarkup(""), "");
+      assert.equal(stripMarkup(null), "");
+      assert.equal(stripMarkup(undefined), "");
+    });
+  });
+
   await group("splitTelegramHtml", async () => {
     const { splitTelegramHtml } = alertService;
     const CAP = 4096;
