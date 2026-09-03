@@ -2145,6 +2145,16 @@ function isValidUrl(str) {
   }
 }
 
+function getDisplayDomain(rawUrl, fallback = 'your-website.com') {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback;
+    return url.hostname.replace(/^www\./, '') || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function SkeletonLine({ w = 'w-full', h = 'h-2.5' }) {
   return <div className={`${w} ${h} rounded-full bg-gray-200 dark:bg-white/10`} />;
 }
@@ -2277,7 +2287,7 @@ function AdImageSlot({ url, height = 'h-36', placeholder = 'Image preview' }) {
 function DisplayAdPreview({ form }) {
   const ctaLabel      = form.callToAction ? form.callToAction.replace(/_/g, ' ') : 'Learn More';
   const rawUrl        = form.finalUrl || '';
-  const domainDisplay = isValidUrl(rawUrl) ? new URL(rawUrl).hostname.replace('www.', '') : (rawUrl || 'your-website.com');
+  const domainDisplay = getDisplayDomain(rawUrl);
   const headline      = form.headline || '';
   const description   = form.description || '';
   const hasImage      = isValidUrl(form.imageUrl);
@@ -2378,7 +2388,7 @@ function VideoAdPreview({ form }) {
   const embedSrc  = youtubeId ? `https://www.youtube.com/embed/${youtubeId}` : null;
   const ctaLabel  = form.callToAction ? form.callToAction.replace(/_/g, ' ') : 'Learn More';
   const rawUrl    = form.finalUrl || '';
-  const domainDisplay = isValidUrl(rawUrl) ? new URL(rawUrl).hostname.replace('www.', '') : 'your-website.com';
+  const domainDisplay = getDisplayDomain(rawUrl);
   const headline  = form.headline || '';
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#181818]">

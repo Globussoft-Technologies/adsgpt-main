@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SiGoogleads } from 'react-icons/si';
@@ -41,6 +41,7 @@ import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
 import ThemeToggle from '@/components/layout/header/ThemeToggle';
 
 const GOOGLE_BLUE = '#4285F4';
+const GOOGLE_ADS_TABS = new Set(['analytics', 'campaigns']);
 
 // Meta/TikTok-style pill dropdown (button + menu, closes on backdrop click)
 const PillDropdown = ({ icon: Icon, iconClass = 'text-emerald-500', label, open, setOpen, children }) => (
@@ -68,16 +69,22 @@ export default function GoogleAdsDashboard() {
   const { userData } = useSelector((state) => state.socket);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const requestedAccountId = searchParams.get('adAccountId');
+  const autoOpenWizardMode = searchParams.get('openWizard');
+  const activeTab = GOOGLE_ADS_TABS.has(requestedTab)
+    ? requestedTab
+    : (searchParams.get('campaignId') || autoOpenWizardMode ? 'campaigns' : 'analytics');
 
   const [adAccounts, setAdAccounts]       = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [campaigns, setCampaigns]         = useState([]);
+  const [campaignsLoadedAccountId, setCampaignsLoadedAccountId] = useState(null);
   const [campaignSearch, setCampaignSearch] = useState('');
   const [campaignsLevel, setCampaignsLevel] = useState('campaigns');
   const [analyticsData, setAnalyticsData] = useState(null);
   const [datePreset, setDatePreset]       = useState('last_14d');
   const [analyticsError, setAnalyticsError] = useState('');
-  const [activeTab, setActiveTab]         = useState('analytics');
 
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
@@ -93,6 +100,45 @@ export default function GoogleAdsDashboard() {
   // ── wizard state ──────────────────────────────────────────────────────────
   const [wizard, setWizard]         = useState({ open: false, mode: 'create-full', context: null });
   const [manageNonce, setManageNonce] = useState(0);
+  const campaignsRequestRef = useRef(0);
+
+  const updateSearchParams = useCallback((patch, options) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      Object.entries(patch).forEach(([key, value]) => {
+        if (value == null) next.delete(key);
+        else next.set(key, String(value));
+      });
+      return next;
+    }, options);
+  }, [setSearchParams]);
+
+  const selectTab = useCallback((tab) => {
+    if (!GOOGLE_ADS_TABS.has(tab)) return;
+    updateSearchParams({ tab });
+  }, [updateSearchParams]);
+
+  const selectAccount = useCallback((account, options) => {
+    if (String(selectedAccount?.id || '') === String(account?.id || '')) {
+      updateSearchParams({ adAccountId: account?.id || null }, options);
+      return;
+    }
+    campaignsRequestRef.current += 1;
+    setLoadingCampaigns(true);
+    setCampaignsLoadedAccountId(null);
+    updateSearchParams({
+      adAccountId: account?.id || null,
+      campaignId: null,
+      adGroupId: null,
+    }, options);
+  }, [selectedAccount?.id, updateSearchParams]);
+
+  // Normalize older /google-ads links without a tab so refresh and copied
+  // links always describe the visible manager page.
+  useEffect(() => {
+    if (GOOGLE_ADS_TABS.has(requestedTab)) return;
+    updateSearchParams({ tab: activeTab }, { replace: true });
+  }, [activeTab, requestedTab, updateSearchParams]);
 
   const openWizard  = async (mode, context = null) => {
     if (mode === 'edit-campaign' && context?.campaignId) {
@@ -196,14 +242,10 @@ export default function GoogleAdsDashboard() {
   // so the wizard's "Campaigns refreshed" outcome lands on the right view,
   // open the wizard, then strip the query param so a refresh / back-nav
   // doesn't keep re-opening it. Mirrors the same flow on MetaAdsDashboard.
-  const autoOpenWizardMode = searchParams.get('openWizard');
   useEffect(() => {
     if (!autoOpenWizardMode) return;
-    setActiveTab('campaigns');
     openWizard(autoOpenWizardMode);
-    const next = new URLSearchParams(searchParams);
-    next.delete('openWizard');
-    setSearchParams(next, { replace: true });
+    updateSearchParams({ tab: 'campaigns', openWizard: null }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpenWizardMode]);
 
@@ -217,7 +259,16 @@ export default function GoogleAdsDashboard() {
         const accounts = res.adAccounts || [];
         setAdAccounts(accounts);
         if (accounts.length) {
-          setSelectedAccount(accounts[0]);
+          const restoredAccount = requestedAccountId
+            ? accounts.find((account) => String(account.id) === requestedAccountId)
+            : null;
+          if (restoredAccount) {
+            setLoadingCampaigns(true);
+            setCampaignsLoadedAccountId(null);
+            setSelectedAccount(restoredAccount);
+          } else {
+            selectAccount(accounts[0], { replace: true });
+          }
         } else {
           // Stay on this page — show a "no accounts" state with disconnect option
           setNoAccountReason(res.noAccountReason || 'no_google_ads_account');
@@ -228,29 +279,48 @@ export default function GoogleAdsDashboard() {
         setLoadingAccounts(false);
       }
     })();
-  }, [navigate]);
+  }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Browser back/forward can restore an earlier account URL after the account
+  // list has already loaded. Select that account without clearing its restored
+  // campaign/ad-group path.
+  useEffect(() => {
+    if (!requestedAccountId || !adAccounts.length) return;
+    if (String(selectedAccount?.id || '') === requestedAccountId) return;
+    const restoredAccount = adAccounts.find((account) => String(account.id) === requestedAccountId);
+    if (!restoredAccount) return;
+    campaignsRequestRef.current += 1;
+    setLoadingCampaigns(true);
+    setCampaignsLoadedAccountId(null);
+    setSelectedAccount(restoredAccount);
+  }, [adAccounts, requestedAccountId, selectedAccount?.id]);
 
   // ── reload campaigns ──────────────────────────────────────────────────────
   const reloadCampaigns = useCallback(async ({ refresh = true } = {}) => {
     if (!selectedAccount) return;
+    const requestId = ++campaignsRequestRef.current;
     setLoadingCampaigns(true);
+    setCampaignsLoadedAccountId(null);
     try {
       const res = await getGoogleCampaigns(selectedAccount.id, { refresh });
+      if (requestId !== campaignsRequestRef.current) return;
       const list = parseGoogleCampaignsResponse(res);
       setCampaigns(list);
+      setCampaignsLoadedAccountId(String(selectedAccount.id));
       setIsGoogleDisconnected(false);
       if (!list.length) {
         const accountError = res?.data?.find?.((d) => d.error)?.error;
         if (accountError) globalToast.error(accountError);
       }
     } catch (e) {
+      if (requestId !== campaignsRequestRef.current) return;
       setCampaigns([]);
       const details = e?.response?.data?.details || '';
       const isDisconnected = details.toLowerCase().includes('not connected') || details.toLowerCase().includes('reconnect') || e?.response?.status === 404 || e?.response?.status === 401;
       setIsGoogleDisconnected(isDisconnected);
       if (!isDisconnected) globalToast.error(e?.response?.data?.error || details || 'Failed to load campaigns');
     } finally {
-      setLoadingCampaigns(false);
+      if (requestId === campaignsRequestRef.current) setLoadingCampaigns(false);
     }
   }, [selectedAccount]);
 
@@ -284,12 +354,12 @@ export default function GoogleAdsDashboard() {
   // ── wizard created callback ───────────────────────────────────────────────
   const handleWizardCreated = useCallback(() => {
     if (wizard.mode === 'create-full' || wizard.mode === 'edit-campaign') {
-      if (wizard.mode === 'create-full') setActiveTab('campaigns');
+      if (wizard.mode === 'create-full') selectTab('campaigns');
       reloadCampaigns();
     } else {
       setManageNonce((n) => n + 1);
     }
-  }, [wizard.mode, reloadCampaigns]);
+  }, [wizard.mode, reloadCampaigns, selectTab]);
 
   // ── disconnect ────────────────────────────────────────────────────────────
   const handleDisconnect = async () => {
@@ -431,9 +501,8 @@ export default function GoogleAdsDashboard() {
                   <button
                     key={acc.id}
                     onClick={() => {
-                      setSelectedAccount(acc);
+                      selectAccount(acc);
                       setAccountOpen(false);
-                      setActiveTab('analytics');
                     }}
                     className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition hover:bg-gray-100 dark:hover:bg-white/5 ${
                       selectedAccount?.id === acc.id ? 'text-[#4285F4]' : 'text-gray-900 dark:text-white'
@@ -532,7 +601,7 @@ export default function GoogleAdsDashboard() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => selectTab(tab.id)}
                 className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-sm font-semibold transition-all duration-200 ${
                   activeTab === tab.id
                     ? 'text-gray-900 dark:text-white'
@@ -625,6 +694,7 @@ export default function GoogleAdsDashboard() {
               <GoogleAdsCampaignsTable
                 campaigns={campaigns}
                 loading={loadingCampaigns}
+                campaignsReady={campaignsLoadedAccountId === String(selectedAccount?.id)}
                 adAccountId={selectedAccount?.id}
                 onRefresh={reloadCampaigns}
                 onLaunchWizard={openWizard}

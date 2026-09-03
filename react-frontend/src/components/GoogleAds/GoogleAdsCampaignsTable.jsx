@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,6 +34,7 @@ import {
 } from '@/apis/googleAds/googleAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import { GA4Events } from '@/utils/ga4';
+import { useSearchParams } from 'react-router-dom';
 import { Spinner, EmptyState } from '@/components/MetaAds/MetaAdsAtoms';
 import {
   adCopyText,
@@ -640,7 +641,7 @@ function CampaignTable({
 
 // ─── ad group table (level 2) ─────────────────────────────────────────────────
 
-function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce }) {
+function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, manageNonce, restoreAdGroupId, onInvalidRestore }) {
   const isPmax = String(campaign.objective || campaign.channelType || '').toUpperCase().includes('PERFORMANCE_MAX');
   const [adGroups,     setAdGroups]     = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -652,6 +653,7 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
   const [pendingDelete,   setPendingDelete]   = useState(null);
   const [deleting,        setDeleting]        = useState(false);
   const [adGroupSearch,   setAdGroupSearch]   = useState('');
+  const restoredAdGroupKeyRef = useRef(null);
   const filteredAdGroups = adGroupSearch.trim()
     ? adGroups.filter((g) => {
         const q = adGroupSearch.trim().toLowerCase();
@@ -676,6 +678,20 @@ function AdGroupTable({ campaign, adAccountId, onDrillDown, onLaunchWizard, mana
       .finally(() => { if (!cancelled) { setLoading(false); setRefreshing(false); } });
     return () => { cancelled = true; };
   }, [campaign.campaignId, campaign.id, adAccountId, manageNonce, refreshNonce]);
+
+  useEffect(() => {
+    if (!restoreAdGroupId) {
+      restoredAdGroupKeyRef.current = null;
+      return;
+    }
+    if (loading) return;
+    const restoreKey = `${campaign.campaignId || campaign.id}:${restoreAdGroupId}`;
+    if (restoredAdGroupKeyRef.current === restoreKey) return;
+    restoredAdGroupKeyRef.current = restoreKey;
+    const match = adGroups.find((group) => String(group.adGroupId || group.id) === restoreAdGroupId);
+    if (match) onDrillDown(match, { replace: true });
+    else onInvalidRestore?.();
+  }, [adGroups, campaign.campaignId, campaign.id, loading, onDrillDown, onInvalidRestore, restoreAdGroupId]);
 
   const getStatus = (g) => statuses[g.adGroupId || g.id] ?? g.status;
   const getPrimaryStatus = (g) => primaryStatuses[g.adGroupId || g.id] ?? g.primaryStatus;
@@ -1588,7 +1604,7 @@ function AdsTableInner({ adGroup, campaign, adAccountId, onLaunchWizard, manageN
           {onLaunchWizard && (
             <AddButton
               label="Add Ad"
-              onClick={() => onLaunchWizard('create-ad', { campaignId: campaign.campaignId || campaign.id, adGroupId: adGroup.adGroupId || adGroup.id, objective: campaign.objective })}
+              onClick={() => onLaunchWizard('create-ad', { campaignId: campaign.campaignId || campaign.id, adGroupId: adGroup.adGroupId || adGroup.id, objective: campaign.objective, destination: campaign.channelType || campaign.objective })}
             />
           )}
         </div>
@@ -1807,21 +1823,75 @@ function AdsTableInner({ adGroup, campaign, adAccountId, onLaunchWizard, manageN
 
 // ─── root export ──────────────────────────────────────────────────────────────
 
-export default function GoogleAdsCampaignsTable({ campaigns = [], loading, adAccountId, onRefresh, onLaunchWizard, manageNonce, campaignSearch: externalSearch, onCampaignSearchChange, onLevelChange }) {
-  const [level,            setLevel]            = useState('campaigns');
-  const [selectedCampaign, setSelectedCampaign] = useState(null);
+export default function GoogleAdsCampaignsTable({ campaigns = [], loading, campaignsReady, adAccountId, onRefresh, onLaunchWizard, manageNonce, campaignSearch: externalSearch, onCampaignSearchChange, onLevelChange }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const campaignIdParam = searchParams.get('campaignId');
+  const adGroupIdParam = searchParams.get('adGroupId');
   const [selectedAdGroup,  setSelectedAdGroup]  = useState(null);
   const [internalSearch,   setInternalSearch]   = useState('');
 
   const query = onCampaignSearchChange ? (externalSearch ?? '') : internalSearch;
   const setQuery = onCampaignSearchChange || setInternalSearch;
+  const selectedCampaign = campaignIdParam
+    ? campaigns.find((campaign) => String(campaign.campaignId || campaign.id) === campaignIdParam) || null
+    : null;
+  const level = !selectedCampaign ? 'campaigns' : selectedAdGroup ? 'ads' : 'adgroups';
+
+  const updateParams = useCallback((patch, options) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      Object.entries(patch).forEach(([key, value]) => {
+        if (value == null) next.delete(key);
+        else next.set(key, String(value));
+      });
+      return next;
+    }, options);
+  }, [setSearchParams]);
 
   useEffect(() => { onLevelChange?.(level); }, [level, onLevelChange]);
 
-  const drillToCampaign = (c) => { setSelectedCampaign(c); setSelectedAdGroup(null); setLevel('adgroups'); };
-  const drillToAdGroup  = (g) => { setSelectedAdGroup(g);                             setLevel('ads'); };
-  const goToCampaigns   = ()  => { setLevel('campaigns'); setSelectedCampaign(null); setSelectedAdGroup(null); };
-  const goToAdGroups    = ()  => { setLevel('adgroups');                              setSelectedAdGroup(null); };
+  useEffect(() => {
+    if (selectedAdGroup && String(selectedAdGroup.adGroupId || selectedAdGroup.id) !== adGroupIdParam) {
+      setSelectedAdGroup(null);
+    }
+  }, [adGroupIdParam, selectedAdGroup]);
+
+  useEffect(() => {
+    if (!campaignIdParam && adGroupIdParam) {
+      updateParams({ adGroupId: null }, { replace: true });
+    }
+  }, [adGroupIdParam, campaignIdParam, updateParams]);
+
+  useEffect(() => {
+    if (!campaignsReady || !campaignIdParam || selectedCampaign) return;
+    setSelectedAdGroup(null);
+    updateParams({ campaignId: null, adGroupId: null }, { replace: true });
+  }, [campaignIdParam, campaignsReady, selectedCampaign, updateParams]);
+
+  const drillToCampaign = useCallback((campaign) => {
+    setSelectedAdGroup(null);
+    updateParams({ campaignId: campaign.campaignId || campaign.id, adGroupId: null });
+  }, [updateParams]);
+
+  const drillToAdGroup = useCallback((group, options) => {
+    setSelectedAdGroup(group);
+    updateParams({ adGroupId: group.adGroupId || group.id }, options);
+  }, [updateParams]);
+
+  const clearInvalidAdGroup = useCallback(() => {
+    setSelectedAdGroup(null);
+    updateParams({ adGroupId: null }, { replace: true });
+  }, [updateParams]);
+
+  const goToCampaigns = () => {
+    setSelectedAdGroup(null);
+    updateParams({ campaignId: null, adGroupId: null });
+  };
+
+  const goToAdGroups = () => {
+    setSelectedAdGroup(null);
+    updateParams({ adGroupId: null });
+  };
 
   const filteredCampaigns = (query || '').trim()
     ? campaigns.filter((c) => {
@@ -1870,6 +1940,8 @@ export default function GoogleAdsCampaignsTable({ campaigns = [], loading, adAcc
                 onDrillDown={drillToAdGroup}
                 onLaunchWizard={onLaunchWizard}
                 manageNonce={manageNonce}
+                restoreAdGroupId={adGroupIdParam}
+                onInvalidRestore={clearInvalidAdGroup}
               />
             </motion.div>
           )}
