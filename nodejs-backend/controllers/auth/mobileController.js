@@ -750,9 +750,12 @@ const MobileSignup = async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ ok: false, code: "INVALID_INPUT", error: "Email and password are required." });
     }
-    const cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
-    if (!cleanPhoneNumber) {
-      return res.status(400).json({ ok: false, code: "INVALID_PHONE_NUMBER", error: "A valid phone number is required." });
+    let cleanPhoneNumber = "";
+    if (phoneNumber !== undefined && phoneNumber !== null && String(phoneNumber).trim() !== "") {
+      cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
+      if (!cleanPhoneNumber) {
+        return res.status(400).json({ ok: false, code: "INVALID_PHONE_NUMBER", error: "A valid phone number is required." });
+      }
     }
 
     const cleanEmail = email.toLowerCase().trim();
@@ -911,9 +914,12 @@ const GoogleSignup = async (req, res) => {
   */
   try {
     const { firebaseIdToken, firstName, lastName, phoneNumber, platform, email: bodyEmail } = req.body;
-    const cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
-    if (!cleanPhoneNumber) {
-      return res.status(400).json({ ok: false, code: "INVALID_PHONE_NUMBER", error: "A valid phone number is required." });
+    let cleanPhoneNumber = "";
+    if (phoneNumber !== undefined && phoneNumber !== null && String(phoneNumber).trim() !== "") {
+      cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
+      if (!cleanPhoneNumber) {
+        return res.status(400).json({ ok: false, code: "INVALID_PHONE_NUMBER", error: "A valid phone number is required." });
+      }
     }
     const decoded = await verifyFirebaseToken(firebaseIdToken);
     if (decoded.firebase?.sign_in_provider !== "google.com") {
@@ -1211,9 +1217,12 @@ const AppleSignup = async (req, res) => {
   */
   try {
     const { firebaseIdToken, firstName, lastName, phoneNumber, platform, email: bodyEmail } = req.body;
-    const cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
-    if (!cleanPhoneNumber) {
-      return res.status(400).json({ ok: false, code: "INVALID_PHONE_NUMBER", error: "A valid phone number is required." });
+    let cleanPhoneNumber = "";
+    if (phoneNumber !== undefined && phoneNumber !== null && String(phoneNumber).trim() !== "") {
+      cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
+      if (!cleanPhoneNumber) {
+        return res.status(400).json({ ok: false, code: "INVALID_PHONE_NUMBER", error: "A valid phone number is required." });
+      }
     }
     const decoded = await verifyFirebaseToken(firebaseIdToken);
     if (decoded.firebase?.sign_in_provider !== "apple.com") {
@@ -3839,20 +3848,19 @@ const v2UpdateOnboardingProfile = async (req, res) => {
         error: "lastName is required.", code: "INVALID_INPUT",
       });
     }
-    if (!phoneNumber || typeof phoneNumber !== "string" || !phoneNumber.trim()) {
-      return res.status(400).json({
-        success: false, statusCode: 400,
-        error: "phoneNumber is required.", code: "INVALID_INPUT",
-      });
+    let cleanPhone = "";
+    if (phoneNumber && typeof phoneNumber === "string" && phoneNumber.trim()) {
+      const digitCount = phoneNumber.replace(/\D/g, "").length;
+      if (digitCount < 7 || digitCount > 15) {
+        return res.status(400).json({
+          success: false, statusCode: 400,
+          error: "A valid phone number is required (7–15 digits).",
+          code: "INVALID_PHONE_NUMBER",
+        });
+      }
+      cleanPhone = phoneNumber.trim();
     }
-    const digitCount = phoneNumber.replace(/\D/g, "").length;
-    if (digitCount < 7 || digitCount > 15) {
-      return res.status(400).json({
-        success: false, statusCode: 400,
-        error: "A valid phone number is required (7–15 digits).",
-        code: "INVALID_PHONE_NUMBER",
-      });
-    }
+    
     if (!userId) {
       return res.status(401).json({
         success: false, statusCode: 401,
@@ -3862,7 +3870,6 @@ const v2UpdateOnboardingProfile = async (req, res) => {
 
     const cleanFirst = firstName.trim();
     const cleanLast  = lastName.trim();
-    const cleanPhone = phoneNumber.trim();
 
     const updated = await UserProfile.findOneAndUpdate(
       { user_id: userId },
