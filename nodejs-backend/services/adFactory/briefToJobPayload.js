@@ -209,7 +209,16 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
     connection.connectionId ||
     connection.adAccountId
   );
-  const wantsMeta = hasMetaFields || !googleTarget;
+  // An explicit platform choice is authoritative. A Google-only brief can
+  // still receive a hydrated Meta connection from the launch UI, but that
+  // must not turn Meta into a destination for the scheduled job. Briefs made
+  // before delivery.platforms existed retain the previous fallback.
+  const selectedPlatforms = arr(delivery.platforms).map((platform) =>
+    String(platform).trim().toLowerCase(),
+  );
+  const wantsMeta = selectedPlatforms.length > 0
+    ? selectedPlatforms.includes("meta")
+    : hasMetaFields || !googleTarget;
 
   if (wantsMeta) {
     if (!connection.facebookId) {

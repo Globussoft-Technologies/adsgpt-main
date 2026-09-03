@@ -409,6 +409,110 @@ group("purity", () => {
   });
 });
 
+// ─── Google as a destination ─────────────────────────────────────────────────
+//
+// Google has no synthesize path — googleTargetSchema wants a real payload — so
+// the target arrives already built from a SAVED template and is passed through
+// untouched. These tests pin the two things that made a Google-only schedule
+// impossible before: the Meta id checks, and the Meta objective check.
+
+const googleTarget = () => ({
+  template: {
+    name: "Refill kit — Search",
+    objective: "SALES",
+    conversionLocation: "SEARCH",
+    customerId: "123-456-7890",
+    payload: { adAccountId: "1234567890", dailyBudgetMicros: 800000000, templateId: "t1" },
+  },
+});
+
+group("google targets", () => {
+  test("a google-only job validates against the LIVE createJobSchema", () => {
+    const { error } = validate(
+      briefToJobPayload(brief(), {}, { google: googleTarget() }),
+    );
+    assert.equal(error, undefined, msgs(error));
+  });
+
+  test("google only → targets.google, and no targets.meta at all", () => {
+    const p = briefToJobPayload(brief(), {}, { google: googleTarget() });
+    assert.deepEqual(Object.keys(p.targets), ["google"]);
+  });
+
+  test("an explicit Google-only brief ignores a complete Meta connection", () => {
+    const b = brief({
+      delivery: { ...brief().delivery, platforms: ["google"] },
+    });
+    const p = briefToJobPayload(b, connection(), { google: googleTarget() });
+    assert.deepEqual(Object.keys(p.targets), ["google"]);
+    const { error } = validate(p);
+    assert.equal(error, undefined, msgs(error));
+  });
+
+  test("both connected → one job carries both targets", () => {
+    const p = briefToJobPayload(brief(), connection(), { google: googleTarget() });
+    assert.deepEqual(Object.keys(p.targets).sort(), ["google", "meta"]);
+    const { error } = validate(p);
+    assert.equal(error, undefined, msgs(error));
+  });
+
+  test("the google block is passed through byte-identical", () => {
+    const g = googleTarget();
+    const p = briefToJobPayload(brief(), {}, { google: g });
+    assert.deepEqual(p.targets.google, g);
+  });
+
+  // The regression this whole change exists for: a Google-only schedule used
+  // to fail with an error naming a platform the user deliberately left blank.
+  test("google only does NOT demand a facebook account", () => {
+    assert.doesNotThrow(() => briefToJobPayload(brief(), {}, { google: googleTarget() }));
+  });
+
+  test("google only does NOT demand a resolved Meta objective", () => {
+    const b = brief({ offer: { cta: {} } });
+    assert.doesNotThrow(() => briefToJobPayload(b, {}, { google: googleTarget() }));
+  });
+
+  // The relaxation is scoped to "Google is carrying this job", not to
+  // "Meta fields are optional now". A half-filled Meta connection alongside
+  // Google is still a mistake, and still says so.
+  test("a PARTIAL meta connection beside google still errors", () => {
+    assert.throws(
+      () => briefToJobPayload(brief(), { facebookId: "123" }, { google: googleTarget() }),
+      (err) => err instanceof BriefJobPayloadError && err.field === "connectionId",
+    );
+  });
+
+  test("neither destination still errors", () => {
+    assert.throws(
+      () => briefToJobPayload(brief(), {}),
+      (err) => err instanceof BriefJobPayloadError,
+    );
+  });
+
+  test("a google target without a template is ignored, not trusted", () => {
+    assert.throws(
+      () => briefToJobPayload(brief(), {}, { google: {} }),
+      (err) => err instanceof BriefJobPayloadError && err.field === "facebookId",
+    );
+  });
+
+  test("budget is still required for a google-only job", () => {
+    const b = brief({ delivery: { ...brief().delivery, budget: { daily: 0 } } });
+    assert.throws(
+      () => briefToJobPayload(b, {}, { google: googleTarget() }),
+      (err) => err instanceof BriefJobPayloadError && err.field === "budget.daily",
+    );
+  });
+
+  test("does not mutate the google target it was handed", () => {
+    const g = googleTarget();
+    const snapshot = JSON.parse(JSON.stringify(g));
+    briefToJobPayload(brief(), {}, { google: g });
+    assert.deepEqual(g, snapshot);
+  });
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${pass} passed, ${fail} failed`);
