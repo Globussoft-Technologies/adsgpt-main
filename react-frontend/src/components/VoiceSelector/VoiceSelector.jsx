@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, X, Mic2, Search, Play, Pause, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, X, Mic2, Search, Play, Pause, Loader2, ChevronDown, Check } from 'lucide-react';
 import {
   getLanguages,
   getGenders,
@@ -414,7 +414,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
             onClick={() => setProviderOpen((o) => !o)}
             className="group flex items-center gap-1.5 rounded-full border border-transparent bg-gray-200 px-3 py-1 text-[12px] font-medium text-gray-900 transition dark:bg-[#3A3A3A] dark:text-white sm:text-13"
           >
-            <ChevronUp className="h-3 w-3" />
+            <ChevronDown className="h-3 w-3" />
             <span>
              Voice Model
               <span className="ml-1 text-gray-500 dark:text-white/60">
@@ -423,22 +423,40 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
             </span>
           </button>
           {providerOpen && (
-            <div className="absolute left-0 bottom-full z-50 mb-2 w-52 overflow-hidden rounded-xl border border-black/10 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]">
-              {PROVIDERS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => handleProviderChange(p.id)}
-                  className={`flex w-full flex-col items-start px-3 py-2 text-left text-13 transition ${
-                    p.id === provider
-                      ? 'bg-black/5 text-gray-900 dark:bg-white/10 dark:text-white'
-                      : 'text-gray-700 hover:bg-black/5 dark:text-white/80 dark:hover:bg-white/5'
-                  }`}
-                >
-                  {p.label}
-                  <span className="text-[10px] text-gray-500 dark:text-white/45">{p.hint}</span>
-                </button>
-              ))}
+            <div className="absolute left-0 top-full z-50 mt-2 w-64 rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#1C1C1E]/95">
+              {PROVIDERS.map((p) => {
+                const isCurrent = p.id === provider;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleProviderChange(p.id)}
+                    className={`group flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150 ${
+                      isCurrent
+                        ? 'bg-black/5 dark:bg-white/10'
+                        : 'hover:bg-black/5 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-13 leading-tight ${
+                          isCurrent
+                            ? 'font-semibold text-gray-900 dark:text-white'
+                            : 'font-medium text-gray-700 group-hover:text-gray-900 dark:text-white/80 dark:group-hover:text-white'
+                        }`}
+                      >
+                        {p.label}
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-snug text-gray-500 group-hover:text-gray-600 dark:text-white/45 dark:group-hover:text-white/60">
+                        {p.hint}
+                      </p>
+                    </div>
+                    {isCurrent && (
+                      <Check className="h-4 w-4 shrink-0 text-[#02C8C4] dark:text-[#15DCFF]" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -526,7 +544,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
         {isOtherLanguage && searchOpen && (
           <div
             ref={searchRef}
-            className="absolute left-0 bottom-full z-[99] mb-2 w-64 overflow-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1C1C1E]/95"
+            className="absolute left-0 top-full z-[99] mt-2 w-64 overflow-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#1C1C1E]/95"
           >
             {/* Single capped scroll container */}
             <div className="mb-1 px-1 pt-0.5">
@@ -543,7 +561,7 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
               </div>
             </div>
 
-            <div className="max-h-[190px] overflow-y-auto pr-0.5 [scrollbar-width:thin]">
+            <div className="max-h-[102px] overflow-y-auto pr-0.5 [scrollbar-width:thin]">
               {searchLoading && (
                 <div className="flex items-center justify-center gap-2 py-4 text-[12px] text-gray-500 dark:text-white/50">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching…

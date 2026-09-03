@@ -41,17 +41,15 @@ const ChipDropdown = ({
       if (!rect) return;
       const dropdownWidth = 260;
 
-      const dialogEl = anchorRef.current?.closest('[role="dialog"]');
-      const containerRect = dialogEl ? dialogEl.getBoundingClientRect() : null;
-      const rightBoundary = containerRect ? containerRect.right - 16 : window.innerWidth - 12;
-      const leftBoundary = containerRect ? containerRect.left + 16 : 12;
+      const containerEl = anchorRef.current?.closest('[role="dialog"], .workspace-card, .rounded-3xl, .rounded-\\[30px\\], [class*="max-w-"], .overflow-y-auto');
+      const containerRect = containerEl ? containerEl.getBoundingClientRect() : null;
+      const rightBoundary = containerRect ? containerRect.right - 16 : window.innerWidth - 16;
+      const leftBoundary = containerRect ? containerRect.left + 16 : 16;
 
+      // Position directly under the button (aligned with its left edge)
       let left = rect.left;
-      if (field === 'voice' || left + dropdownWidth > rightBoundary) {
-        left = rect.right - dropdownWidth;
-      }
 
-      // Keep within boundaries
+      // Shift left only if opening rightwards would overflow the card/screen boundary (e.g. for Age at far right)
       if (left + dropdownWidth > rightBoundary) {
         left = rightBoundary - dropdownWidth;
       }
@@ -59,10 +57,21 @@ const ChipDropdown = ({
         left = leftBoundary;
       }
 
-      // Calculate available space between button bottom and window bottom (leaving 24px margin)
-      const spaceBelow = window.innerHeight - rect.bottom - 24;
-      const headerOffset = field === 'voice' ? 44 : 8;
-      const scrollMaxHeight = Math.max(90, Math.min(180, spaceBelow - headerOffset));
+      // Compact height for voice and age: exactly 3 visible selections (~80px)
+      const isCompactField = field === 'voice' || field === 'age';
+      const defaultMaxHeight = isCompactField ? 80 : 180;
+      const headerHeight = field === 'voice' ? 32 : 0;
+
+      // Available space inside the main card container below the button
+      const cardBottom = containerRect ? containerRect.bottom - 8 : window.innerHeight - 12;
+      const spaceBelow = cardBottom - (rect.bottom + 6);
+      const availableListHeight = spaceBelow - headerHeight - 10;
+
+      // Ensure dropdown never exceeds the card boundary while showing 3 selections
+      const scrollMaxHeight = Math.max(
+        50,
+        Math.min(defaultMaxHeight, availableListHeight > 50 ? availableListHeight : defaultMaxHeight)
+      );
 
       setCoords({
         top: rect.bottom + 6,
@@ -139,7 +148,7 @@ const ChipDropdown = ({
   const renderSimpleRow = (key, label, isSelected, onClick) => (
     <div
       key={key}
-      className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] transition-colors ${
+      className={`flex items-center gap-2 rounded-lg px-2.5 py-1 text-[12px] transition-colors ${
         isSelected ? 'bg-black/5 dark:bg-white/10 font-medium' : 'hover:bg-black/5 dark:hover:bg-white/5'
       }`}
     >
@@ -172,7 +181,7 @@ const ChipDropdown = ({
       return (
         <div
           key={opt.voice_id}
-          className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-[12px] transition-colors ${
+          className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-1 text-[12px] transition-colors ${
             isSelected ? 'bg-black/5 dark:bg-white/10 font-medium' : 'hover:bg-black/5 dark:hover:bg-white/5'
           }`}
         >
@@ -240,7 +249,7 @@ const ChipDropdown = ({
         >
           {field === 'voice' && (
             <div className="mb-1 px-1 pt-0.5">
-              <div className="flex items-center gap-2 rounded-lg border border-black/10 bg-gray-100/80 px-2.5 py-1.5 dark:border-white/10 dark:bg-white/5">
+              <div className="flex items-center gap-2 rounded-lg border border-black/10 bg-gray-100/80 px-2.5 py-1 dark:border-white/10 dark:bg-white/5">
                 <Search className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-white/40" />
                 <input
                   type="text"
