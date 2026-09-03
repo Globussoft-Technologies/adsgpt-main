@@ -3,7 +3,6 @@ import {
   Bot,
   ChartNoAxesColumn,
   ChevronLeft,
-  ChevronRight,
   History,
   Library,
   LogOut,
@@ -13,6 +12,8 @@ import {
   Zap,
 } from 'lucide-react';
 import AdsGPTLogoDarkLogo from '@/assets/layouts/adsgpt-dark-mode-logo.svg';
+import AdsGPTLogo from '@/assets/layouts/adsgpt-logo.webp';
+import AdsGPTLightModeLogo from '@/assets/layouts/adsgpt-light-mode-logo.png';
 import brandIQDarkLogo from '@/assets/layouts/appsidebar/brand-iq-dark.svg';
 import adStudioDarkLogo from '@/assets/layouts/appsidebar/ad-studio-dark.svg';
 import adFactoryDarkLogo from '@/assets/layouts/appsidebar/ad-factory-dark.svg';
@@ -26,6 +27,10 @@ import { resetAdFactorNewSlice } from '@/store/reducers/adFactoryNew/adFactoryNe
 import { setActiveBrandIQTab } from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
 import { setActivePage } from '@/store/reducers/adStudio/adVideoNewSlice';
+import {
+  setActiveAdStudioTab,
+  setAdCreativeNewActivePage,
+} from '@/store/reducers/adStudio/adStudioTabsSlice';
 import { IS_AI_ASSISTANT_ENABLED, IS_LANDING_ANALYZER_ENABLED } from '@/utils/featureFlags';
 import {
   canUseWorkspaceFeature,
@@ -200,6 +205,14 @@ const AppSidebar = () => {
     if (isMobile) setOpenMobile(false);
   };
 
+  // ── Logo click: navigate to Ad Studio Ad Creative ───────────────────────
+  const handleLogoClick = () => {
+    dispatch(setActiveAdStudioTab('adCreativeNew'));
+    dispatch(setAdCreativeNewActivePage('home'));
+    setOpenHistory(false);
+    if (isMobile) setOpenMobile(false);
+  };
+
   // ── Permission-filtered navigation groups ──────────────────────────────
   const visibleNavGroups = NAV_GROUPS_STATIC.map((group) => ({
     ...group,
@@ -214,7 +227,8 @@ const AppSidebar = () => {
   const showLibraryGroup = showWorkspace || showMySpace;
 
   // ── Layout mode: showExpanded = wide nav with labels ───────────────────
-  const showExpanded = isNavExpanded && !openHistory;
+  // Sidebar expansion is permanently disabled; the sidebar remains in compact mode.
+  const showExpanded = false;
 
   // ── Badge renderer ─────────────────────────────────────────────────────
   const renderBadge = (badge) => {
@@ -336,12 +350,12 @@ const AppSidebar = () => {
         showExpanded
           ? `px-4.5 pb-2 ${first ? 'pt-3.5' : 'pt-5.5'}`
           : `flex flex-col items-center justify-center px-1 pb-2 2xl:pb-3 ${
-              first ? 'pt-4 2xl:pt-5' : 'pt-4 2xl:pt-6'
+              first ? 'pt-3.5 2xl:pt-4.5' : 'pt-3 2xl:pt-3.5'
             }`
       }`}
     >
       {!showExpanded && !first && (
-        <div className="sidebar-section-divider mb-4 h-px w-7 dark:bg-white/15" />
+        <div className="sidebar-section-divider mb-3 2xl:mb-3.5 h-px w-9 dark:bg-white/15" />
       )}
       <span className="sidebar-section-label uppercase dark:leading-normal dark:text-[#999]">
         {label}
@@ -380,89 +394,64 @@ const AppSidebar = () => {
     >
       <div className="lm-sidebar-surface relative flex h-full w-full flex-col bg-sidebar dark:bg-[#0F0F0F]">
 
-        {/* ── BRAND HEADER ──────────────────────────────────────────────────── */}
+        {/* ── BRAND HEADER ────────────────────────────────────────────────── */}
         <div className="flex-shrink-0">
           {openHistory ? (
-            /* History open — full brand header + close history trigger */
-            <div className="flex h-[74px] items-center gap-3 px-3.5">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <SidebarLogoMark className="sidebar-expanded-logo-mark w-10 h-10 2xl:h-12 2xl:w-12 flex-shrink-0 object-contain" />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="sidebar-brand-title dark:font-extrabold dark:tracking-[0.01em] dark:text-white">
-                    AdsGPT
-                  </span>
-                  <span className="sidebar-brand-subtitle truncate dark:text-[9.5px] dark:text-[#AFAFAF]">
-                    {workspaceSubtitle}
-                  </span>
-                </div>
-              </div>
+            /* History open — full brand logo covering the space + close history button */
+            <div className="flex h-[60px] 2xl:h-[68px] items-center justify-between gap-3 pl-5 pr-3.5">
+              <Link
+                to="/adstudio"
+                onClick={handleLogoClick}
+                aria-label="Home - Ad Studio Ad Creative"
+                className="flex min-w-0 flex-1 items-center cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98] focus:outline-none"
+              >
+                {/* Light mode full logo */}
+                <img
+                  src={AdsGPTLightModeLogo}
+                  alt="AdsGPT"
+                  className="h-8 2xl:h-9 w-auto max-w-[150px] 2xl:max-w-[165px] object-contain object-left dark:hidden"
+                />
+                {/* Dark mode full logo */}
+                <img
+                  src={AdsGPTLogo}
+                  alt="AdsGPT"
+                  className="hidden h-8 2xl:h-9 w-auto max-w-[150px] 2xl:max-w-[165px] object-contain object-left dark:block"
+                />
+              </Link>
               <ShadcnTooltip label="Close history">
                 <button
                   type="button"
                   onClick={() => setOpenHistory(false)}
                   aria-label="Close history"
-                  className="sidebar-header-control flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full transition-all dark:text-[#5A5A5A] dark:hover:text-[#AFAFAF]"
-                >
-                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </ShadcnTooltip>
-            </div>
-          ) : showExpanded ? (
-            /* Expanded — icon + title + workspace + collapse chevron */
-            <div className="flex h-[74px] items-center gap-3 px-3.5">
-              <button
-                type="button"
-                onClick={() => (isMobile ? setOpenMobile(false) : toggleNavExpanded())}
-                className="group flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
-                aria-label="Collapse sidebar"
-                title="Collapse sidebar"
-              >
-                <SidebarLogoMark className="sidebar-expanded-logo-mark h-10 w-10 2xl:h-12 2xl:w-12 flex-shrink-0 object-contain" />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="sidebar-brand-title transition-colors group-hover:text-black dark:font-extrabold dark:tracking-[0.01em] dark:text-white">
-                    AdsGPT
-                  </span>
-                  <span className="sidebar-brand-subtitle truncate dark:text-[9.5px] dark:text-[#AFAFAF]">
-                    {workspaceSubtitle}
-                  </span>
-                </div>
-              </button>
-              <ShadcnTooltip label={isMobile ? 'Close navigation' : 'Collapse sidebar'}>
-                <button
-                  type="button"
-                  onClick={() => (isMobile ? setOpenMobile(false) : toggleNavExpanded())}
-                  aria-label={isMobile ? 'Close navigation' : 'Collapse sidebar'}
-                  aria-controls="app-sidebar-navigation"
-                  aria-expanded={isMobile ? openMobile : isNavExpanded}
-                  className="sidebar-header-control flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full transition-all dark:text-[#5A5A5A] dark:hover:text-[#AFAFAF]"
+                  className="sidebar-header-control flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-neutral-500 hover:text-neutral-900 transition-all hover:bg-black/5 dark:text-[#888888] dark:hover:text-white dark:hover:bg-white/10"
                 >
                   <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 </button>
               </ShadcnTooltip>
             </div>
           ) : (
-            /* Collapsed — use the AdsGPT mark itself as the compact header control. */
+            /* Collapsed — logo icon mark navigation to Ad Studio Ad Creative (Home button) */
             <div className="relative flex h-[60px] 2xl:h-[74px] items-center justify-center">
-              <button
-                type="button"
-                onClick={toggleNavExpanded}
-                aria-label="Expand sidebar"
-                aria-controls="app-sidebar-navigation"
-                aria-expanded={isNavExpanded}
-                className="group relative flex h-12 w-12 items-center justify-center bg-transparent focus:outline-none cursor-pointer"
+              <Link
+                to="/adstudio"
+                onClick={handleLogoClick}
+                aria-label="Home - Ad Studio Ad Creative"
+                className="group relative flex h-12 w-12 items-center justify-center rounded-xl transition-transform hover:scale-105 active:scale-95 focus:outline-none cursor-pointer"
               >
                 <SidebarLogoMark className="sidebar-compact-logo-mark w-10 h-10 2xl:h-12 2xl:w-12 object-contain" />
-                <ChevronRight
-                  className="pointer-events-none absolute -right-2 2xl:-right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400 transition-colors group-hover:text-zinc-900 dark:text-[#888888] dark:group-hover:text-white"
-                  aria-hidden="true"
-                />
-              </button>
+              </Link>
             </div>
           )}
         </div>
 
-        {/* ── DIVIDER (reduced wideness / inset) ─────────────────────────────── */}
-        <div className="sidebar-divider mx-3.5 flex-shrink-0 border-t dark:border-white/15" />
+        {/* ── DIVIDER ────────────────────────────────────────────────────────── */}
+        <div
+          className={
+            openHistory
+              ? 'sidebar-divider mx-4 flex-shrink-0 border-t border-black/10 dark:border-white/15'
+              : 'sidebar-section-divider mx-auto h-px w-9 flex-shrink-0 dark:bg-white/15'
+          }
+        />
 
         {/* ── CHAT HISTORY SECTION (only when open) ─────────────────────────── */}
         {openHistory && activeAdStudioTabId === 'adCopy' && (
@@ -499,141 +488,190 @@ const AppSidebar = () => {
 
 
 
-            {/* LIBRARY group — Workspace + My Space */}
-            {showLibraryGroup && (
-              <div className="mt-auto">
-                <SectionHeader label="LIBRARY" />
-                <div className={showExpanded ? 'space-y-1 px-2.5' : 'space-y-2 px-2'}>
-
-                  {/* Workspace (owner only) */}
-                  {showWorkspace && (() => {
-                    const active = currentRoute === '/workspace/members';
-                    const doNav = () => {
-                      setOpenHistory(false);
-                      if (isMobile) setOpenMobile(false);
-                    };
-                    if (showExpanded) {
-                      return (
-                        <Link
-                          key="workspace"
-                          to="/workspace/members"
-                          onClick={doNav}
-                          aria-current={active ? 'page' : undefined}
-                          className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
-                        >
-                          {active && (
-                            <span
-                              aria-hidden="true"
-                              className="nav-accent-bar absolute left-0 top-[12px] bottom-[12px] w-[2.5px] rounded-r-full"
-                            />
-                          )}
-                          <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
-                            <Users className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" />
-                          </div>
-                          <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1">Workspace</span>
-                        </Link>
-                      );
-                    }
-                    return (
-                      <ShadcnTooltip key="workspace" label="Workspace" side="right">
-                        <Link
-                          to="/workspace/members"
-                          onClick={doNav}
-                          aria-label="Workspace"
-                          aria-current={active ? 'page' : undefined}
-                          className={`sidebar-nav-item sidebar-nav-item--compact${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[76px]`}
-                        >
-                          {active && (
-                            <span
-                              aria-hidden="true"
-                              className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full dark:left-0 dark:top-2 dark:bottom-2"
-                            />
-                          )}
-                          <div className="flex h-7 w-7 items-center justify-center">
-                            <Users className="sidebar-nav-icon h-[24px] w-[24px]" />
-                          </div>
-                          <span className="sidebar-nav-label sidebar-nav-label--compact whitespace-nowrap dark:text-[#AFAFAF]">
-                            Workspace
-                          </span>
-                        </Link>
-                      </ShadcnTooltip>
-                    );
-                  })()}
-
-                  {/* My Space (gated by canUseMySpace) */}
-                  {showMySpace && (() => {
-                    const active = currentRoute === '/my-space';
-                    const doNav = () => {
-                      setOpenHistory(false);
-                      dispatch(setActivePage('myVideos'));
-                      if (isMobile) setOpenMobile(false);
-                    };
-                    if (showExpanded) {
-                      return (
-                        <Link
-                          key="myspace"
-                          id="sidebar-my-space-button"
-                          to="/my-space"
-                          onClick={doNav}
-                          aria-current={active ? 'page' : undefined}
-                          className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
-                        >
-                          {active && (
-                            <span
-                              aria-hidden="true"
-                              className="nav-accent-bar absolute left-0 top-[12px] bottom-[12px] w-[2.5px] rounded-r-full"
-                            />
-                          )}
-                          <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
-                            <Library className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" />
-                          </div>
-                          <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1 text-left">My Space</span>
-                          {savedCount > 0 && renderBadge(savedCount)}
-                        </Link>
-                      );
-                    }
-                    return (
-                      <ShadcnTooltip key="myspace" label="My Space" side="right">
-                        <Link
-                          key="myspace"
-                          id="sidebar-my-space-button"
-                          to="/my-space"
-                          onClick={doNav}
-                          aria-label="My Space"
-                          aria-current={active ? 'page' : undefined}
-                          className={`sidebar-nav-item sidebar-nav-item--compact${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 ${
-                            savedCount > 0 ? 'h-[90px]' : 'h-[76px]'
-                          }`}
-                        >
-                          {active && (
-                            <span
-                              aria-hidden="true"
-                              className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full dark:left-0 dark:top-2 dark:bottom-2"
-                            />
-                          )}
-                          <div className="flex h-7 w-7 items-center justify-center">
-                            <Library className="sidebar-nav-icon h-[24px] w-[24px]" />
-                          </div>
-                          <span className="sidebar-nav-label sidebar-nav-label--compact whitespace-nowrap dark:text-[#AFAFAF]">
-                            My Space
-                          </span>
-                          {savedCount > 0 && (
-                            <div className="sidebar-nav-badge--compact absolute right-1.5 2xl:right-5 -top-2">
-                              {renderBadge(savedCount)}
-                            </div>
-                          )}
-                        </Link>
-                      </ShadcnTooltip>
-                    );
-                  })()}
-
+            {/* LIBRARY group & Chat History */}
+            <div className="mt-auto">
+              {/* Ad Copy — Chat History button top of library */}
+              {currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (
+                <div className={showExpanded ? 'px-2.5 pb-1' : 'px-2'}>
+                  {showExpanded ? (
+                    <button
+                      type="button"
+                      onClick={() => setOpenHistory(!openHistory)}
+                      aria-label="Chat History"
+                      className={`sidebar-nav-item sidebar-nav-item--expanded ${
+                        openHistory ? 'sidebar-nav-item--active' : 'sidebar-nav-item--inactive'
+                      } relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
+                    >
+                      {openHistory && (
+                        <span
+                          aria-hidden="true"
+                          className="nav-accent-bar absolute left-0 top-[12px] bottom-[12px] w-[2.5px] rounded-r-full"
+                        />
+                      )}
+                      <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
+                        <History className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" aria-hidden="true" />
+                      </div>
+                      <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1 text-left">Chat History</span>
+                    </button>
+                  ) : (
+                    <ShadcnTooltip label="Chat History" side="right">
+                      <button
+                        type="button"
+                        onClick={() => setOpenHistory(!openHistory)}
+                        aria-label="Chat History"
+                        className={`sidebar-nav-item sidebar-nav-item--compact ${
+                          openHistory ? 'sidebar-nav-item--active' : 'sidebar-nav-item--inactive'
+                        } relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[76px]`}
+                      >
+                        {openHistory && (
+                          <span
+                            aria-hidden="true"
+                            className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full dark:left-0 dark:top-2 dark:bottom-2"
+                          />
+                        )}
+                        <div className="flex h-7 w-7 items-center justify-center">
+                          <History className="sidebar-nav-icon h-[24px] w-[24px]" aria-hidden="true" />
+                        </div>
+                        <span className="sidebar-nav-label sidebar-nav-label--compact whitespace-nowrap dark:text-[#AFAFAF]">History</span>
+                      </button>
+                    </ShadcnTooltip>
+                  )}
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Logout (members only) — no mt-auto here: LIBRARY above already
-                claims the free space, so this just follows it immediately
-                rather than the two splitting the space into two gaps. */}
+              {showLibraryGroup && (
+                <div>
+                  <SectionHeader label="LIBRARY" />
+                  <div className={showExpanded ? 'space-y-1 px-2.5' : 'space-y-2 px-2'}>
+
+                    {/* Workspace (owner only) */}
+                    {showWorkspace && (() => {
+                      const active = currentRoute === '/workspace/members';
+                      const doNav = () => {
+                        setOpenHistory(false);
+                        if (isMobile) setOpenMobile(false);
+                      };
+                      if (showExpanded) {
+                        return (
+                          <Link
+                            key="workspace"
+                            to="/workspace/members"
+                            onClick={doNav}
+                            aria-current={active ? 'page' : undefined}
+                            className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
+                          >
+                            {active && (
+                              <span
+                                aria-hidden="true"
+                                className="nav-accent-bar absolute left-0 top-[12px] bottom-[12px] w-[2.5px] rounded-r-full"
+                              />
+                            )}
+                            <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
+                              <Users className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" />
+                            </div>
+                            <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1">Workspace</span>
+                          </Link>
+                        );
+                      }
+                      return (
+                        <ShadcnTooltip key="workspace" label="Workspace" side="right">
+                          <Link
+                            to="/workspace/members"
+                            onClick={doNav}
+                            aria-label="Workspace"
+                            aria-current={active ? 'page' : undefined}
+                            className={`sidebar-nav-item sidebar-nav-item--compact${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[76px]`}
+                          >
+                            {active && (
+                              <span
+                                aria-hidden="true"
+                                className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full dark:left-0 dark:top-2 dark:bottom-2"
+                              />
+                            )}
+                            <div className="flex h-7 w-7 items-center justify-center">
+                              <Users className="sidebar-nav-icon h-[24px] w-[24px]" />
+                            </div>
+                            <span className="sidebar-nav-label sidebar-nav-label--compact whitespace-nowrap dark:text-[#AFAFAF]">
+                              Workspace
+                            </span>
+                          </Link>
+                        </ShadcnTooltip>
+                      );
+                    })()}
+
+                    {/* My Space (gated by canUseMySpace) */}
+                    {showMySpace && (() => {
+                      const active = currentRoute === '/my-space';
+                      const doNav = () => {
+                        setOpenHistory(false);
+                        dispatch(setActivePage('myVideos'));
+                        if (isMobile) setOpenMobile(false);
+                      };
+                      if (showExpanded) {
+                        return (
+                          <Link
+                            key="myspace"
+                            id="sidebar-my-space-button"
+                            to="/my-space"
+                            onClick={doNav}
+                            aria-current={active ? 'page' : undefined}
+                            className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
+                          >
+                            {active && (
+                              <span
+                                aria-hidden="true"
+                                className="nav-accent-bar absolute left-0 top-[12px] bottom-[12px] w-[2.5px] rounded-r-full"
+                              />
+                            )}
+                            <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
+                              <Library className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" />
+                            </div>
+                            <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1 text-left">My Space</span>
+                            {savedCount > 0 && renderBadge(savedCount)}
+                          </Link>
+                        );
+                      }
+                      return (
+                        <ShadcnTooltip key="myspace" label="My Space" side="right">
+                          <Link
+                            key="myspace"
+                            id="sidebar-my-space-button"
+                            to="/my-space"
+                            onClick={doNav}
+                            aria-label="My Space"
+                            aria-current={active ? 'page' : undefined}
+                            className={`sidebar-nav-item sidebar-nav-item--compact${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 ${
+                              savedCount > 0 ? 'h-[90px]' : 'h-[76px]'
+                            }`}
+                          >
+                            {active && (
+                              <span
+                                aria-hidden="true"
+                                className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full dark:left-0 dark:top-2 dark:bottom-2"
+                              />
+                            )}
+                            <div className="flex h-7 w-7 items-center justify-center">
+                              <Library className="sidebar-nav-icon h-[24px] w-[24px]" />
+                            </div>
+                            <span className="sidebar-nav-label sidebar-nav-label--compact whitespace-nowrap dark:text-[#AFAFAF]">
+                              My Space
+                            </span>
+                            {savedCount > 0 && (
+                              <div className="sidebar-nav-badge--compact absolute right-1.5 2xl:right-5 -top-2">
+                                {renderBadge(savedCount)}
+                              </div>
+                            )}
+                          </Link>
+                        </ShadcnTooltip>
+                      );
+                    })()}
+
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Logout (members only) */}
             {memberSession && (
               <div className="px-2.5 pb-2 pt-1">
                 <button
@@ -653,52 +691,20 @@ const AppSidebar = () => {
           </nav>
         )}
 
-        {/* Ad Copy — Chat History button above account */}
-        {currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (
-          <div className={showExpanded || openHistory ? 'px-2.5 pb-1' : 'px-2 pb-1'}>
-            {showExpanded || openHistory ? (
-              <button
-                type="button"
-                onClick={() => setOpenHistory(!openHistory)}
-                aria-label="Chat History"
-                className={`sidebar-nav-item sidebar-nav-item--expanded ${
-                  openHistory ? 'sidebar-nav-item--active' : 'sidebar-nav-item--inactive'
-                } relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
-              >
-                {openHistory && (
-                  <span
-                    aria-hidden="true"
-                    className="nav-accent-bar absolute left-0 top-[12px] bottom-[12px] w-[2.5px] rounded-r-full"
-                  />
-                )}
-                <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
-                  <History className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" aria-hidden="true" />
-                </div>
-                <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1 text-left">Chat History</span>
-              </button>
-            ) : (
-              <ShadcnTooltip label="Chat History" side="right">
-                <button
-                  type="button"
-                  onClick={() => setOpenHistory(!openHistory)}
-                  aria-label="Chat History"
-                  className={`sidebar-nav-item sidebar-nav-item--compact ${
-                    openHistory ? 'sidebar-nav-item--active' : 'sidebar-nav-item--inactive'
-                  } relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[76px]`}
-                >
-                  {openHistory && (
-                    <span
-                      aria-hidden="true"
-                      className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full dark:left-0 dark:top-2 dark:bottom-2"
-                    />
-                  )}
-                  <div className="flex h-7 w-7 items-center justify-center">
-                    <History className="sidebar-nav-icon h-[24px] w-[24px]" aria-hidden="true" />
-                  </div>
-                  <span className="sidebar-nav-label sidebar-nav-label--compact whitespace-nowrap dark:text-[#AFAFAF]">History</span>
-                </button>
-              </ShadcnTooltip>
-            )}
+        {/* Ad Copy — Chat History button (when history drawer is open) */}
+        {openHistory && currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (
+          <div className="px-2.5 pb-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setOpenHistory(!openHistory)}
+              aria-label="Chat History"
+              className="sidebar-nav-item sidebar-nav-item--expanded sidebar-nav-item--inactive relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5"
+            >
+              <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
+                <History className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" aria-hidden="true" />
+              </div>
+              <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1 text-left">Chat History</span>
+            </button>
           </div>
         )}
 
@@ -708,7 +714,7 @@ const AppSidebar = () => {
             className={
               showExpanded || openHistory
                 ? 'sidebar-divider mx-3.5 flex-shrink-0 border-t dark:border-white/15'
-                : 'sidebar-section-divider mx-auto mb-1.5 h-px w-7 flex-shrink-0 dark:bg-white/15'
+                : 'sidebar-section-divider mx-auto mb-1.5 h-px w-9 flex-shrink-0 dark:bg-white/15'
             }
           />
         )}
@@ -716,59 +722,63 @@ const AppSidebar = () => {
         {/* ── PROFILE FOOTER (anchored at bottom) ───────────────────────────── */}
         {(!memberSession || (memberSession && canUseWorkspaceFeature('profile', workspacePayload))) ? (
           <div
-            className={`flex flex-shrink-0 items-center ${
-              showExpanded || openHistory
-                ? 'h-[76px] px-2.5'
-                : 'h-[55px] 2xl:h-[68px] justify-center'
+            className={`relative flex flex-shrink-0 items-center justify-center ${
+              openHistory ? 'h-[76px] px-2.5' : 'h-[64px] 2xl:h-[72px] pb-2 pt-1'
             }`}
           >
-            <ShadcnTooltip label={showExpanded || openHistory ? undefined : 'User Profile'} side="right">
+            {currentRoute === '/profile' && !openHistory && (
+              <span
+                aria-hidden="true"
+                className="nav-accent-bar absolute left-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-r-full"
+              />
+            )}
+            <ShadcnTooltip label={openHistory ? undefined : 'User Profile'} side="right">
               <Link
                 to="/profile"
                 onClick={() => {
                   setOpenHistory(false);
                   if (isMobile) setOpenMobile(false);
                 }}
-                aria-label={showExpanded || openHistory ? undefined : 'User Profile'}
+                aria-label={openHistory ? undefined : 'User Profile'}
                 aria-current={currentRoute === '/profile' ? 'page' : undefined}
-                className={`sidebar-nav-item${showExpanded || openHistory ? ' sidebar-nav-item--expanded' : ' sidebar-nav-item--compact'}${
-                  currentRoute === '/profile' ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'
-                } relative flex items-center gap-3 transition-all ${
-                  showExpanded || openHistory
-                    ? 'h-13 w-full rounded-[15px] px-3 py-2'
-                    : 'h-12 w-12 justify-center rounded-[14px] p-0'
-                }`}
+                className={
+                  openHistory
+                    ? `sidebar-nav-item sidebar-nav-item--expanded${
+                        currentRoute === '/profile'
+                          ? ' sidebar-nav-item--active'
+                          : ' sidebar-nav-item--inactive'
+                      } relative flex w-full items-center gap-3 rounded-[15px] px-3 py-2 transition-all`
+                    : 'group relative flex items-center justify-center rounded-full focus:outline-none cursor-pointer'
+                }
               >
-                {currentRoute === '/profile' && (
+                {currentRoute === '/profile' && openHistory && (
                   <span
                     aria-hidden="true"
-                    className={`nav-accent-bar absolute rounded-r-full ${
-                      showExpanded || openHistory
-                        ? 'left-0 top-[11px] bottom-[11px] w-[2px]'
-                        : '-left-2 top-3 bottom-3 w-[3px] dark:left-0 dark:top-2 dark:bottom-2'
-                    }`}
+                    className="nav-accent-bar absolute left-0 top-[11px] bottom-[11px] w-[2px] rounded-r-full"
                   />
                 )}
                 {/* Avatar */}
                 <div
-                  className="sidebar-profile-button relative flex h-9 w-9 2xl:h-10 2xl:w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[#25221E] text-white shadow-xs dark:bg-[#2A2A2A]"
+                  className={`sidebar-profile-button ${
+                    currentRoute === '/profile' ? 'sidebar-profile-button-active' : ''
+                  } relative flex h-10 w-10 2xl:h-11 2xl:w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full shadow-xs transition-transform duration-200 group-hover:scale-105 active:scale-95`}
                 >
                   {profileImage ? (
                     <img
                       src={profileImage}
                       alt=""
                       aria-hidden="true"
-                      className="sidebar-profile-avatar h-full w-full rounded-[12px] object-cover"
+                      className="sidebar-profile-avatar h-full w-full rounded-full object-cover"
                     />
                   ) : (
-                    <span className="sidebar-profile-avatar flex h-full w-full items-center justify-center text-center text-xs 2xl:text-[13px] font-bold text-white">
+                    <span className="sidebar-profile-avatar flex h-full w-full items-center justify-center text-center text-xs 2xl:text-[13px] font-bold">
                       {profileInitials}
                     </span>
                   )}
                 </div>
 
                 {/* Name + role */}
-                {(showExpanded || openHistory) && (
+                {openHistory && (
                   <div className="flex min-w-0 flex-1 flex-col justify-center">
                     <span
                       className="sidebar-profile-name truncate dark:text-white"
@@ -786,7 +796,7 @@ const AppSidebar = () => {
           </div>
         ) : null}
 
-        <div className="sidebar-edge-divider absolute top-0 right-0 h-full w-[2px] dark:bg-white/20" />
+        <div className="sidebar-edge-divider absolute top-0 right-0 h-full w-[1px]" />
       </div>
     </Sidebar>
   );

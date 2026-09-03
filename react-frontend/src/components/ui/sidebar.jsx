@@ -43,7 +43,7 @@ function useSidebar() {
 }
 
 function SidebarProvider({
-  defaultOpen = true,
+  defaultOpen = false,
   open: openProp,
   onOpenChange: setOpenProp,
   className,
@@ -73,42 +73,21 @@ function SidebarProvider({
     return () => window.removeEventListener('resize', updateSidebarDimensions);
   }, []);
 
-  // ── Nav expand / collapse — independent of chat-history panel ──────────────
-  // Persisted to localStorage so the state survives page refreshes.
-  const [internalNavExpanded, setInternalNavExpanded] = React.useState(() => {
-    try {
-      const persisted = localStorage.getItem('adsgpt_sidebar_collapsed');
-      return persisted === null ? defaultOpen : persisted !== 'true';
-    } catch {
-      return defaultOpen;
-    }
-  });
-  const isNavExpanded = openProp ?? internalNavExpanded;
+  // ── Nav expand / collapse permanently disabled ──────────────────────────────
+  const [internalNavExpanded, setInternalNavExpanded] = React.useState(false);
+  const isNavExpanded = false;
 
   // This is the internal state of the sidebar.
-  // We use openProp and setOpenProp for control from outside the component.
   const setOpen = React.useCallback(
-    (value) => {
-      const openState = typeof value === 'function' ? value(isNavExpanded) : value;
-      if (setOpenProp) {
-        setOpenProp(openState);
-      } else {
-        setInternalNavExpanded(openState);
-      }
-
-      try {
-        localStorage.setItem('adsgpt_sidebar_collapsed', String(!openState));
-      } catch (_e) {
-        // Storage can be unavailable in private or restricted browser contexts.
-      }
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+    (_value) => {
+      // Navigation sidebar never opens; keep in collapsed mode
     },
-    [isNavExpanded, setOpenProp]
+    []
   );
 
   const toggleNavExpanded = React.useCallback(() => {
-    setOpen((expanded) => !expanded);
-  }, [setOpen]);
+    // Navigation sidebar never opens; keep in collapsed mode
+  }, []);
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
