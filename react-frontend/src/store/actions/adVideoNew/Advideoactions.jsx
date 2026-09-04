@@ -21,6 +21,7 @@ import { uploadToS3 } from '@/utils/imageUpload';
 import { globalToast } from '@/utils/globalToast';
 import { setSavedCount } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { GA4Events } from '@/utils/ga4';
+import { toVideoDurationValue } from '@/utils/videoModelCapabilities';
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
@@ -74,6 +75,7 @@ export const generateVideoAction =
         ...payload,
         inputs: {
           ...payload.inputs,
+          duration: toVideoDurationValue(payload.inputs?.duration),
           image: imageUrl || (payload.inputs.image ? `${S3_BASE_URL}${payload.inputs.image}` : ''),
         },
       };
@@ -210,6 +212,7 @@ export const generateVideoUGCAction =
         ...payload,
         inputs: {
           ...payload.inputs,
+          duration: toVideoDurationValue(payload.inputs?.duration),
           image: imageUrl,
         },
       };
@@ -451,9 +454,16 @@ export const generateImageAndScript = (payload) => async (dispatch) => {
   try {
     dispatch(setLoading(true));
     dispatch(setError(null));
+    const normalizedPayload = {
+      ...payload,
+      inputs: {
+        ...payload.inputs,
+        duration: toVideoDurationValue(payload.inputs?.duration),
+      },
+    };
     const response = await axios.post(
       `${BACKEND_HOST}/adsgpt/video/generate-image-and-script`,
-      payload,
+      normalizedPayload,
       {
         headers: {
           Authorization: `Bearer ${getCookies()}`,
@@ -637,6 +647,7 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
     }
 
     const { formData } = details;
+    const duration = toVideoDurationValue(formData.duration);
     const isBrand = aiAdsType === 'brand';
 
     // Voice cascade — the deliverable depends on the provider:
@@ -674,7 +685,7 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
           ctaType: formData.cta,
           tagline: formData.tagline,
           model: formData.model,
-          duration: formData.duration,
+          duration,
           aspectRatio: formData.aspectRatio,
           numberOfVideos: 1,
           userPrompt: formData.optimizedPrompt || '',
@@ -695,7 +706,7 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
           productType: formData.productType,
           price: formData.price || '',
           model: formData.model,
-          duration: formData.duration,
+          duration,
           aspectRatio: formData.aspectRatio,
           numberOfVideos: 1,
           userPrompt: formData.optimizedPrompt || '',
@@ -829,10 +840,17 @@ export const generateCloneImageAndScript = (payload) => async (dispatch) => {
   try {
     dispatch(setLoading(true));
     dispatch(setError(null));
-    dispatch(setClonePayload(payload));
+    const normalizedPayload = {
+      ...payload,
+      inputs: {
+        ...payload.inputs,
+        duration: toVideoDurationValue(payload.inputs?.duration),
+      },
+    };
+    dispatch(setClonePayload(normalizedPayload));
     const res = await axios.post(
       `${BACKEND_HOST}/adsgpt/video/generate-image-and-script-clone`,
-      payload,
+      normalizedPayload,
       { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
     );
     dispatch(setImageAndScript(res.data));

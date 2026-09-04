@@ -21,16 +21,23 @@ export const getModelAspectRatios = (models, surface, canonicalModel) => {
   }));
 };
 
+export const toVideoDurationValue = (value) => {
+  const match = String(value ?? '').trim().match(/^(\d+(?:\.\d+)?)\s*s?$/i);
+  if (!match || Number(match[1]) <= 0) return '';
+
+  return `${Number(match[1])}s`;
+};
+
 export const getModelDurationOptions = (models, canonicalModel) => {
   const model = models.find((entry) => (entry.canonical || entry.model) === canonicalModel);
   const durations = Array.isArray(model?.durations) ? model.durations : [];
-  return [...new Set(durations.map(Number).filter((duration) => Number.isFinite(duration) && duration > 0))]
-    .sort((a, b) => a - b)
-    .map((duration) => ({ value: `${duration}s`, label: `${duration}s` }));
+  return [...new Set(durations.map(toVideoDurationValue).filter(Boolean))]
+    .sort((a, b) => Number(a) - Number(b))
+    .map((duration) => ({ value: duration, label: duration }));
 };
 
 export const getSelectedModelDuration = (durationOptions, duration) =>
-  durationOptions.find((option) => option.value === duration)?.value || '';
+  durationOptions.find((option) => option.value === toVideoDurationValue(duration))?.value || '';
 
 export const AspectRatioPreview = ({ ratio, className = '' }) => {
   const [width, height] = String(ratio).split(':').map(Number);
