@@ -245,7 +245,7 @@ export default function AdjustPanel({
           <Notice tone="warn" icon={AlertCircle}>
             <span className="flex flex-wrap items-center gap-2">
               <span>
-                Couldn&apos;t load Meta&apos;s objective list, so objective, location and button
+                Couldn&apos;t load Meta&apos;s objective list, so objective, location and CTA
                 can&apos;t be changed yet.
               </span>
               <button
@@ -284,11 +284,11 @@ export default function AdjustPanel({
               onChange={(v) => editOffer('conversionLocation', v)}
             />
           </FieldBlock>
-          <FieldBlock label="Button" tooltip="The call to action printed on the ad.">
+          <FieldBlock label="CTA" tooltip="The call to action printed on the ad.">
             <SelectField
               value={offer.cta?.button}
               options={ctaOptions.length ? ctaOptions : currentAsOption(offer.cta?.button)}
-              placeholder="Choose a button"
+              placeholder="Choose a CTA"
               flagged={isLow('offer.cta.button')}
               onChange={(v) => editOffer('cta', { ...(offer.cta || {}), button: v })}
             />
@@ -347,9 +347,10 @@ export default function AdjustPanel({
               onChange={(next) => onEditField?.('generation', 'seedImages', next)}
               onAddCompetitors={() => setCompetitorVisualsOpen(true)}
               emptyLabel="Nothing found on the page — add one"
+              size="lg"
             />
           </FieldBlock>
-          <FieldGrid cols={4}>
+          <div className="flex flex-wrap items-start gap-8 sm:gap-10">
             <FieldBlock label="Logo">
               <ImageStrip
                 urls={brand.logoUrls}
@@ -359,13 +360,13 @@ export default function AdjustPanel({
                 emptyLabel="No logo found on the page"
               />
             </FieldBlock>
-            <FieldBlock label="Colours" wide>
+            <FieldBlock label="Colours">
               <PaletteEditor
                 colors={brand.palette}
                 onChange={(next) => editBrand('palette', next)}
               />
             </FieldBlock>
-          </FieldGrid>
+          </div>
         </div>
       </Section>
 

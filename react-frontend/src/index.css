@@ -252,6 +252,12 @@ html.theme-changing *::after {
   .scrollbar-hide {
     /* Firefox */
     scrollbar-width: none;
+    /* IE and Edge */
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    /* Chrome, Safari, Opera */
+    display: none;
   }
   .scrollbar-white {
     scrollbar-width: thin;

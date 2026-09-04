@@ -18,7 +18,7 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
   };
 
   return (
-    <div className="workspace-card relative flex h-full w-screen rounded-3xl max-w-sm min-w-[450px] flex-col overflow-y-auto p-6 sm:max-w-xl md:max-w-2xl 2xl:max-h-[90vh] 2xl:max-w-4xl 2xl:p-12 dark:bg-[#303030]/40">
+    <div className="workspace-card scrollbar-hide relative flex h-full w-screen rounded-3xl max-w-sm min-w-[450px] flex-col overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden p-6 sm:max-w-xl md:max-w-2xl 2xl:max-h-[90vh] 2xl:max-w-4xl 2xl:p-12 dark:bg-[#303030]/40">
       {/* Header */}
       <div className="relative mb-10 flex items-center justify-center pt-6 text-gray-900 dark:text-white 2xl:mb-12">
         <h2 className="text-base font-semibold sm:text-lg lg:text-xl 2xl:text-[26px]">

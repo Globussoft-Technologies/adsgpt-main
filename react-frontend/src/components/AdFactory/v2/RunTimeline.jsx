@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Share2,
   ThumbsUp,
+  X,
 } from 'lucide-react';
 import {
   Dialog,
@@ -18,6 +19,10 @@ import {
 } from '@/components/ui/dialog';
 
 import { AnimatePresence, motion } from 'framer-motion';
+import { FaFacebookF } from 'react-icons/fa6';
+import { FcGoogle } from 'react-icons/fc';
+import MobilePreview from '@/components/AdFactory/AdPreview/MobilePreview';
+import GoogleMobilePreview from '@/components/AdFactory/AdPreview/GoogleMobilePreview';
 
 import { Panel, PanelBody, PanelHeader, GhostBtn } from './Panel';
 import { useMotionPresets } from './_motion';
@@ -229,7 +234,7 @@ function Cycle({ row, last, onRetry, brandName, motionProps }) {
         ? `${row.liveCount} live · ${row.failedCount} failed`
         : `${row.liveCount} ${row.liveCount === 1 ? 'ad' : 'ads'} live`;
 
-  const link = (row.links || []).find((l) => l?.url);
+  const links = (row.links || []).filter((l) => l?.url);
 
   return (
     <motion.li {...motionProps} className="relative grid grid-cols-[16px_1fr] gap-3 pb-4">
@@ -247,16 +252,21 @@ function Cycle({ row, last, onRetry, brandName, motionProps }) {
           <span className={`rounded-md px-2 py-0.5 text-13 font-medium ${PILL[tone]}`}>
             {label}
           </span>
-          {link && (
-            <a
-              href={link.url}
-              target="_blank"
-              rel="noreferrer"
-              className="ml-auto inline-flex items-center gap-1 text-13 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
-            >
-              View on {link.platform || 'Meta'}
-              <ExternalLink className="h-3 w-3" />
-            </a>
+          {links.length > 0 && (
+            <div className="ml-auto flex items-center gap-2">
+              {links.map((l, idx) => (
+                <a
+                  key={idx}
+                  href={l.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-13 text-[#6B7280] transition-colors hover:text-[#111827] dark:text-[#AFB6C0] dark:hover:text-[#ECEFF3]"
+                >
+                  View on {l.platform || 'Meta'}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ))}
+            </div>
           )}
         </div>
 
@@ -380,18 +390,19 @@ function PublishedAd({ creative, onPreview }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
-        {link?.url && (
+        {(creative.adLinks || []).filter((l) => l?.url).map((l, idx) => (
           <a
-            href={link.url}
+            key={idx}
+            href={l.url}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
             className="flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-10 font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
           >
-            <span>View</span>
+            <span>{l.platform ? `View on ${l.platform}` : 'View'}</span>
             <ExternalLink className="h-2.5 w-2.5" />
           </a>
-        )}
+        ))}
       </div>
     </li>
   );
@@ -422,121 +433,153 @@ function shortZone(tz) {
 function TimelinePreviewDialog({ creative, open, onOpenChange, brandName }) {
   const failed = creative?.posted === false;
   const link = (creative?.adLinks || [])[0];
-  const platformLabel = link?.platform || creative?.platform || 'Google';
-  const accountName = creative?.accountName || creative?.pageName || (platformLabel.toLowerCase() === 'google' ? 'Google Ads' : platformLabel.toLowerCase() === 'meta' ? 'Meta Ads' : 'Ad Account');
-  const postedAt = creative?.postedAt || creative?.createdAt || creative?.timestamp;
-  const initial = (creative?.brandName || brandName || creative?.headline || 'A').slice(0, 1).toUpperCase();
+  const detectedPlatform = (link?.platform || creative?.platform || 'meta').toLowerCase();
+  const initialPlatform = detectedPlatform.includes('google') ? 'google' : 'meta';
+  const [platform, setPlatform] = useState(initialPlatform);
+
+  useEffect(() => {
+    if (creative) {
+      const p = (link?.platform || creative?.platform || 'meta').toLowerCase();
+      setPlatform(p.includes('google') ? 'google' : 'meta');
+    }
+  }, [creative, link]);
+
+  const isGoogle = platform === 'google';
   const ctaLabel = formatCta(creative?.cta || creative?.callToAction);
+
+  // Extract headlines & descriptions for Google vs Meta
+  const rawHeadline =
+    (isGoogle ? creative?.copy?.google?.headline : creative?.copy?.meta?.headline) ||
+    creative?.copy?.headline ||
+    creative?.headline ||
+    '';
+  const rawPrimary =
+    creative?.copy?.meta?.primary_text ||
+    creative?.copy?.meta?.primaryText ||
+    creative?.copy?.primaryText ||
+    creative?.message ||
+    creative?.primaryText ||
+    '';
+  const rawDescription =
+    creative?.copy?.google?.description ||
+    creative?.copy?.description ||
+    creative?.message ||
+    creative?.description ||
+    rawPrimary;
+
+  // Enforce character lengths & format for Google vs Meta
+  const headline = isGoogle && rawHeadline.length > 30 ? rawHeadline.slice(0, 30) : rawHeadline;
+  const description = isGoogle && rawDescription.length > 90 ? rawDescription.slice(0, 90) : rawDescription;
+  const primaryText = isGoogle ? description : rawPrimary;
+
+  const previewCopy = {
+    headline,
+    primaryText,
+    description,
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(420px,92vw)] max-w-[400px] overflow-hidden rounded-[24px] border border-gray-200 bg-white p-0 text-gray-900 shadow-2xl dark:border-white/10 dark:bg-[#0F1115] dark:text-white [&>button]:top-5 [&>button]:right-5 [&>button]:z-20 [&>button]:rounded-md [&>button]:border [&>button]:border-gray-200 [&>button]:bg-gray-100 [&>button]:p-1 [&>button]:text-gray-700 dark:[&>button]:border-white/10 dark:[&>button]:bg-[#171A20] dark:[&>button]:text-white/80 [&>button]:opacity-100 [&>button]:transition-colors hover:[&>button]:bg-gray-200 dark:hover:[&>button]:bg-[#1E222B] dark:hover:[&>button]:text-white [&>button]:focus:ring-0 [&>button_svg]:h-3.5 [&>button_svg]:w-3.5">
-        <DialogHeader className="border-b border-gray-100 px-5 py-4 pr-16 text-left dark:border-white/8">
-          <DialogTitle className="text-[16px] font-semibold text-gray-900 dark:text-white">
-            Ad Preview
-          </DialogTitle>
+      <DialogContent
+        showCloseButton={false}
+        className="max-h-[92vh] w-[min(440px,94vw)] max-w-[440px] overflow-hidden rounded-[24px] border border-gray-200 bg-white p-0 text-gray-900 shadow-2xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden dark:border-white/10 dark:bg-[#0F1115] dark:text-white"
+      >
+        {/* Dialog Header with properly aligned close button */}
+        <DialogHeader className="border-b border-gray-100 px-5 py-3.5 text-left dark:border-white/8">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <DialogTitle className="text-[15px] font-semibold text-gray-900 dark:text-white">
+                Ad Preview
+              </DialogTitle>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium tracking-wide ${
+                  failed
+                    ? 'bg-red-50 text-red-600 ring-1 ring-red-200 dark:bg-red-500/10 dark:text-red-400 dark:ring-red-500/30'
+                    : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/30'
+                }`}
+              >
+                {failed ? (
+                  <>
+                    <AlertTriangle className="size-3" />
+                    Failed
+                  </>
+                ) : (
+                  <>
+                    <Check className="size-3" />
+                    Posted
+                  </>
+                )}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onOpenChange?.(false)}
+              aria-label="Close"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-800 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/20 dark:hover:text-white cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </DialogHeader>
 
-        <div className="flex justify-center p-5">
-          <div className="w-full max-w-[360px] overflow-hidden rounded-xl border border-gray-200 bg-white text-gray-800 shadow-sm dark:border-white/10">
-            <div className="flex items-start justify-between gap-2 px-3 pt-3">
-              <div className="flex min-w-0 flex-1 items-start gap-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#167beb] text-xs font-bold text-white">
-                  {initial}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="truncate text-[12px] leading-tight font-semibold text-gray-900">
-                      {creative?.brandName || brandName || 'Brand'}
-                    </span>
-                    <span className="truncate rounded-md border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                      {platformLabel} · {accountName}
-                    </span>
-                  </div>
-                  {postedAt && (
-                    <div className="mt-0.5 truncate text-[10px] text-gray-500">
-                      {formatPostedAt(postedAt)}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <span
-                  className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white shadow ${
-                    failed ? 'bg-red-500' : 'bg-emerald-500'
-                  }`}
-                >
-                  {failed ? (
-                    <>
-                      <AlertTriangle className="size-3" />
-                      Failed
-                    </>
-                  ) : (
-                    <>
-                      <Check className="size-3" />
-                      Posted
-                    </>
-                  )}
-                </span>
-                <EllipsisVertical className="size-4 text-gray-400" />
-              </div>
-            </div>
+        <div className="flex flex-col items-center px-4 pt-3 pb-3">
+          {/* Platform Switcher: Meta Preview | Google Preview */}
+          <div className="mb-2 flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 p-1 shadow-xs dark:border-white/10 dark:bg-white/5">
+            <button
+              type="button"
+              onClick={() => setPlatform('meta')}
+              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
+                platform === 'meta'
+                  ? 'bg-[#1877F2] text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+              }`}
+            >
+              <FaFacebookF className="h-3 w-3" />
+              <span>Meta Preview</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPlatform('google')}
+              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
+                platform === 'google'
+                  ? 'bg-white text-gray-900 shadow-sm dark:bg-[#2C2C2C] dark:text-white'
+                  : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+              }`}
+            >
+              <FcGoogle className="h-3.5 w-3.5" />
+              <span>Google Preview</span>
+            </button>
+          </div>
 
-            <div className="mt-2 px-3 text-[11px] leading-snug text-gray-700">
-              {creative?.message || (
-                <span className="text-gray-500">No ad copy available</span>
-              )}
-            </div>
-
-            <div className="mx-3 mt-2 aspect-square overflow-hidden rounded-md bg-[#E4E6EB]">
-              {creative?.imageUrl ? (
-                <img
-                  src={srcOf(creative.imageUrl)}
-                  alt={creative?.headline || 'Published ad'}
-                  className="h-full w-full object-contain"
+          {/* Phone Frame Preview */}
+          <div className="flex w-full justify-center overflow-hidden">
+            <div className="origin-top scale-[0.87] -mb-16 transition-transform">
+              {isGoogle ? (
+                <GoogleMobilePreview
+                  image={srcOf(creative?.imageUrl)}
+                  text={previewCopy}
+                  cta={ctaLabel || 'Learn more'}
+                  ctaLink={link?.url || creative?.linkUrl || ''}
+                  brandName={creative?.brandName || brandName}
                 />
               ) : (
-                <div className="flex h-full items-center justify-center text-sm text-gray-500">
-                  No image available
-                </div>
+                <MobilePreview
+                  image={srcOf(creative?.imageUrl)}
+                  text={previewCopy}
+                  cta={ctaLabel || 'Learn more'}
+                  ctaLink={link?.url || creative?.linkUrl || ''}
+                  brandName={creative?.brandName || brandName}
+                />
               )}
             </div>
-
-            <div className="m-3 flex items-center justify-between gap-2 rounded bg-[#F7F8FA] p-2">
-              <div className="min-w-0">
-                <div className="line-clamp-1 break-all text-[9px] text-gray-500">
-                  {link?.url || creative?.linkUrl || 'No link'}
-                </div>
-                <div className="truncate text-[11px] leading-tight font-semibold text-gray-900">
-                  {creative?.headline || 'Untitled ad'}
-                </div>
-              </div>
-              <span className="shrink-0 rounded-md bg-[#E4E6EB] px-3 py-1.5 text-[10px] font-semibold text-[#191919]">
-                {ctaLabel || 'Learn More'}
-              </span>
-            </div>
-
-            <div className="mx-3 mb-3 flex items-center justify-around border-t border-gray-200 pt-2 text-gray-500">
-              <span className="flex items-center gap-1 text-[10px] font-medium">
-                <ThumbsUp className="size-3.5" />
-                Like
-              </span>
-              <span className="flex items-center gap-1 text-[10px] font-medium">
-                <MessageCircle className="size-3.5" />
-                Comment
-              </span>
-              <span className="flex items-center gap-1 text-[10px] font-medium">
-                <Share2 className="size-3.5" />
-                Share
-              </span>
-            </div>
-
-            {failed && creative?.runError && (
-              <div className="border-t border-red-200 bg-red-50 px-3 py-1.5 text-[10px] leading-tight text-red-700">
-                <span className="font-semibold">Reason:</span> {creative.runError}
-              </div>
-            )}
           </div>
+
+          {failed && creative?.runError && (
+            <div className="mt-2 w-full rounded-lg border border-red-200 bg-red-50 p-2.5 text-[11px] text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+              <span className="font-semibold">Failure Reason:</span> {creative.runError}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

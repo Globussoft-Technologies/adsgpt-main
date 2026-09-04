@@ -84,7 +84,7 @@ function normalizeCopy(data) {
     "";
   const description = meta.description || google.description || d.description || "";
 
-  return { primaryText, headline, description };
+  return { primaryText, headline, description, meta, google };
 }
 
 /**

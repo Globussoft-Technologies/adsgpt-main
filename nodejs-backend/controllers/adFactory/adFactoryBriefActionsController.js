@@ -508,12 +508,59 @@ exports.publishBrief = async (req, res) => {
     let pairs;
     if (wanted && wanted.size > 0) {
       const all = await loadAllPairs(brief, userId);
-      pairs = all.filter((p) => wanted.has(String(p.imageUrl)));
+      const allUrls = new Set(all.map((p) => String(p.imageUrl)));
+      const customPairs = (Array.isArray(body.pairs) ? body.pairs : [])
+        .filter(
+          (p) =>
+            p &&
+            p.imageUrl &&
+            wanted.has(String(p.imageUrl)) &&
+            !allUrls.has(String(p.imageUrl))
+        )
+        .map((p) => ({
+          imageUrl: p.imageUrl,
+          headline: p.headline || p.copy?.headline || "",
+          description:
+            p.description || p.primaryText || p.copy?.primaryText || "",
+          body: p.description || p.primaryText || p.copy?.primaryText || "",
+          text: p.description || p.primaryText || p.copy?.primaryText || "",
+          copy: p.copy || {
+            headline: p.headline || "",
+            primaryText: p.description || p.primaryText || "",
+            description: p.description || p.primaryText || "",
+          },
+          isUser: true,
+        }));
+
+      pairs = [...all.filter((p) => wanted.has(String(p.imageUrl))), ...customPairs];
       if (pairs.length === 0) {
         return res.status(409).json({
           success: false,
           code: "NOTHING_TO_POST",
           error: "None of those ads are available to post any more.",
+        });
+      }
+      if (Array.isArray(body.pairs) && body.pairs.length > 0) {
+        const editedByUrl = new Map(body.pairs.map((p) => [String(p.imageUrl), p]));
+        pairs = pairs.map((p) => {
+          const edited = editedByUrl.get(String(p.imageUrl));
+          if (!edited) return p;
+          const headline = edited.headline || edited.copy?.headline || p.copy?.headline || p.headline;
+          const text = edited.description || edited.primaryText || edited.body || edited.copy?.primaryText || p.copy?.primaryText || p.body;
+          return {
+            ...p,
+            headline,
+            body: text,
+            description: text,
+            text,
+            copy: {
+              ...(p.copy || {}),
+              ...(edited.copy || {}),
+              headline,
+              primaryText: text,
+              description: text,
+            },
+          };
         });
       }
     } else {

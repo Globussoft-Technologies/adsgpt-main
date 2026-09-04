@@ -1,10 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Check, Download, Eye, ImageOff, Loader2, Rocket, X } from 'lucide-react';
+import {
+  AlertCircle,
+  Check,
+  Download,
+  Eye,
+  ImageOff,
+  Loader2,
+  Pencil,
+  Plus,
+  Rocket,
+  X,
+} from 'lucide-react';
+import { FaFacebookF } from 'react-icons/fa6';
+import { FcGoogle } from 'react-icons/fc';
 
 import { downloadMediaFromUrl } from '@/store/actions/adVideoNew/Advideoactions';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import MobilePreview from '@/components/AdFactory/AdPreview/MobilePreview';
+import GoogleMobilePreview from '@/components/AdFactory/AdPreview/GoogleMobilePreview';
+import AddImageDialog from '@/components/AdFactory/AdPreview/AddImageDialog';
 import {
   PublishError,
   PublishResult,
@@ -49,44 +64,6 @@ const when = (value) => {
 // ----------------------------------------------------------------------------
 // RunGallery — every ad this brief has made, and the one place any selection of
 // them goes live.
-//
-// ─── Why picking and posting share a screen ──────────────────────────────────
-//
-// The first version of this was two views: a grid, then a Post button that
-// replaced the grid with the form. That is a wizard, and it is the wrong shape
-// for this job. Choosing which ads to run is not a decision you make once and
-// walk away from — you pick two, look at the ad set you are posting into,
-// realise it is the retargeting one, and change your mind about which two. With
-// the grid swapped out for the form, checking that costs a trip back and the
-// selection is out of sight while you are deciding where it goes.
-//
-// So: the ads on the left, where they are going on the right, one action bar
-// across the bottom that always says what is about to happen. Select, fill,
-// post, in one pass, with both halves of the decision visible the whole time.
-//
-// ─── Why the layout cannot break ─────────────────────────────────────────────
-//
-// A run can be 3 ads or 50 — "ads per run" goes up to 50 — and there can be any
-// number of runs. Every dimension of that is absorbed by scrolling INSIDE the
-// pane it belongs to, never by the modal growing:
-//
-//   • the modal is a fixed 90vh, `flex flex-col`, and its header and action bar
-//     are `shrink-0`, so they cannot be pushed off by a tall body
-//   • the two panes are `min-h-0` (without it a flex child refuses to shrink
-//     below its content and the scroll silently moves to the page)
-//   • each pane scrolls on its own, so 50 ads on the left never move the form
-//   • the form pane is a fixed 360px and the grid takes the rest, so more ads
-//     make the grid denser, not the form narrower
-//
-// Below `lg` the two stack and the body scrolls as one — a 360px form beside
-// anything on a phone is two unusable columns instead of one good one. The
-// action bar stays pinned either way.
-//
-// ─── Posting is the form we already have ─────────────────────────────────────
-//
-// Not a copy of it: `usePublishTarget` + `PublishTargetFields` are the same
-// parts the full-width "Ship these ads" card composes, rendered `stacked` here.
-// One set of Meta plumbing, two layouts. See the note in ShipTheseAds.jsx.
 // ----------------------------------------------------------------------------
 
 export default function RunGallery({
@@ -113,6 +90,60 @@ export default function RunGallery({
   const [selected, setSelected] = useState(() => new Set());
   const [previewing, setPreviewing] = useState(null);
   const [platform, setPlatform] = useState('meta');
+  const [galleryFilter, setGalleryFilter] = useState('all'); // 'all' | 'meta' | 'google'
+  const [editedCopies, setEditedCopies] = useState({}); // { [imageUrl]: { headline, primaryText, ... } }
+  const [previewPlatform, setPreviewPlatform] = useState('meta');
+  const [customPairs, setCustomPairs] = useState([]);
+  const [addImageOpen, setAddImageOpen] = useState(false);
+
+  const userData = useSelector((state) => state.auth?.userData || state.socket?.userData);
+  const userId = userData?.user_id;
+
+  const handleAddCustomImage = useCallback(
+    (img) => {
+      if (!img?.src) return;
+      const defaultHeadline = brandName ? `${brandName}` : 'Special Offer';
+      const defaultText = 'Experience the difference. Explore our offers and get started today.';
+      const newPair = {
+        imageUrl: img.src,
+        isCustom: true,
+        copy: {
+          headline: defaultHeadline,
+          primaryText: defaultText,
+          description: defaultText,
+          meta: {
+            headline: defaultHeadline,
+            primary_text: defaultText,
+          },
+          google: {
+            headline: defaultHeadline.slice(0, 30),
+            description: defaultText.slice(0, 90),
+          },
+        },
+      };
+      setCustomPairs((prev) => [newPair, ...prev]);
+      setSelected((prev) => new Set([...prev, img.src]));
+      setAddImageOpen(false);
+    },
+    [brandName]
+  );
+
+  const displayRuns = useMemo(() => {
+    if (customPairs.length === 0) return runs;
+    if (!runs || runs.length === 0) {
+      return [
+        {
+          key: 'custom-run',
+          title: 'Custom ads',
+          pairs: customPairs,
+          pending: 0,
+        },
+      ];
+    }
+    return runs.map((r, i) =>
+      i === 0 ? { ...r, pairs: [...customPairs, ...(r.pairs || [])] } : r
+    );
+  }, [runs, customPairs]);
 
   const { googleUser } = useSelector((state) => state.adFactoryNew) || {};
 
@@ -129,15 +160,15 @@ export default function RunGallery({
   const isGoogleConnected = isGoogleAccountConnected(googleUser);
   const isGoogleReady = isGoogleConnectionComplete(googleConnection, isGoogleConnected);
 
-  const total = useMemo(() => runs.reduce((sum, r) => sum + (r.pairs?.length || 0), 0), [runs]);
+  const total = useMemo(() => displayRuns.reduce((sum, r) => sum + (r.pairs?.length || 0), 0), [displayRuns]);
   const pendingTotal = useMemo(
-    () => runs.reduce((sum, r) => sum + (r.pending || 0), 0),
-    [runs]
+    () => displayRuns.reduce((sum, r) => sum + (r.pending || 0), 0),
+    [displayRuns]
   );
 
   const allUrls = useMemo(
-    () => runs.flatMap((r) => (r.pairs || []).map((p) => p.imageUrl).filter(Boolean)),
-    [runs]
+    () => displayRuns.flatMap((r) => (r.pairs || []).map((p) => p.imageUrl).filter(Boolean)),
+    [displayRuns]
   );
 
   // A fresh grid every time it opens. Carrying a selection across an open is
@@ -168,6 +199,97 @@ export default function RunGallery({
     });
   }, []);
 
+  const getEffectiveCopy = useCallback(
+    (pair, targetPlatform = galleryFilter) => {
+      if (!pair) return {};
+      const edited = editedCopies[pair.imageUrl];
+      const base = pair.copy || {};
+      const metaCopy = edited?.meta || base.meta || null;
+      const googleCopy = edited?.google || base.google || null;
+
+      if (targetPlatform === 'google') {
+        const headline =
+          edited?.google?.headline ||
+          edited?.headline ||
+          googleCopy?.headline ||
+          base.headline ||
+          '';
+        const primaryText =
+          edited?.google?.description ||
+          edited?.google?.primaryText ||
+          edited?.primaryText ||
+          googleCopy?.description ||
+          googleCopy?.primaryText ||
+          base.primaryText ||
+          '';
+        return {
+          headline,
+          primaryText,
+          description: primaryText,
+        };
+      }
+
+      if (targetPlatform === 'meta') {
+        const headline =
+          edited?.meta?.headline || edited?.headline || metaCopy?.headline || base.headline || '';
+        const primaryText =
+          edited?.meta?.primary_text ||
+          edited?.meta?.primaryText ||
+          edited?.primaryText ||
+          metaCopy?.primary_text ||
+          metaCopy?.primaryText ||
+          base.primaryText ||
+          '';
+        const description =
+          edited?.meta?.description ||
+          edited?.description ||
+          metaCopy?.description ||
+          base.description ||
+          '';
+        return {
+          headline,
+          primaryText,
+          description,
+        };
+      }
+
+      // 'all'
+      const headline =
+        edited?.headline ||
+        edited?.meta?.headline ||
+        edited?.google?.headline ||
+        metaCopy?.headline ||
+        googleCopy?.headline ||
+        base.headline ||
+        '';
+      const primaryText =
+        edited?.primaryText ||
+        edited?.meta?.primary_text ||
+        edited?.meta?.primaryText ||
+        edited?.google?.description ||
+        edited?.google?.primaryText ||
+        metaCopy?.primary_text ||
+        metaCopy?.primaryText ||
+        googleCopy?.description ||
+        base.primaryText ||
+        '';
+      const description =
+        edited?.description ||
+        edited?.meta?.description ||
+        edited?.google?.description ||
+        metaCopy?.description ||
+        googleCopy?.description ||
+        base.description ||
+        '';
+      return {
+        headline,
+        primaryText,
+        description,
+      };
+    },
+    [editedCopies, galleryFilter]
+  );
+
   const count = selected.size;
   const allSelected = total > 0 && count === total;
   const canPost =
@@ -176,6 +298,21 @@ export default function RunGallery({
       : target.canPublish(count);
 
   const handlePublish = useCallback(() => {
+    const selectedPairs = displayRuns
+      .flatMap((r) => r.pairs || [])
+      .filter((p) => selected.has(p.imageUrl))
+      .map((p) => {
+        const eff = getEffectiveCopy(p, platform);
+        return {
+          ...p,
+          headline: eff.headline,
+          description: eff.description || eff.primaryText,
+          body: eff.primaryText,
+          text: eff.primaryText,
+          copy: eff,
+        };
+      });
+
     if (platform === 'google') {
       onPublish?.({
         platform: 'google',
@@ -185,15 +322,17 @@ export default function RunGallery({
         adGroupId: googleConnection?.adGroupId,
         googleConnection,
         imageUrls: [...selected],
+        pairs: selectedPairs,
       });
     } else {
       onPublish?.({
         platform: 'meta',
         ...target.publishArgs,
         imageUrls: [...selected],
+        pairs: selectedPairs,
       });
     }
-  }, [platform, onPublish, googleConnection, target.publishArgs, selected]);
+  }, [platform, onPublish, googleConnection, target.publishArgs, selected, displayRuns, getEffectiveCopy]);
 
   // What the action bar's button says, in the order the user hits the reasons:
   // nothing picked → no Meta/Google → no ad set/template → go.
@@ -212,11 +351,12 @@ export default function RunGallery({
           : '';
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className="flex h-[90vh] w-[96%] max-w-6xl! scale-100! flex-col overflow-hidden rounded-xl border-[var(--ws-border)] bg-[var(--ws-bg)] p-0 text-[var(--ws-text-primary)] dark:border-[#2A2A2A] dark:bg-[#0f0f0f] dark:text-[#F4F4F5]"
-      >
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          showCloseButton={false}
+          className="flex h-[90vh] w-[90vw]! max-w-[1400px]! sm:max-w-[1400px]! scale-100! flex-col overflow-hidden rounded-xl border-[var(--ws-border)] bg-[var(--ws-bg)] p-0 text-[var(--ws-text-primary)] dark:border-[#2A2A2A] dark:bg-[#0f0f0f] dark:text-[#F4F4F5]"
+        >
         {/* ── Header ── */}
         <div
           className={`flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-5 py-4 ${RULE_BORDER}`}
@@ -226,9 +366,6 @@ export default function RunGallery({
             <span className={MUTED}>
               <span className={NUM}>{total}</span> {total === 1 ? 'ad' : 'ads'} across{' '}
               <span className={NUM}>{runs.length}</span> {runs.length === 1 ? 'run' : 'runs'}
-              {/* Live: this modal re-renders from the brief, which the socket
-                  refetches as each image lands, so the count climbs on its
-                  own while you are looking at it. */}
               {pendingTotal > 0 && (
                 <>
                   {' · '}
@@ -257,15 +394,98 @@ export default function RunGallery({
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
           {/* ── The ads ── */}
           <div className="min-w-0 shrink-0 px-5 pt-4 pb-5 lg:min-h-0 lg:flex-1 lg:shrink lg:overflow-y-auto">
+            {/* ── Platform Template Toggle (All / Meta / Google) ── */}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface)] p-2 shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 rounded-lg bg-[var(--ws-surface-hover)] p-1 dark:bg-[#1f1f1f]">
+                  <button
+                    type="button"
+                    onClick={() => setGalleryFilter('all')}
+                    className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                      galleryFilter === 'all'
+                        ? 'bg-white text-gray-900 shadow-sm dark:bg-[#2C2C2C] dark:text-white'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>All</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGalleryFilter('meta')}
+                    className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                      galleryFilter === 'meta'
+                        ? 'bg-white text-gray-900 shadow-sm dark:bg-[#2C2C2C] dark:text-white'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                    }`}
+                  >
+                    <FaFacebookF className="h-3 w-3 text-[#1877F2] dark:text-[#5B9DF8]" />
+                    <span>Meta</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGalleryFilter('google')}
+                    className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                      galleryFilter === 'google'
+                        ? 'bg-white text-gray-900 shadow-sm dark:bg-[#2C2C2C] dark:text-white'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                    }`}
+                  >
+                    <FcGoogle className="h-3.5 w-3.5" />
+                    <span>Google</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setAddImageOpen(true)}
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--ws-border)] bg-[var(--ws-surface-hover)] px-3 py-1.5 text-xs font-semibold text-[var(--ws-text-primary)] shadow-2xs transition-all hover:border-[#5867EB]/50 hover:bg-[#5867EB]/10 dark:border-[#2A2A2A] dark:bg-[#1f1f1f] dark:text-white dark:hover:border-[#15DCFF]/50 dark:hover:bg-[#15DCFF]/10 cursor-pointer"
+                  title="Add custom image"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Add image</span>
+                </button>
+              </div>
+
+              {/* Template guidance & character caps */}
+              <div className="flex items-center gap-2 text-[11px]">
+                {galleryFilter === 'google' ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 font-medium text-amber-700 dark:text-amber-300">
+                    <span className="font-semibold">Google template:</span>
+                    <span>Headline max 30 chars · Description max 90 chars</span>
+                  </span>
+                ) : galleryFilter === 'meta' ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/25 bg-blue-500/10 px-2.5 py-1 font-medium text-blue-700 dark:text-blue-300">
+                    <span className="font-semibold">Meta template:</span>
+                    <span>Headline rec 40 chars · Primary text rec 125 chars</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-[#5867EB]/25 bg-[#5867EB]/10 px-2.5 py-1 font-medium text-[#4654D4] dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]">
+                    <span className="font-semibold">All templates:</span>
+                    <span>All generations for Meta &amp; Google</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
             {total === 0 && pendingTotal === 0 ? (
-              <p className={`py-12 text-center ${MUTED}`}>
-                Nothing generated yet. Press Generate and they&apos;ll collect here.
-              </p>
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <p className={`text-center ${MUTED}`}>
+                  Nothing generated yet. Press Generate and they&apos;ll collect here.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setAddImageOpen(true)}
+                  className="flex items-center gap-2 rounded-lg border border-[var(--ws-border)] bg-[var(--ws-surface)] px-4 py-2 text-xs font-semibold text-[var(--ws-text-primary)] shadow-xs transition-colors hover:border-[#5867EB]/50 hover:bg-[#5867EB]/10 dark:border-[#2A2A2A] dark:bg-[#1E1E1E] dark:text-white cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add custom image</span>
+                </button>
+              </div>
             ) : (
               <div className="flex flex-col gap-6">
-                {runs
+                {displayRuns
                   .filter((r) => (r.pairs?.length || 0) > 0 || (r.pending || 0) > 0)
-                  .map((run) => (
+                  .map((run, runIndex) => (
                     <section key={run.key} className="flex flex-col gap-3">
                       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
                         <h3 className={SECTION}>{run.title}</h3>
@@ -282,11 +502,7 @@ export default function RunGallery({
                         </span>
                       </div>
 
-                      {/* Denser than the page's preview grid on purpose: this
-                          is for picking out of everything, not for reading one
-                          batch. A 50-ad run stays a grid rather than a column
-                          of billboards. */}
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 xl:grid-cols-4">
                         {run.pairs.map((pair, i) => (
                           <Tile
                             key={pair.imageUrl || `${run.key}-${i}`}
@@ -295,14 +511,21 @@ export default function RunGallery({
                             callToAction={callToAction}
                             selected={selected.has(pair.imageUrl)}
                             onToggle={() => toggle(pair.imageUrl)}
-                            onPreview={() => setPreviewing(pair)}
+                            onPreview={() => {
+                              setPreviewing(pair);
+                              setPreviewPlatform(galleryFilter === 'google' ? 'google' : 'meta');
+                            }}
+                            activeFilter={galleryFilter}
+                            effectiveCopy={getEffectiveCopy(pair, galleryFilter)}
+                            onSaveCopy={(newCopy) => {
+                              setEditedCopies((prev) => ({
+                                ...prev,
+                                [pair.imageUrl]: newCopy,
+                              }));
+                            }}
                           />
                         ))}
 
-                        {/* One placeholder per slot this run asked for and
-                            hasn't delivered. They occupy the exact footprint
-                            the real card will, so the grid doesn't reflow under
-                            the cursor as each image arrives. */}
                         {Array.from({ length: run.pending || 0 }).map((_, i) => (
                           <SkeletonTile key={`pending-${run.key}-${i}`} ratio={ratio} />
                         ))}
@@ -368,9 +591,7 @@ export default function RunGallery({
           </aside>
         </div>
 
-        {/* ── Action bar ── one row, always visible, always saying what the
-            button will do. Pinned outside both scroll areas so neither a long
-            run nor a long form can scroll it away. */}
+        {/* ── Action bar ── */}
         {!publishResult && (
           <div
             className={`flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-t px-5 py-3.5 ${RULE_BORDER}`}
@@ -399,29 +620,69 @@ export default function RunGallery({
           </div>
         )}
 
-        {/* ── The ad preview ── Ad Factory's own phone-frame preview, not a
-            fullscreen image. What matters when judging an ad is how the copy,
-            the image and the button sit together in a feed; a bare JPEG at
-            2000px shows none of that. */}
+        {/* ── The ad preview with Meta / Google template switcher ── */}
         {previewing && (
           <div
             role="presentation"
             onClick={() => setPreviewing(null)}
-            className="absolute inset-0 z-10 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+            className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
           >
-            <div className="relative" onClick={(e) => e.stopPropagation()} role="presentation">
-              <MobilePreview
-                image={srcOf(previewing.imageUrl)}
-                text={previewing.copy || {}}
-                cta={callToAction}
-                ctaLink={linkUrl}
-                brandName={brandName}
-              />
+            <div
+              className="relative flex flex-col items-center gap-3"
+              onClick={(e) => e.stopPropagation()}
+              role="presentation"
+            >
+              {/* Preview Platform Switcher */}
+              <div className="flex items-center gap-1 rounded-full border border-white/20 bg-black/70 p-1 shadow-lg backdrop-blur-md">
+                <button
+                  type="button"
+                  onClick={() => setPreviewPlatform('meta')}
+                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
+                    previewPlatform === 'meta'
+                      ? 'bg-[#1877F2] text-white shadow-sm'
+                      : 'text-white/70 hover:text-white'
+                  }`}
+                >
+                  <FaFacebookF className="h-3 w-3" />
+                  <span>Meta Preview</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPlatform('google')}
+                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
+                    previewPlatform === 'google'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-white/70 hover:text-white'
+                  }`}
+                >
+                  <FcGoogle className="h-3.5 w-3.5" />
+                  <span>Google Preview</span>
+                </button>
+              </div>
+
+              {previewPlatform === 'google' ? (
+                <GoogleMobilePreview
+                  image={srcOf(previewing.imageUrl)}
+                  text={getEffectiveCopy(previewing, 'google')}
+                  cta={callToAction}
+                  ctaLink={linkUrl}
+                  brandName={brandName}
+                />
+              ) : (
+                <MobilePreview
+                  image={srcOf(previewing.imageUrl)}
+                  text={getEffectiveCopy(previewing, 'meta')}
+                  cta={callToAction}
+                  ctaLink={linkUrl}
+                  brandName={brandName}
+                />
+              )}
+
               <button
                 type="button"
                 onClick={() => setPreviewing(null)}
                 aria-label="Close preview"
-                className="absolute -top-2 -right-2 rounded-full bg-[#5867EB] p-1.5 text-white shadow-lg dark:bg-[#15DCFF] dark:text-[#062024]"
+                className="absolute -top-2 -right-2 rounded-full bg-[#5867EB] p-1.5 text-white shadow-lg transition-transform hover:scale-110 cursor-pointer dark:bg-[#15DCFF] dark:text-[#062024]"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -430,17 +691,89 @@ export default function RunGallery({
         )}
       </DialogContent>
     </Dialog>
+
+    <AddImageDialog
+      open={addImageOpen}
+      onClose={() => setAddImageOpen(false)}
+      onAdd={handleAddCustomImage}
+      userId={userId}
+    />
+
+  </>
   );
 }
 
-function Tile({ pair, ratio, callToAction, selected, onToggle, onPreview }) {
+function Tile({
+  pair,
+  ratio,
+  callToAction,
+  selected,
+  onToggle,
+  onPreview,
+  activeFilter = 'all',
+  effectiveCopy,
+  onSaveCopy,
+}) {
   const dispatch = useDispatch();
-  const copy = pair.copy || {};
   const src = srcOf(pair.imageUrl);
-  // The record says the image was delivered, but the CDN can still drop it.
-  // A broken-image glyph in a grid you are picking from reads as "this ad is
-  // broken", which is the right message — say it plainly instead.
   const [broken, setBroken] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+
+  const [draftHeadline, setDraftHeadline] = useState(effectiveCopy?.headline || '');
+  const [draftPrimaryText, setDraftPrimaryText] = useState(effectiveCopy?.primaryText || '');
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraftHeadline(effectiveCopy?.headline || '');
+      setDraftPrimaryText(effectiveCopy?.primaryText || '');
+    }
+  }, [effectiveCopy, isEditing]);
+
+  const currentHeadline = isEditing ? draftHeadline : effectiveCopy?.headline || '';
+  const currentPrimaryText = isEditing ? draftPrimaryText : effectiveCopy?.primaryText || '';
+
+  // Character caps & guidelines
+  const isGoogle = activeFilter === 'google';
+  const headlineMax = isGoogle ? 30 : 40;
+  const primaryMax = isGoogle ? 90 : 125;
+
+  const headlineOver = isGoogle
+    ? currentHeadline.length > 30
+    : currentHeadline.length > 40;
+  const primaryOver = isGoogle
+    ? currentPrimaryText.length > 90
+    : currentPrimaryText.length > 125;
+
+  const handleSave = (e) => {
+    e?.stopPropagation();
+    onSaveCopy?.({
+      headline: draftHeadline,
+      primaryText: draftPrimaryText,
+      description: draftPrimaryText,
+      ...(isGoogle
+        ? { google: { headline: draftHeadline, description: draftPrimaryText } }
+        : {}),
+      ...(activeFilter === 'meta'
+        ? { meta: { headline: draftHeadline, primary_text: draftPrimaryText } }
+        : {}),
+    });
+    setIsEditing(false);
+  };
+
+  const handleCancel = (e) => {
+    e?.stopPropagation();
+    setDraftHeadline(effectiveCopy?.headline || '');
+    setDraftPrimaryText(effectiveCopy?.primaryText || '');
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      handleCancel(e);
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      handleSave(e);
+    }
+  };
 
   return (
     <article
@@ -448,8 +781,7 @@ function Tile({ pair, ratio, callToAction, selected, onToggle, onPreview }) {
         selected ? 'ring-2 ring-[#5867EB] dark:ring-[#15DCFF]' : ''
       }`}
     >
-      {/* The whole image is the checkbox. On a grid whose only job is picking,
-          a 16px target in the corner is the wrong size for the gesture. */}
+      {/* Checkbox / image trigger */}
       <button
         type="button"
         onClick={onToggle}
@@ -466,61 +798,216 @@ function Tile({ pair, ratio, callToAction, selected, onToggle, onPreview }) {
         ) : (
           <img
             src={src}
-            alt={copy.headline || 'Generated ad'}
+            alt={currentHeadline || 'Generated ad'}
             loading="lazy"
             onError={() => setBroken(true)}
             className="h-full w-full object-contain"
           />
         )}
 
+        {/* Selection indicator */}
         <span
           className={`absolute top-2 left-2 grid h-5 w-5 place-items-center rounded-md border transition-colors ${
             selected
-              ? 'border-[#B87215] bg-[#B87215] text-white dark:border-[#15DCFF] dark:bg-[#15DCFF] dark:text-[#062024]'
+              ? 'border-[#5867EB] bg-[#5867EB] text-white dark:border-[#15DCFF] dark:bg-[#15DCFF] dark:text-[#062024]'
               : 'border-white/70 bg-black/30 text-transparent group-hover:border-white'
           }`}
         >
           <Check className="h-3.5 w-3.5" strokeWidth={3} />
         </span>
+
+        {/* Platform tag badge on card */}
+        <span className="absolute top-2 right-2 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-xs">
+          {activeFilter === 'google' ? (
+            <>
+              <FcGoogle className="h-3 w-3" />
+              <span>Google</span>
+            </>
+          ) : activeFilter === 'meta' ? (
+            <>
+              <FaFacebookF className="h-2.5 w-2.5 text-[#5B9DF8]" />
+              <span>Meta</span>
+            </>
+          ) : (
+            <>
+              <FaFacebookF className="h-2.5 w-2.5 text-[#5B9DF8]" />
+              <FcGoogle className="h-2.5 w-2.5" />
+              <span>All</span>
+            </>
+          )}
+        </span>
       </button>
 
-      <div className={`flex flex-1 flex-col gap-1.5 border-t px-3 py-2.5 ${RULE_BORDER}`}>
-        {copy.headline && (
-          <b className="line-clamp-2 text-[12px] leading-snug font-medium text-[#111827] dark:text-[#ECEFF3]">
-            {copy.headline}
-          </b>
-        )}
-        {copy.primaryText && (
-          <p className="line-clamp-2 text-[11px] leading-relaxed text-[#6B7280] dark:text-[#AFB6C0]">
-            {copy.primaryText}
-          </p>
-        )}
+      {/* Copy / Text area */}
+      <div className={`flex flex-1 flex-col gap-2 border-t px-2.5 py-2.5 ${RULE_BORDER}`}>
+        {isEditing ? (
+          <div
+            className="flex flex-col gap-2"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={handleKeyDown}
+          >
+            {/* Edit Mode Header */}
+            <div className="flex items-center justify-between pb-0.5">
+              <span className="flex items-center gap-1 text-[11px] font-bold text-[#5867EB] dark:text-[#15DCFF]">
+                <Pencil className="h-3 w-3" />
+                <span>Edit Copy</span>
+              </span>
+              <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                Esc to cancel
+              </span>
+            </div>
 
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <span className="text-10 inline-flex min-w-0 truncate rounded-md bg-[#B87215] px-2 py-0.5 font-semibold text-white dark:bg-[#ECEFF3] dark:text-[#0A0A0A]">
-            {callToAction}
-          </span>
-          <span className="flex shrink-0 items-center gap-1">
-            <TileAction onClick={onPreview} title="Preview this ad">
-              <Eye className="h-3.5 w-3.5" />
-            </TileAction>
-            <TileAction
-              onClick={() => dispatch(downloadMediaFromUrl(src, 'image'))}
-              title="Download"
+            {/* Headline Input */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between text-[10px]">
+                <label className="font-semibold text-gray-700 dark:text-gray-200">
+                  Headline
+                </label>
+                <span
+                  className={`font-medium ${
+                    isGoogle && draftHeadline.length > 30
+                      ? 'font-bold text-red-500'
+                      : draftHeadline.length > headlineMax
+                        ? 'text-amber-500'
+                        : 'text-gray-400 dark:text-gray-500'
+                  }`}
+                >
+                  {draftHeadline.length}/{headlineMax} {isGoogle ? 'max' : 'rec'}
+                </span>
+              </div>
+              <input
+                type="text"
+                autoFocus
+                value={draftHeadline}
+                onChange={(e) => setDraftHeadline(e.target.value)}
+                placeholder="Enter headline..."
+                className={`w-full rounded-lg border-2 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-900 shadow-xs outline-none transition-all dark:bg-[#1E1E1E] dark:text-white ${
+                  isGoogle && draftHeadline.length > 30
+                    ? 'border-red-500 ring-2 ring-red-500/20'
+                    : 'border-gray-300 hover:border-gray-400 focus:border-[#5867EB] focus:ring-2 focus:ring-[#5867EB]/25 dark:border-[#444] dark:hover:border-[#666] dark:focus:border-[#15DCFF] dark:focus:ring-[#15DCFF]/25'
+                }`}
+              />
+            </div>
+
+            {/* Primary Text / Caption Input */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between text-[10px]">
+                <label className="font-semibold text-gray-700 dark:text-gray-200">
+                  {isGoogle ? 'Description' : 'Primary text'}
+                </label>
+                <span
+                  className={`font-medium ${
+                    isGoogle && draftPrimaryText.length > 90
+                      ? 'font-bold text-red-500'
+                      : draftPrimaryText.length > primaryMax
+                        ? 'text-amber-500'
+                        : 'text-gray-400 dark:text-gray-500'
+                  }`}
+                >
+                  {draftPrimaryText.length}/{primaryMax} {isGoogle ? 'max' : 'rec'}
+                </span>
+              </div>
+              <textarea
+                value={draftPrimaryText}
+                onChange={(e) => setDraftPrimaryText(e.target.value)}
+                rows={3}
+                placeholder={isGoogle ? 'Enter description...' : 'Enter primary text...'}
+                className={`w-full min-h-[68px] resize-none rounded-lg border-2 bg-white p-2.5 text-xs leading-relaxed text-gray-900 shadow-xs outline-none transition-all dark:bg-[#1E1E1E] dark:text-white ${
+                  isGoogle && draftPrimaryText.length > 90
+                    ? 'border-red-500 ring-2 ring-red-500/20'
+                    : 'border-gray-300 hover:border-gray-400 focus:border-[#5867EB] focus:ring-2 focus:ring-[#5867EB]/25 dark:border-[#444] dark:hover:border-[#666] dark:focus:border-[#15DCFF] dark:focus:ring-[#15DCFF]/25'
+                }`}
+                style={{
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(156,163,175,0.6) transparent',
+                }}
+              />
+            </div>
+
+            {/* Action buttons: Cancel & Save */}
+            <div className="flex items-center justify-end gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-2xs hover:bg-gray-50 dark:border-[#444] dark:bg-[#202020] dark:text-gray-200 dark:hover:bg-[#2A2A2A] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="flex items-center gap-1 rounded-md bg-[#5867EB] px-3 py-1 text-[11px] font-semibold text-white shadow-xs hover:bg-[#4755D6] dark:bg-[#15DCFF] dark:text-[#062024] cursor-pointer"
+              >
+                <Check className="h-3 w-3" strokeWidth={3} />
+                <span>Save</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Read Mode: headline & description */}
+            <div
+              className="group/caption flex flex-col gap-1 cursor-pointer rounded-md p-1 -m-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+              onClick={() => setIsEditing(true)}
+              title="Click to edit headline & text"
             >
-              <Download className="h-3.5 w-3.5" />
-            </TileAction>
-          </span>
-        </div>
+              {currentHeadline ? (
+                <b className="line-clamp-2 text-[12px] font-medium leading-snug text-[#111827] transition-colors group-hover/caption:text-[#5867EB] dark:text-[#ECEFF3] dark:group-hover/caption:text-[#15DCFF]">
+                  {currentHeadline}
+                </b>
+              ) : (
+                <span className="text-[11px] italic text-gray-400">Click to add headline</span>
+              )}
+
+              {currentPrimaryText ? (
+                <p className="line-clamp-2 text-[11px] leading-relaxed text-[#6B7280] dark:text-[#AFB6C0]">
+                  {currentPrimaryText}
+                </p>
+              ) : (
+                <span className="text-[11px] italic text-gray-400">Click to add primary text</span>
+              )}
+            </div>
+
+            {/* Platform limit warnings */}
+            {isGoogle && (headlineOver || primaryOver) && (
+              <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                <AlertCircle className="h-3 w-3" />
+                <span>Exceeds Google limit</span>
+              </span>
+            )}
+
+            {/* Footer action bar */}
+            <div className="mt-auto flex items-center justify-between gap-1.5 pt-2">
+              <span
+                title={(callToAction || 'Learn more').replace(/_/g, ' ')}
+                className="inline-flex min-w-0 max-w-[85px] items-center rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface-hover)] px-2 py-0.5 text-[10.5px] font-medium tracking-tight text-[var(--ws-text-primary)] shadow-2xs transition-colors hover:border-[#5867EB]/40 dark:border-[#333] dark:bg-[#202020] dark:text-[#ECEFF3] dark:hover:border-[#15DCFF]/40"
+              >
+                <span className="truncate">{(callToAction || 'Learn more').replace(/_/g, ' ')}</span>
+              </span>
+
+              <div className="flex shrink-0 items-center gap-1">
+                <TileAction onClick={() => setIsEditing(true)} title="Edit copy on card">
+                  <Pencil className="h-3 w-3" />
+                </TileAction>
+                <TileAction onClick={onPreview} title="Preview this ad">
+                  <Eye className="h-3 w-3" />
+                </TileAction>
+                <TileAction
+                  onClick={() => dispatch(downloadMediaFromUrl(src, 'image'))}
+                  title="Download"
+                >
+                  <Download className="h-3 w-3" />
+                </TileAction>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </article>
   );
 }
 
-// A slot that has been asked for and not yet delivered. Deliberately the same
-// frame, aspect ratio and footer height as a real tile — a placeholder whose
-// dimensions differ from the thing it stands in for makes the whole grid jump
-// when it resolves.
+// Placeholder for pending slots
 function SkeletonTile({ ratio }) {
   return (
     <article className={`flex flex-col overflow-hidden ${CARD}`}>
@@ -539,8 +1026,6 @@ function SkeletonTile({ ratio }) {
   );
 }
 
-// A small icon action on a tile. Same hairline-and-label vocabulary as
-// BTN_GHOST, sized for a card footer rather than a form.
 function TileAction({ onClick, title, children }) {
   return (
     <button
@@ -548,7 +1033,7 @@ function TileAction({ onClick, title, children }) {
       onClick={onClick}
       title={title}
       aria-label={title}
-      className="grid h-7 w-7 place-items-center rounded-md border border-[var(--ws-border)] text-[var(--ws-text-secondary)] transition-colors hover:border-[var(--ws-border-strong)] hover:text-[var(--ws-text-primary)] dark:border-[#2A2A2A] dark:text-[#AFAFAF] dark:hover:border-[#3A3A3A] dark:hover:text-[#F4F4F5]"
+      className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-[var(--ws-border)] text-[var(--ws-text-secondary)] transition-colors hover:border-[var(--ws-border-strong)] hover:text-[var(--ws-text-primary)] dark:border-[#2E2E2E] dark:bg-[#1A1A1A] dark:text-[#AFAFAF] dark:hover:border-[#444] dark:hover:text-[#F4F4F5] cursor-pointer"
     >
       {children}
     </button>

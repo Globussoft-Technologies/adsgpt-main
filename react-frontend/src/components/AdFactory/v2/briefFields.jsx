@@ -1,5 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Loader2, Minus, Plus, Search, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Eye,
+  Loader2,
+  Minus,
+  Plus,
+  Search,
+  X,
+} from 'lucide-react';
 import { InfoTip } from '@/components/Autopilot/_atoms';
 import { getClipboardImageFiles } from '@/utils/clipboardImages';
 import {
@@ -411,6 +423,8 @@ export function ImageStrip({
   onAddCompetitors,
   uploadFile,
   formatHint = 'JPG, PNG, WebP, GIF, SVG',
+  size = 'md',
+  fit,
 }) {
   const rawList = useMemo(() => (Array.isArray(urls) ? urls.filter(Boolean) : []), [urls]);
   const list = useMemo(() => rawList.slice(0, max), [rawList, max]);
@@ -418,6 +432,47 @@ export function ImageStrip({
   const [urlDraft, setUrlDraft] = useState('');
   const [showUrl, setShowUrl] = useState(false);
   const [error, setError] = useState('');
+  const [previewIndex, setPreviewIndex] = useState(null);
+  const [fitOverrides, setFitOverrides] = useState({});
+  const [aspects, setAspects] = useState({});
+
+  const isLg = size === 'lg';
+  const defaultThumbSizeClass = isLg ? 'w-[116px] h-[72px]' : 'w-[48px] h-[48px]';
+  const iconSizeClass = isLg ? 'h-4 w-4' : 'h-4 w-4';
+
+  const handleImgLoad = (url, e) => {
+    const { naturalWidth, naturalHeight } = e.currentTarget;
+    if (naturalWidth && naturalHeight) {
+      setAspects((prev) => ({ ...prev, [url]: naturalWidth / naturalHeight }));
+    }
+  };
+
+  const getImgFit = (url) => {
+    if (fitOverrides[url]) return fitOverrides[url];
+    if (fit) return fit;
+    if (!isLg) return 'contain';
+    const ar = aspects[url];
+    // Standard photos (1:1, 4:3, 3:2, 16:9) have ar <= 2.0 and will FILL edge-to-edge.
+    // Ultra-wide badges/banners (App Store 3:1, Google Play 2.6:1, ar >= 2.2) will FIT so text is never cropped.
+    if (ar && (ar >= 2.2 || ar < 0.6)) return 'contain';
+    return 'cover';
+  };
+
+  const getThumbSizeClass = (url) => {
+    const ar = aspects[url];
+    if (!isLg) {
+      // Horizontal wordmark logo (e.g. Speedtest, brand name lockup)
+      if (ar && ar > 1.3) {
+        return 'w-[96px] h-[48px]';
+      }
+      return 'w-[48px] h-[48px]';
+    }
+    const currentFit = getImgFit(url);
+    if (currentFit === 'contain' && ar && ar >= 2.2) {
+      return 'w-[148px] h-[72px]';
+    }
+    return 'w-[116px] h-[72px]';
+  };
 
   const full = list.length >= max;
   const room = max - list.length;
@@ -427,6 +482,26 @@ export function ImageStrip({
       onChange?.(list);
     }
   }, [rawList.length, max, list, onChange]);
+
+  useEffect(() => {
+    if (previewIndex === null) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setPreviewIndex(null);
+      } else if (e.key === 'ArrowLeft') {
+        setPreviewIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
+      } else if (e.key === 'ArrowRight') {
+        setPreviewIndex((prev) => (prev !== null && prev < list.length - 1 ? prev + 1 : prev));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [previewIndex, list.length]);
 
   const addMany = (incoming) => {
     const merged = [...list];
@@ -473,38 +548,107 @@ export function ImageStrip({
 
   return (
     <div className="flex flex-col gap-2" onPaste={handlePaste} tabIndex={0}>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {list.map((url, i) => (
-          <span key={`${url}-${i}`} className="group relative">
-            <img
-              src={url}
-              alt=""
-              loading="lazy"
-              className={`h-10 w-10 ${THUMB}`}
-              onError={(e) => {
-                e.currentTarget.style.opacity = '0.25';
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => onChange?.(list.filter((_, idx) => idx !== i))}
-              aria-label="Remove image"
-              className="absolute -top-1.5 -right-1.5 hidden h-5 w-5 place-items-center rounded-full bg-[#111827] text-white group-hover:grid dark:bg-[#ECEFF3] dark:text-[#0A0A0A]"
+      <div className="flex flex-wrap items-center gap-2">
+        {list.map((url, i) => {
+          const currentFit = getImgFit(url);
+          const thumbClass = getThumbSizeClass(url);
+          const isContain = currentFit === 'contain';
+
+          return (
+            <div
+              key={`${url}-${i}`}
+              className={`group relative flex items-center justify-center overflow-hidden ${thumbClass} cursor-pointer rounded-lg border border-[var(--ws-border)] ${
+                !isLg
+                  ? 'bg-white p-2 shadow-2xs dark:border-[#333] dark:bg-[#1C1C1C]'
+                  : 'bg-[var(--ws-surface-hover)] dark:border-[#2A2A2A] dark:bg-[#1a1a1a]'
+              } transition-all hover:border-[#5867EB]/60 hover:shadow-md dark:hover:border-[#15DCFF]/60`}
+              onClick={() => setPreviewIndex(i)}
+              title={!isLg && i === 0 ? 'Primary brand logo · Click to preview' : 'Click to preview'}
             >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
+              {/* If in contain mode on large visuals, render a soft blurred ambient fill so there are no empty gaps */}
+              {isLg && isContain && (
+                <img
+                  src={url}
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 h-full w-full object-cover blur-md scale-125 opacity-35 dark:opacity-45 pointer-events-none"
+                />
+              )}
+
+              <img
+                src={url}
+                alt=""
+                loading="lazy"
+                onLoad={(e) => handleImgLoad(url, e)}
+                className={`relative z-1 h-full w-full ${
+                  !isLg ? 'object-contain' : isContain ? 'object-contain p-1.5' : 'object-cover'
+                } transition-transform duration-200 group-hover:scale-105`}
+                onError={(e) => {
+                  e.currentTarget.style.opacity = '0.25';
+                }}
+              />
+
+              {/* Primary logo badge */}
+              {!isLg && i === 0 && list.length > 1 && (
+                <span className="absolute bottom-0.5 left-1 rounded bg-[#5867EB]/10 px-1 py-0.2 text-[7.5px] font-bold tracking-tight text-[#4654D4] dark:bg-[#15DCFF]/15 dark:text-[#15DCFF] pointer-events-none">
+                  Main
+                </span>
+              )}
+
+              {/* Hover overlay with preview eye icon */}
+              <div className="absolute inset-0 z-2 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-150 group-hover:opacity-100 pointer-events-none rounded-lg">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-xs">
+                  <Eye className="h-3.5 w-3.5" />
+                </div>
+              </div>
+
+              {/* Quick Fit / Fill toggle button on hover for Key visuals */}
+              {isLg && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFitOverrides((prev) => ({
+                      ...prev,
+                      [url]: isContain ? 'cover' : 'contain',
+                    }));
+                  }}
+                  title={isContain ? 'Switch to Fill (cover frame)' : 'Switch to Fit (show full image)'}
+                  className="absolute bottom-1 left-1 z-10 flex h-5 items-center gap-1 rounded bg-black/75 px-1.5 text-[9.5px] font-semibold text-white opacity-0 transition-all hover:bg-black group-hover:opacity-100 backdrop-blur-xs cursor-pointer shadow-xs"
+                >
+                  {isContain ? 'Fill' : 'Fit'}
+                </button>
+              )}
+
+              {/* Remove button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange?.(list.filter((_, idx) => idx !== i));
+                }}
+                aria-label="Remove image"
+                title="Remove image"
+                className="absolute top-1 right-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-[#111827]/80 text-white opacity-0 transition-all hover:bg-[#111827] group-hover:opacity-100 dark:bg-[#ECEFF3]/90 dark:text-[#0A0A0A] dark:hover:bg-white cursor-pointer"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </div>
+          );
+        })}
 
         {!full && uploadFile && (
           <label
             title="Upload from device"
-            className={`grid h-10 w-10 cursor-pointer place-items-center ${THUMB_ADD}`}
+            className={`grid ${defaultThumbSizeClass} cursor-pointer place-items-center ${THUMB_ADD} transition-colors`}
           >
             {busy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className={`${iconSizeClass} animate-spin`} />
             ) : (
-              <Plus className="h-3.5 w-3.5" />
+              <div className="flex flex-col items-center justify-center gap-0.5">
+                <Plus className={iconSizeClass} />
+                {isLg && <span className="text-[10px] font-medium opacity-70">Upload</span>}
+              </div>
             )}
             <input
               type="file"
@@ -524,7 +668,11 @@ export function ImageStrip({
           <button
             type="button"
             onClick={onAddCompetitors}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-[#5867EB]/30 bg-[#5867EB]/10 px-2 text-[11px] font-medium text-[#4654D4] transition-colors hover:border-[#5867EB]/55 hover:bg-[#5867EB]/15 dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/8 dark:text-[#15DCFF] dark:hover:border-[#15DCFF]/45 dark:hover:bg-[#15DCFF]/12"
+            className={
+              isLg
+                ? 'inline-flex h-[72px] items-center gap-2 rounded-lg border border-[#5867EB]/30 bg-[#5867EB]/10 px-3 text-xs font-medium text-[#4654D4] transition-colors hover:border-[#5867EB]/55 hover:bg-[#5867EB]/15 dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/8 dark:text-[#15DCFF] dark:hover:border-[#15DCFF]/45 dark:hover:bg-[#15DCFF]/12'
+                : 'inline-flex h-10 items-center gap-2 rounded-md border border-[#5867EB]/30 bg-[#5867EB]/10 px-2 text-[11px] font-medium text-[#4654D4] transition-colors hover:border-[#5867EB]/55 hover:bg-[#5867EB]/15 dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/8 dark:text-[#15DCFF] dark:hover:border-[#15DCFF]/45 dark:hover:bg-[#15DCFF]/12'
+            }
           >
             <Search className="h-3.5 w-3.5" />
             <span>Competitor visuals</span>
@@ -573,6 +721,115 @@ export function ImageStrip({
       ) : (
         uploadFile && <p className={FAINT}>Supported: {formatHint}</p>
       )}
+
+      {/* Lightbox / Image Preview Modal */}
+      {previewIndex !== null && list[previewIndex] && typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Image preview"
+            onClick={() => setPreviewIndex(null)}
+            className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/85 backdrop-blur-md p-4 sm:p-6 animate-in fade-in duration-200"
+          >
+            {/* Top Bar */}
+            <div className="absolute top-4 inset-x-4 sm:top-6 sm:inset-x-6 z-20 flex items-center justify-between pointer-events-none">
+              <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/15 bg-black/50 px-3.5 py-1.5 text-xs font-medium text-white/90 shadow-lg backdrop-blur-md">
+                <span>{`Visual ${previewIndex + 1} of ${list.length}`}</span>
+              </div>
+
+              <div className="pointer-events-auto flex items-center gap-2">
+                <a
+                  href={list[previewIndex]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  title="Open original in new tab"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/90 shadow-lg backdrop-blur-md transition-all hover:bg-white/20 hover:text-white"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewIndex(null);
+                  }}
+                  title="Close (Esc)"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white/90 shadow-lg backdrop-blur-md transition-all hover:bg-white/20 hover:text-white cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Centered Image with Nav Chevrons */}
+            <div
+              className="relative flex items-center justify-center max-h-[75vh] max-w-[90vw]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {list.length > 1 && (
+                <button
+                  type="button"
+                  disabled={previewIndex === 0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (previewIndex > 0) setPreviewIndex(previewIndex - 1);
+                  }}
+                  title="Previous (Left arrow)"
+                  className="absolute -left-4 sm:-left-14 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white/90 shadow-lg backdrop-blur-md transition-all hover:bg-white/20 hover:text-white disabled:opacity-20 disabled:pointer-events-none cursor-pointer"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+              )}
+
+              <img
+                src={list[previewIndex]}
+                alt={`Visual ${previewIndex + 1}`}
+                className="max-h-[75vh] max-w-[85vw] rounded-xl object-contain shadow-2xl ring-1 ring-white/10 select-none bg-black/20"
+              />
+
+              {list.length > 1 && (
+                <button
+                  type="button"
+                  disabled={previewIndex === list.length - 1}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (previewIndex < list.length - 1) setPreviewIndex(previewIndex + 1);
+                  }}
+                  title="Next (Right arrow)"
+                  className="absolute -right-4 sm:-right-14 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white/90 shadow-lg backdrop-blur-md transition-all hover:bg-white/20 hover:text-white disabled:opacity-20 disabled:pointer-events-none cursor-pointer"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+
+            {/* Bottom thumbnail selector if multiple */}
+            {list.length > 1 && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute bottom-4 sm:bottom-6 z-20 flex items-center gap-2 rounded-xl border border-white/15 bg-black/60 p-1.5 shadow-lg backdrop-blur-md max-w-[90vw] overflow-x-auto"
+              >
+                {list.map((u, idx) => (
+                  <button
+                    key={`preview-thumb-${idx}`}
+                    type="button"
+                    onClick={() => setPreviewIndex(idx)}
+                    className={`h-11 w-11 shrink-0 rounded-md overflow-hidden border transition-all cursor-pointer ${
+                      idx === previewIndex
+                        ? 'border-[#15DCFF] ring-2 ring-[#15DCFF]/50 scale-105'
+                        : 'border-white/20 opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    <img src={u} alt="" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

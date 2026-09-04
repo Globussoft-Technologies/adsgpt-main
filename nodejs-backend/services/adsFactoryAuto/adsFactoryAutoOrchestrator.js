@@ -207,8 +207,12 @@ async function acquireMetaPostLock() {
 const PLATFORM_POSTERS = {
   meta: {
     isConfigured: (target) => {
-      const validPage = !!target?.template?.pageId || !!target?.template?.payload?.pageId;
-      const validAdAccount = !!target?.template?.payload?.adAccountId;
+      const tpl = target?.template || {};
+      // adAccountId lives at template.payload.adAccountId for saved templates,
+      // and directly at template.adAccountId on the synthesize path.
+      const validAdAccount = !!(tpl.payload?.adAccountId || tpl.adAccountId);
+      // pageId lives at template.pageId (synthesize) or template.payload.pageId (saved).
+      const validPage = !!(tpl.pageId || tpl.payload?.pageId);
       const hasTemplate = !!target?.template;
       return !!(validAdAccount && validPage && hasTemplate);
     },

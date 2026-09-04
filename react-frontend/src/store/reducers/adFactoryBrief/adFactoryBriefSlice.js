@@ -260,6 +260,7 @@ export const publishNow = createAsyncThunk(
       platform,
       googleTarget,
       googleConnection,
+      pairs,
     },
     { rejectWithValue }
   ) => {
@@ -275,6 +276,7 @@ export const publishNow = createAsyncThunk(
         imageUrls,
         googleTarget,
         googleConnection,
+        pairs,
       });
     } catch (err) {
       // The server reports WHICH step failed (`step: 'campaign' | 'adset' |

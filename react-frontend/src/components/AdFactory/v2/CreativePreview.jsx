@@ -233,8 +233,8 @@ function Card({ pair, ratio, callToAction, onRegenerate }) {
             </p>
           )}
           <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-            <span className="text-10 inline-flex rounded-md bg-[#B87215] px-2.5 py-1 font-semibold text-white dark:bg-[#ECEFF3] dark:text-[#0A0A0A]">
-              {callToAction}
+            <span className="inline-flex min-w-0 max-w-full items-center rounded-md border border-[var(--ws-border)] bg-[var(--ws-surface-hover)] px-2.5 py-1 text-[11px] font-medium tracking-tight text-[var(--ws-text-primary)] shadow-2xs transition-colors dark:border-[#333] dark:bg-[#202020] dark:text-[#ECEFF3]">
+              <span className="truncate">{(callToAction || 'Shop now').replace(/_/g, ' ')}</span>
             </span>
             {onRegenerate && (
               <button

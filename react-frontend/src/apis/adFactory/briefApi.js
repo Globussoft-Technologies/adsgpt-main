@@ -149,6 +149,7 @@ export const publishBrief = async (
     imageUrls,
     googleConnection,
     googleTarget,
+    pairs,
   },
 ) => {
   const { data } = await axios.post(
@@ -169,6 +170,7 @@ export const publishBrief = async (
           ? { campaignId, adSetId }
           : {}),
       ...(imageUrls?.length ? { imageUrls } : {}),
+      ...(pairs?.length ? { pairs } : {}),
     },
     { headers: authHeaders() },
   );

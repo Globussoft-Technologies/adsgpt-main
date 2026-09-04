@@ -4,8 +4,9 @@ import { useSelector } from 'react-redux';
 import { ThumbsUp, MessageSquare, Share2, EllipsisVertical } from 'lucide-react';
 import googleAdsIcon from '@/assets/layouts/google-ads-icon.png';
 
-const GoogleMobilePreview = ({ image, text, cta, ctaLink }) => {
+const GoogleMobilePreview = ({ image, text, cta, ctaLink, brandName }) => {
   const { brandInfo } = useSelector((state) => state?.adFactoryNew);
+  const name = brandName || brandInfo?.brandName || 'Brand';
 
   return (
     <div className="flex justify-center">
@@ -82,7 +83,7 @@ const GoogleMobilePreview = ({ image, text, cta, ctaLink }) => {
                   </div>
                   <div>
                     <div className="text-[10px] font-semibold text-gray-900 leading-tight">
-                      {brandInfo?.brandName || 'Brand'}
+                      {name}
                     </div>
                     <div className="text-[8px] text-gray-400">Sponsored</div>
                   </div>

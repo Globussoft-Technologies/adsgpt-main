@@ -150,8 +150,15 @@ function serializeRunTimeline(job, opts = {}) {
 
   const metaTarget = plain(j.targets?.meta) || {};
   const googleTarget = plain(j.targets?.google) || {};
+  const metaTemplate = plain(metaTarget.template) || {};
   const context = {
-    metaAdAccountId: plain(metaTarget.template)?.payload?.adAccountId || null,
+    // `adAccountId` lives at template.payload.adAccountId when the user picked
+    // a saved template, and directly at template.adAccountId on the synthesize
+    // path (briefToJobPayload.js line 307). Check both so links always work.
+    metaAdAccountId:
+      metaTemplate?.payload?.adAccountId ||
+      metaTemplate?.adAccountId ||
+      null,
     googleCustomerId:
       plain(googleTarget.template)?.customerId ||
       plain(googleTarget.template)?.payload?.customerId ||

@@ -714,7 +714,7 @@ export default function AdFactoryV2Page() {
   // that can span several runs. Omitted — which is what "Ship these ads" on the
   // preview screen sends — the server posts the whole run being viewed.
   const handlePublish = useCallback(
-    ({ platform = 'meta', mode, campaignId, adSetId, imageUrls, googleTarget, googleConnection: gConn }) => {
+    ({ platform = 'meta', mode, campaignId, adSetId, imageUrls, googleTarget, googleConnection: gConn, pairs }) => {
       if (!briefId) return;
       dispatch(
         publishNow({
@@ -727,6 +727,7 @@ export default function AdFactoryV2Page() {
           adSetId,
           imageUrls,
           googleTarget,
+          pairs,
         })
       );
     },
