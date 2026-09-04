@@ -28,6 +28,9 @@ export const toVideoDurationValue = (value) => {
   return `${Number(match[1])}s`;
 };
 
+// The UI displays seconds with a suffix, while video APIs expect seconds as a string.
+export const toVideoDurationSeconds = (value) => toVideoDurationValue(value).replace(/s$/, '');
+
 export const getModelDurationOptions = (models, canonicalModel) => {
   const model = models.find((entry) => (entry.canonical || entry.model) === canonicalModel);
   const durations = Array.isArray(model?.durations) ? model.durations : [];

@@ -21,7 +21,7 @@ import { uploadToS3 } from '@/utils/imageUpload';
 import { globalToast } from '@/utils/globalToast';
 import { setSavedCount } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { GA4Events } from '@/utils/ga4';
-import { toVideoDurationValue } from '@/utils/videoModelCapabilities';
+import { toVideoDurationSeconds } from '@/utils/videoModelCapabilities';
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
@@ -75,7 +75,7 @@ export const generateVideoAction =
         ...payload,
         inputs: {
           ...payload.inputs,
-          duration: toVideoDurationValue(payload.inputs?.duration),
+          duration: toVideoDurationSeconds(payload.inputs?.duration),
           image: imageUrl || (payload.inputs.image ? `${S3_BASE_URL}${payload.inputs.image}` : ''),
         },
       };
@@ -212,7 +212,7 @@ export const generateVideoUGCAction =
         ...payload,
         inputs: {
           ...payload.inputs,
-          duration: toVideoDurationValue(payload.inputs?.duration),
+          duration: toVideoDurationSeconds(payload.inputs?.duration),
           image: imageUrl,
         },
       };
@@ -458,7 +458,7 @@ export const generateImageAndScript = (payload) => async (dispatch) => {
       ...payload,
       inputs: {
         ...payload.inputs,
-        duration: toVideoDurationValue(payload.inputs?.duration),
+        duration: toVideoDurationSeconds(payload.inputs?.duration),
       },
     };
     const response = await axios.post(
@@ -647,7 +647,7 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
     }
 
     const { formData } = details;
-    const duration = toVideoDurationValue(formData.duration);
+    const duration = toVideoDurationSeconds(formData.duration);
     const isBrand = aiAdsType === 'brand';
 
     // Voice cascade — the deliverable depends on the provider:
@@ -844,7 +844,7 @@ export const generateCloneImageAndScript = (payload) => async (dispatch) => {
       ...payload,
       inputs: {
         ...payload.inputs,
-        duration: toVideoDurationValue(payload.inputs?.duration),
+        duration: toVideoDurationSeconds(payload.inputs?.duration),
       },
     };
     dispatch(setClonePayload(normalizedPayload));
