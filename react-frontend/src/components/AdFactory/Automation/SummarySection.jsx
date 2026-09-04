@@ -41,13 +41,18 @@ export default function SummarySection({
   const view = useMemo(() => {
     if (apiSummary) {
       const cyclesScheduled = apiSummary.cyclesScheduled; // number | null (open-ended)
-      const affordable = apiSummary.cyclesCredsCover ?? 0;
-      const costPerCycle = Number(apiSummary.creditsPerCycle) || 0;
-      const totalCost = Number(apiSummary.creditsUsedAcrossRunnable) || 0;
-      const total = Number(apiSummary.remainingCredits) || availableCredits;
-      // const total = Number(apiSummary.totalCredits) || availableCredits;
-      const exceedsCredits =
-        cyclesScheduled != null && affordable < cyclesScheduled;
+      const affordable = Number.isFinite(Number(apiSummary.cyclesCredsCover))
+        ? Number(apiSummary.cyclesCredsCover)
+        : null;
+      const costPerCycle = Number.isFinite(Number(apiSummary.creditsPerCycle))
+        ? Number(apiSummary.creditsPerCycle)
+        : null;
+      const totalCost = Number.isFinite(Number(apiSummary.creditsUsedAcrossRunnable))
+        ? Number(apiSummary.creditsUsedAcrossRunnable)
+        : 0;
+      const total = Number.isFinite(Number(apiSummary.remainingCredits))
+        ? Number(apiSummary.remainingCredits)
+        : availableCredits;
       const isOpenEnded = cyclesScheduled == null;
       return {
         scheduled: cyclesScheduled,
@@ -55,7 +60,7 @@ export default function SummarySection({
         costPerCycle,
         totalCost,
         totalCredits: total,
-        exceedsCredits,
+        exceedsCredits: costPerCycle != null && affordable != null && cyclesScheduled != null && affordable < cyclesScheduled,
         isOpenEnded,
         nextRun: apiSummary.nextRunAt ? new Date(apiSummary.nextRunAt) : null,
         source: 'api',
@@ -122,11 +127,11 @@ export default function SummarySection({
             )
           }
         />
-        <Stat label="Credits / cycle" value={view.costPerCycle} />
+        <Stat label="Credits / cycle" value={view.costPerCycle ?? '—'} />
         <Stat
           label="Cycles your credits cover"
           value={
-            view.costPerCycle === 0
+            view.costPerCycle == null || view.costPerCycle === 0
               ? '—'
               : (view.affordable ?? 0).toLocaleString()
           }
@@ -139,7 +144,7 @@ export default function SummarySection({
           Total credits used across runnable cycles
         </div>
         <span className="text-sm font-semibold text-gray-900 dark:text-white">
-          {view.totalCost.toLocaleString()} / {view.totalCredits.toLocaleString()}
+          {view.totalCost.toLocaleString()} / {view.totalCredits == null ? '—' : view.totalCredits.toLocaleString()}
         </span>
       </div>
 
@@ -150,7 +155,7 @@ export default function SummarySection({
         </Warning>
       )}
 
-      {view.isOpenEnded && view.affordable === 0 && (
+      {view.isOpenEnded && view.affordable === 0 && view.costPerCycle != null && (
         <Warning>
           Your credits don't cover even one cycle at this configuration. Reduce pairs per cycle or
           top up credits.

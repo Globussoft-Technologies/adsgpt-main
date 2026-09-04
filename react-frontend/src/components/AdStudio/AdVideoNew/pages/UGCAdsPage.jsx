@@ -11,9 +11,6 @@ import {
   Loader2,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
-import { SiOpenai, SiBytedance } from 'react-icons/si';
-import KlingIcon from '@/components/icons/KlingIcon';
-import { RiGeminiFill as GeminiIcon } from 'react-icons/ri';
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
 import UpgradeModal from '../UpgradeModal';
 import SparkleDark from '@/assets/layouts/prompt/sparkle-dark.svg';
@@ -26,8 +23,7 @@ import { analazeDomain } from '@/store/actions/brandIQ/myBrandActions';
 import { toast } from 'react-toastify';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
 import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
-import { AspectRatioPreview, getModelAspectRatios } from '@/utils/videoModelCapabilities';
-import { RiGeminiFill } from 'react-icons/ri';
+import { AspectRatioPreview, getModelAspectRatios, getModelDurationOptions, getSelectedModelDuration } from '@/utils/videoModelCapabilities';
 import emitter from '@/utils/eventEmitter';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import { setRecreateInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
@@ -35,6 +31,7 @@ import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { uploadToS3 } from '@/utils/imageUpload';
 import { globalToast } from '@/utils/globalToast';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+import { getFirstAvailableVideoModel, isVideoModelBlocked } from '@/utils/videoModelAccess';
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
@@ -45,10 +42,6 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   const [step, setStep] = useState(recreateInputs?.type === 'ugc' ? 2 : 1);
   const { modelCredits } = useSelector((state) => state.prompt);
   const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('ugc');
-  const availableCanonicalKeys = useMemo(
-    () => new Set(surfaceModels.map((entry) => entry.canonical)),
-    [surfaceModels]
-  );
   const { userData, credits } = useSelector((state) => state.socket);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
 
@@ -83,8 +76,6 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
     if (productName && errors.productName) setErrors((prev) => ({ ...prev, productName: null }));
     if (description && errors.description) setErrors((prev) => ({ ...prev, description: null }));
     if (videoModel && errors.videoModel) setErrors((prev) => ({ ...prev, videoModel: null }));
-    if (videoDuration && errors.videoDuration)
-      setErrors((prev) => ({ ...prev, videoDuration: null }));
     if (aspectRatio && errors.aspectRatio) setErrors((prev) => ({ ...prev, aspectRatio: null }));
     if ((productUrl || uploadedImages.length > 0) && errors.productUrl)
       setErrors((prev) => ({ ...prev, productUrl: null }));
@@ -92,7 +83,6 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
     productName,
     description,
     videoModel,
-    videoDuration,
     aspectRatio,
     productUrl,
     uploadedImages,
@@ -100,119 +90,29 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   ]);
 
   const videoChatModels = useMemo(
-    () => [
-      {
-        value: 'veo-3.1-fast',
-        label: 'Veo 3.1 Fast (Fast & Social-Ready)',
-        tier: 'lower',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) =>
-          m.label.toLowerCase().includes('veo 3.1 fast')
-        )?.value,
-      },
-      // {
-      //   value: 'sora',
-      //   label: 'Sora 2 (Creative & Stylised)',
-      //   tier: 'lower',
-      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2')?.value,
-      // },
-      {
-        value: 'veo',
-        label: 'Veo 3 (Cinematic Quality)',
-        tier: 'premium',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
-      },
-      // {
-      //   value: 'soraPro',
-      //   label: 'Sora 2 Pro (Cinematic Storytelling)',
-      //   tier: 'premium',
-      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2 pro')
-      //     ?.value,
-      // },
-      // {
-      //   value: 'soraPro_4k',
-      //   label: 'Sora Pro 4K (Premium 4K Film Quality)',
-      //   tier: 'premium',
-      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find(
-      //     (m) =>
-      //       m.label.toLowerCase().includes('sora 2 pro 4k') ||
-      //       m.label.toLowerCase().includes('sora pro 4k')
-      //   )?.value,
-      // },
-      {
-        value: 'veo_4k',
-        label: 'Veo 4K (Cinematic 4K Quality)',
-        tier: 'premium',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 4k')?.value,
-      },
-      // {
-      //   value: 'seedance_v1',
-      //   label: 'Seedance 1.5 Pro',
-      //   tier: 'premium',
-      //   Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'seedance v1')
-      //     ?.value,
-      // },
-      {
-        value: 'seedance_v2',
-        label: 'Seedance 2.0 (Smooth Motion & Transitions)',
-        tier: 'premium',
-        Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'seedance 2.0')
-          ?.value,
-      },
-      {
-        value: 'seedance_fast',
-        label: 'Seedance 2.0 Fast (Quick Turnaround)',
-        tier: 'premium',
-        Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find(
-          (m) => m.label.toLowerCase() === 'seedance 2.0 fast'
-        )?.value,
-      },
-      {
-        value: 'kling_3.0',
-        label: 'Kling 3.0',
-        tier: 'premium',
-        Icon: <KlingIcon className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
-          ?.value,
-      },
-    ].filter((option) => availableCanonicalKeys.has(option.value)),
-    [modelCredits, availableCanonicalKeys]
+    () =>
+      surfaceModels.map((model) => ({
+        value: model.canonical,
+        label: model.label,
+        tier: model.isPremium ? 'premium' : 'standard',
+        credit: model.value,
+        creditsPerSecond: model.creditsPerSecond,
+        blockedPlanIds: model.blockedPlanIds || [],
+      })),
+    [surfaceModels]
   );
+  const configuredDurationOptions = useMemo(() => getModelDurationOptions(surfaceModels, videoModel), [surfaceModels, videoModel]);
+  const selectedVideoDuration = getSelectedModelDuration(configuredDurationOptions, videoDuration);
 
   useEffect(() => {
-    if (!videoChatModels.some((option) => option.value === videoModel)) {
-      setVideoModel(videoChatModels[0]?.value || '');
-    }
-  }, [videoChatModels, videoModel]);
+    if (videoModel) return;
+    const defaultVideoModel = getFirstAvailableVideoModel(videoChatModels, userData);
+    if (defaultVideoModel) setVideoModel(defaultVideoModel);
+  }, [userData, videoChatModels, videoModel]);
 
   useEffect(() => {
     dispatch(fetchModelCreditsAction());
   }, [dispatch]);
-
-  useEffect(() => {
-    if (videoModel !== 'kling_3.0' && aspectRatio === '1:1') {
-      setAspectRatio('16:9');
-    }
-
-    // Kling specific ratio enforcement based on image orientation
-    if (videoModel === 'kling_3.0' && imageOrientation) {
-      if (imageOrientation === 'portrait' && aspectRatio !== '9:16') {
-        setAspectRatio('9:16');
-      } else if (imageOrientation === 'landscape' && aspectRatio !== '16:9') {
-        setAspectRatio('16:9');
-      } else if (imageOrientation === 'square' && aspectRatio !== '1:1') {
-        setAspectRatio('1:1');
-      }
-    }
-  }, [videoModel, aspectRatio, imageOrientation]);
 
   useEffect(() => {
     if (isAspectRatioLoading || !aspectRatioOptions.length) return;
@@ -259,7 +159,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
     if (!productName.trim()) newErrors.productName = 'Product name is required';
     if (!description.trim()) newErrors.description = 'Description is required';
     if (!videoModel) newErrors.videoModel = 'Model is required';
-    if (!videoDuration) newErrors.videoDuration = 'Duration is required';
+    if (!selectedVideoDuration) newErrors.videoDuration = 'Duration is required';
     if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
     if (!productUrl.trim() && uploadedImages.length === 0) {
       newErrors.productUrl = 'Product image is required';
@@ -276,7 +176,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
         type: 'ugc',
         productUrl,
         productName,
-        duration: videoDuration,
+        duration: selectedVideoDuration,
         aspectRatio,
         promotion,
         notes,
@@ -304,7 +204,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
     productName &&
     description &&
     videoModel &&
-    videoDuration &&
+    selectedVideoDuration &&
     aspectRatio &&
     (productUrl || uploadedImages.length > 0);
 
@@ -373,70 +273,6 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
       setUploadedImages((prev) => [...prev, { file: null, preview: pastedText, isUrl: true }]);
     }
   };
-
-  const videoTimer = useMemo(() => {
-    const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
-
-    if (videoModel === 'veo_4k') {
-      return [{ value: '8s', label: '8s' }];
-    }
-
-    if (videoModel === 'veo' || videoModel === 'veo-3.1-fast') {
-      let options = [
-        // { value: '4s', label: '4s' },
-        // { value: '6s', label: '6s' },
-        { value: '8s', label: '8s' },
-      ];
-
-      if (hasPlan8) {
-        if (videoModel === 'veo-3.1-fast') {
-          // limit to 8s
-          options = options.filter((opt) => parseInt(opt.value) <= 8);
-        }
-
-        // if (videoModel === 'veo') {
-        //   // limit to 6s
-        //   options = options.filter((opt) => parseInt(opt.value) <= 6);
-        // }
-      }
-
-      return options;
-    }
-
-    if (videoModel === 'soraPro_4k') {
-      return [
-        // { value: '4s', label: '4s' },
-        { value: '8s', label: '8s' },
-        { value: '12s', label: '12s' },
-        { value: '16s', label: '16s' },
-        { value: '21s', label: '21s' },
-      ];
-    }
-    if (videoModel === 'seedance_v2' || videoModel === 'seedance_fast' || videoModel === 'kling_3.0') {
-      return [
-        // { value: '4s', label: '4s' },
-        // {value: '6s', label: '6s' },  
-        { value: '8s', label: '8s' },
-        { value: '12s', label: '12s' },
-      
-      ]
-    };
-
-    // sora / soraPro
-    return [
-      // { value: '4s', label: '4s' },
-      { value: '8s', label: '8s' },
-      { value: '12s', label: '12s' },
-      { value: '16s', label: '16s' },
-      { value: '20s', label: '20s' },
-    ];
-  }, [videoModel]);
-
-  useEffect(() => {
-    if (videoTimer.length > 0) {
-      setVideoDuration(videoTimer[0].value);
-    }
-  }, [videoModel]);
 
   useEffect(() => {
     const handleRecreate = (inputs) => {
@@ -664,17 +500,11 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                       icon={SparkleDark}
                       value={videoChatModels.find((o) => o.value === videoModel)}
                       onChange={(val) => {
-                        const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes(
-                          '8'
-                        );
-                        if (hasPlan8) {
-                          if (val !== 'sora' && val !== 'veo-3.1-fast') {
-                            // window.location.href =
-                            //   'https://adsgpt-dev.poweradspy.com/amember/signup';
-                            setIsUpgradeModalOpen(true);
-                            return;
-                          }
+                        if (isVideoModelBlocked(videoChatModels.find((model) => model.value === val), userData)) {
+                          setIsUpgradeModalOpen(true);
+                          return;
                         }
+                        if (val !== videoModel) setVideoDuration('');
                         setVideoModel(val);
                       }}
                       type="ugc"
@@ -688,11 +518,14 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                       Duration *
                     </label>
                     <CommonDropdown
-                      options={videoTimer}
+                      options={configuredDurationOptions}
                       label="Duration"
                       icon={TimerDarkLogo}
-                      value={videoTimer.find((o) => o.value === videoDuration)}
-                      onChange={(value) => setVideoDuration(value)}
+                      value={configuredDurationOptions.find((o) => o.value === selectedVideoDuration)}
+                      onChange={(value) => {
+                        setVideoDuration(value);
+                        setErrors((prev) => ({ ...prev, videoDuration: null }));
+                      }}
                       type="ugc"
                     />
                     {errors.videoDuration && (
@@ -716,32 +549,18 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                     {aspectRatioOptions
                       .map((ratio) => {
                         const isSelected = aspectRatio === ratio.value;
-                        const isKling = videoModel === 'kling_3.0';
-                        let isDisabled = false;
-
-                        if (isKling && imageOrientation) {
-                          if (imageOrientation === 'portrait' && ratio.value !== '9:16')
-                            isDisabled = true;
-                          if (imageOrientation === 'landscape' && ratio.value !== '16:9')
-                            isDisabled = true;
-                          if (imageOrientation === 'square' && ratio.value !== '1:1')
-                            isDisabled = true;
-                        }
-
                         return (
                           <button
                             key={ratio.value}
-                            disabled={isDisabled || isAspectRatioLoading}
+                            disabled={isAspectRatioLoading}
                             onClick={() => {
-                              if (isDisabled || isAspectRatioLoading) return;
+                              if (isAspectRatioLoading) return;
                               setAspectRatio(ratio.value);
                             }}
                             className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${
                               isSelected
                                 ? 'border-black/10 dark:border-white/30 bg-black/5 dark:bg-white/10 text-gray-900 dark:text-white shadow-inner'
-                                : isDisabled
-                                  ? 'border-black/10 dark:border-white/5 bg-transparent text-gray-500 dark:text-white/20 cursor-not-allowed opacity-40 grayscale'
-                                  : errors.aspectRatio
+                                : errors.aspectRatio
                                     ? 'border-red-500/50 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5'
                                     : 'border-black/10 dark:border-white/5 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white/60'
                             }`}
@@ -764,7 +583,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                 </div>
 
                 {/* Promotional Info */}
-                {videoModel !== 'seedance_v1' && (
+                {(
                   <div className="mt-0.5 flex flex-col gap-2 2xl:mt-0">
                     <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                       Promotional Info
@@ -883,11 +702,21 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
           {/* Footer */}
           <div className="mr-4 flex items-center justify-end gap-2 2xl:gap-3">
             {(() => {
-              const est = estimateAdVideoCredits({ video_model: videoModel, video_duration: videoDuration, no_of_ads: 1, modelCredits });
-              const enough = availableCredits >= est;
+              const selectedModel = videoChatModels.find((model) => model.value === videoModel);
+              const hasEstimateInputs = Boolean(videoModel && selectedVideoDuration && selectedModel);
+              const est = hasEstimateInputs
+                ? estimateAdVideoCredits({
+                    video_model: videoModel,
+                    video_duration: selectedVideoDuration,
+                    no_of_ads: 1,
+                    modelCredits,
+                    creditsPerSecond: selectedModel.creditsPerSecond,
+                  })
+                : 0;
+              const enough = hasEstimateInputs && availableCredits >= est;
               return (
                 <>
-                  {enough ? (
+                  {hasEstimateInputs && enough ? (
                     <ShadcnTooltip
                       label={`Will use : ${est} credits, ${availableCredits - est} left after`}
                     >
@@ -895,16 +724,16 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                         ~{est} credits
                       </span>
                     </ShadcnTooltip>
-                  ) : (
+                  ) : hasEstimateInputs ? (
                     <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
                       Not enough credits — need {est}, you have {availableCredits}
                     </span>
-                  )}
+                  ) : null}
                   <button
-                    disabled={isLoading || isSubmitting || !enough}
+                    disabled={isLoading || isSubmitting || !hasEstimateInputs || !enough}
                     onClick={handleGenerate}
                     className={`rounded-full px-10 py-2 text-xs font-bold text-white shadow-2xl transition 2xl:text-sm dark:text-black ${
-                      isLoading || isSubmitting || !enough
+                      isLoading || isSubmitting || !hasEstimateInputs || !enough
                         ? 'cursor-not-allowed bg-gray-900/40 dark:bg-white/30'
                         : 'bg-gray-900 hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] dark:bg-white'
                     }`}

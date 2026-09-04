@@ -58,6 +58,9 @@ import { toast } from 'react-toastify';
 import { suggestPrompt } from '@/store/actions/adStudio/promptActions';
 import { fetchModelCredits } from '@/utils/fetchModelCredits';
 import { estimateAdCreativeCredits, estimateAdVideoCredits } from '@/utils/creditEstimator';
+import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
+import { getModelDurationOptions, getSelectedModelDuration } from '@/utils/videoModelCapabilities';
+import { getFirstAvailableVideoModel } from '@/utils/videoModelAccess';
 import { detect } from 'tinyld';
 
 const AdPromptComponent = () => {
@@ -84,6 +87,7 @@ const AdPromptComponent = () => {
   const { isEditorOpen } = useSelector((state) => state.editor);
   const user_id = userData?.user_id;
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
+  const { models: videoSurfaceModels } = useVideoSurfaceModelsState('ai_ads');
   const uploadImageExists =
     Array.isArray(uploadedImages) && uploadedImages.some((img) => img.type === 'uploaded');
 
@@ -193,10 +197,15 @@ const AdPromptComponent = () => {
     { value: 3, label: '3V' },
   ];
 
-  const videoRatios = [
-    { value: 'ASPECT_16_9', label: '16:9' },
-    { value: 'ASPECT_9_16', label: '9:16' },
-  ];
+  const videoRatios = useMemo(() => {
+    const selectedModel = videoSurfaceModels.find(
+      (entry) => (entry.canonical || entry.model) === video_model
+    );
+    return (selectedModel?.aspectRatios || []).map((value) => ({
+      value: `ASPECT_${value.replace(':', '_')}`,
+      label: value,
+    }));
+  }, [videoSurfaceModels, video_model]);
   const MODEL_ASPECT_RATIO_MAP = useMemo(
     () => ({
       'ADSGPT-3.0': model1Ratios,
@@ -263,71 +272,32 @@ const AdPromptComponent = () => {
   );
 
   const videoChatModels = useMemo(
-    () => [
-      {
-        value: 'sora',
-        label: 'Sora 2',
-        Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2')?.value,
-      },
-      {
-        value: 'veo-3.1-fast',
-        label: 'Veo 3.1 Fast',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) =>
-          m.label.toLowerCase().includes('veo 3.1 fast')
-        )?.value,
-      },
-      {
-        value: 'veo',
-        label: 'Veo 3',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
-      },
-      {
-        value: 'soraPro',
-        label: 'Sora 2 Pro',
-        Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2 pro')
-          ?.value,
-      },
-      {
-        value: 'soraPro_4k',
-        label: 'Sora Pro 4K',
-        Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find(
-          (m) =>
-            m.label.toLowerCase().includes('sora 2 pro 4k') ||
-            m.label.toLowerCase().includes('sora pro 4k')
-        )?.value,
-      },
-      {
-        value: 'veo_4k',
-        label: 'Veo 4K',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 4k')?.value,
-      },
-    ],
-    [modelCredits]
+    () => videoSurfaceModels.map((model) => ({
+      value: model.canonical || model.model,
+      label: model.label || model.canonical || model.model,
+      tier: model.isPremium ? 'premium' : 'standard',
+      credit: model.value,
+      creditsPerSecond: model.creditsPerSecond,
+      blockedPlanIds: model.blockedPlanIds || [],
+    })),
+    [videoSurfaceModels]
   );
 
-  const videoTimer = useMemo(() => {
-    if (video_model === 'veo_4k') {
-      return [{ value: '8s', label: '8s' }];
+  useEffect(() => {
+    if (video_model) return;
+    const defaultVideoModel = getFirstAvailableVideoModel(videoChatModels, userData);
+    if (defaultVideoModel) {
+      dispatch(setField({ key: 'video_duration', value: '' }));
+      dispatch(setField({ key: 'video_model', value: defaultVideoModel }));
     }
-    if (video_model === 'veo' || video_model === 'veo-3.1-fast') {
-      return [
-        { value: '4s', label: '4s' },
-        { value: '6s', label: '6s' },
-        { value: '8s', label: '8s' },
-      ];
-    }
-    return [
-      { value: '4s', label: '4s' },
-      { value: '8s', label: '8s' },
-      { value: '12s', label: '12s' },
-    ];
-  }, [video_model]);
+  }, [dispatch, userData, videoChatModels, video_model]);
+
+  const videoTimer = useMemo(
+    () => getModelDurationOptions(videoSurfaceModels, video_model),
+    [videoSurfaceModels, video_model]
+  );
+  const selectedVideoDuration = getSelectedModelDuration(videoTimer, video_duration);
+  const hasValidVideoSelection = Boolean(video_model && selectedVideoDuration);
 
   const handleVideoTimerChange = (value) => {
     dispatch(setField({ key: 'video_duration', value: value }));
@@ -343,11 +313,18 @@ const AdPromptComponent = () => {
       return { estimated: c, label: `~${c} credit${c !== 1 ? 's' : ''}` };
     }
     if (activeAdStudioTabId === 'adVideo') {
-      const c = estimateAdVideoCredits({ video_model, video_duration, no_of_ads, modelCredits });
+      if (!hasValidVideoSelection) return null;
+      const c = estimateAdVideoCredits({
+        video_model,
+        video_duration: selectedVideoDuration,
+        no_of_ads,
+        modelCredits,
+        creditsPerSecond: videoChatModels.find((item) => item.value === video_model)?.creditsPerSecond,
+      });
       return { estimated: c, label: `~${c} credit${c !== 1 ? 's' : ''}` };
     }
     return null;
-  }, [activeAdStudioTabId, model, video_model, video_duration, no_of_ads, modelCredits]);
+  }, [activeAdStudioTabId, model, video_model, selectedVideoDuration, no_of_ads, modelCredits, videoChatModels, hasValidVideoSelection]);
 
   const hasEnoughCredits = creditEstimate ? availableCredits >= creditEstimate.estimated : true;
 
@@ -359,7 +336,6 @@ const AdPromptComponent = () => {
     dispatch(setField({ key: 'isUsingImprovedPrompt', value: false }));
 
     if (activeAdStudioTabId === 'adVideo') {
-      dispatch(setField({ key: 'video_aspect_ratio', value: 'ASPECT_16_9' }));
       dispatch(setField({ key: 'no_of_ads', value: 1 }));
       dispatch(clearUploadedImages());
     }
@@ -454,6 +430,10 @@ const AdPromptComponent = () => {
 
     //  BLOCK AD VIDEO WITHOUT IMAGE
     if (activeAdStudioTabId === 'adVideo') {
+      if (!hasValidVideoSelection) {
+        toast.error('Select a model and duration before generating Ad Video');
+        return;
+      }
       const hasUploadedImage =
         Array.isArray(uploadedImages) && uploadedImages.some((img) => img.type === 'uploaded');
 
@@ -496,6 +476,9 @@ const AdPromptComponent = () => {
   };
 
   const handleVideoModelChange = (selectedValue) => {
+    if (selectedValue !== video_model) {
+      dispatch(setField({ key: 'video_duration', value: '' }));
+    }
     dispatch(setField({ key: 'video_model', value: selectedValue }));
   };
 
@@ -980,7 +963,7 @@ const AdPromptComponent = () => {
                     label="Durations"
                     icon={TimerDarkLogo}
                     onChange={handleVideoTimerChange}
-                    value={videoTimer.find((s) => s.value === video_duration)}
+                    value={videoTimer.find((s) => s.value === selectedVideoDuration)}
                   />
                 </div>
                 {/* </ShadcnTooltip> */}
@@ -1015,11 +998,11 @@ const AdPromptComponent = () => {
                 {prompt && !isListening ? (
                   <button
                     // id="tour_video_prompt_by_mic"
-                    disabled={!hasEnoughCredits}
-                    className={`flex h-6.75 w-6.75 items-center justify-center rounded-full 2xl:h-9 2xl:w-9 ${hasEnoughCredits ? 'bg-zinc-900 text-white dark:bg-white dark:text-black' : 'cursor-not-allowed bg-zinc-300 text-zinc-500 dark:bg-white/30 dark:text-white/50'}`}
+                    disabled={!hasValidVideoSelection || !hasEnoughCredits}
+                    className={`flex h-6.75 w-6.75 items-center justify-center rounded-full 2xl:h-9 2xl:w-9 ${hasValidVideoSelection && hasEnoughCredits ? 'bg-zinc-900 text-white dark:bg-white dark:text-black' : 'cursor-not-allowed bg-zinc-300 text-zinc-500 dark:bg-white/30 dark:text-white/50'}`}
                     onClick={handleRequestSubmit}
                   >
-                    <ShadcnTooltip label={hasEnoughCredits ? 'Generate Ad Video' : 'Not enough credits'}>
+                    <ShadcnTooltip label={!hasValidVideoSelection ? 'Select a model and duration' : hasEnoughCredits ? 'Generate Ad Video' : 'Not enough credits'}>
                       <Send className="h-4 w-4 text-current xl:h-5 xl:w-5" />
                     </ShadcnTooltip>
                   </button>

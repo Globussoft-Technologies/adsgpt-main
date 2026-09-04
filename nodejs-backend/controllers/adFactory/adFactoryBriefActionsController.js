@@ -154,7 +154,7 @@ exports.generateFromBrief = async (req, res) => {
     // and the amount held are the same number.
     const estimate = estimateBriefCredits(
       brief,
-      UnifiedCreditController.getModelDeduction.bind(UnifiedCreditController),
+      UnifiedCreditController.getAdFactoryModelDeduction.bind(UnifiedCreditController),
     );
     const required = estimate?.total || 0;
     const reservationKey = `campaign:${campaign.metadata.campaignId}`;

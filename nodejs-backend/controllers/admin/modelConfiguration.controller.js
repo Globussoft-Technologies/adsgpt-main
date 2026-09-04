@@ -4,7 +4,7 @@ const modelConfigurationService = require("../../services/modelConfigurationServ
 const { SURFACE_SLUGS } = require("../../config/surfaceCatalog");
 const { validateModelPayload } = require("../../config/aiModelConfigurationValidation");
 
-const WRITABLE_FIELDS = ["canonicalKey", "displayName", "type", "aliases", "enabled", "archived", "sortOrder", "icon", "description", "adminNotes", "credits", "pricing", "qualityTiers", "extraCharges", "aggregationCreditDefault", "capabilities", "surfaces", "metadata"];
+const WRITABLE_FIELDS = ["canonicalKey", "displayName", "type", "aliases", "enabled", "archived", "isPremium", "blockedPlanIds", "sortOrder", "icon", "description", "adminNotes", "credits", "pricing", "qualityTiers", "extraCharges", "aggregationCreditDefault", "capabilities", "surfaces", "metadata"];
 
 function pickWritable(body) {
   return Object.fromEntries(WRITABLE_FIELDS.filter((field) => body?.[field] !== undefined).map((field) => [field, body[field]]));

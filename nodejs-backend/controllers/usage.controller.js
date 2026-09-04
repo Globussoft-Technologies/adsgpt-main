@@ -258,6 +258,8 @@ function surfaceRowFor(entry, caps, media) {
     canonical: entry.canonicalKey,
     aliases: entry.aliases || [],
     label: entry.displayName || entry.label,
+    isPremium: entry.isPremium === true,
+    blockedPlanIds: entry.blockedPlanIds || [],
     type: entry.type,
     value: `${credits} ${unitLabelFor(entry.type)}`,
     [creditField]: credits,

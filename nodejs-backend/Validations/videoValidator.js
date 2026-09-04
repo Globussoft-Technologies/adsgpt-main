@@ -4,9 +4,7 @@ const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 const baseInputSchema = {
   type: Joi.string().valid("ugc", "broll", "avatar", "clone", "ai_ads").required(),
 
-  model: Joi.string()
-    .valid("soraPro_4k", "soraPro", "sora", "veo", "veo-3.1-fast", "veo_4k", "seedance_v1", "seedance_v2", "seedance_fast", "kling_3.0")
-    .required(),
+  model: Joi.string().required(),
 
   numberOfVideos: Joi.number().min(1).required(),
 

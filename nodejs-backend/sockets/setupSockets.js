@@ -442,13 +442,17 @@ const settleAdFactoryCampaign = async (campaign, campaignId) => {
       // result item. Items only carry { status, data, error, prompt, timestamp }.
       const serviceModel =
         type === "text" ? "ADSGPT-TEXT" : srv?.serviceParams?.model;
-      const perItem =
-        UnifiedCreditController.getModelDeduction(serviceModel) || 0;
-
+      const perItem = type === "image"
+        ? UnifiedCreditController.getAdFactoryModelDeduction(serviceModel)
+        : UnifiedCreditController.getModelDeduction(serviceModel);
       const successful = arr.filter((it) => it?.status === 200);
       let typeCharge = 0;
       for (const item of successful) {
-        let cost = perItem;
+        const itemModel = item?.model || serviceModel;
+        const itemCost = type === "image"
+          ? UnifiedCreditController.getAdFactoryModelDeduction(itemModel)
+          : UnifiedCreditController.getModelDeduction(itemModel);
+        let cost = itemCost || 0;
         if (type === "text") {
           const dataLength = Object.keys(item?.data || {}).length;
           cost = cost * dataLength;

@@ -278,7 +278,7 @@ exports.getBrief = async (req, res) => {
     // nothing rather than a misleading "0 credits".
     const estimate = estimateBriefCredits(
       brief,
-      UnifiedCreditController.getModelDeduction.bind(UnifiedCreditController),
+      UnifiedCreditController.getAdFactoryModelDeduction.bind(UnifiedCreditController),
     );
 
     return res
@@ -481,7 +481,7 @@ exports.updateBrief = async (req, res) => {
     // charge.
     const estimate = estimateBriefCredits(
       brief,
-      UnifiedCreditController.getModelDeduction.bind(UnifiedCreditController),
+      UnifiedCreditController.getAdFactoryModelDeduction.bind(UnifiedCreditController),
     );
 
     return res.status(200).json({ success: true, data: brief, jobSync, estimate });

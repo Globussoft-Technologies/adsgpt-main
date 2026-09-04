@@ -81,6 +81,15 @@ const PRESERVED_FROM_EXISTING = Object.freeze([
 
 const plain = (v) => (v && typeof v.toObject === "function" ? v.toObject() : v || {});
 const text = (v) => (typeof v === "string" ? v.trim() : "");
+const imageModelForBrief = (generation, provenance) => {
+  const value = text(generation?.imageModel);
+  // `google` was the old schema default. It was never a user choice in Quick
+  // setup, so legacy briefs should use the explicit auto sentinel instead.
+  if (!value || (value === "google" && provenance?.["generation.imageModel"]?.source !== "user")) {
+    return "auto";
+  }
+  return value;
+};
 const list = (v) =>
   Array.isArray(v) ? v.filter((x) => x != null && x !== "").map((x) => (typeof x === "string" ? x.trim() : x)) : [];
 
@@ -246,7 +255,10 @@ function briefToCampaignDoc(brief, opts = {}) {
   if (imageCount > 0) {
     servicesSelected.push({
       serviceName: "image",
-      serviceParams: { quantity: imageCount, model: text(generation.imageModel) || "auto" },
+      serviceParams: {
+        quantity: imageCount,
+        model: imageModelForBrief(generation, plain(b.provenance)),
+      },
       generated: 0,
     });
   }

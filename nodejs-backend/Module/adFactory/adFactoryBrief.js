@@ -171,7 +171,7 @@ const DeliverySchema = new mongoose.Schema(
 
 const GenerationSchema = new mongoose.Schema(
   {
-    imageModel: { type: String, default: "google" },
+    imageModel: { type: String, default: "auto" },
     textModel: { type: String, default: null },
     imageCount: { type: Number, default: 3, min: 0, max: 50 },
     textCount: { type: Number, default: 3, min: 0, max: 50 },

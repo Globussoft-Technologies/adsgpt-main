@@ -21,7 +21,7 @@ const CommonDropdown = ({
   // const selectedOption = options?.find((opt) => opt.value === value?.value);
   // const SelectedIcon = selectedOption?.Icon;
   return (
-    <Select value={value?.value} onValueChange={onChange} disabled={disabled}>
+    <Select value={value?.value ?? ''} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
         hideIcon
         disabled={disabled}

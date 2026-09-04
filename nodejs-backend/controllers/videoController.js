@@ -177,6 +177,16 @@ exports.generateVideo = async (req, res) => {
 
     // * STEP 2: Model-based credit logic
     const selectedModel = inputs.model; // e.g., 'veo-3.1-fast'
+    const configuredModel = await modelConfigurationService.resolveModelByAlias(selectedModel, {
+      includeDisabled: false,
+    });
+    if (!configuredModel) {
+      return res.status(400).json({ success: false, error: "Selected video model is unavailable" });
+    }
+    const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
+    if ((configuredModel.blockedPlanIds || []).includes(String(plan))) {
+      return res.status(403).json({ success: false, error: "This model is not available on your current plan" });
+    }
     const durationNum = Number(inputs.duration.replace("s", "")) || 0; // Duration in seconds
 
     // Calculate how many credits 1 video takes: duration * model_multiplier
@@ -186,8 +196,6 @@ exports.generateVideo = async (req, res) => {
     const numberOfVideos = inputs.numberOfVideos;
     // Calculate total required credits for the entire batch
     const totalRequiredCredits = numberOfVideos * videoMinCount;
-
-    const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
 
     // * STEP 3: Permission logic based on remaining credits
     // Create the record in MongoDB with 'pending' status first

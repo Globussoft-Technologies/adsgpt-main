@@ -1013,7 +1013,7 @@ exports.validateCredits = async (user, subscriptionTypeKey, data) => {
       textParams.qty * UnifiedCreditController.getModelDeduction("ADSGPT-TEXT");
     const requiredImage =
       imageParams.qty *
-      UnifiedCreditController.getModelDeduction(imageParams.model);
+      UnifiedCreditController.getAdFactoryModelDeduction(imageParams.model);
     const requiredVideo =
       videoParams.qty *
       UnifiedCreditController.getModelDeduction(videoParams.model);
@@ -1649,7 +1649,7 @@ exports.updateGenerationResult = async (req, res) => {
         // 2. GeneratedMedia row — mirrors the per-item credit + USD cost so
         // dashboards can sum AdFactory usage alongside Ad Studio.
         const creditDeduction =
-          UnifiedCreditController.getModelDeduction(modelIdentifier) || 0;
+          UnifiedCreditController.getAdFactoryModelDeduction(modelIdentifier) || 0;
         const inputTokens = item?.usage?.input_tokens || 0;
         const outputTokens = item?.usage?.output_tokens || 0;
         const cost = modelPricingConfig.getImageCost(

@@ -28,7 +28,6 @@ import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 import FrequencySection from './FrequencySection';
 import { getBrowserTimezone } from './TimezoneSelect';
 import PairsPerCycleSection from './PairsPerCycleSection';
-import { MODEL_OPTIONS } from './imageModels';
 import { isValidCtaUrl } from './CallToActionSection';
 import TemplatePicker from './TemplatePicker';
 import SummarySection from './SummarySection';
@@ -333,18 +332,19 @@ export default function AutomationForm({ onActivated, onActionsChange }) {
     }
   }, [dispatch, userData?.user_id, hasGoogleSelected]);
 
-  // Existing Automation jobs retain their legacy values (google/openai).
-  // Models added in Admin use their canonical key as the submitted value.
+  // Existing Automation jobs retain their legacy aliases when those aliases
+  // are present in the live catalog. New models use their canonical API key.
   const modelOptions = useMemo(() => {
     const liveOptions = adFactoryModels.map((model) => {
       const aliases = Array.isArray(model.aliases) ? model.aliases.map((alias) => String(alias).toLowerCase()) : [];
       const legacyValue = aliases.includes('google') ? 'google' : aliases.includes('openai') ? 'openai' : model.apiId;
       return { value: legacyValue, label: model.label, Icon: model.icon ? <img src={model.icon} alt="" className="size-4 rounded object-contain" /> : undefined, creditsPerImage: Number(model.creditsPerImage) || 0 };
     });
-    return liveOptions.length ? liveOptions : MODEL_OPTIONS.map((model) => ({ ...model, creditsPerImage: 7 }));
+    return liveOptions;
   }, [adFactoryModels]);
   const selectedModel = modelOptions.find((model) => model.value === values.imageModelProvider);
-  const creditsPerImage = selectedModel?.creditsPerImage || (adFactoryModelsLoading ? 7 : 0);
+  const selectedCredits = Number(selectedModel?.creditsPerImage);
+  const creditsPerImage = Number.isFinite(selectedCredits) ? selectedCredits : null;
 
   // A newly added DB model becomes the initial choice when no legacy value is
   // available. Existing saved google/openai values remain untouched whenever

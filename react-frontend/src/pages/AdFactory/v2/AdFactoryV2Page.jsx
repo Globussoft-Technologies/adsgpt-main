@@ -856,16 +856,16 @@ export default function AdFactoryV2Page() {
   );
 
   const costPerPair = useMemo(() => {
-    if (estimate?.counts?.image && estimate?.total) {
-      return estimate.total / estimate.counts.image;
+    if (estimate?.counts?.image > 0 && Number.isFinite(Number(estimate.total))) {
+      return Number(estimate.total) / estimate.counts.image;
     }
-    return 7;
+    return null;
   }, [estimate]);
 
   const creditsPerCycle = useMemo(() => {
-    if (estimate?.total == null) return null;
+    if (costPerPair == null) return null;
     return Math.round(costPerPair * (cadence.pairsPerCycle || 1));
-  }, [costPerPair, estimate?.total, cadence.pairsPerCycle]);
+  }, [costPerPair, cadence.pairsPerCycle]);
 
   // Google is a destination only when it is one of the brief's own platforms —
   // the same tick in Output that decides whether we render Google sizes.

@@ -8,9 +8,6 @@ import {
   Loader2,
   X,
 } from 'lucide-react';
-import { RiGeminiFill } from 'react-icons/ri';
-import { SiOpenai, SiBytedance } from 'react-icons/si';
-import KlingIcon from '@/components/icons/KlingIcon';
 import geminiLogo from '@/assets/layouts/profile/Google_Gemini_icon_2025.svg.png';
 import SparkleDark from '@/assets/layouts/prompt/sparkle-dark.svg';
 import TimerDarkLogo from '@/assets/layouts/prompt/advideo/timer.svg';
@@ -26,14 +23,15 @@ import { AnimatePresence } from 'framer-motion';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
 import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
-import { AspectRatioPreview, getModelAspectRatios } from '@/utils/videoModelCapabilities';
+import { AspectRatioPreview, getModelAspectRatios, getModelDurationOptions, getSelectedModelDuration } from '@/utils/videoModelCapabilities';
+import { getFirstAvailableVideoModel, isVideoModelBlocked } from '@/utils/videoModelAccess';
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
 const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [videoModel, setVideoModel] = useState('');
-  const [videoDuration, setVideoDuration] = useState('4s');
+  const [videoDuration, setVideoDuration] = useState('');
   const [uploadedImages, setUploadedImages] = useState([]);
   const [productUrl, setProductUrl] = useState('');
   // const [productName, setProductName] = useState('');
@@ -54,10 +52,6 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
   const productName = brand_name || brandInfo?.brandName || '';
   const { video_model, modelCredits } = useSelector((state) => state.prompt);
   const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('broll');
-  const availableCanonicalKeys = useMemo(
-    () => new Set(surfaceModels.map((entry) => entry.canonical)),
-    [surfaceModels]
-  );
   const aspectRatioOptions = useMemo(
     () => getModelAspectRatios(surfaceModels, 'broll', videoModel),
     [surfaceModels, videoModel]
@@ -66,119 +60,28 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
 
   const videoChatModels = useMemo(
-    () => [
-      {
-        value: 'veo-3.1-fast',
-        label: 'Veo 3.1 Fast (Fast & Social-Ready)',
-        tier: 'lower',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) =>
-          m.label.toLowerCase().includes('veo 3.1 fast')
-        )?.value,
-      },
-      // {
-      //   value: 'sora',
-      //   label: 'Sora 2 (Creative & Stylised)',
-      //   tier: 'lower',
-      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2')?.value,
-      // },
-
-      {
-        value: 'veo',
-        label: 'Veo 3 (Cinematic Quality)',
-        tier: 'premium',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
-      },
-      // {
-      //   value: 'soraPro',
-      //   label: 'Sora 2 Pro (Cinematic Storytelling)',
-      //   tier: 'premium',
-      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2 pro')
-      //     ?.value,
-      // },
-      // {
-      //   value: 'soraPro_4k',
-      //   label: 'Sora Pro 4K (Premium 4K Film Quality)',
-      //   tier: 'premium',
-      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find(
-      //     (m) =>
-      //       m.label.toLowerCase().includes('sora 2 pro 4k') ||
-      //       m.label.toLowerCase().includes('sora pro 4k')
-      //   )?.value,
-      // },
-      {
-        value: 'veo_4k',
-        label: 'Veo 4K (Cinematic 4K Quality)',
-        tier: 'premium',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 4k')?.value,
-      },
-      // {
-      //   value: 'seedance_v1',
-      //   label: 'Seedance 1.5 Pro',
-      //   tier: 'premium',
-      //   Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'seedance v1')
-      //     ?.value,
-      // },
-      {
-        value: 'seedance_v2',
-        label: 'Seedance 2.0 (Smooth Motion & Transitions)',
-        tier: 'premium',
-        Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'seedance 2.0')
-          ?.value,
-      },
-      {
-        value: 'seedance_fast',
-        label: 'Seedance 2.0 Fast (Quick Turnaround)',
-        tier: 'premium',
-        Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'seedance 2.0 fast')
-          ?.value,
-      },
-      {
-        value: 'kling_3.0',
-        label: 'Kling 3.0',
-        tier: 'premium',
-        Icon: <KlingIcon className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
-          ?.value,
-      },
-    ].filter((option) => availableCanonicalKeys.has(option.value)),
-    [modelCredits, availableCanonicalKeys]
+    () => surfaceModels.map((model) => ({
+        value: model.canonical,
+        label: model.label,
+        tier: model.isPremium ? 'premium' : 'standard',
+        credit: model.value,
+        creditsPerSecond: model.creditsPerSecond,
+        blockedPlanIds: model.blockedPlanIds || [],
+      })),
+    [surfaceModels]
   );
+  const configuredDurationOptions = useMemo(() => getModelDurationOptions(surfaceModels, videoModel), [surfaceModels, videoModel]);
+  const selectedVideoDuration = getSelectedModelDuration(configuredDurationOptions, videoDuration);
 
   useEffect(() => {
-    if (!videoChatModels.some((option) => option.value === videoModel)) {
-      setVideoModel(videoChatModels[0]?.value || '');
-    }
-  }, [videoChatModels, videoModel]);
+    if (videoModel) return;
+    const defaultVideoModel = getFirstAvailableVideoModel(videoChatModels, userData);
+    if (defaultVideoModel) setVideoModel(defaultVideoModel);
+  }, [userData, videoChatModels, videoModel]);
 
   useEffect(() => {
     dispatch(fetchModelCreditsAction());
   }, [dispatch]);
-
-  useEffect(() => {
-    if (videoModel !== 'kling_3.0' && aspectRatio === '1:1') {
-      setAspectRatio('16:9');
-    }
-    
-    // Kling specific ratio enforcement based on image orientation
-    if (videoModel === 'kling_3.0' && imageOrientation) {
-      if (imageOrientation === 'portrait' && aspectRatio !== '9:16') {
-        setAspectRatio('9:16');
-      } else if (imageOrientation === 'landscape' && aspectRatio !== '16:9') {
-        setAspectRatio('16:9');
-      } else if (imageOrientation === 'square' && aspectRatio !== '1:1') {
-        setAspectRatio('1:1');
-      }
-    }
-  }, [videoModel, aspectRatio, imageOrientation]);
 
   useEffect(() => {
     if (isAspectRatioLoading || !aspectRatioOptions.length) return;
@@ -205,68 +108,9 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
     }
   }, [uploadedImages]);
 
-  const videoTimer = useMemo(() => {
-    const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
-
-    if (videoModel === 'veo_4k') {
-      return [{ value: '8s', label: '8s' }];
-    }
-    if (videoModel === 'veo' || videoModel === 'veo-3.1-fast') {
-      let options = [
-        // { value: '4s', label: '4s' },
-        // { value: '6s', label: '6s' },
-        { value: '8s', label: '8s' },
-      ];
-
-      if (hasPlan8) {
-        if (videoModel === 'veo-3.1-fast') {
-          // limit to 8s
-          options = options.filter((opt) => parseInt(opt.value) <= 8);
-        }
-
-        // if (videoModel === 'veo') {
-        //   // limit to 6s
-        //   options = options.filter((opt) => parseInt(opt.value) <= 6);
-        // }
-      }
-
-      return options;
-    }
-    if (videoModel === 'soraPro_4k') {
-      return [
-        // { value: '4s', label: '4s' },
-        { value: '8s', label: '8s' },
-        { value: '12s', label: '12s' },
-        { value: '16s', label: '16s' },
-        { value: '21s', label: '21s' },
-      ];
-    }
-    if (videoModel === 'seedance_v2' || videoModel === 'seedance_fast' || videoModel === 'kling_3.0') {
-      return [
-        // { value: '4s', label: '4s' },
-        // {value: '6s', label: '6s' },  
-        { value: '8s', label: '8s' },
-        { value: '12s', label: '12s' },
-      
-      ]
-    };
-    // sora, soraPro (sora-2, sora-2-pro)
-    return [
-      // { value: '4s', label: '4s' },
-      { value: '8s', label: '8s' },
-      { value: '12s', label: '12s' },
-      { value: '16s', label: '16s' },
-      { value: '20s', label: '20s' },
-    ];
-  }, [videoModel]);
-
   // useEffect(() => {
   //   dispatch(fetchProcessingCount());
   // }, [dispatch]);
-
-  useEffect(() => {
-    setVideoDuration(videoTimer[0].value);
-  }, [videoTimer]);
 
   useEffect(() => {
     const handleRecreate = (inputs) => {
@@ -312,7 +156,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
     return () => {
       emitter.off('recreate-video', handleRecreate);
     };
-  }, [dispatch, recreateInputs, videoTimer, videoChatModels]);
+  }, [dispatch, recreateInputs, videoChatModels]);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -370,7 +214,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
     if (!videoModel) {
       newErrors.videoModel = 'Model is required';
     }
-    if (!videoDuration) {
+    if (!selectedVideoDuration) {
       newErrors.videoDuration = 'Duration is required';
     }
     if (!aspectRatio) {
@@ -393,7 +237,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
         type: 'broll',
         productUrl,
         productName,
-        duration: videoDuration,
+        duration: selectedVideoDuration,
         aspectRatio,
         promotion,
         notes,
@@ -549,14 +393,11 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
               type="b-roll"
               value={videoChatModels.find((o) => o.value === videoModel)}
               onChange={(val) => {
-                const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
-                if (hasPlan8) {
-                  if (val !== 'sora' && val !== 'veo-3.1-fast') {
-                    // window.location.href = 'https://adsgpt-dev.poweradspy.com/amember/signup';
-                    setIsUpgradeModalOpen(true);
-                    return;
-                  }
+                if (isVideoModelBlocked(videoChatModels.find((model) => model.value === val), userData)) {
+                  setIsUpgradeModalOpen(true);
+                  return;
                 }
+                if (val !== videoModel) setVideoDuration('');
                 setVideoModel(val);
                 setErrors((prev) => ({ ...prev, videoModel: '' }));
               }}
@@ -569,11 +410,11 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
           <div className="flex flex-1 flex-col gap-2">
             <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Duration *</label>
             <CommonDropdown
-              options={videoTimer}
+              options={configuredDurationOptions}
               label="Durations"
               icon={TimerDarkLogo}
               type="b-roll"
-              value={videoTimer.find((o) => o.value === videoDuration)}
+              value={configuredDurationOptions.find((o) => o.value === selectedVideoDuration)}
               onChange={(value) => {
                 setVideoDuration(value);
                 setErrors((prev) => ({ ...prev, videoDuration: '' }));
@@ -600,33 +441,16 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
             {aspectRatioOptions
               .map(({ value, label }) => {
                 const isSelected = value === aspectRatio;
-                const isKling = videoModel === 'kling_3.0';
-                let isDisabled = false;
-
-                if (isKling && imageOrientation) {
-                  if (imageOrientation === 'portrait' && value !== '9:16') isDisabled = true;
-                  if (imageOrientation === 'landscape' && value !== '16:9') isDisabled = true;
-                  if (imageOrientation === 'square' && value !== '1:1') isDisabled = true;
-                }
-
                 return (
                   <button
                     key={value}
-                    disabled={isDisabled || isAspectRatioLoading}
+                    disabled={isAspectRatioLoading}
                     onClick={() => {
-                      if (isDisabled || isAspectRatioLoading) return;
+                      if (isAspectRatioLoading) return;
                       setAspectRatio(value);
                       setErrors((prev) => ({ ...prev, aspectRatio: '' }));
                     }}
-                    className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${
-                      isSelected
-                        ? 'border-black/10 dark:border-white/30 bg-black/5 dark:bg-white/10 text-gray-900 dark:text-white shadow-inner'
-                        : isDisabled
-                          ? 'border-black/10 dark:border-white/5 bg-transparent text-gray-500 dark:text-white/20 cursor-not-allowed opacity-40 grayscale'
-                          : errors.aspectRatio
-                            ? 'border-red-500/50 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5'
-                            : 'border-black/10 dark:border-white/5 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white/60'
-                    }`}
+                    className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${isSelected ? 'border-black/10 bg-black/5 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-white' : 'border-black/10 bg-transparent text-gray-500 dark:border-white/5 dark:text-white/40'}`}
                   >
                     <AspectRatioPreview ratio={value} className={`h-4 w-4 ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/40'}`} />
                     {label}
@@ -655,8 +479,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
         </div>
 
         {/* Promotional Info */}
-        {videoModel !== 'seedance_v1' && (
-          <div>
+        <div>
             <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Promotional Info</label>
             <input
               className="mt-2 w-full rounded-4xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
@@ -664,8 +487,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
               value={promotion}
               onChange={(e) => setPromotion(e.target.value)}
             />
-          </div>
-        )}
+        </div>
 
         {/* Prompt */}
         <div>
@@ -680,11 +502,15 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
 
         <div className="mt-4 flex flex-col items-end gap-2">
           {(() => {
-            const est = estimateAdVideoCredits({ video_model: videoModel, video_duration: videoDuration, no_of_ads: 1, modelCredits });
-            const enough = availableCredits >= est;
+            const selectedModel = videoChatModels.find((model) => model.value === videoModel);
+            const hasEstimateInputs = Boolean(videoModel && selectedVideoDuration && selectedModel);
+            const est = hasEstimateInputs
+              ? estimateAdVideoCredits({ video_model: videoModel, video_duration: selectedVideoDuration, no_of_ads: 1, modelCredits, creditsPerSecond: selectedModel.creditsPerSecond })
+              : 0;
+            const enough = hasEstimateInputs && availableCredits >= est;
             return (
               <div className="flex items-center gap-2">
-                {enough ? (
+                {hasEstimateInputs && enough ? (
                   <ShadcnTooltip
                     label={`Will use : ${est} credits, ${availableCredits - est} left after`}
                   >
@@ -692,15 +518,15 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
                       ~{est} credits
                     </span>
                   </ShadcnTooltip>
-                ) : (
+                ) : hasEstimateInputs ? (
                   <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
                     Not enough credits — need {est}, you have {availableCredits}
                   </span>
-                )}
+                ) : null}
                 <button
-                  disabled={isLoading || isSubmitting || !enough}
+                  disabled={isLoading || isSubmitting || !hasEstimateInputs || !enough}
                   onClick={handleGenerate}
-                  className={`rounded-full px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 2xl:py-3 2xl:text-base dark:text-black ${isLoading || isSubmitting || !enough ? 'cursor-not-allowed bg-gray-900/40 dark:bg-white/30' : 'bg-gray-900 dark:bg-white'}`}
+                  className={`rounded-full px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 2xl:py-3 2xl:text-base dark:text-black ${isLoading || isSubmitting || !hasEstimateInputs || !enough ? 'cursor-not-allowed bg-gray-900/40 dark:bg-white/30' : 'bg-gray-900 dark:bg-white'}`}
                 >
                   {isLoading || isSubmitting ? 'Generating...' : 'Generate'}
                 </button>

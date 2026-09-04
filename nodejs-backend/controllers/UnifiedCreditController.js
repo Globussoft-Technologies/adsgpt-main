@@ -54,6 +54,31 @@ class UnifiedCreditController {
   }
 
   /**
+   * Ad Factory pricing includes the surface-level surcharge, when configured.
+   * `auto` is reserved conservatively at the highest enabled Ad Factory image
+   * rate; settlement can then charge the model Python actually reports and
+   * refund the unused part of the hold.
+   */
+  static getAdFactoryModelDeduction(model) {
+    const surface = "ad_factory";
+    const isAuto = String(model || "").trim().toLowerCase() === "auto";
+    const entries = isAuto
+      ? modelConfigurationService.getCachedModelsForSurface(surface, {
+          type: "image",
+          activeOnly: true,
+        })
+      : [modelConfigurationService.getRuntimeModel(model)];
+
+    return entries.reduce((highest, entry) => {
+      if (!entry) return highest;
+      const base = modelConfigurationService.getRuntimeCredit(entry);
+      const surfaceCharge = modelConfigurationService.getRuntimeExtra(entry, surface);
+      const total = base + (Number(surfaceCharge?.credits) || 0);
+      return Math.max(highest, total);
+    }, 0);
+  }
+
+  /**
    * Quality-aware variant of getModelDeduction. NEW + additive — the original
    * above is left untouched. Image models resolve their (model, quality) tier
    * credits via the DB-backed catalog; SPECIAL_CASES and tier-less models behave exactly

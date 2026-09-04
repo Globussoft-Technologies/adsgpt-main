@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { FieldBlock, PillGroup, SelectField, Stepper, TogglePill } from './briefFields';
 import { CARD, FAINT, SECTION, SECTION_PAD } from './_tokens';
@@ -10,6 +10,13 @@ import {
   pruneRatios,
   ratiosFor,
 } from '@/components/AdFactory/adPlatforms';
+import { fetchAdFactoryConfig } from '@/utils/fetchAdCreativeConfig';
+
+// Same models/credits the Full-control form pulls from the backend
+// (`/adsgpt/usage/model-credit-value?media=ad_factory`) — Quick setup used to
+// hardcode "Google"/"OpenAI" here, which drifted from whatever the backend
+// actually offered.
+const AUTO_OPTION = { value: 'auto', label: 'Choose for me' };
 
 // ----------------------------------------------------------------------------
 // OutputPanel — what we make, at what sizes, how many, with which model.
@@ -41,7 +48,39 @@ export default function OutputPanel({ brief, onEditField, onEditFields }) {
   const delivery = brief?.delivery || {};
   const generation = brief?.generation || {};
 
+  const [imageModelOptions, setImageModelOptions] = useState([AUTO_OPTION]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchAdFactoryConfig()
+      .then((models) => {
+        if (cancelled) return;
+        setImageModelOptions([
+          AUTO_OPTION,
+          ...models.map((m) => ({
+            value: m.apiId,
+            label: m.label,
+            aliases: Array.isArray(m.aliases) ? m.aliases : [],
+          })),
+        ]);
+      })
+      .catch(() => {}); // keep the "Choose for me" fallback on failure
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const selectedPlatforms = delivery.platforms?.length ? delivery.platforms : ['meta'];
+  const persistedImageModel = generation.imageModel || AUTO_OPTION.value;
+  const isLegacyAuto = persistedImageModel.toLowerCase() === 'google'
+    && brief?.provenance?.['generation.imageModel']?.source !== 'user';
+  const legacySelectedModel = imageModelOptions.find((option) =>
+    option.aliases?.some((alias) => String(alias).toLowerCase() === persistedImageModel.toLowerCase()),
+  );
+  const selectedImageModel = isLegacyAuto
+    ? AUTO_OPTION.value
+    : imageModelOptions.some((option) => option.value === persistedImageModel)
+    ? persistedImageModel
+    : legacySelectedModel?.value || AUTO_OPTION.value;
   const allowedRatios = ratiosFor(selectedPlatforms);
   const platformNames = selectedPlatforms.map((id) => platform(id)?.label || id).join(', ');
 
@@ -139,12 +178,8 @@ export default function OutputPanel({ brief, onEditField, onEditFields }) {
 
           <FieldBlock label="Image model">
             <SelectField
-              value={generation.imageModel || 'auto'}
-              options={[
-                { value: 'auto', label: 'Choose for me' },
-                { value: 'google', label: 'Google' },
-                { value: 'openai', label: 'OpenAI' },
-              ]}
+              value={selectedImageModel}
+              options={imageModelOptions}
               onChange={(v) => onEditField?.('generation', 'imageModel', v)}
             />
           </FieldBlock>

@@ -13,7 +13,6 @@ const {
 const logger = require("../../utils/logger");
 const { _runningJobs } = require("../../services/adsFactoryAuto/adsFactoryAutoOrchestrator");
 const UnifiedCreditController = require("../UnifiedCreditController");
-const modelConfigurationService = require("../../services/modelConfigurationService");
 
 async function ownsFacebookConnection(userId, target) {
   if (!target?.facebookId || !target?.connectionId) return false;
@@ -1760,15 +1759,8 @@ class AdsFactoryAutoController {
       // If model is missing/unresolvable, fall back to the first active image model.
       const ppc = Number(pairsPerCycle) || 1;
 
-      const _resolvedImageDeduction = (() => {
-        if (model) {
-          const d = UnifiedCreditController.getModelDeduction(model);
-          if (d > 0) return d;
-        }
-        // fallback: first active image model
-        const first = modelConfigurationService.getRuntimeModels({ type: "image", activeOnly: true })[0];
-        return first ? modelConfigurationService.getRuntimeCredit(first) : 0;
-      })();
+      const _resolvedImageDeduction =
+        UnifiedCreditController.getAdFactoryModelDeduction(model || "auto");
 
       const textDeduction  = UnifiedCreditController.getModelDeduction("ADSGPT-TEXT") || 0;
       const creditsPerCycle = ppc * (_resolvedImageDeduction + textDeduction);

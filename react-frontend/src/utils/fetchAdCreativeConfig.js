@@ -10,7 +10,7 @@ import getCookies from '@/utils/getCookies';
 // shape so consumers don't have to know the endpoint's wire format.
 //
 // Throws on failure — the thunk that calls this rejects, and the hook applies
-// its hardcoded FALLBACK so the UI always renders.
+// inventing a model or credit value.
 // ----------------------------------------------------------------------------
 
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;

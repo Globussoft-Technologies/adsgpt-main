@@ -16,8 +16,6 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
-import { RiGeminiFill } from 'react-icons/ri';
-import KlingIcon from '@/components/icons/KlingIcon';
 import {
   Select,
   SelectTrigger,
@@ -40,7 +38,8 @@ import { uploadToS3 } from '@/utils/imageUpload';
 import getCookies from '@/utils/getCookies';
 import { globalToast } from '@/utils/globalToast';
 import { toast } from 'react-toastify';
-import { AspectRatioPreview, getModelAspectRatios } from '@/utils/videoModelCapabilities';
+import { AspectRatioPreview, getModelAspectRatios, getModelDurationOptions, getSelectedModelDuration } from '@/utils/videoModelCapabilities';
+import { getFirstAvailableVideoModel, isVideoModelBlocked } from '@/utils/videoModelAccess';
 
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const PYTHON_API_CLONE_YOURSELF_VALIDATE_URL = (
@@ -84,7 +83,7 @@ const AIAvatarCommonDropdown = ({ options = [], placeholder = '', value = '', on
   const triggerLabel = value?.label?.replace(/\s*\(.*?\)\s*$/, '') || placeholder;
 
   return (
-    <Select value={value?.value} onValueChange={onChange}>
+    <Select value={value?.value ?? ''} onValueChange={onChange}>
       <SelectTrigger
         hideIcon
         className="prompt_selection_button_no_gradient group relative flex items-center gap-0 rounded-full py-4 text-xs shadow-none transition-all duration-200 ease-in [&_svg]:text-current! 2xl:py-5 2xl:text-sm dark:border-none dark:bg-[#2B2A2A80] dark:text-[#AFAFAF] [&>svg]:size-5"
@@ -278,60 +277,24 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
   }, [clearVoiceError, dispatch, setVoiceError, userData?.user_id]);
 
   const videoChatModels = useMemo(
-    () => [
-      {
-        value: 'veo-3.1-fast',
-        label: 'Veo 3.1 Fast (Fast & Social-Ready)',
-        tier: 'lower',
-        Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
-        credit: (() => {
-          const configured = cloneModelConfigs.find(
-            (model) => model?.canonical === 'veo-3.1-fast',
-          );
-          const rate = Number(configured?.creditsPerSecond);
-          return Number.isFinite(rate) ? `${rate} CREDITS/SECOND` : null;
-        })(),
-      },
-      // {
-      //   value: 'veo',
-      //   label: 'Veo 3 (Cinematic Quality)',
-      //   tier: 'premium',
-      //   Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
-      // },
-      // {
-      //   value: 'veo_4k',
-      //   label: 'Veo 4K (Cinematic 4K Quality)',
-      //   tier: 'premium',
-      //   Icon: <RiGeminiFill className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 4k')?.value,
-      // },
-      // {
-      //   value: 'kling_3.0',
-      //   label: 'Kling 3.0',
-      //   tier: 'premium',
-      //   Icon: <KlingIcon className="!h-3 !w-3 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
-      //     ?.value,
-      // },
-    ].filter((option) => cloneModelConfigs.some((model) => model?.canonical === option.value)),
+    () =>
+      cloneModelConfigs.map((model) => ({
+        value: model.canonical,
+        label: model.label,
+        tier: model.isPremium ? 'premium' : 'standard',
+        credit: model.value,
+        blockedPlanIds: model.blockedPlanIds || [],
+      })),
     [cloneModelConfigs]
   );
+  const configuredDurationOptions = useMemo(() => getModelDurationOptions(cloneModelConfigs, videoModel), [cloneModelConfigs, videoModel]);
+  const selectedVideoDuration = getSelectedModelDuration(configuredDurationOptions, videoDuration);
 
-  const videoTimer = useMemo(() => {
-    const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
-    if (videoModel === 'veo-3.1-fast' || videoModel === 'veo' || videoModel === 'veo_4k') {
-      return [{ value: '8s', label: '8s' }, { value: '15s', label: '15s' }];
-    }
-    if (videoModel === 'kling_3.0') {
-      return [{ value: '8s', label: '8s' }, { value: '15s', label: '15s' }];
-    }
-    const opts = [
-      { value: '8s', label: '8s' },
-      { value: '15s', label: '15s' },
-    ];
-    return hasPlan8 ? opts.slice(0, 1) : opts;
-  }, [videoModel, userData]);
+  useEffect(() => {
+    if (videoModel) return;
+    const defaultVideoModel = getFirstAvailableVideoModel(videoChatModels, userData);
+    if (defaultVideoModel) setVideoModel(defaultVideoModel);
+  }, [userData, videoChatModels, videoModel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -351,25 +314,6 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (!videoChatModels.some((option) => option.value === videoModel)) {
-      setVideoModel(videoChatModels[0]?.value || '');
-    }
-  }, [videoChatModels, videoModel]);
-
-  useEffect(() => {
-    if (videoTimer.length > 0) setVideoDuration(videoTimer[0].value);
-  }, [videoModel]);
-
-  useEffect(() => {
-    if (videoModel !== 'kling_3.0' && aspectRatio === '1:1') setAspectRatio('16:9');
-    if (videoModel === 'kling_3.0' && imageOrientation) {
-      if (imageOrientation === 'portrait' && aspectRatio !== '9:16') setAspectRatio('9:16');
-      else if (imageOrientation === 'landscape' && aspectRatio !== '16:9') setAspectRatio('16:9');
-      else if (imageOrientation === 'square' && aspectRatio !== '1:1') setAspectRatio('1:1');
-    }
-  }, [videoModel, imageOrientation]);
 
   useEffect(() => {
     if (isCloneModelsLoading || !aspectRatioOptions.length) return;
@@ -397,11 +341,10 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     if ((productUrl || uploadedImages.length > 0) && errors.productUrl)
       setErrors((p) => ({ ...p, productUrl: null }));
     if (videoModel && errors.videoModel) setErrors((p) => ({ ...p, videoModel: null }));
-    if (videoDuration && errors.videoDuration) setErrors((p) => ({ ...p, videoDuration: null }));
     if (aspectRatio && errors.aspectRatio) setErrors((p) => ({ ...p, aspectRatio: null }));
     if (brand_name && errors.brandName) setErrors((p) => ({ ...p, brandName: null }));
     if (validatedVoicePath && errors.voice) setErrors((p) => ({ ...p, voice: null }));
-  }, [productUrl, uploadedImages, videoModel, videoDuration, aspectRatio, brand_name, validatedVoicePath]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [productUrl, uploadedImages, videoModel, aspectRatio, brand_name, validatedVoicePath]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!recreateData) return;
@@ -554,7 +497,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
     else if (uploadedImages.length === 0 && !isValidImageUrl(productUrl))
       newErrors.productUrl = 'Enter a valid image URL (jpg, png, webp, …) or upload an image';
     if (!videoModel) newErrors.videoModel = 'Model is required';
-    if (!videoDuration) newErrors.videoDuration = 'Duration is required';
+    if (!selectedVideoDuration) newErrors.videoDuration = 'Duration is required';
     if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
     if (!brand_name) newErrors.brandName = 'Brand name is required';
     if (!validatedVoicePath) newErrors.voice = 'Please validate a voice sample before generating';
@@ -618,7 +561,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
           productName: brand_name || '',
           promotion: promotion || '',
           notes: notes || '',
-          duration: videoDuration,
+          duration: selectedVideoDuration,
           aspectRatio,
           tone: 'Casual',
           model: videoModel,
@@ -643,9 +586,9 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
   const hasCreditConfig = Number.isFinite(selectedModelCredit);
   const creditsPerSecond = hasCreditConfig ? selectedModelCredit : 0;
   const est = hasCreditConfig
-    ? Math.ceil(creditsPerSecond * (parseFloat(videoDuration) || 0))
+    ? Math.ceil(creditsPerSecond * (parseFloat(selectedVideoDuration) || 0))
     : 0;
-  const enough = hasCreditConfig && availableCredits >= est;
+  const enough = Boolean(selectedVideoDuration) && hasCreditConfig && availableCredits >= est;
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-3xl border border-black/10 bg-white sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]">
@@ -797,8 +740,8 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
               disabled={isUploading || isLoading}
               onChange={(val) => {
                 if (isUploading || isLoading) return;
-                const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
-                if (hasPlan8 && val !== 'veo-3.1-fast') { setIsUpgradeModalOpen(true); return; }
+                if (isVideoModelBlocked(videoChatModels.find((model) => model.value === val), userData)) { setIsUpgradeModalOpen(true); return; }
+                if (val !== videoModel) setVideoDuration('');
                 setVideoModel(val);
               }}
             />
@@ -807,10 +750,14 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
           <div className="flex flex-1 flex-col gap-2">
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Duration*</label>
             <AIAvatarCommonDropdown
-              options={videoTimer}
-              value={videoTimer.find((m) => m.value === videoDuration)}
+              options={configuredDurationOptions}
+              value={configuredDurationOptions.find((m) => m.value === selectedVideoDuration)}
               disabled={isUploading || isLoading}
-              onChange={(val) => { if (!isUploading && !isLoading) setVideoDuration(val); }}
+              onChange={(val) => {
+                if (isUploading || isLoading) return;
+                setVideoDuration(val);
+                setErrors((prev) => ({ ...prev, videoDuration: null }));
+              }}
             />
             {errors.videoDuration && <span className="mt-1 text-[12px] text-red-400">{errors.videoDuration}</span>}
           </div>
@@ -823,24 +770,15 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
             {aspectRatioOptions
               .map((ratio) => {
                 const isSelected = aspectRatio === ratio.value;
-                const isKling = videoModel === 'kling_3.0';
-                let isDisabled = false;
-                if (isKling && imageOrientation) {
-                  if (imageOrientation === 'portrait' && ratio.value !== '9:16') isDisabled = true;
-                  if (imageOrientation === 'landscape' && ratio.value !== '16:9') isDisabled = true;
-                  if (imageOrientation === 'square' && ratio.value !== '1:1') isDisabled = true;
-                }
                 return (
                   <button
                     key={ratio.value}
-                    disabled={isDisabled || isUploading || isLoading || isCloneModelsLoading}
-                    onClick={() => { if (!isDisabled && !isUploading && !isLoading && !isCloneModelsLoading) setAspectRatio(ratio.value); }}
+                    disabled={isUploading || isLoading || isCloneModelsLoading}
+                    onClick={() => { if (!isUploading && !isLoading && !isCloneModelsLoading) setAspectRatio(ratio.value); }}
                     className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs transition-all ${
                       isSelected
                         ? 'border border-blue-500 bg-blue-500/10 text-gray-900 dark:text-white'
-                        : isDisabled
-                          ? 'cursor-not-allowed border border-transparent bg-gray-100 text-gray-400 opacity-40 grayscale dark:bg-[#38383840] dark:text-white/20'
-                          : errors.aspectRatio ? 'border border-red-500/50 bg-gray-100 text-gray-500 dark:bg-[#38383880] dark:text-white/40'
+                        : errors.aspectRatio ? 'border border-red-500/50 bg-gray-100 text-gray-500 dark:bg-[#38383880] dark:text-white/40'
                           : 'border border-transparent bg-gray-100 text-gray-500 hover:border-black/20 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-white/20'
                     }`}
                   >
@@ -1181,7 +1119,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
 
         {/* Generate */}
         <div className="mt-auto mb-3 flex items-center justify-end gap-2">
-          {videoModel && videoDuration && (
+          {videoModel && selectedVideoDuration && (
             !hasCreditConfig ? (
               <span className="rounded-full border border-amber-500/70 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-200">
                 Pricing unavailable

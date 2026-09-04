@@ -66,10 +66,14 @@ function validateModelPayload(input, { partial = false } = {}) {
   }
   if (body.enabled !== undefined && typeof body.enabled !== "boolean") return "enabled must be boolean";
   if (body.archived !== undefined && typeof body.archived !== "boolean") return "archived must be boolean";
+  if (body.isPremium !== undefined && typeof body.isPremium !== "boolean") return "isPremium must be boolean";
+  const blockedPlanIdsError = stringArray(body.blockedPlanIds, "blockedPlanIds");
+  if (blockedPlanIdsError) return blockedPlanIdsError;
   if (body.aliases) {
     const aliases = body.aliases.map((alias) => alias.trim());
     if (new Set(aliases).size !== aliases.length) return "aliases must not contain duplicates";
   }
+  if (body.blockedPlanIds && new Set(body.blockedPlanIds).size !== body.blockedPlanIds.length) return "blockedPlanIds must not contain duplicates";
   return validateExtraCharges(body.extraCharges) || validateSurfaceMap(body.surfaces);
 }
 

@@ -98,6 +98,7 @@ const fullBrief = () => ({
   },
   provenance: {
     "brand.voice": { source: "autofill", confidence: 0.8, evidence: "page copy" },
+    "generation.imageModel": { source: "user", confidence: 1, evidence: "test choice" },
   },
   status: "draft",
 });

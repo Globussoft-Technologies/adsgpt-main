@@ -1,12 +1,11 @@
 import React from 'react';
 import { Layers } from 'lucide-react';
 import InputCommonDropdown from '@/components/AdFactory/NodeForms/InputCommonDropdown';
-import { MODEL_OPTIONS, FALLBACK_CREDITS_PER_IMAGE } from './imageModels';
 
 // ----------------------------------------------------------------------------
 // AdsPerCycleSection — how many ad pairs (image creative + ad copy variant)
 // each cycle should produce + which image model generates them. Default 1
-// ad, max 50. Cost per cycle = ads × 7 credits (image cost; text is free).
+// ad, max 50. Cost per cycle comes from the selected live model configuration.
 // Header pill surfaces the live cost.
 //
 // Model options mirror the existing ServicesForm Image Ads dropdown so the
@@ -23,12 +22,12 @@ export default function PairsPerCycleSection({
   model,
   onModelChange,
   creditsPerImage,
-  modelOptions = MODEL_OPTIONS,
+  modelOptions = [],
   disabled,
 }) {
   const ads = clamp(Number(value) || MIN_ADS, MIN_ADS, MAX_ADS);
-  const perImage = Number(creditsPerImage) || FALLBACK_CREDITS_PER_IMAGE;
-  const cost = ads * perImage;
+  const perImage = Number(creditsPerImage);
+  const cost = Number.isFinite(perImage) ? ads * perImage : null;
 
   const set = (next) => onChange?.(clamp(next, MIN_ADS, MAX_ADS));
 
@@ -47,7 +46,7 @@ export default function PairsPerCycleSection({
           </h3>
         </div>
         <span className="rounded-full border border-black/10 bg-black/[0.04] px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-[#E3E3E3]">
-          {cost} credit{cost === 1 ? '' : 's'} / cycle
+          {cost == null ? '—' : `${cost} credit${cost === 1 ? '' : 's'} / cycle`}
         </span>
       </div>
 
@@ -72,7 +71,7 @@ export default function PairsPerCycleSection({
         <InputCommonDropdown
           label="Image model"
           options={modelOptions}
-          value={model || modelOptions[0]?.value || 'google'}
+          value={model || ''}
           onChange={(next) => onModelChange?.(next)}
           disabled={disabled}
         />

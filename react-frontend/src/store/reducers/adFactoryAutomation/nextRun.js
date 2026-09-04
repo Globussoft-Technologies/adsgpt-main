@@ -285,11 +285,24 @@ export function describeFrequency(frequency) {
 export function summarizeCycles({
   frequency,
   pairsPerCycle,
-  creditsPerImage = 7,   // mirrors ServicesForm cost
+  creditsPerImage,
   availableCredits = 0,
 }) {
   const scheduled = countCyclesBetween(frequency); // number | null
-  const costPerCycle = Math.max(0, Number(pairsPerCycle) || 0) * creditsPerImage;
+  const perImage = Number(creditsPerImage);
+  if (!Number.isFinite(perImage)) {
+    return {
+      scheduled,
+      affordable: null,
+      runnable: 0,
+      costPerCycle: null,
+      totalCost: 0,
+      isOpenEnded: scheduled == null,
+      exceedsCredits: false,
+    };
+  }
+
+  const costPerCycle = Math.max(0, Number(pairsPerCycle) || 0) * perImage;
   const affordable = costPerCycle > 0 ? Math.floor(availableCredits / costPerCycle) : 0;
 
   // Cycles that will actually run before credits are exhausted.

@@ -51,6 +51,9 @@ const brief = (generation = {}) => ({
   offer: { primaryObjective: "OUTCOME_SALES", conversionLocation: "WEBSITE" },
   delivery: { platforms: ["meta"], budget: { daily: 800 } },
   generation: { imageModel: "google", imageCount: 3, textCount: 3, ...generation },
+  provenance: {
+    "generation.imageModel": { source: "user", confidence: 1, evidence: "test choice" },
+  },
 });
 
 // ─── ─────────────────────────────────────────────────────────────────────────
@@ -69,6 +72,12 @@ group("the arithmetic matches validateCredits", () => {
     const dear = estimateBriefCredits(brief({ imageModel: 'openai' }), getDeduction);
     assert.ok(dear.total > cheap.total);
     assert.equal(dear.image, 3 * 35);
+  });
+
+  test("an unmarked legacy google default uses auto pricing", () => {
+    const legacy = { ...brief(), provenance: {} };
+    const e = estimateBriefCredits(legacy, getDeduction);
+    assert.equal(e.image, 3 * 10);
   });
 
   test("counts are reported so the UI can say what it's pricing", () => {

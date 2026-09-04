@@ -39,6 +39,8 @@ const aiModelConfigurationSchema = new mongoose.Schema(
     aliases: { type: [String], default: [] },
     enabled: { type: Boolean, default: true, index: true },
     archived: { type: Boolean, default: false, index: true },
+    isPremium: { type: Boolean, default: false },
+    blockedPlanIds: { type: [String], default: undefined },
     sortOrder: { type: Number, default: 0 },
     icon: { type: String, default: null },
     description: { type: String, default: "" },

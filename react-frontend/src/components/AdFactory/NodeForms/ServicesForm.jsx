@@ -212,53 +212,6 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
     // }
   });
 
-  // const calculateCreditCost = (values) => {
-  //   const { text, image, video } = values.servicesSelected;
-  //   const imageProvider = values.imageModelProvider;
-
-  //   let imageCost = 0;
-  //   if (image > 0) {
-  //     const costMap = {
-  //       // auto: creativeCreditsLeft >= image * 7 ? 7 : 1,
-  //       openai: 7,
-  //       google: 7,
-  //     };
-  //     imageCost = image * costMap[imageProvider];
-  //   }
-
-  //   const textCost = text * 1 * distribution?.platforms?.length;
-  //   // const videoCost = video * 3;
-
-  //   return {
-  //     total: textCost + imageCost,
-  //     text: textCost,
-  //     image: imageCost,
-  //     // video: videoCost,
-  //   };
-  // };
-
-  //   const validateCredits = (values) => {
-  //     const costs = calculateCreditCost(values);
-  //     const errors = {};
-
-  //     if (costs.text > textCreditsLeft) {
-  //       errors.serviceError = `Insufficient text credits. Required: ${costs.text}, Available: ${textCreditsLeft}`;
-  //     }
-
-  //     if (costs.image > creativeCreditsLeft) {
-  //       errors.imageProviderError = `Insufficient image credits. Required: ${costs.image}, Available: ${creativeCreditsLeft}`;
-  //     }
-
-  //     // if (costs.video > videoCreditsLeft) {
-  //     //   errors.serviceError = `Insufficient video credits. Required: ${costs.video}, Available: ${videoCreditsLeft}`;
-  //     // }
-  // const availableCredits = credits?.totalCredits - credits?.creditsUsed;
-  //     if  (costs.total > availableCredits) {
-  //       errors.serviceError = 'Total credits required exceed available credits';
-  //     }
-
-  //     return errors;
-  //   };
   const calculateCreditCost = (values) => {
     const imageQty = values.servicesSelected.image || 0;
     const selectedModel = adFactoryModels.find(
@@ -627,23 +580,10 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
                                   {errors.imageModelProvider}
                                 </div>
                               )}
-                              {/* <div className="mt-1 pr-4 text-right text-sm text-zinc-400">
-                          Cost per image {values.imageModelProvider === 'auto'&&"A deduction of 1 or 7 credits may be applied per image. Given your selection of auto mode, the precise credit deduction will be displayed post-image generation, with a consistent maximum of 7 credits"}
-                          {values.imageModelProvider !== 'auto'&&(values.imageModelProvider === 'google' ? ' : 1 credit' : ': 7 credits')}
-                          
-                        </div> */}
                               <div className="mt-1 pr-4 text-xs text-zinc-400 2xl:text-sm">
-                                {/* {values.imageModelProvider === 'auto' ? (
-                            <div className="text-justify leading-relaxed">
-                              A deduction of 1 or 7 credits may be applied per image. Given your
-                              selection of auto mode, the precise credit deduction will be displayed
-                              post-image generation, with a consistent maximum of 7 credits.
-                            </div>
-                          ) : ( */}
                                 <div className="text-right">
                                   Cost per image: {costs.image ? `${costs.image / (values.servicesSelected.image || 1)} credits` : '—'}
                                 </div>
-                                {/* )} */}
                               </div>
                             </div>
                           </div>

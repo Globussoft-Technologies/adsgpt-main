@@ -16,17 +16,18 @@ import { AnimatePresence } from 'framer-motion';
 
 import { useDispatch, useSelector } from 'react-redux';
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
-import { RiGeminiFill } from 'react-icons/ri';
 import { generateAiAdsSceneAction, copyAiAdsSessionAction } from '@/store/actions/adVideoNew/Advideoactions';
 import { setAiAdsSceneLoading } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
 import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
-import { getModelAspectRatios } from '@/utils/videoModelCapabilities';
+import { getModelAspectRatios, getModelDurationOptions, getSelectedModelDuration } from '@/utils/videoModelCapabilities';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import VoiceSelector from '@/components/VoiceSelector/VoiceSelector';
 import { estimateAdVideoCredits } from '@/utils/creditEstimator';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import { analyzeLogoTransparency, LOGO_BACKGROUND_ERROR } from '@/utils/logoTransparency';
+import UpgradeModal from '@/components/AdStudio/AdVideoNew/UpgradeModal';
+import { getFirstAvailableVideoModel, isVideoModelBlocked } from '@/utils/videoModelAccess';
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
@@ -128,14 +129,6 @@ const productTypeOptions = [
   { value: 'service_based', label: 'Service-Based' },
 ];
 
-const durationOptions = [
-  { value: '8', label: '8s' },
-  { value: '10', label: '10s' },
-  { value: '20', label: '20s' },
-  { value: '30', label: '30s' },
-  { value: '40', label: '40s' },
-];
-
 // const aspectRatioOptions = [
 //   { value: '9:16', label: '9:16' },
 //   { value: '16:9', label: '16:9' },
@@ -144,7 +137,7 @@ const durationOptions = [
 // If the saved duration isn't in the active list (e.g. '4'/'6' were removed),
 // pick the closest available value so the field is never blank on recreate.
 const normalizeDuration = (value, options) => {
-  if (!value) return '';
+  if (!value || !options?.length) return '';
   const exact = options.find((o) => o.value === String(value));
   if (exact) return exact.value;
   const num = parseInt(value, 10);
@@ -176,14 +169,11 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
   const dispatch = useDispatch();
   const { modelCredits } = useSelector((state) => state.prompt);
   const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('ai_ads');
-  const availableCanonicalKeys = useMemo(
-    () => new Set(surfaceModels.map((entry) => entry.canonical || entry.model)),
-    [surfaceModels]
-  );
-  const { credits } = useSelector((state) => state.socket);
+  const { credits, userData } = useSelector((state) => state.socket);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   useEffect(() => {
     dispatch(fetchModelCreditsAction());
@@ -196,7 +186,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     if (!formData.description.trim()) e.description = `${isBrand ? 'Brand' : 'Product'} Description is required`;
     if (urlImages.length + uploadedImages.length === 0) e.images = 'At least one image is required';
     if (!formData.model) e.model = 'Model is required';
-    if (!formData.duration) e.duration = 'Duration is required';
+    if (!selectedVideoDuration) e.duration = 'Duration is required';
     // Deliverable differs by provider: Sarvam picks resolve to voiceName
     // (voiceId is always '' for Sarvam), ElevenLabs to voiceId.
     const vv = formData.voice || {};
@@ -217,7 +207,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     optimizedPrompt: data?.optimizedPrompt || data?.userPrompt || '',
     model: data?.model || '',
     duration: data?.duration || '',
-    aspectRatio: data?.aspectRatio || '9:16',
+    aspectRatio: data?.aspectRatio || '',
     captionsEnabled: data?.captionsEnabled ?? false,
     voice: {
       // Voice data may arrive in two shapes:
@@ -244,6 +234,11 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     () => getModelAspectRatios(surfaceModels, 'ai_ads', formData.model),
     [surfaceModels, formData.model]
   );
+  const configuredDurationOptions = useMemo(
+    () => getModelDurationOptions(surfaceModels, formData.model),
+    [surfaceModels, formData.model]
+  );
+  const selectedVideoDuration = getSelectedModelDuration(configuredDurationOptions, formData.duration);
 
   // URL-based images from analysis (not File objects)
   // brandImages takes priority — these are already on S3 from BrandIQ, no re-upload needed
@@ -288,8 +283,8 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       productType: matchOption(productTypeOptions, inputs.productType),
       optimizedPrompt: inputs.optimizedPrompt || inputs.userPrompt || '',
       model: inputs.model || '',
-      duration: normalizeDuration(inputs.duration, durationOptions),
-      aspectRatio: inputs.aspectRatio || '9:16',
+      duration: normalizeDuration(inputs.duration, configuredDurationOptions),
+      aspectRatio: inputs.aspectRatio || '',
       captionsEnabled: inputs.captionsEnabled ?? false,
       voice: {
         // Same dual-shape handling as the useState initializer above.
@@ -388,7 +383,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       formData.productType !== (orig.productType || '') ||
       formData.optimizedPrompt !== (orig.optimizedPrompt || orig.userPrompt || '') ||
       formData.model !== (orig.model || '') ||
-      formData.duration !== normalizeDuration(orig.duration, durationOptions) ||
+      formData.duration !== normalizeDuration(orig.duration, configuredDurationOptions) ||
       formData.aspectRatio !== (orig.aspectRatio || '') ||
       formData.captionsEnabled !== (orig.captionsEnabled ?? false) ||
       formData.voice?.voiceId !== (orig.voice?.voiceId || orig.voiceId || '') ||
@@ -521,45 +516,25 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     { value: 'casual', label: 'Casual' }
   ];
 
-  const modelOptions = [
-    {
-      value: 'veo-3.1-fast',
-      label: 'Veo 3.1 Fast (Fast & Social-Ready)',
-      tier: 'lower',
-      Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      credit: modelCredits?.videoModels?.find((m) =>
-        m.label.toLowerCase().includes('veo 3.1 fast')
-      )?.value,
-    },
-    // {
-    //   value: 'veo',
-    //   label: 'Veo 3.0 (Cinematic Quality)',
-    //   tier: 'premium',
-    //   Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-    //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
-    // },
-  ].filter((option) => availableCanonicalKeys.has(option.value));
-
   const visibleModelOptions = surfaceModels.map((model) => {
     const value = model.canonical || model.model;
-    const metadata = modelOptions.find((option) => option.value === value);
     return {
       value,
-      label: model.label || metadata?.label || value,
-      tier: metadata?.tier,
-      Icon: metadata?.Icon || <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      credit: model.value || metadata?.credit,
+      label: model.label || value,
+      tier: model.isPremium ? 'premium' : 'standard',
+      credit: model.value,
+      creditsPerSecond: model.creditsPerSecond,
+      blockedPlanIds: model.blockedPlanIds || [],
     };
   });
 
   useEffect(() => {
-    if (!visibleModelOptions.length) return;
-
-    const nextModel = visibleModelOptions[0].value;
-    if (!visibleModelOptions.some((option) => option.value === formData.model) && formData.model !== nextModel) {
-      updateField('model', nextModel);
+    if (formData.model) return;
+    const defaultVideoModel = getFirstAvailableVideoModel(visibleModelOptions, userData);
+    if (defaultVideoModel) {
+      setFormData((prev) => (prev.model ? prev : { ...prev, model: defaultVideoModel, duration: '' }));
     }
-  }, [surfaceModels, formData.model]);
+  }, [formData.model, userData, visibleModelOptions]);
 
   useEffect(() => {
     if (isAspectRatioLoading || !aspectRatioOptions.length) return;
@@ -626,7 +601,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
                       options={visibleModelOptions}
                       value={visibleModelOptions.find((opt) => opt.value === formData.model)}
-                      onChange={(val) => { updateField('model', val); setErrors((prev) => ({ ...prev, model: '' })); }}
+                      onChange={(val) => { if (isVideoModelBlocked(visibleModelOptions.find((model) => model.value === val), userData)) { setIsUpgradeModalOpen(true); return; } setFormData((prev) => ({ ...prev, model: val, duration: val === prev.model ? prev.duration : '' })); setErrors((prev) => ({ ...prev, model: '' })); }}
                     />
                   </div>
                   {errors.model && <p className="mt-1 text-[10px] text-red-400">{errors.model}</p>}
@@ -638,8 +613,8 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       type="b-roll"
                       side="top"
                       className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
-                      options={durationOptions}
-                      value={durationOptions.find((opt) => opt.value === formData.duration)}
+                      options={configuredDurationOptions}
+                      value={configuredDurationOptions.find((opt) => opt.value === selectedVideoDuration)}
                       onChange={(val) => { updateField('duration', val); setErrors((prev) => ({ ...prev, duration: '' })); }}
                     />
                   </div>
@@ -969,9 +944,9 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                 <div className="flex items-center gap-2 sm:gap-3">
                   {(() => {
-                    const est = estimateAdVideoCredits({ video_model: formData.model, video_duration: formData.duration, no_of_ads: 1, modelCredits });
+                    const est = estimateAdVideoCredits({ video_model: formData.model, video_duration: selectedVideoDuration, no_of_ads: 1, modelCredits, creditsPerSecond: visibleModelOptions.find((model) => model.value === formData.model)?.creditsPerSecond });
                     const enough = availableCredits >= est;
-                    if (!formData.model || !formData.duration) return null;
+                    if (!formData.model || !selectedVideoDuration) return null;
                     return enough ? (
                       <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
                         <span className="rounded-full bg-black/5 dark:bg-white/20 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-white/90">
@@ -992,7 +967,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                     Back
                   </button>
                   <button
-                    disabled={submitting || availableCredits < estimateAdVideoCredits({ video_model: formData.model, video_duration: formData.duration, no_of_ads: 1, modelCredits })}
+                    disabled={submitting || !formData.model || !selectedVideoDuration || availableCredits < estimateAdVideoCredits({ video_model: formData.model, video_duration: selectedVideoDuration, no_of_ads: 1, modelCredits, creditsPerSecond: visibleModelOptions.find((model) => model.value === formData.model)?.creditsPerSecond })}
                     onClick={async () => {
                       const validationErrors = validate();
                       if (Object.keys(validationErrors).length > 0) {
@@ -1085,6 +1060,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
           />
         )}
       </AnimatePresence>
+      <UpgradeModal isOpen={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} onUpgrade={() => { setIsUpgradeModalOpen(false); window.open(import.meta.env.VITE_SIGNUP_URL, '_blank'); }} />
     </div>
   );
 };

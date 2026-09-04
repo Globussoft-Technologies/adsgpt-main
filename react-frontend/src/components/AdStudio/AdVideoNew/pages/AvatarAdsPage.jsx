@@ -19,7 +19,7 @@ import {
 } from '@/store/actions/adVideoNew/Advideoactions';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
 import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
-import { AspectRatioPreview, getModelAspectRatios } from '@/utils/videoModelCapabilities';
+import { AspectRatioPreview, getModelAspectRatios, getModelDurationOptions, getSelectedModelDuration } from '@/utils/videoModelCapabilities';
 import avatarLibraryImg from '@/assets/layouts/adVideoNew/avatarLibrary.png';
 import avatarUploadImg from '@/assets/layouts/adVideoNew/avatarUpload.png';
 import avatarUploadBgImg from '@/assets/layouts/adVideoNew/avatarUploadBg.png';
@@ -49,9 +49,6 @@ import { estimateAdVideoCredits } from '@/utils/creditEstimator';
 import SparkleDark from '@/assets/layouts/prompt/sparkle-dark.svg';
 import TimerDarkLogo from '@/assets/layouts/prompt/advideo/timer.svg';
 import BrandSearch from '@/components/AdFactory/BrandsDropDown/BrandSelect';
-import { SiOpenai, SiBytedance } from 'react-icons/si';
-import KlingIcon from '@/components/icons/KlingIcon';
-import { RiGeminiFill } from 'react-icons/ri';
 import {
   Select,
   SelectTrigger,
@@ -60,6 +57,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+import { getFirstAvailableVideoModel, isVideoModelBlocked } from '@/utils/videoModelAccess';
 import VeoGradientIcon from '@/assets/layouts/adVideoNew/icon/veo.svg';
 import FaceCaptureGuide from '../FaceCaptureGuide';
 import { globalToast } from '@/utils/globalToast';
@@ -89,7 +87,7 @@ const AIAvatarCommonDropdown = ({
   const triggerLabel = value?.label?.replace(/\s*\(.*?\)\s*$/, '') || placeholder || label;
 
   return (
-    <Select value={value?.value} onValueChange={onChange}>
+    <Select value={value?.value ?? ''} onValueChange={onChange}>
       <SelectTrigger
         hideIcon
         className={`prompt_selection_button_no_gradient group relative flex items-center gap-0 rounded-full py-4 text-xs shadow-none transition-all duration-200 ease-in [&_svg]:text-current! 2xl:py-5 2xl:text-sm dark:border-none dark:bg-[#2B2A2A80] dark:text-[#AFAFAF] [&>svg]:size-5 ${triggerClassName}`}
@@ -790,10 +788,6 @@ const AvatarConfigForm = ({
   const isCustomAvatar = customAvatarImages.length > 0;
   const { modelCredits } = useSelector((state) => state.prompt);
   const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('avatar');
-  const availableCanonicalKeys = useMemo(
-    () => new Set(surfaceModels.map((entry) => entry.canonical)),
-    [surfaceModels]
-  );
   const { brand_name } = useSelector((state) => state.adFactoryNew);
   const { userData, credits } = useSelector((state) => state.socket);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
@@ -842,8 +836,6 @@ const AvatarConfigForm = ({
 
   useEffect(() => {
     if (videoModel && errors.videoModel) setErrors((prev) => ({ ...prev, videoModel: null }));
-    if (videoDuration && errors.videoDuration)
-      setErrors((prev) => ({ ...prev, videoDuration: null }));
     if (aspectRatio && errors.aspectRatio) setErrors((prev) => ({ ...prev, aspectRatio: null }));
     if (brand_name && errors.brandName) setErrors((prev) => ({ ...prev, brandName: null }));
     if (notes.trim() && errors.notes) setErrors((prev) => ({ ...prev, notes: null }));
@@ -851,113 +843,31 @@ const AvatarConfigForm = ({
       setErrors((prev) => ({ ...prev, productUrl: null }));
     if (promptText.trim() && errors.promptText)
       setErrors((prev) => ({ ...prev, promptText: null }));
-  }, [videoModel, videoDuration, aspectRatio, brand_name, notes, productUrl, uploadedImages, promptText, errors.videoModel, errors.videoDuration, errors.aspectRatio, errors.brandName, errors.notes, errors.productUrl, errors.promptText]);
+  }, [videoModel, aspectRatio, brand_name, notes, productUrl, uploadedImages, promptText, errors.videoModel, errors.aspectRatio, errors.brandName, errors.notes, errors.productUrl, errors.promptText]);
 
   const videoChatModels = useMemo(
-    () => [
-      {
-        value: 'veo-3.1-fast',
-        label: 'Veo 3.1 Fast (Fast & Social-Ready)',
-        tier: 'lower',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) =>
-          m.label.toLowerCase().includes('veo 3.1 fast')
-        )?.value,
-      },
-      // {
-      //   value: 'sora',
-      //   label: 'Sora 2 (Creative & Stylised)',
-      //   tier: 'lower',
-      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2')?.value,
-      // },
-      {
-        value: 'veo',
-        label: 'Veo 3 (Cinematic Quality)',
-        tier: 'premium',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 3')?.value,
-      },
-      // {
-      //   value: 'soraPro',
-      //   label: 'Sora 2 Pro (Cinematic Storytelling)',
-      //   tier: 'premium',
-      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'sora 2 pro')
-      //     ?.value,
-      // },
-      // {
-      //   value: 'soraPro_4k',
-      //   label: 'Sora Pro 4K (Premium 4K Film Quality)',
-      //   tier: 'premium',
-      //   Icon: <SiOpenai className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find(
-      //     (m) =>
-      //       m.label.toLowerCase().includes('sora 2 pro 4k') ||
-      //       m.label.toLowerCase().includes('sora pro 4k')
-      //   )?.value,
-      // },
-      {
-        value: 'veo_4k',
-        label: 'Veo 4K (Cinematic 4K Quality)',
-        tier: 'premium',
-        Icon: <RiGeminiFill className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'veo 4k')?.value,
-      },
-      // {
-      //   value: 'seedance_v1',
-      //   label: 'Seedance 1.5 Pro',
-      //   tier: 'premium',
-      //   Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'seedance v1')
-      //     ?.value,
-      // },
-      // {
-      //   value: 'seedance_v2',
-      //   label: 'Seedance 2.0',
-      //   tier: 'premium',
-      //   Icon: <SiBytedance className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-      //   credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'seedance v2')
-      //     ?.value,
-      // },
-      {
-        value: 'kling_3.0',
-        label: 'Kling 3.0',
-        tier: 'premium',
-        Icon: <KlingIcon className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
-        credit: modelCredits?.videoModels?.find((m) => m.label.toLowerCase() === 'kling 3.0')
-          ?.value,
-      },
-    ].filter((option) => availableCanonicalKeys.has(option.value)),
-    [modelCredits, availableCanonicalKeys]
+    () => surfaceModels.map((model) => ({
+        value: model.canonical,
+        label: model.label,
+        tier: model.isPremium ? 'premium' : 'standard',
+        credit: model.value,
+        creditsPerSecond: model.creditsPerSecond,
+        blockedPlanIds: model.blockedPlanIds || [],
+      })),
+    [surfaceModels]
   );
+  const configuredDurationOptions = useMemo(() => getModelDurationOptions(surfaceModels, videoModel), [surfaceModels, videoModel]);
+  const selectedVideoDuration = getSelectedModelDuration(configuredDurationOptions, videoDuration);
 
   useEffect(() => {
-    if (!videoChatModels.some((option) => option.value === videoModel)) {
-      setVideoModel(videoChatModels[0]?.value || '');
-    }
-  }, [videoChatModels, videoModel]);
+    if (videoModel) return;
+    const defaultVideoModel = getFirstAvailableVideoModel(videoChatModels, userData);
+    if (defaultVideoModel) setVideoModel(defaultVideoModel);
+  }, [userData, videoChatModels, videoModel]);
 
   useEffect(() => {
     dispatch(fetchModelCreditsAction());
   }, [dispatch]);
-
-  useEffect(() => {
-    if (videoModel !== 'kling_3.0' && aspectRatio === '1:1') {
-      setAspectRatio('16:9');
-    }
-
-    // Kling specific ratio enforcement based on image orientation
-    if (videoModel === 'kling_3.0' && imageOrientation) {
-      if (imageOrientation === 'portrait' && aspectRatio !== '9:16') {
-        setAspectRatio('9:16');
-      } else if (imageOrientation === 'landscape' && aspectRatio !== '16:9') {
-        setAspectRatio('16:9');
-      } else if (imageOrientation === 'square' && aspectRatio !== '1:1') {
-        setAspectRatio('1:1');
-      }
-    }
-  }, [videoModel, aspectRatio, imageOrientation]);
 
   useEffect(() => {
     if (isAspectRatioLoading || !aspectRatioOptions.length) return;
@@ -1035,7 +945,7 @@ const AvatarConfigForm = ({
     if (hasProductImage === null || hasProductImage === undefined)
       newErrors.hasProductImage = 'Please select Yes or No';
     if (!videoModel) newErrors.videoModel = 'Model is required';
-    if (!videoDuration) newErrors.videoDuration = 'Duration is required';
+    if (!selectedVideoDuration) newErrors.videoDuration = 'Duration is required';
     if (!aspectRatio) newErrors.aspectRatio = 'Aspect ratio is required';
     if (!brand_name) newErrors.brandName = 'Brand name is required';
     if (hasProductImage === true && !productUrl.trim() && uploadedImages.length === 0)
@@ -1144,7 +1054,7 @@ const AvatarConfigForm = ({
           type: 'avatar',
           model: videoModel,
           numberOfVideos: 1,
-          duration: videoDuration,
+          duration: selectedVideoDuration,
           aspectRatio: aspectRatio,
           avatarType: isCustomAvatar ? 'custom' : 'ai_library',
           ...(isCustomAvatar
@@ -1169,71 +1079,6 @@ const AvatarConfigForm = ({
       setIsUploading(false);
     }
   };
-
-  const videoTimer = useMemo(() => {
-    const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
-
-    if (videoModel === 'veo_4k') {
-      return [{ value: '8s', label: '8s' }];
-    }
-    if (videoModel === 'veo' || videoModel === 'veo-3.1-fast') {
-      let options = [
-        // { value: '4s', label: '4s' },
-        // { value: '6s', label: '6s' },
-        { value: '8s', label: '8s' },
-        { value: '15s', label: '15s' },
-        // { value: '22s', label: '22s' },
-        // { value: '29s', label: '29s' },
-        // { value: '36s', label: '36s' },
-        // { value: '43s', label: '43s' },
-        // { value: '50s', label: '50s' },
-        // { value: '57s', label: '57s' },
-      ];
-
-      if (hasPlan8) {
-        if (videoModel === 'veo-3.1-fast') {
-          // limit to 8s
-          options = options.filter((opt) => parseInt(opt.value) <= 8);
-        }
-
-        // if (videoModel === 'veo') {
-        //   // limit to 6s
-        //   options = options.filter((opt) => parseInt(opt.value) <= 6);
-        // }
-      }
-
-      return options;
-    }
-    if (videoModel === 'soraPro_4k') {
-      return [
-        // { value: '4s', label: '4s' },
-        { value: '8s', label: '8s' },
-        { value: '12s', label: '12s' },
-        { value: '16s', label: '16s' },
-        { value: '21s', label: '21s' },
-      ];
-    }
-    if(videoModel === 'kling_3.0') {
-      return [
-        // { value: '4s', label: '4s' },
-        // { value: '6s', label: '6s' },
-        { value: '8s', label: '8s' },
-        { value: '12s', label: '12s' },
-      ];
-    }
-
-    return [
-      // { value: '4s', label: '4s' },
-      { value: '8s', label: '8s' },
-      { value: '12s', label: '12s' },
-      { value: '16s', label: '16s' },
-      { value: '20s', label: '20s' },
-    ];
-  }, [videoModel]);
-
-  useEffect(() => {
-    setVideoDuration(videoTimer[0].value);
-  }, [videoTimer]);
 
   const handlePaste = async (e) => {
     const items = e.clipboardData.items;
@@ -1291,7 +1136,7 @@ const AvatarConfigForm = ({
   };
 
   const isFormValid =
-    (productUrl || uploadedImages.length > 0) && videoModel && videoDuration && aspectRatio;
+    (productUrl || uploadedImages.length > 0) && videoModel && selectedVideoDuration && aspectRatio;
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-3xl border border-black/10 bg-white sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]">
@@ -1510,14 +1355,11 @@ const AvatarConfigForm = ({
               placeholder="Choose Model"
               value={videoChatModels.find((m) => m.value === videoModel)}
               onChange={(val) => {
-                const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
-                if (hasPlan8) {
-                  if (val !== 'sora' && val !== 'veo-3.1-fast') {
-                    // window.location.href = 'https://adsgpt-dev.poweradspy.com/amember/signup';
-                    setIsUpgradeModalOpen(true);
-                    return;
-                  }
+                if (isVideoModelBlocked(videoChatModels.find((model) => model.value === val), userData)) {
+                  setIsUpgradeModalOpen(true);
+                  return;
                 }
+                if (val !== videoModel) setVideoDuration('');
                 setVideoModel(val);
                 if (errors.videoModel) setErrors((prev) => ({ ...prev, videoModel: '' }));
               }}
@@ -1530,9 +1372,12 @@ const AvatarConfigForm = ({
           <div className="flex flex-1 flex-col gap-2">
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Duration*</label>
             <AIAvatarCommonDropdown
-              options={videoTimer}
-              value={videoTimer.find((m) => m.value === videoDuration)}
-              onChange={(val) => setVideoDuration(val)}
+              options={configuredDurationOptions}
+              value={configuredDurationOptions.find((m) => m.value === selectedVideoDuration)}
+              onChange={(val) => {
+                setVideoDuration(val);
+                setErrors((prev) => ({ ...prev, videoDuration: null }));
+              }}
               className="!border-[#3a3a3a] !bg-[#2c2c2c]"
             />
             {errors.videoDuration && (
@@ -1554,35 +1399,15 @@ const AvatarConfigForm = ({
             {aspectRatioOptions
               .map((ratio) => {
                 const isSelected = aspectRatio === ratio.value;
-                const isKling = videoModel === 'kling_3.0';
-                let isDisabled = false;
-
-                if (isKling && imageOrientation) {
-                  if (imageOrientation === 'portrait' && ratio.value !== '9:16')
-                    isDisabled = true;
-                  if (imageOrientation === 'landscape' && ratio.value !== '16:9')
-                    isDisabled = true;
-                  if (imageOrientation === 'square' && ratio.value !== '1:1')
-                    isDisabled = true;
-                }
-
                 return (
                   <button
                     key={ratio.value}
-                    disabled={isDisabled || isAspectRatioLoading}
+                    disabled={isAspectRatioLoading}
                     onClick={() => {
-                      if (isDisabled || isAspectRatioLoading) return;
+                      if (isAspectRatioLoading) return;
                       setAspectRatio(ratio.value);
                     }}
-                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs transition-all ${
-                      isSelected
-                        ? 'border border-blue-500 bg-blue-500/10 text-gray-900 dark:text-white'
-                        : isDisabled
-                          ? 'border border-transparent bg-gray-100 text-gray-400 cursor-not-allowed opacity-40 grayscale dark:bg-[#38383840] dark:text-white/20'
-                          : errors.aspectRatio
-                            ? 'border border-red-500/50 bg-gray-100 text-gray-500 hover:border-black/20 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-white/20'
-                            : 'border border-transparent bg-gray-100 text-gray-500 hover:border-black/20 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-white/20'
-                    }`}
+                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs transition-all ${isSelected ? 'border border-blue-500 bg-blue-500/10 text-gray-900 dark:text-white' : 'border border-transparent bg-gray-100 text-gray-500 dark:bg-[#38383880] dark:text-white/40'}`}
                   >
                     <AspectRatioPreview ratio={ratio.value} className="h-4 w-4" />
                     {ratio.label}
@@ -1611,8 +1436,7 @@ const AvatarConfigForm = ({
           )}
         </div>
 
-        {videoModel !== 'seedance_v1' && (
-          <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Promotional Info</label>
             <input
               value={promotion}
@@ -1620,8 +1444,7 @@ const AvatarConfigForm = ({
               className="w-full rounded-full bg-gray-100 p-3 px-4 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 focus:outline-none 2xl:text-base dark:bg-[#9092941A] dark:text-white dark:placeholder:text-[#AFAFAF]"
               placeholder="Enter your Promotional Info"
             />
-          </div>
-        )}
+        </div>
 
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Prompt</label>
@@ -1636,9 +1459,9 @@ const AvatarConfigForm = ({
 
         <div className="mt-auto mb-3 flex items-center justify-end gap-2">
           {(() => {
-            const est = estimateAdVideoCredits({ video_model: videoModel, video_duration: videoDuration, no_of_ads: 1, modelCredits });
+            const est = estimateAdVideoCredits({ video_model: videoModel, video_duration: selectedVideoDuration, no_of_ads: 1, modelCredits, creditsPerSecond: videoChatModels.find((model) => model.value === videoModel)?.creditsPerSecond });
             const enough = availableCredits >= est;
-            const showCreditPill = videoModel && videoDuration;
+            const showCreditPill = Boolean(videoModel && selectedVideoDuration);
             return (
               <>
                 {showCreditPill && (
@@ -1655,9 +1478,9 @@ const AvatarConfigForm = ({
                   )
                 )}
                 <button
-                  disabled={isLoading || isUploading || (showCreditPill && !enough)}
+                  disabled={isLoading || isUploading || !showCreditPill || !enough}
                   onClick={handleGenerateClick}
-                  className={`rounded-full px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 2xl:py-3 2xl:text-base dark:text-black ${isLoading || isUploading || (showCreditPill && !enough) ? 'cursor-not-allowed bg-gray-900/30 dark:bg-white/30' : 'bg-gray-900 dark:bg-white'}`}
+                  className={`rounded-full px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 2xl:py-3 2xl:text-base dark:text-black ${isLoading || isUploading || !showCreditPill || !enough ? 'cursor-not-allowed bg-gray-900/30 dark:bg-white/30' : 'bg-gray-900 dark:bg-white'}`}
                 >
                   {isLoading || isUploading ? (
                     <Loader2 className="h-5 w-5 animate-spin text-white dark:text-black" />
