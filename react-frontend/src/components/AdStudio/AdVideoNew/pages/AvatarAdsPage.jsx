@@ -1373,6 +1373,7 @@ const AvatarConfigForm = ({
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Duration*</label>
             <AIAvatarCommonDropdown
               options={configuredDurationOptions}
+              placeholder="Duration"
               value={configuredDurationOptions.find((m) => m.value === selectedVideoDuration)}
               onChange={(val) => {
                 setVideoDuration(val);
@@ -1386,12 +1387,14 @@ const AvatarConfigForm = ({
           </div>
         </div>
 
-        {['sora', 'veo-3.1-fast'].includes(videoModel) && (
-          <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400">
-            <span>⚠</span>
-            <span>Lower quality model selected. Video output quality may be reduced.</span>
-          </div>
-        )}
+        <div>
+          {['sora', 'veo-3.1-fast'].includes(videoModel) && (
+            <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400">
+              <span>⚠</span>
+              <span>Lower quality model selected. Video output quality may be reduced.</span>
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-col gap-3">
           <label className="flex items-center gap-2 text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Aspect Ratio* {isAspectRatioLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}</label>

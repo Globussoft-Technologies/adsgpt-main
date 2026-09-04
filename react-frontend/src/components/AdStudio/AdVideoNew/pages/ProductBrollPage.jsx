@@ -384,13 +384,14 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
 
         {/* Model + Duration */}
         <div className="flex gap-4">
-          <div className="flex flex-col gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
             <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Model *</label>
             <CommonDropdown
               options={videoChatModels}
               label="AI Model"
               icon={SparkleDark}
               type="b-roll"
+              className="w-full min-w-0 justify-between [&>div]:min-w-0 [&>div>span]:truncate"
               value={videoChatModels.find((o) => o.value === videoModel)}
               onChange={(val) => {
                 if (isVideoModelBlocked(videoChatModels.find((model) => model.value === val), userData)) {
@@ -407,13 +408,14 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
             )}
           </div>
 
-          <div className="flex flex-1 flex-col gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
             <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Duration *</label>
             <CommonDropdown
               options={configuredDurationOptions}
               label="Durations"
               icon={TimerDarkLogo}
               type="b-roll"
+              className="w-full min-w-0 justify-between [&>div]:min-w-0 [&>div>span]:truncate"
               value={configuredDurationOptions.find((o) => o.value === selectedVideoDuration)}
               onChange={(value) => {
                 setVideoDuration(value);
@@ -426,12 +428,14 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
           </div>
         </div>
 
-        {['sora', 'veo-3.1-fast'].includes(videoModel) && (
-          <div className="flex items-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
-            <span>⚠</span>
-            <span>Lower quality model selected. Video output quality may be reduced.</span>
-          </div>
-        )}
+        <div>
+          {['sora', 'veo-3.1-fast'].includes(videoModel) && (
+            <div className="flex items-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
+              <span>⚠</span>
+              <span>Lower quality model selected. Video output quality may be reduced.</span>
+            </div>
+          )}
+        </div>
 
         {/* Aspect Ratio */}
         <div>

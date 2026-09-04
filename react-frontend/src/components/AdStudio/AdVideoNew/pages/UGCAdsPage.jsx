@@ -533,12 +533,14 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                     )}
                   </div>
                 </div>
-                {['sora', 'veo-3.1-fast'].includes(videoModel) && (
-                  <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400">
-                    <span>⚠</span>
-                    <span>Lower quality model selected. Video output quality may be reduced.</span>
-                  </div>
-                )}
+                <div>
+                  {['sora', 'veo-3.1-fast'].includes(videoModel) && (
+                    <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400">
+                      <span>⚠</span>
+                      <span>Lower quality model selected. Video output quality may be reduced.</span>
+                    </div>
+                  )}
+                </div>
 
                 {/* Aspect Ratio */}
                 <div className="flex flex-col gap-3">

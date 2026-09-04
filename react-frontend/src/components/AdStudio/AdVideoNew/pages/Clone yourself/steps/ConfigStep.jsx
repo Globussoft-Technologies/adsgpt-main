@@ -751,6 +751,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Duration*</label>
             <AIAvatarCommonDropdown
               options={configuredDurationOptions}
+              placeholder="Duration"
               value={configuredDurationOptions.find((m) => m.value === selectedVideoDuration)}
               disabled={isUploading || isLoading}
               onChange={(val) => {
