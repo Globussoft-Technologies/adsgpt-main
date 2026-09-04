@@ -539,6 +539,49 @@ const AppSidebar = () => {
                 </div>
               )}
 
+              {/* Logout (members only) — placed top of the library dividing line */}
+              {memberSession && (
+                <div className={showExpanded ? 'px-2.5 pb-1' : 'px-2 pb-1'}>
+                  {showExpanded ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearWorkspaceToken();
+                        window.location.href = '/workspace-login';
+                      }}
+                      aria-label="Log out"
+                      className="sidebar-nav-item sidebar-nav-item--expanded sidebar-nav-item--inactive relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5"
+                    >
+                      <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
+                        <LogOut className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" aria-hidden="true" />
+                      </div>
+                      <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1 text-left">
+                        Log out
+                      </span>
+                    </button>
+                  ) : (
+                    <ShadcnTooltip label="Log out" side="right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearWorkspaceToken();
+                          window.location.href = '/workspace-login';
+                        }}
+                        aria-label="Log out"
+                        className="sidebar-nav-item sidebar-nav-item--compact sidebar-nav-item--inactive relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[76px]"
+                      >
+                        <div className="flex h-7 w-7 items-center justify-center">
+                          <LogOut className="sidebar-nav-icon h-[24px] w-[24px]" aria-hidden="true" />
+                        </div>
+                        <span className="sidebar-nav-label sidebar-nav-label--compact whitespace-nowrap dark:text-[#AFAFAF]">
+                          Log out
+                        </span>
+                      </button>
+                    </ShadcnTooltip>
+                  )}
+                </div>
+              )}
+
               {showLibraryGroup && (
                 <div>
                   <SectionHeader label="LIBRARY" />
@@ -670,23 +713,6 @@ const AppSidebar = () => {
                 </div>
               )}
             </div>
-
-            {/* Logout (members only) */}
-            {memberSession && (
-              <div className="px-2.5 pb-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    clearWorkspaceToken();
-                    window.location.href = '/login';
-                  }}
-                  className="sidebar-secondary-action flex w-full items-center gap-3 rounded-[12px] px-3 py-2 text-[12px] font-medium transition-colors"
-                >
-                  <LogOut className="h-4 w-4" />
-                  {showExpanded && <span>Log out</span>}
-                </button>
-              </div>
-            )}
 
           </nav>
         )}
