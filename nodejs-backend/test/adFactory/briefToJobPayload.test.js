@@ -89,6 +89,14 @@ const brief = (extra = {}) => ({
   ...extra,
 });
 
+const briefForPlatforms = (platforms, extra = {}) => {
+  const value = brief(extra);
+  return {
+    ...value,
+    delivery: { ...value.delivery, platforms },
+  };
+};
+
 const validate = (payload) => createJobSchema.validate(payload, { abortEarly: false });
 const msgs = (error) => (error ? error.details.map((d) => d.message).join("; ") : "");
 
@@ -145,7 +153,7 @@ group("output validates against the LIVE createJobSchema", () => {
       customerId: "7138174374",
       channelType: "DISPLAY",
     };
-    const payload = briefToJobPayload(brief(), {}, { google: googleConn });
+    const payload = briefToJobPayload(briefForPlatforms(["google"]), {}, { google: googleConn });
     assert.equal(payload.targets.meta, undefined);
     assert.ok(payload.targets.google);
     assert.equal(payload.targets.google.createdCampaignId, "12345678901");
@@ -429,20 +437,18 @@ const googleTarget = () => ({
 group("google targets", () => {
   test("a google-only job validates against the LIVE createJobSchema", () => {
     const { error } = validate(
-      briefToJobPayload(brief(), {}, { google: googleTarget() }),
+      briefToJobPayload(briefForPlatforms(["google"]), {}, { google: googleTarget() }),
     );
     assert.equal(error, undefined, msgs(error));
   });
 
   test("google only → targets.google, and no targets.meta at all", () => {
-    const p = briefToJobPayload(brief(), {}, { google: googleTarget() });
+    const p = briefToJobPayload(briefForPlatforms(["google"]), {}, { google: googleTarget() });
     assert.deepEqual(Object.keys(p.targets), ["google"]);
   });
 
   test("an explicit Google-only brief ignores a complete Meta connection", () => {
-    const b = brief({
-      delivery: { ...brief().delivery, platforms: ["google"] },
-    });
+    const b = briefForPlatforms(["google"]);
     const p = briefToJobPayload(b, connection(), { google: googleTarget() });
     assert.deepEqual(Object.keys(p.targets), ["google"]);
     const { error } = validate(p);
@@ -450,7 +456,11 @@ group("google targets", () => {
   });
 
   test("both connected → one job carries both targets", () => {
-    const p = briefToJobPayload(brief(), connection(), { google: googleTarget() });
+    const p = briefToJobPayload(
+      briefForPlatforms(["meta", "google"]),
+      connection(),
+      { google: googleTarget() },
+    );
     assert.deepEqual(Object.keys(p.targets).sort(), ["google", "meta"]);
     const { error } = validate(p);
     assert.equal(error, undefined, msgs(error));
@@ -458,18 +468,20 @@ group("google targets", () => {
 
   test("the google block is passed through byte-identical", () => {
     const g = googleTarget();
-    const p = briefToJobPayload(brief(), {}, { google: g });
+    const p = briefToJobPayload(briefForPlatforms(["google"]), {}, { google: g });
     assert.deepEqual(p.targets.google, g);
   });
 
   // The regression this whole change exists for: a Google-only schedule used
   // to fail with an error naming a platform the user deliberately left blank.
   test("google only does NOT demand a facebook account", () => {
-    assert.doesNotThrow(() => briefToJobPayload(brief(), {}, { google: googleTarget() }));
+    assert.doesNotThrow(() =>
+      briefToJobPayload(briefForPlatforms(["google"]), {}, { google: googleTarget() }),
+    );
   });
 
   test("google only does NOT demand a resolved Meta objective", () => {
-    const b = brief({ offer: { cta: {} } });
+    const b = briefForPlatforms(["google"], { offer: { cta: {} } });
     assert.doesNotThrow(() => briefToJobPayload(b, {}, { google: googleTarget() }));
   });
 
@@ -478,7 +490,12 @@ group("google targets", () => {
   // Google is still a mistake, and still says so.
   test("a PARTIAL meta connection beside google still errors", () => {
     assert.throws(
-      () => briefToJobPayload(brief(), { facebookId: "123" }, { google: googleTarget() }),
+      () =>
+        briefToJobPayload(
+          briefForPlatforms(["meta", "google"]),
+          { facebookId: "123" },
+          { google: googleTarget() },
+        ),
       (err) => err instanceof BriefJobPayloadError && err.field === "connectionId",
     );
   });
@@ -498,7 +515,9 @@ group("google targets", () => {
   });
 
   test("budget is still required for a google-only job", () => {
-    const b = brief({ delivery: { ...brief().delivery, budget: { daily: 0 } } });
+    const b = briefForPlatforms(["google"], {
+      delivery: { ...brief().delivery, budget: { daily: 0 } },
+    });
     assert.throws(
       () => briefToJobPayload(b, {}, { google: googleTarget() }),
       (err) => err instanceof BriefJobPayloadError && err.field === "budget.daily",
@@ -508,7 +527,7 @@ group("google targets", () => {
   test("does not mutate the google target it was handed", () => {
     const g = googleTarget();
     const snapshot = JSON.parse(JSON.stringify(g));
-    briefToJobPayload(brief(), {}, { google: g });
+    briefToJobPayload(briefForPlatforms(["google"]), {}, { google: g });
     assert.deepEqual(g, snapshot);
   });
 });
