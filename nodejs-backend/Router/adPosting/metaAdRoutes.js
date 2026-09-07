@@ -106,6 +106,7 @@ router.get("/wizard-schema", metaAdController.getWizardSchema);
 
 router.get("/get-pages", metaAdController.getPages);
 router.get("/get-saved-audiences", metaAdController.getSavedAudiences);
+router.get("/get-custom-audiences", metaAdController.getCustomAudiences);
 // Geo-location typeahead — drives the V2 wizard's Location Targeting
 // picker (countries / cities with radius / regions / free-trade groups).
 router.get("/search-geo", metaAdController.searchGeoLocations);

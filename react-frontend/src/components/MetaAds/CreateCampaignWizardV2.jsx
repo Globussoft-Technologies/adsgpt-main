@@ -109,26 +109,13 @@ import {
   validateAllSteps,
   validateCarouselCards,
   CAPPED_BID_STRATEGIES,
+  isDetailedTargetingHidden,
 } from './wizardValidation';
 import { currencySymbol } from './metaAdsUtils';
 import LocationTargeting from './LocationTargeting';
 import DetailedTargeting from './DetailedTargeting';
+import CustomAudiencePicker from './CustomAudiencePicker';
 import AudienceReachEstimate from './AudienceReachEstimate';
-
-// Special Ad Categories that hide Detailed Targeting entirely (Meta UI
-// rule — regulated categories restrict the picker to a curated, often
-// empty subset). Hide-the-section behaviour is enforced here AND
-// defence-in-depth on the backend (buildExplicitTargeting strips
-// detailedTargeting from the payload under these SACs).
-const SAC_HIDES_DETAILED_TARGETING = new Set([
-  'FINANCIAL_PRODUCTS_SERVICES',
-  'CREDIT',
-  'EMPLOYMENT',
-  'HOUSING',
-  'ISSUES_ELECTIONS_POLITICS',
-]);
-const isDetailedTargetingHidden = (specialAdCategories) =>
-  (specialAdCategories || []).some((c) => SAC_HIDES_DETAILED_TARGETING.has(c));
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -349,8 +336,14 @@ function buildInitialForm(context = null) {
     advantageAudience: true,
     // Detailed Targeting — Demographics / Interests / Behaviours. Hidden
     // entirely when the campaign carries a regulated SAC (see
-    // SAC_HIDES_DETAILED_TARGETING above). Mirrors backend Joi shape.
+    // isDetailedTargetingHidden in wizardValidation.js). Mirrors backend
+    // Joi shape.
     detailedTargeting: { include: [], narrow: [], exclude: [] },
+    // Custom audiences to include / exclude — `{id, name, subtype…}` refs.
+    // Gated on the SAME regulated-SAC set as detailed targeting; the backend
+    // strips them independently in utils/customAudiences.js.
+    customAudiences: [],
+    excludedCustomAudiences: [],
     // Placements
     placementMode: 'advantage_plus', // 'advantage_plus' | 'manual'
     publisherPlatforms: [], // active when placementMode === 'manual'
@@ -921,6 +914,15 @@ export default function CreateCampaignWizardV2({
             detailedTargeting: isDetailedTargetingHidden(form.specialAdCategories)
               ? { include: [], narrow: [], exclude: [] }
               : form.detailedTargeting,
+            // Same SAC rule as above. Sent empty rather than omitted so an
+            // EDIT that removes every audience actually clears them — the
+            // backend only emits the Meta keys when non-empty.
+            customAudiences: isDetailedTargetingHidden(form.specialAdCategories)
+              ? []
+              : form.customAudiences,
+            excludedCustomAudiences: isDetailedTargetingHidden(form.specialAdCategories)
+              ? []
+              : form.excludedCustomAudiences,
           },
           status: 'ACTIVE',
         };
@@ -1028,6 +1030,12 @@ export default function CreateCampaignWizardV2({
               detailedTargeting: isDetailedTargetingHidden(form.specialAdCategories)
                 ? { include: [], narrow: [], exclude: [] }
                 : form.detailedTargeting,
+              customAudiences: isDetailedTargetingHidden(form.specialAdCategories)
+                ? []
+                : form.customAudiences,
+              excludedCustomAudiences: isDetailedTargetingHidden(form.specialAdCategories)
+                ? []
+                : form.excludedCustomAudiences,
             },
           };
           if (!form.cbo) {
@@ -1321,6 +1329,15 @@ export default function CreateCampaignWizardV2({
             detailedTargeting: isDetailedTargetingHidden(form.specialAdCategories)
               ? { include: [], narrow: [], exclude: [] }
               : form.detailedTargeting,
+            // Same SAC rule as above. Sent empty rather than omitted so an
+            // EDIT that removes every audience actually clears them — the
+            // backend only emits the Meta keys when non-empty.
+            customAudiences: isDetailedTargetingHidden(form.specialAdCategories)
+              ? []
+              : form.customAudiences,
+            excludedCustomAudiences: isDetailedTargetingHidden(form.specialAdCategories)
+              ? []
+              : form.excludedCustomAudiences,
           },
         };
         // Budget lives on the ad set only for ABO campaigns.
@@ -2090,6 +2107,15 @@ function WizardSideRail({
                 detailedTargeting: isDetailedTargetingHidden(form.specialAdCategories)
                   ? { include: [], narrow: [], exclude: [] }
                   : form.detailedTargeting,
+                // The estimate has to see the audiences too — an ad set
+                // narrowed to a 4,000-person customer list does not reach the
+                // millions the geo/age spec alone implies.
+                customAudiences: isDetailedTargetingHidden(form.specialAdCategories)
+                  ? []
+                  : form.customAudiences,
+                excludedCustomAudiences: isDetailedTargetingHidden(form.specialAdCategories)
+                  ? []
+                  : form.excludedCustomAudiences,
               }}
               optimizationGoal={form.optimizationGoal}
             />
@@ -3016,6 +3042,24 @@ function AdSetStep({ form, update, cell, pages, savedAudiences, adAccountId, cur
                 value={form.detailedTargeting}
                 onChange={(v) => update({ detailedTargeting: v })}
                 advantageAudienceOn={form.advantageAudience}
+              />
+            )}
+
+            {/* Custom audiences the advertiser already built in Meta. Hidden
+                under the SAME regulated SACs as Detailed Targeting — the
+                backend strips them independently, so the two must agree or a
+                launch silently loses targeting the form still shows.
+                No facebookId prop: like DetailedTargeting, the API client
+                falls back to the ambient connection header. */}
+            {!isDetailedTargetingHidden(form.specialAdCategories) && (
+              <CustomAudiencePicker
+                adAccountId={adAccountId}
+                included={form.customAudiences}
+                excluded={form.excludedCustomAudiences}
+                onChange={({ included, excluded }) =>
+                  update({ customAudiences: included, excludedCustomAudiences: excluded })
+                }
+                error={errors.customAudiences}
               />
             )}
 

@@ -220,8 +220,12 @@ const duplicateEntitySchema = Joi.object({
   targetCampaignId: Joi.string().optional(),
   targetAdSetId: Joi.string().optional(),
 
-  // Copy the children too. Meaningless for ads (they're the leaf level), so
-  // it's rejected there rather than silently ignored.
+  // Copy the children too. NOTE this no longer maps to Meta's `deep_copy`
+  // param — that asks Meta to clone the whole tree in one request and it caps
+  // how much that may carry. The controller fans out instead (parent shallow,
+  // then each child individually), so this flag now means "also copy the
+  // children", however that is achieved. Meaningless for ads (they're the leaf
+  // level), so it's rejected there rather than silently ignored.
   deepCopy: Joi.boolean().default(true).when("level", {
     is: "ad",
     then: Joi.valid(false).messages({

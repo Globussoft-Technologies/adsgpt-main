@@ -54,7 +54,12 @@ const {
   AD_ACCOUNT_LIST_FIELDS,
   formatAdAccountForList,
 } = require("../../utils/metaAdAccountShape");
-const { metricsFingerprint, dateRangeToken } = require("../../utils/metaCacheKeys");
+const {
+  metricsFingerprint,
+  dateRangeToken,
+  CACHE_SHAPE,
+  cacheInvalidationPatterns,
+} = require("../../utils/metaCacheKeys");
 const { resolveDateRange } = require("../../utils/metaDateRange");
 const {
   updateAdStatusSchema,
@@ -103,22 +108,10 @@ async function fetchAllPaged(firstPageCursor, label = "items") {
 // useful while bounding the temporal skew users can observe.
 const VOLATILE_TTL = 300;
 
-// Bumped whenever the shape of ANY cached payload changes. Without it a
-// release that adds a field keeps serving entries that predate it for the full
-// TTL, so the new field reads as permanently empty. Old keys are simply
-// orphaned and expire on their own.
-//
-// EVERY cached response shape belongs behind this, not just the entity lists.
-// Real hit (2026-08-28): carousel support added `kind:"carousel"` + `cards` to
-// getAdPreviewMedia, but `metaAdPreview:` had no CACHE_SHAPE segment — so a
-// launched carousel kept rendering as a single image for 30 minutes, and the
-// network response said `kind:"image"` with the new code deployed. Same latent
-// bug in `metaRecommendations:`, whose shape also changed this cycle
-// (opportunityScore + composed headline).
-//
-// When you add a cached endpoint, put CACHE_SHAPE in its key. When you change
-// what an existing one returns, bump this.
-const CACHE_SHAPE = "v3";
+// CACHE_SHAPE and cacheInvalidationPatterns live in utils/metaCacheKeys.js —
+// a pure module, so both are unit-testable (nothing in THIS file is: it opens
+// DB and Redis connections at require time). Read that file's docblocks before
+// changing a cache key; they carry the two bugs this convention exists for.
 
 // Meta's suggestions come from the ad-account edge, not from the entities
 // themselves, and are attached AFTER the entity cache is read — same reasoning
@@ -258,18 +251,33 @@ const ALL_CACHE_PREFIXES = [
   // read it. Not in STATUS_CACHE_PREFIXES: pausing a campaign doesn't
   // retroactively change which leads it already captured.
   "metaLeads",
+  // Custom Audiences the advertiser built in Meta. Audience NAMES are
+  // business-sensitive ("Churned enterprise trials"), and the list is scoped
+  // to an ad account the next connection may not own at all. Not in
+  // STATUS_CACHE_PREFIXES: pausing an entity doesn't change what audiences
+  // exist on the account.
+  "metaCustomAudiences",
+  // Detailed-targeting picker results + the reach estimate beside it. All
+  // ad-account-scoped, so a reconnect under a different FB account would
+  // otherwise browse the previous account's interest tree.
+  "metaDTSearch",
+  "metaDTBrowse",
+  "metaDTSuggest",
+  "metaReachEstimate",
 ];
 
 async function invalidateMetaCacheByPrefixes(userId, prefixes) {
   const keysToDelete = [];
   for (const prefix of prefixes) {
-    // Structured keys: prefix:userId:...
-    const stream = redisClient.scanStream({
-      match: `${prefix}:${userId}:*`,
-      count: 100,
-    });
-    for await (const keys of stream) {
-      if (keys.length) keysToDelete.push(...keys);
+    // Structured keys, BOTH conventions: `prefix:userId:...` and the
+    // shape-versioned `prefix:v3:userId:...`. Matching only the first is what
+    // let every versioned key survive invalidation — see
+    // cacheInvalidationPatterns.
+    for (const pattern of cacheInvalidationPatterns(prefix, `${userId}:*`)) {
+      const stream = redisClient.scanStream({ match: pattern, count: 100 });
+      for await (const keys of stream) {
+        if (keys.length) keysToDelete.push(...keys);
+      }
     }
     // Bare keys: prefix:userId (e.g., metaAdAccounts:userId)
     keysToDelete.push(`${prefix}:${userId}`);
@@ -482,17 +490,22 @@ async function getPagePhone(pageId) {
 // Drop list-level cache entries that should reflect a newly-created entity.
 async function invalidateAfterCreate(userId, { adAccountId, campaignId, adSetId } = {}) {
   const keys = [];
+  // Each entry expands to the unversioned AND shape-versioned key — the
+  // entity lists carry CACHE_SHAPE, the dashboard/analytics keys don't, and
+  // hardcoding one convention here silently skipped the other.
+  const push = (prefix, tail) =>
+    keys.push(...cacheInvalidationPatterns(prefix, `${userId}:${tail}`));
   if (adAccountId) {
-    keys.push(`metaCampaigns:${userId}:*:${adAccountId}`);
-    keys.push(`metaDashboard:${userId}:*:${adAccountId}:*`);
-    keys.push(`metaAnalytics:${userId}:*:${adAccountId}:*`);
+    push("metaCampaigns", `*:${adAccountId}`);
+    push("metaDashboard", `*:${adAccountId}:*`);
+    push("metaAnalytics", `*:${adAccountId}:*`);
   }
   if (campaignId) {
-    keys.push(`metaAdsets:${userId}:*:*:${campaignId}`);
-    keys.push(`metaCampaignAds:${userId}:*:${campaignId}`);
+    push("metaAdsets", `*:*:${campaignId}`);
+    push("metaCampaignAds", `*:${campaignId}`);
   }
   if (adSetId) {
-    keys.push(`metaAdSetAds:${userId}:*:${adSetId}`);
+    push("metaAdSetAds", `*:${adSetId}`);
   }
   // Resolve any wildcards via SCAN, exact keys via direct DEL.
   const concrete = [];
@@ -718,6 +731,146 @@ async function loadLeadsForForm(
   return payload;
 }
 
+// Meta's CustomAudience.subtype enum -> something a picker can show. An
+// unknown value title-cases rather than rendering raw or blank: Meta adds and
+// retires subtypes (Special Ad Audience came and went), and an unlabelled
+// option is worse than an imperfect label.
+const AUDIENCE_SUBTYPE_LABELS = {
+  CUSTOM: "Customer list",
+  WEBSITE: "Website",
+  APP: "App activity",
+  ENGAGEMENT: "Engagement",
+  VIDEO: "Video views",
+  OFFLINE_CONVERSION: "Offline activity",
+  LOOKALIKE: "Lookalike",
+  BAG_OF_ACCOUNTS: "Account list",
+  MANAGED: "Managed",
+  PARTNER: "Partner",
+  CLAIM: "Claim",
+};
+
+function labelAudienceSubtype(subtype) {
+  const raw = String(subtype || "").trim();
+  if (!raw) return "";
+  if (AUDIENCE_SUBTYPE_LABELS[raw]) return AUDIENCE_SUBTYPE_LABELS[raw];
+  const words = raw.toLowerCase().replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// Meta's response key for a copy varies by level and by deep-vs-shallow —
+// `id`, `copied_campaign_id`, `copied_adset_id`, `copied_ad_id`. The MCP's
+// clone tool reads `copied_ad_id ?? id` for the same reason. Read all of them.
+function copiedId(copy) {
+  const d = copy?._data || copy || {};
+  return (
+    d.id ||
+    d.copied_campaign_id ||
+    d.copied_adset_id ||
+    d.copied_ad_id ||
+    d.ad_object_id ||
+    null
+  );
+}
+
+/**
+ * Duplicate a campaign or ad set by FANNING OUT — copy the parent shallow,
+ * then copy each child individually — rather than asking Meta to clone the
+ * whole tree with `deep_copy: true`.
+ *
+ * Why not deep_copy: Meta caps how much one copy request may carry and the
+ * ceiling is low. It rejected a campaign on a 4-campaign account with "17th
+ * try: Copy request is too large", creating nothing. The cap is on the single
+ * request, so no amount of retrying the same shape helps.
+ *
+ * Fanning out has no such limit, and it degrades per item instead of
+ * all-or-nothing: one ad that won't copy is reported and the rest still land.
+ * This mirrors `ads_clone_ad_set_bundle` in mcps/meta, which has been doing it
+ * this way in production — its notes record that native per-ad `/copies` gives
+ * full creative-type coverage (carousel, catalog, dynamic asset_feed_spec and
+ * boosted posts all clone losslessly, inheriting the destination ad set's
+ * pixel), which a hand-rolled recreate would not.
+ *
+ * SEQUENTIAL on purpose: Meta meters Business Use Case limits by CPU time as
+ * well as call count, and a wide parallel fan-out is exactly the shape that
+ * trips an account into a throttle window.
+ *
+ * Children are copied with NO_RENAME. Only the top-level object gets the
+ * " - Copy" suffix — Ads Manager doesn't rename every ad inside a duplicated
+ * campaign either, and doing so makes the copy hard to diff against its source.
+ */
+async function copyChildAds(sourceAdSetId, newAdSetId, statusOption, report) {
+  const ads = await fetchAllPaged(
+    new bizSdk.AdSet(sourceAdSetId).getAds([bizSdk.Ad.Fields.id], { limit: 100 }),
+    "ads (duplicate fan-out)",
+  );
+  for (const ad of ads) {
+    const adId = (ad?._data || ad)?.id;
+    if (!adId) continue;
+    try {
+      const copy = await new bizSdk.Ad(adId).createCopy([], {
+        adset_id: newAdSetId,
+        status_option: statusOption,
+        rename_options: { rename_strategy: "NO_RENAME" },
+      });
+      if (copiedId(copy)) report.ads += 1;
+      else report.skipped.push({ level: "ad", id: adId, reason: "Meta returned no id" });
+    } catch (err) {
+      // Skip-and-continue: one ad's failure must not abandon the rest, which
+      // would leave a half-built duplicate the user can't tell apart from a
+      // complete one.
+      //
+      // LOG the whole thing. Skip-and-continue without logging is how a
+      // per-item failure becomes undiagnosable — the response only carries a
+      // truncated message, and the subcode is what actually identifies the
+      // cause.
+      const m = logMetaError(`Duplicate: ad ${adId} copy failed`, err);
+      report.skipped.push({
+        level: "ad",
+        id: adId,
+        reason: m.message || m.title,
+        code: m.code ?? null,
+        subcode: m.subcode ?? null,
+      });
+    }
+  }
+}
+
+async function duplicateCampaignDeep(campaignId, newCampaignId, statusOption, report) {
+  const adSets = await fetchAllPaged(
+    new bizSdk.Campaign(campaignId).getAdSets([bizSdk.AdSet.Fields.id], { limit: 100 }),
+    "ad sets (duplicate fan-out)",
+  );
+  for (const adSet of adSets) {
+    const adSetId = (adSet?._data || adSet)?.id;
+    if (!adSetId) continue;
+    let newAdSetId = null;
+    try {
+      const copy = await new bizSdk.AdSet(adSetId).createCopy([], {
+        campaign_id: newCampaignId,
+        deep_copy: false,
+        status_option: statusOption,
+        rename_options: { rename_strategy: "NO_RENAME" },
+      });
+      newAdSetId = copiedId(copy);
+      if (!newAdSetId) throw new Error("Meta returned no copied ad set id");
+      report.adSets += 1;
+    } catch (err) {
+      const m = logMetaError(`Duplicate: ad set ${adSetId} copy failed`, err);
+      report.skipped.push({
+        level: "adset",
+        id: adSetId,
+        reason: m.message || m.title,
+        code: m.code ?? null,
+        subcode: m.subcode ?? null,
+      });
+      // Its ads have nowhere to go — skip them rather than copying them into
+      // the wrong ad set.
+      continue;
+    }
+    await copyChildAds(adSetId, newAdSetId, statusOption, report);
+  }
+}
+
 class MetaAdLauncher {
   constructor() {
     this.getAdAccountsList = this.getAdAccountsList.bind(this);
@@ -741,6 +894,7 @@ class MetaAdLauncher {
     this.createAd = this.createAd.bind(this);
     this.deleteCampaign = this.deleteCampaign.bind(this);
     this.deleteAdSet = this.deleteAdSet.bind(this);
+    this.getCustomAudiences = this.getCustomAudiences.bind(this);
     this.duplicateEntity = this.duplicateEntity.bind(this);
     this.deleteAd = this.deleteAd.bind(this);
   }
@@ -3232,6 +3386,101 @@ class MetaAdLauncher {
   }
 
   // * 9. GET saved audiences for an ad account (for the audience picker).
+  /**
+   * List the ad account's Custom Audiences for the targeting picker.
+   *
+   * Distinct from getSavedAudiences below, and a common point of confusion: a
+   * Custom Audience is a SOURCE of people (customer list, website/pixel
+   * traffic, engagement, a lookalike derived from one). A Saved Audience is a
+   * saved targeting CONFIGURATION that may reference custom audiences inside
+   * it. They live on different edges — /customaudiences vs /saved_audiences —
+   * and a custom audience never appears in the saved-audience list, which is
+   * why users with one in Meta couldn't find it anywhere in the wizard.
+   *
+   * Ported from the Ads Chat MCP's `ads_get_custom_audiences`, which has been
+   * reading this edge in production; the field list is the same.
+   */
+  async getCustomAudiences(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'List Custom Audiences (incl. lookalikes) for an ad account'
+       #swagger.parameters['adAccountId'] = { description: 'Ad Account ID', type: 'string', required: true }
+    */
+    try {
+      const { adAccountId } = req.query;
+      if (!adAccountId) {
+        return res.status(400).json({ status: false, error: "adAccountId is required" });
+      }
+
+      const userId = req.user.user_id;
+      const cacheKey = `metaCustomAudiences:${CACHE_SHAPE}:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adAccountId}`;
+      const cached = await redisClient.get(cacheKey);
+      if (cached) return res.status(200).json(JSON.parse(cached));
+
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
+      const account = new AdAccount(`act_${adAccountId}`);
+
+      // Paged: an agency account can hold hundreds of audiences and Meta's
+      // default page is 25, which would silently truncate the picker.
+      const audiences = await fetchAllPaged(
+        account.getCustomAudiences(
+          [
+            "id",
+            "name",
+            "description",
+            "subtype",
+            "approximate_count_lower_bound",
+            "approximate_count_upper_bound",
+            "delivery_status",
+            "operation_status",
+            "time_updated",
+          ],
+          { limit: 200 },
+        ),
+        "custom audiences",
+      );
+
+      const formatted = audiences.map((a) => {
+        const d = a._data || a;
+        const delivery = d.delivery_status?._data || d.delivery_status || {};
+        return {
+          id: d.id,
+          name: d.name,
+          description: d.description || "",
+          subtype: d.subtype || null,
+          subtypeLabel: labelAudienceSubtype(d.subtype),
+          // Meta returns a range; the lower bound is the single honest number
+          // to show, same convention as getSavedAudiences.
+          size: d.approximate_count_lower_bound ?? null,
+          // Meta keeps returning audiences that can't currently be targeted
+          // (too small, still populating, expired). Surfaced rather than
+          // filtered out: a user who made an audience in Meta and can't find
+          // it here would otherwise have no idea why.
+          ready: delivery.code === 200,
+          statusLabel: delivery.description || null,
+          updatedTime: d.time_updated
+            ? new Date(Number(d.time_updated) * 1000).toISOString()
+            : null,
+        };
+      });
+
+      const response = {
+        status: true,
+        customAudiences: formatted,
+        count: formatted.length,
+      };
+      await redisClient.set(cacheKey, JSON.stringify(response), "EX", REDIS_TTL);
+      return res.status(200).json(response);
+    } catch (error) {
+      const m = logMetaError("Get custom audiences error", error);
+      return res.status(error.statusCode || 500).json({
+        status: false,
+        error: m.title || "Failed to load custom audiences",
+        details: m.message,
+        meta: { code: m.code, subcode: m.subcode, fbtraceId: m.fbtraceId },
+      });
+    }
+  }
+
   async getSavedAudiences(req, res) {
     /* #swagger.tags = ['Meta Ads Launcher']
        #swagger.description = 'List Saved Audiences for an ad account'
@@ -5072,13 +5321,17 @@ class MetaAdLauncher {
         ...(suffix ? { rename_suffix: suffix } : {}),
       };
 
+      // The parent is ALWAYS copied shallow; children are fanned out below.
+      // `deep_copy: true` asks Meta to clone the whole tree in one request and
+      // it caps how much that may carry — low enough to reject a campaign on a
+      // 4-campaign account. See duplicateCampaignDeep's docblock.
       let source;
       if (level === "campaign") {
         source = new bizSdk.Campaign(id);
-        params.deep_copy = deepCopy;
+        params.deep_copy = false;
       } else if (level === "adset") {
         source = new bizSdk.AdSet(id);
-        params.deep_copy = deepCopy;
+        params.deep_copy = false;
         // Omitted = copy into the same campaign, which is the common case.
         if (targetCampaignId) params.campaign_id = targetCampaignId;
       } else {
@@ -5088,17 +5341,7 @@ class MetaAdLauncher {
 
       const copy = await source.createCopy([], params);
 
-      // Meta's response shape varies by level and by deep-vs-shallow copy:
-      // a plain `{id}` for shallow copies, `copied_campaign_id` /
-      // `copied_adset_id` on some deep-copy responses. Read defensively rather
-      // than trusting one key.
-      const data = copy?._data || copy || {};
-      const newId =
-        data.id ||
-        data.copied_campaign_id ||
-        data.copied_adset_id ||
-        data.ad_object_id ||
-        null;
+      const newId = copiedId(copy);
 
       if (level === "campaign" && newId) {
         // Claim the slot for the campaign that now exists. `force` because
@@ -5112,18 +5355,38 @@ class MetaAdLauncher {
         });
       }
 
-      // A deep copy creates entities at every level below the one copied, so
+      // ── Fan out to the children ──
+      // Only when the caller asked for a full duplicate. An ad has no
+      // children, and a caller can opt out with deepCopy:false to copy just
+      // the shell.
+      const report = { adSets: 0, ads: 0, skipped: [] };
+      if (newId && deepCopy && level === "campaign") {
+        await duplicateCampaignDeep(id, newId, statusOption, report);
+      } else if (newId && deepCopy && level === "adset") {
+        await copyChildAds(id, newId, statusOption, report);
+      }
+
+      // A duplicate creates entities at every level below the one copied, so
       // bust the whole status-bearing set rather than threading child ids we
       // were never told about.
       await invalidateUserMetaCache(userId);
 
+      // Partial success is a NORMAL outcome of fanning out, so the response
+      // always reports what actually landed rather than implying all of it
+      // did. The frontend turns `skipped` into a visible warning.
+      const partial = report.skipped.length > 0;
       return res.status(201).json({
         status: true,
-        message: `${level} duplicated`,
+        message: partial
+          ? `${level} duplicated — ${report.skipped.length} item${report.skipped.length === 1 ? "" : "s"} couldn't be copied`
+          : `${level} duplicated`,
         level,
         sourceId: id,
         id: newId,
         deepCopy: level === "ad" ? false : deepCopy,
+        copied: { adSets: report.adSets, ads: report.ads },
+        skipped: report.skipped,
+        partial,
         statusOption,
       });
     } catch (error) {

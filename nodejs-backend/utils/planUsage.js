@@ -27,6 +27,7 @@ const { getFacebookConnectionStatus, metaCacheScope } = require("./metaConnectio
 const { initApiForUser, fetchAllPaged } = require("../controllers/adPosting/metaAdLauncher");
 const logger = require("./logger");
 const { filterActiveCampaigns, sumCounts } = require("./planUsagePure");
+const { CACHE_SHAPE } = require("./metaCacheKeys");
 
 // Ad account ids for one Facebook connection — cache hit reuses the
 // dashboard's own metaAdAccounts:* entry; a miss makes an id-only Meta call
@@ -65,8 +66,14 @@ async function listAdAccountIdsForConnection(userId, connection) {
 
 // Active/paused campaign count for one ad account — cache hit reuses the
 // dashboard's own metaCampaigns:* entry; a miss makes an id+status-only call.
+//
+// The CACHE_SHAPE segment is load-bearing and easy to lose: it was added to
+// the controller's key on 2026-08-20 but not here, so from then until
+// 2026-09-07 this read never matched, the "reuses the dashboard's entry"
+// promise above was quietly false, and every plan-usage readout made a live
+// Meta call per ad account instead. Import the constant, never retype the key.
 async function countActiveCampaignsForAccount(userId, connection, adAccountId) {
-  const cacheKey = `metaCampaigns:${metaCacheScope(userId, connection.facebookId)}:${adAccountId}`;
+  const cacheKey = `metaCampaigns:${CACHE_SHAPE}:${metaCacheScope(userId, connection.facebookId)}:${adAccountId}`;
   const cached = await redisClient.get(cacheKey).catch(() => null);
   if (cached) {
     try {

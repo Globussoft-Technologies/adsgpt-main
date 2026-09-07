@@ -246,6 +246,20 @@ const {
 
 // Factory rather than top-level const so the schema is fresh on each
 // reference (Joi schemas are stateful when reused with .when() or .meta()).
+// A custom-audience reference. `id` is all Meta needs; `name` (and the
+// display metadata beside it) is carried so the wizard can render its chips —
+// including on edit-load, where the alternative is a second lookup per
+// audience just to show a label. buildExplicitTargeting strips all of it.
+function customAudienceRefSchema() {
+  return Joi.object({
+    id: Joi.string().required(),
+    name: Joi.string().allow("").default(""),
+    subtype: Joi.string().allow("", null).optional(),
+    subtypeLabel: Joi.string().allow("", null).optional(),
+    size: Joi.number().allow(null).optional(),
+  });
+}
+
 function detailedTargetingItemSchema() {
   return Joi.object({
     type: Joi.string()
@@ -338,6 +352,19 @@ const targetingSchemaV2 = Joi.object({
       .default([]),
     exclude: Joi.array().items(detailedTargetingItemSchema()).default([]),
   }).default({ include: [], narrow: [], exclude: [] }),
+
+  // Custom audiences to include / exclude. `{id, name}` — the name is carried
+  // so the wizard can render chips (and re-render them on edit-load) without a
+  // second Meta lookup; buildExplicitTargeting drops it and sends bare {id}.
+  //
+  // Not capped here: Meta enforces its own ceiling on how many audiences an ad
+  // set may reference and that number has moved, so a hardcoded max would
+  // eventually reject payloads Meta accepts.
+  customAudiences: Joi.array().items(customAudienceRefSchema()).default([]),
+  excludedCustomAudiences: Joi.array()
+    .items(customAudienceRefSchema())
+    .default([]),
+
   placementMode: Joi.string().valid("advantage_plus", "manual").default("advantage_plus"),
   publisherPlatforms: Joi.array()
     .items(Joi.string().valid("facebook", "instagram", "audience_network", "messenger"))
@@ -345,7 +372,33 @@ const targetingSchemaV2 = Joi.object({
   devicePlatforms: Joi.array()
     .items(Joi.string().valid("mobile", "desktop"))
     .default([]),
-});
+})
+  // An audience can't be both included and excluded. Meta rejects the whole
+  // ad set for this, with a message that names neither the audience nor which
+  // list it clashed in — and it is easy to reach, since the picker's Include
+  // and Exclude buttons sit side by side on the same row. Mirrored in the
+  // frontend engine (wizardValidation.js validateAdSet), which reports it on
+  // the `customAudiences` field so the picker shows it inline.
+  //
+  // Enforced unconditionally, even though a regulated special ad category
+  // makes buildCustomAudienceTargeting drop both lists: the ad-set payload
+  // carries no `specialAdCategories` to branch on (it lives on the campaign),
+  // and the wizard already sends empty arrays under a regulated SAC, so a
+  // clash can't reach here in that case anyway.
+  .custom((value, helpers) => {
+    const included = new Set(
+      (value.customAudiences || []).map((a) => a && a.id).filter(Boolean),
+    );
+    const clash = (value.excludedCustomAudiences || []).find(
+      (a) => a && included.has(a.id),
+    );
+    if (clash) {
+      return helpers.message(
+        `Custom audience "${clash.name || clash.id}" is both included and excluded — remove it from one of the two lists.`,
+      );
+    }
+    return value;
+  });
 
 // ─── AdSet EDIT schema ────────────────────────────────────────────────────────
 //

@@ -29,6 +29,7 @@ const AutopilotActionLog = require("../../Module/autopilot/autopilotActionLog");
 const logger = require("../../utils/logger");
 const { trackBackendGA4Event } = require("../../utils/ga4");
 const { redisClient } = require("../../db/redis");
+const { cacheInvalidationPatterns } = require("../../utils/metaCacheKeys");
 const {
   getFacebookIdFromRequest,
 } = require("../../utils/metaConnection");
@@ -74,22 +75,44 @@ const getRoas = (roas) => {
   return r ? parseFloat(r.value) : 0;
 };
 
+// Applying an audit fix mutates entities, so the tables and tiles that show
+// them have to be re-fetched rather than served from cache.
+//
+// These patterns were wrong on TWO counts until 2026-09-07, so this function
+// had been deleting nothing at all — an applied fix left the old numbers on
+// screen for the full TTL:
+//   1. no facebookId segment. Every key is `<prefix>:<userId>:<facebookId>:…`
+//      (metaCacheScope), not `<prefix>:<userId>:…`, so `:${adAccountId}` was
+//      being matched against the facebookId's position.
+//   2. no CACHE_SHAPE segment on the entity lists — see
+//      cacheInvalidationPatterns in utils/metaCacheKeys.js.
+// Build the tails through the shared helper so a future shape bump can't
+// silently orphan this call site again.
 const bustAccountCaches = async (userId, adAccountId) => {
   try {
     const patterns = [
-      `metaDashboard:${userId}:${adAccountId}:*`,
-      `metaAnalytics:${userId}:${adAccountId}:*`,
-      `metaCampaigns:${userId}:${adAccountId}`,
-      `metaAdsets:${userId}:${adAccountId}:*`,
-      `metaCampaignAds:${userId}:*`,
-      `metaAdSetAds:${userId}:*`,
-      `metaInsights:${userId}:${adAccountId}:*`,
-      `metaAudit:${userId}:${adAccountId}`,
+      // `*` stands in for the facebookId, which this call site doesn't have.
+      ...cacheInvalidationPatterns("metaDashboard", `${userId}:*:${adAccountId}:*`),
+      ...cacheInvalidationPatterns("metaAnalytics", `${userId}:*:${adAccountId}:*`),
+      ...cacheInvalidationPatterns("metaCampaigns", `${userId}:*:${adAccountId}`),
+      ...cacheInvalidationPatterns("metaAdsets", `${userId}:*:${adAccountId}:*`),
+      // Keyed by campaign / ad-set id, not ad account — nothing here narrows
+      // them, so clear the user's whole set.
+      ...cacheInvalidationPatterns("metaCampaignAds", `${userId}:*`),
+      ...cacheInvalidationPatterns("metaAdSetAds", `${userId}:*`),
+      ...cacheInvalidationPatterns("metaInsights", `${userId}:*:${adAccountId}:*`),
+      ...cacheInvalidationPatterns("metaAudit", `${userId}:*:${adAccountId}`),
     ];
+    // SCAN, not KEYS — KEYS blocks the whole Redis server for the duration of
+    // the sweep, and this runs on a user-facing apply-fix request.
+    const keysToDelete = [];
     for (const pattern of patterns) {
-      const keys = await redisClient.keys(pattern);
-      if (keys.length > 0) await redisClient.del(keys);
+      const stream = redisClient.scanStream({ match: pattern, count: 100 });
+      for await (const batch of stream) {
+        if (batch.length) keysToDelete.push(...batch);
+      }
     }
+    if (keysToDelete.length) await redisClient.del(...keysToDelete);
   } catch (err) {
     logger.error(`Cache bust failed: ${err.message}`);
   }

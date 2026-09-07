@@ -23,6 +23,24 @@ export const CAPPED_BID_STRATEGIES = new Set([
   'COST_CAP',
 ]);
 
+// Special Ad Categories that hide Detailed Targeting AND the custom-audience
+// picker. Regulated categories (housing / employment / credit / financial
+// products / politics) restrict audience-based targeting for the same
+// anti-discrimination reason they restrict interests. Lives here rather than
+// in the wizard so ONE place in the frontend answers "is this campaign
+// regulated" — the render guard, the payload builders and this validator all
+// read it — mirroring `opts.blocked` in the backend's
+// utils/customAudiences.js.
+const SAC_HIDES_DETAILED_TARGETING = new Set([
+  'FINANCIAL_PRODUCTS_SERVICES',
+  'CREDIT',
+  'EMPLOYMENT',
+  'HOUSING',
+  'ISSUES_ELECTIONS_POLITICS',
+]);
+export const isDetailedTargetingHidden = (specialAdCategories) =>
+  (specialAdCategories || []).some((c) => SAC_HIDES_DETAILED_TARGETING.has(c));
+
 // Minimum budget in MAJOR currency units. Meta's true floor is currency-
 // specific; 1 major unit is a safe lower bound across supported currencies
 // and matches the backend Joi `min(100)` (100 minor units = 1 major).
@@ -270,6 +288,26 @@ function validateAdSet(form, cell, ctx, mode) {
           }
         }
       }
+    }
+  }
+
+  // Custom audiences — an audience can't be both included and excluded.
+  // Meta rejects the whole ad set for this with a message that names neither
+  // the audience nor which list it clashed in, and it's easy to reach: the
+  // picker's Include and Exclude buttons sit side by side on the same row.
+  // Skipped under a regulated SAC because the picker isn't rendered there —
+  // stale form state must not produce an error with no field to fix it (the
+  // same "required but unreachable" dead-end as the autobid bid_amount above).
+  // Mirrors the `.custom()` on targetingSchemaV2 in meta.v2.validator.js.
+  if (!isDetailedTargetingHidden(form.specialAdCategories)) {
+    const includedIds = new Set(
+      (form.customAudiences || []).map((a) => a && a.id).filter(Boolean),
+    );
+    const clash = (form.excludedCustomAudiences || []).find(
+      (a) => a && includedIds.has(a.id),
+    );
+    if (clash) {
+      e.customAudiences = `“${clash.name || clash.id}” is both included and excluded — remove it from one of the two lists.`;
     }
   }
 

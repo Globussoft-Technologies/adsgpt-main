@@ -300,6 +300,24 @@ export const getMetaPages = async (adAccountId, { facebookId } = {}) => {
   return data;
 };
 
+/**
+ * Custom Audiences on the ad account — customer lists, website/pixel traffic,
+ * engagement audiences and lookalikes.
+ *
+ * NOT the same thing as getMetaSavedAudiences below, and the confusion is the
+ * reason this exists: a Custom Audience is a SOURCE of people, a Saved
+ * Audience is a saved targeting CONFIGURATION that may reference one. Different
+ * Meta edges, and a custom audience never shows up in the saved-audience list.
+ */
+export const getCustomAudiences = async (adAccountId, { facebookId } = {}) => {
+  if (!adAccountId) throw new Error('getCustomAudiences: adAccountId is required');
+  const { data } = await axios.get(`${BASE_URL}/adsgpt/meta-ads/get-custom-audiences`, {
+    params: { adAccountId },
+    headers: getAuthHeaders(facebookId),
+  });
+  return data;
+};
+
 export const getMetaSavedAudiences = async (adAccountId) => {
   const { data } = await axios.get(
     `${BASE_URL}/adsgpt/meta-ads/get-saved-audiences`,

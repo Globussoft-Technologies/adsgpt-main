@@ -663,7 +663,18 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, opportunityS
         level: 'campaign',
         id: c.id,
       });
-      globalToast.success(res?.message || 'Campaign duplicated');
+      // A campaign Meta couldn't copy whole comes back as a shell. Reporting
+      // that as a plain success would leave someone believing they have a
+      // working duplicate when it has no ad sets or ads at all.
+      // Duplicating fans out — parent, then each ad set, then each ad — so a
+      // partial result is a normal outcome, not an exception. Reporting it as
+      // a plain success would send someone away believing they have a complete
+      // copy when some ads are missing from it.
+      if (res?.partial) {
+        globalToast.error(res.message, { duration: 8000 });
+      } else {
+        globalToast.success(res?.message || 'Campaign duplicated');
+      }
       onRefresh?.();
     } catch (err) {
       globalToast.error(
@@ -1037,6 +1048,13 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, opportunityS
                           )}
                         </button>
                       )}
+                      {/* HIDDEN 2026-09-07 — duplicate is hidden pending the per-ad copy failures:
+                          Meta returns "(#3) Application does not have the capability" and a
+                          standard-enhancements creative error on ad-level /copies, so a campaign
+                          duplicate lands with its ads missing. The endpoint, handlers and state are
+                          intentionally left in place — re-enable by uncommenting.
+                          See gotchas.md "deep_copy is unusable — fan out instead".
+                      
                       <button
                         onClick={(e) => handleDuplicate(e, c)}
                         disabled={duplicatingId === c.id || !managed}
@@ -1049,6 +1067,7 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, opportunityS
                           <Copy className="h-3.5 w-3.5" />
                         )}
                       </button>
+                      */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1368,6 +1387,12 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
             narrow: [],
             exclude: [],
           },
+          // Custom audiences MUST round-trip: updateAdSetV2 rebuilds the
+          // targeting spec from scratch, so anything not prefilled here is
+          // dropped on save and the ad set silently widens to everyone it was
+          // excluding. resolveAdSetForEdit reads them back off Meta.
+          customAudiences: r.targeting?.customAudiences || [],
+          excludedCustomAudiences: r.targeting?.excludedCustomAudiences || [],
           useSavedAudience: false,
           // Awareness/STANDARD — pass-through frequency cap from the
           // backend's resolve handler. null when Meta has no cap set (so
@@ -1427,7 +1452,8 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
         id: s.id,
         campaignId: campaign?.id,
       });
-      globalToast.success(res?.message || 'Ad set duplicated');
+      if (res?.partial) globalToast.error(res.message, { duration: 8000 });
+      else globalToast.success(res?.message || 'Ad set duplicated');
       await handleRefresh();
     } catch (err) {
       globalToast.error(
@@ -1615,6 +1641,13 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
                           )}
                         </button>
                       )}
+                      {/* HIDDEN 2026-09-07 — duplicate is hidden pending the per-ad copy failures:
+                          Meta returns "(#3) Application does not have the capability" and a
+                          standard-enhancements creative error on ad-level /copies, so a campaign
+                          duplicate lands with its ads missing. The endpoint, handlers and state are
+                          intentionally left in place — re-enable by uncommenting.
+                          See gotchas.md "deep_copy is unusable — fan out instead".
+                      
                       <button
                         onClick={(e) => handleDuplicate(e, s)}
                         disabled={duplicatingId === s.id}
@@ -1627,6 +1660,7 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
                           <Copy className="h-3.5 w-3.5" />
                         )}
                       </button>
+                      */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -2447,6 +2481,13 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
                             )}
                           </button>
                         )}
+                        {/* HIDDEN 2026-09-07 — duplicate is hidden pending the per-ad copy failures:
+                            Meta returns "(#3) Application does not have the capability" and a
+                            standard-enhancements creative error on ad-level /copies, so a campaign
+                            duplicate lands with its ads missing. The endpoint, handlers and state are
+                            intentionally left in place — re-enable by uncommenting.
+                            See gotchas.md "deep_copy is unusable — fan out instead".
+                        
                         <button
                           onClick={(e) => handleDuplicate(e, a)}
                           disabled={duplicatingId === a.id}
@@ -2459,6 +2500,7 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
                             <Copy className="h-3.5 w-3.5" />
                           )}
                         </button>
+                        */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

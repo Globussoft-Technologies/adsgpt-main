@@ -35,6 +35,10 @@ const {
 const { buildPromotedObject } = require("../../utils/promotedObject");
 const { buildObjectStorySpec } = require("../../utils/objectStorySpec");
 const {
+  buildCustomAudienceTargeting,
+  readCustomAudienceTargeting,
+} = require("../../utils/customAudiences");
+const {
   groupLocationsByType,
   dropOverlappingIncludes,
   reverseGeoToLocations,
@@ -284,6 +288,12 @@ function buildExplicitTargeting(t, opts = {}) {
     // inside flexible_spec. Subcode 1885097 fires if sent the wrong way.
     if (topLevel) Object.assign(spec, topLevel);
   }
+
+  // Custom audiences — include and exclude. Gated on the SAME regulated-SAC
+  // set as detailed targeting above; the rule and its reasoning live in
+  // utils/customAudiences.js, kept pure so both are unit-testable (nothing in
+  // this file is — it opens DB/Redis connections at require time).
+  Object.assign(spec, buildCustomAudienceTargeting(t, { blocked: sacBlocks }));
 
   return spec;
 }
@@ -1814,6 +1824,14 @@ async function resolveAdSetForEdit(req, res) {
         // legacy ad sets with flat interests/behaviors arrays (folds them
         // into Include). See utils/detailedTargeting.js.
         detailedTargeting: flexibleSpecToForm(tg),
+        // Custom audiences — MUST round-trip. updateAdSetV2 rebuilds the
+        // targeting spec from scratch on every save, so an audience that
+        // isn't read back here is dropped on the next edit and the ad set
+        // silently widens to everyone it was excluding. Meta enriches the
+        // bare ids we sent with names on read, so the chips re-render without
+        // a lookup. Same class of bug as the device_platforms and Instagram
+        // identity drops — see gotchas.md.
+        ...readCustomAudienceTargeting(tg),
       },
     });
   } catch (err) {

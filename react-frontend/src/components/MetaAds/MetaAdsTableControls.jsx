@@ -464,7 +464,12 @@ export function BulkActionBar({
           <>
             {onActivate && action('Activate', Play, onActivate)}
             {onPause && action('Pause', Pause, onPause)}
+            {/* HIDDEN 2026-09-07 — see the note on the row duplicate buttons in
+                MetaAdsTableView.jsx. Hiding it here covers bulk duplicate at
+                all three levels in one place. useBulkActions still builds
+                onDuplicate; nothing calls it while this is commented.
             {onDuplicate && action('Duplicate', Copy, onDuplicate)}
+            */}
             {onDelete &&
               action(
                 'Delete',
