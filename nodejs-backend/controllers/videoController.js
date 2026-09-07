@@ -91,9 +91,25 @@ const resolveAiAdsCaptionLanguage = ({ pending, baseVersion, inputs }) =>
   pending?.language ||
   (pending?.regenType === "translate" ? pending?.translateLang : null) ||
   baseVersion?.aiAds?.language ||
+  baseVersion?.aiAds?.translateLang ||
   inputs?.voiceFilters?.language ||
   inputs?.language ||
   "en";
+
+// Regeneration requests start from frozen original inputs, but the selected
+// version may have been approved in a different language. Do not let the
+// original voiceFilters.language make a later rewrite switch back to English.
+const applyAiAdsVersionLanguage = (inputs, baseVersion) => {
+  const language = resolveAiAdsCaptionLanguage({ baseVersion, inputs });
+  const { languageLabel: _staleLanguageLabel, ...voiceFilters } =
+    inputs?.voiceFilters || {};
+
+  return {
+    ...inputs,
+    voiceFilters: { ...voiceFilters, language },
+    captionLanguage: language,
+  };
+};
 
 const emitCreditStatus = async (userId) => {
   try {
@@ -3246,7 +3262,7 @@ exports.regenerateAiAdsVoice = async (req, res) => {
     // the selected version's script as the base + the new voice delta on top.
     const { brandName, productName, productDescription, scenes: _dropScenes, ...restInputs } =
       record.inputs.toObject ? record.inputs.toObject() : record.inputs;
-    const inputsForPython = {
+    const inputsForPython = applyAiAdsVersionLanguage({
       ...restInputs,
       ...(brandName || productName ? { name: brandName || productName } : {}),
       ...(productDescription ? { description: productDescription } : {}),
@@ -3262,7 +3278,7 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       // URL of the currently-pointed (last-selected) version — the render
       // Python re-voices from. Same version baseScenes is taken from.
       generatedUrl: baseVersion?.url || "",
-    };
+    }, baseVersion);
 
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
     const applyWatermark = plan === "8" ? true : (record.watermark ?? false);
@@ -3387,7 +3403,7 @@ exports.finalMergeAiAdsVoice = async (req, res) => {
         error: "No source video is available for the final merge.",
       });
     }
-    const inputs = {
+    const inputs = applyAiAdsVersionLanguage({
       ...restInputs,
       ...(brandName || productName ? { name: brandName || productName } : {}),
       ...(productDescription ? { description: productDescription } : {}),
@@ -3406,7 +3422,7 @@ exports.finalMergeAiAdsVoice = async (req, res) => {
         inputs: rawInputs,
       }),
       scenes: pending.scenes || record.scenes || [],
-    };
+    }, baseVersion);
 
     await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { regenState: "processing" } }, NO_TOUCH);
     try {
@@ -3513,7 +3529,7 @@ exports.previewRegenerateScript = async (req, res) => {
 
     const { brandName, productName, productDescription, scenes: _dropScenes, ...restInputs } =
       record.inputs.toObject ? record.inputs.toObject() : record.inputs;
-    const inputsForPython = {
+    const inputsForPython = applyAiAdsVersionLanguage({
       ...restInputs,
       ...(brandName || productName ? { name: brandName || productName } : {}),
       ...(productDescription ? { description: productDescription } : {}),
@@ -3524,7 +3540,7 @@ exports.previewRegenerateScript = async (req, res) => {
       translateLang: delta.translateLang ?? "",
       scenes: baseScenes,
       generatedUrl: baseVersion?.url || "",
-    };
+    }, baseVersion);
 
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
     const applyWatermark = plan === "8" ? true : (record.watermark ?? false);
