@@ -423,6 +423,11 @@ exports.runBriefNow = async (req, res) => {
       { ...req, params: { id: String(brief.jobId) }, user: req.user },
     );
 
+    if (statusCode < 400 && brief.status !== "live") {
+      brief.status = "live";
+      await brief.save();
+    }
+
     return res.status(statusCode).json(body);
   } catch (err) {
     logger.error(`[adFactory:brief:runNow] ${err.message}`);

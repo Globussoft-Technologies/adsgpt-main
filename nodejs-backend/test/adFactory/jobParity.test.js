@@ -30,6 +30,8 @@
  * Run:  node test/adFactory/jobParity.test.js
  */
 
+process.env.ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || "test-access-token-secret";
+
 const assert = require("node:assert/strict");
 
 const { briefToJobPayload } = require("../../services/adFactory/briefToJobPayload");
@@ -289,6 +291,55 @@ group("activation refuses with a field, never a silent bad job", () => {
     const b = brief();
     b.delivery.budget.daily = 0;
     assert.throws(() => briefToJobPayload(b, connection()), (e) => e.field === "budget.daily");
+  });
+});
+
+// ─── 5. Controller parity: runNow ─────────────────────────────────────────────
+
+group("controller parity: runNow endpoint exists for briefs and jobs", () => {
+  class MockRedis {
+    constructor() {}
+    on() { return this; }
+    getRepeatableJobs() { return Promise.resolve([]); }
+    getDelayed() { return Promise.resolve([]); }
+    getWaiting() { return Promise.resolve([]); }
+    status = "ready";
+  }
+  MockRedis.Redis = MockRedis;
+
+  try {
+    const ioredisPath = require.resolve("ioredis");
+    require.cache[ioredisPath] = {
+      id: ioredisPath,
+      filename: ioredisPath,
+      loaded: true,
+      exports: MockRedis,
+    };
+  } catch (_) {}
+
+  try {
+    const dbRedisPath = require.resolve("../../db/redis");
+    require.cache[dbRedisPath] = {
+      id: dbRedisPath,
+      filename: dbRedisPath,
+      loaded: true,
+      exports: {
+        redisClient: new MockRedis(),
+        pub: new MockRedis(),
+        sub: new MockRedis(),
+      },
+    };
+  } catch (_) {}
+
+  const adsFactoryAutoController = require("../../controllers/adsFactoryAuto/adsFactoryAutoController");
+
+  test("adsFactoryAutoController exposes runNow as a function", () => {
+    assert.equal(typeof adsFactoryAutoController.runNow, "function");
+  });
+
+  test("runNow is bindable for callController in briefActions", () => {
+    const bound = adsFactoryAutoController.runNow.bind(adsFactoryAutoController);
+    assert.equal(typeof bound, "function");
   });
 });
 

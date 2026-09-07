@@ -3,7 +3,7 @@ const Campaign      = require("../../Module/adFactory/adFactory");
 const AdFactoryBrief = require("../../Module/adFactory/adFactoryBrief");
 const FBUsers       = require('../../Module/adPosting/facebookUsers');
 const { CELLS, CTA_LABELS } = require("../../config/wizardSchema");
-const { scheduleJob, cancelJob, resolveScheduleForQueue, resolvePresetCron, resolveInclusiveEndDate, getNextRunTime } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
+const { scheduleJob, cancelJob, resolveScheduleForQueue, resolvePresetCron, resolveInclusiveEndDate, getNextRunTime, runJobNow } = require("../../services/adsFactoryAuto/adsFactoryAutoQueue");
 const {
   createJobSchema,
   updateJobSchema,
@@ -828,6 +828,71 @@ class AdsFactoryAutoController {
     }
   }
 
+  async runNow(req, res) {
+    /*
+      #swagger.tags = ['Ads Factory Autopilot']
+      #swagger.summary = 'Trigger autopilot job immediately'
+      #swagger.description = 'Queues an immediate manual execution of the specified autopilot job, independent of its schedule.'
+      #swagger.security = [{ "BearerAuth": [] }]
+      #swagger.parameters['id'] = { in: 'path', description: 'Job MongoDB ObjectId', type: 'string', required: true }
+    */
+    try {
+      const userId = req.user.user_id;
+      const job = await AdsFactoryJob.findOne({ _id: req.params.id, userId });
+      if (!job) return res.status(404).json({ success: false, error: "Job not found" });
+
+      if (isJobRunLocked(job)) {
+        return res.status(409).json({
+          success: false,
+          error: "This job is currently running. Please wait for the current run to finish.",
+        });
+      }
+
+      if (job.status === "archived") {
+        return res.status(400).json({
+          success: false,
+          error: "Cannot run an archived job.",
+        });
+      }
+
+      if (job.status === "paused") {
+        return res.status(400).json({
+          success: false,
+          error: "This job is paused. Please resume it before running.",
+        });
+      }
+
+      // If the job was marked completed (e.g. schedule finished or previous cycle failed),
+      // reactivate it so orchestrator runs this manual cycle.
+      if (job.status === "completed") {
+        job.status = "active";
+        await job.save();
+        await AdFactoryBrief.updateMany(
+          { userId, jobId: job._id.toString() },
+          { $set: { status: "live" } }
+        );
+      }
+
+      // If campaign was left in an interrupted "in-progress" state, unblock it
+      if (job.campaignId) {
+        await Campaign.updateOne(
+          { _id: job.campaignId, $or: [{ status: "in-progress" }, { "results.status": "in-progress" }] },
+          { $set: { status: "draft", "results.status": "draft" } }
+        );
+      }
+
+      await runJobNow(job._id);
+
+      return res.json({
+        success: true,
+        message: "Run queued immediately",
+        data: { jobId: job._id },
+      });
+    } catch (err) {
+      logger.error(`[adsFactoryAuto:runNow] ${err.message}`);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
 
   async testAlertEmail(req, res) {
     /*

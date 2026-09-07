@@ -2024,14 +2024,20 @@ async function run(jobId) {
         // Only update nextRunAt for repeating, still-active jobs — does_not_repeat
         // and auto-paused jobs already cleared/set nextRunAt above.
         const nextTime = (job.schedule?.frequency !== "does_not_repeat" && job.status !== "paused")
-          ? await getNextRunTime(jobId) : null;
+          ? await getNextRunTime(jobId, job.schedule) : null;
         if (nextTime) {
           job.schedule.nextRunAt = nextTime;
         } else if (job.schedule?.frequency !== "does_not_repeat" && job.status !== "paused") {
           // If BullMQ no longer has a nextRunTime, the repeating schedule has naturally finished (endDate reached).
-          job.status = "completed";
-          job.schedule.nextRunAt = null;
-          job.lifecycleKey = undefined;
+          // Only mark completed if the run succeeded or was partial — if it failed, keep it active so the user can retry.
+          if (runStatus === "success" || runStatus === "partial") {
+            job.status = "completed";
+            job.schedule.nextRunAt = null;
+            job.lifecycleKey = undefined;
+          } else {
+            job.schedule.nextRunAt = null;
+            logger.info(`[adsFactoryAuto][9] repeating job ${jobId} failed — staying active for manual retry`);
+          }
         }
       } catch (e) {
         logger.warn(`[adsFactoryAuto][9] could not update nextRunAt: ${e.message}`);
