@@ -15,11 +15,15 @@ const getInitialMySpaceTab = () => {
 //   'adCreative'  — Ad Studio's ImageGeneration store (default)
 //   'adFactory'   — AdFactory images API
 //   'aiAssistant' — AI Assistant (Sherry) generations, from /generated-media/library
-const getInitialImageSource = () => {
-  const stored = sessionStorage.getItem('mySpaceImageSource');
-  return ['all', 'adCreative', 'adFactory', 'aiAssistant'].includes(stored)
-    ? stored
-    : 'adCreative';
+const getInitialImageSource = () => 'all';
+
+const resetMySpaceImageSource = (state) => {
+  state.mySpaceImageSource = 'all';
+  try {
+    sessionStorage.setItem('mySpaceImageSource', 'all');
+  } catch {
+    /* sessionStorage may be disabled; best-effort persistence */
+  }
 };
 
 const initialState = {
@@ -66,9 +70,15 @@ const adVideoNewSlice = createSlice({
     resetAdVideoNewSlice: () => ({ ...initialState, activePage: 'home' }),
     setActivePage: (state, action) => {
       state.activePage = action.payload;
+      if (action.payload === 'myVideos' && state.mySpaceTab === 'images') {
+        resetMySpaceImageSource(state);
+      }
     },
     setMySpaceTab: (state, action) => {
       state.mySpaceTab = action.payload;
+      if (action.payload === 'images') {
+        resetMySpaceImageSource(state);
+      }
       // Persist so a page refresh in MySpace > Videos doesn't pop the user
       // back to the Images tab.
       try {
