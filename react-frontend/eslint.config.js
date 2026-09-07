@@ -43,4 +43,25 @@ export default defineConfig([
       'react/jsx-no-undef': 'error',
     },
   },
+  {
+    // Temporal-dead-zone reads: a `const` used above its own declaration in
+    // the SAME scope throws at runtime but is valid syntax, so neither the
+    // bundler nor the build catches it. A real one shipped here — the ad
+    // drawer read `media` above its useState and threw on every render, which
+    // surfaced as a UI flicker with no error anyone saw.
+    //
+    // SCOPED to the Meta Ads surface on purpose: app-wide this rule reports
+    // ~188 pre-existing hits, almost all module-level consts referenced from
+    // component bodies (safe — the module finishes evaluating before any
+    // component runs). Turning it on globally is a separate cleanup, not a
+    // side effect of this feature. `functions: false` keeps hoisted function
+    // declarations allowed.
+    files: ['src/components/MetaAds/**/*.{js,jsx}', 'src/apis/metaAds/**/*.js'],
+    rules: {
+      'no-use-before-define': [
+        'error',
+        { variables: true, functions: false, classes: false, allowNamedExports: true },
+      ],
+    },
+  },
 ]);

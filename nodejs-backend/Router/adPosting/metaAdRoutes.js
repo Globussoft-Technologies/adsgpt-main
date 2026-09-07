@@ -188,6 +188,9 @@ router.post(
 );
 router.post("/create-ad", metaAdController.createAd);
 router.delete("/delete-campaign", metaAdController.deleteCampaign);
+router.delete("/delete-adset", metaAdController.deleteAdSet);
+router.delete("/delete-ad", metaAdController.deleteAd);
+router.post("/duplicate", metaAdController.duplicateEntity);
 
 // V2 wizard creation flow — config-driven from `config/wizardSchema.js`.
 // Only ships the 3 migrated objectives (Traffic / Leads / App Promotion);

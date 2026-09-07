@@ -29,6 +29,12 @@ function getAdFields() {
     // themselves are NOT readable here — see utils/metaRecommendations.js for
     // why the per-object `recommendations` field is a silent no-op.
     Ad.Fields.issues_info,
+    // Ad review outcome. Without this a REJECTED ad is visually identical to a
+    // running one in the table — `status` stays ACTIVE because the user never
+    // paused it; only `effective_status` flips to DISAPPROVED and only
+    // `ad_review_feedback` says which policy was hit. Shape is
+    // `{global: {<PolicyName>: "<reason>"}, placement_specific: {...}}`.
+    Ad.Fields.ad_review_feedback,
   ];
 }
 
@@ -45,6 +51,15 @@ function getAdSetFields() {
     AdSet.Fields.billing_event,
     AdSet.Fields.optimization_goal,
     AdSet.Fields.issues_info,
+    // Delivery state as Meta computes it, vs `status` which is only what the
+    // user last set. An ad set whose campaign is paused, whose schedule has
+    // ended or which was rejected still reports status ACTIVE — the tables
+    // showed that as "Active" and generated support load.
+    AdSet.Fields.effective_status,
+    // `{learning_stage_info: {status: LEARNING|SUCCESS, attribution_windows,
+    // conversions, last_sig_edit_ts}}`. LEARNING_LIMITED is reported here as
+    // status LEARNING with too few conversions to exit — see
+    // normalizeLearningStage in metaAdLauncher.js for the derivation.
     // `normalizeAdset` reads `learning_stage_info.status` to populate the
     // `learning_status` rule field — but this list never requested it, so the
     // value was always null and every rule on `learning_status` silently
@@ -71,6 +86,9 @@ function getCampaignFields() {
     Campaign.Fields.bid_strategy,
     Campaign.Fields.special_ad_categories,
     Campaign.Fields.issues_info,
+    // See the note on AdSet.Fields.effective_status — same reason, and a
+    // paused/rejected campaign is what makes every child look wrong too.
+    Campaign.Fields.effective_status,
   ];
 }
 

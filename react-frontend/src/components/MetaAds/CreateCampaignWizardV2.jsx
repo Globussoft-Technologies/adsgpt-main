@@ -85,6 +85,7 @@ import {
 } from '@/apis/metaAds/metaAdsApi';
 import { globalToast } from '@/utils/globalToast';
 import LibraryPicker from './LibraryPicker';
+import CarouselCardEditor, { newCard, cardHasMedia } from './CarouselCardEditor';
 import {
   FieldShell,
   TextField,
@@ -106,6 +107,7 @@ import {
 import {
   validateStep,
   validateAllSteps,
+  validateCarouselCards,
   CAPPED_BID_STRATEGIES,
 } from './wizardValidation';
 import { currencySymbol } from './metaAdsUtils';
@@ -391,6 +393,10 @@ function buildInitialForm(context = null) {
     // SegGroup on the Ad step; the inactive set is sent as undefined on
     // handleLaunch so the backend's xor validator stays happy.
     mediaType: 'image', // 'image' | 'video'
+    // Ad format — 'single' or 'carousel'. Only cells whose creative shape can
+    // carry child_attachments ever offer the choice (cell.supportsCarousel).
+    adFormat: 'single',
+    cards: [],
     imageFile: null,
     imageUrl: null,
     videoFile: null,
@@ -648,6 +654,13 @@ export default function CreateCampaignWizardV2({
       // mediaKind=video, so force the AdStep into video mode and clear
       // any image inputs left from a prior cell pick. Mirror for
       // mediaKind=image (none today, but the symmetry costs nothing).
+      // Carousel is a per-cell capability. Switching to a cell that can't
+      // carry child_attachments must drop the format AND the cards — leaving
+      // them would send a payload the backend forbids for that shape.
+      if (!cell.supportsCarousel) {
+        next.adFormat = 'single';
+        next.cards = [];
+      }
       if (cell.ad?.mediaKind === 'video') {
         next.mediaType = 'video';
         next.imageFile = null;
@@ -799,6 +812,15 @@ export default function CreateCampaignWizardV2({
     setLaunching(true);
     setLaunchError(null);
     try {
+      // Carousel only when the cell can carry it AND the user chose it — a
+      // stale `form.cards` left over from toggling back to Single must not
+      // reach the payload, where the backend would reject it.
+      const isCarouselLaunch =
+        !!cell?.supportsCarousel &&
+        form.adFormat === 'carousel' &&
+        Array.isArray(form.cards) &&
+        form.cards.length > 0;
+
       // ── Campaign ──
       let campaignId = created.campaignId;
       if (!campaignId) {
@@ -1052,13 +1074,69 @@ export default function CreateCampaignWizardV2({
       // "Provide either an 'image' file or an 'imageUrl'" — before ever
       // reaching the (already-guarded) backend rejection for sending
       // media on this shape.
+      // ── Carousel: upload each card's media ──
+      // `created.cardMedia` is keyed by the card's CLIENT id, not its index,
+      // so reordering or removing a card between attempts can't make a
+      // surviving card re-upload or — worse — pick up its neighbour's media.
+      // Same idempotency contract as created.imageHash, one level down.
+      let resolvedCards = null;
+      if (isCarouselLaunch) {
+        const cache = { ...(created.cardMedia || {}) };
+        resolvedCards = [];
+        for (const card of form.cards) {
+          let media = cache[card.id];
+          if (!media) {
+            if (card.mediaType === 'video') {
+              const r = await uploadMetaAdVideo({
+                adAccountId,
+                video: card.videoFile,
+                videoUrl: card.videoUrl,
+              });
+              if (!r.videoId) {
+                throw new Error("A card's video uploaded but no id was returned");
+              }
+              media = {
+                videoId: r.videoId,
+                videoThumbnailUrl: card.videoThumbnailUrl || r.thumbnailUrl || undefined,
+              };
+            } else {
+              const r = await uploadMetaAdImage({
+                adAccountId,
+                image: card.imageFile,
+                imageUrl: card.imageUrl,
+              });
+              if (!r.imageHash) {
+                throw new Error("A card's image uploaded but no hash was returned");
+              }
+              media = { imageHash: r.imageHash };
+            }
+            cache[card.id] = media;
+            // Persist after EACH card, not once at the end — a failure on
+            // card 7 must not discard the six uploads that already succeeded.
+            setCreated((p) => ({ ...p, cardMedia: { ...(p.cardMedia || {}), [card.id]: media } }));
+          }
+          resolvedCards.push({
+            ...media,
+            headline: card.headline || undefined,
+            description: card.description || undefined,
+            link: String(card.link || '').trim() || undefined,
+          });
+        }
+      }
+
       let imageHash = created.imageHash;
       let videoId = created.videoId;
       // Prefer the auto-thumbnail Meta extracted during upload over a
       // form value that's only set if the user manually overrode it.
       // Falls back to whatever the user typed.
       let videoThumb = form.videoThumbnailUrl || null;
-      if (cell.ad.objectStorySpecShape === 'template_data') {
+      if (isCarouselLaunch) {
+        // Media lives on the cards; the backend rejects ad-level media
+        // alongside them (Meta would otherwise silently render the single
+        // image and ignore every card).
+        imageHash = undefined;
+        videoId = undefined;
+      } else if (cell.ad.objectStorySpecShape === 'template_data') {
         imageHash = undefined;
         videoId = undefined;
       } else if (form.mediaType === 'video') {
@@ -1116,7 +1194,11 @@ export default function CreateCampaignWizardV2({
         callToAction: form.callToAction,
         status: 'ACTIVE',
       };
-      if (cell.ad.objectStorySpecShape === 'template_data') {
+      if (isCarouselLaunch) {
+        adPayload.cards = resolvedCards;
+        if (form.multiShareOptimized) adPayload.multiShareOptimized = true;
+        if (form.multiShareEndCard === false) adPayload.multiShareEndCard = false;
+      } else if (cell.ad.objectStorySpecShape === 'template_data') {
         // Sales/CATALOG — Meta sources images per-product from the
         // catalog feed; sending imageHash/videoId here is rejected by
         // the backend's template_data builder.
@@ -1291,7 +1373,25 @@ export default function CreateCampaignWizardV2({
           callToAction: form.callToAction,
           status: 'ACTIVE',
         };
-        if (form.mediaType === 'video') {
+        // Carousel — resend the cards' EXISTING media identifiers. The backend
+        // rebuilds object_story_spec from scratch on every save, so a carousel
+        // whose cards aren't resent would be flattened to a single-media ad.
+        // Media is never re-uploaded here; only copy and links are editable.
+        if (form.adFormat === 'carousel' && Array.isArray(form.cards) && form.cards.length) {
+          adPayload.cards = form.cards.map((card) => ({
+            ...(card.videoId
+              ? {
+                  videoId: card.videoId,
+                  ...(card.videoThumbnailUrl
+                    ? { videoThumbnailUrl: card.videoThumbnailUrl }
+                    : {}),
+                }
+              : { imageHash: card.imageHash }),
+            headline: card.headline || undefined,
+            description: card.description || undefined,
+            link: String(card.link || '').trim() || undefined,
+          }));
+        } else if (form.mediaType === 'video') {
           adPayload.videoId = form.videoId;
           adPayload.videoThumbnailUrl = form.videoThumbnailUrl;
         } else {
@@ -1697,6 +1797,39 @@ function AdPreviewCard({ form, pages, schema }) {
     return () => URL.revokeObjectURL(localVideoUrl);
   }, [localVideoUrl]);
 
+  // Carousel — the single-media fields are empty by design, so without this
+  // the preview showed "Add media to preview" no matter how many cards had
+  // media on them.
+  const carouselCards =
+    form.adFormat === 'carousel' && Array.isArray(form.cards) && form.cards.length
+      ? form.cards
+      : null;
+
+  // Blob URLs for manually-uploaded card files, cached BY FILE rather than by
+  // card index or array identity. Editing any card's text produces a new
+  // `cards` array, so memoising on that would mint a fresh blob URL — and a
+  // new <img src> — on every keystroke, visibly reloading the image. Keyed on
+  // the File object, a URL is created once and reused until unmount.
+  const cardBlobCache = useRef(new Map());
+  useEffect(() => {
+    const cache = cardBlobCache.current;
+    return () => {
+      for (const url of cache.values()) URL.revokeObjectURL(url);
+      cache.clear();
+    };
+  }, []);
+  const blobUrlFor = (file) => {
+    if (!file) return null;
+    const cache = cardBlobCache.current;
+    if (!cache.has(file)) cache.set(file, URL.createObjectURL(file));
+    return cache.get(file);
+  };
+
+  const cardPreviewUrl = (card) =>
+    card.mediaType === 'video'
+      ? card.videoThumbnailUrl || blobUrlFor(card.videoFile) || card.videoUrl || null
+      : card.imageUrl || blobUrlFor(card.imageFile) || null;
+
   const mediaUrl = isVideo ? (form.videoUrl || localVideoUrl) : (form.imageUrl || localImageUrl);
   const ctaLabel = form.callToAction
     ? schema?.labels?.cta?.[form.callToAction] || form.callToAction
@@ -1721,7 +1854,44 @@ function AdPreviewCard({ form, pages, schema }) {
           </p>
         )}
         <div className="relative aspect-square w-full bg-gray-100 dark:bg-[#1e1e1e]">
-          {mediaUrl ? (
+          {carouselCards ? (
+            /* Card strip, in the order Meta renders them. Peeking the next
+               card is deliberate — it's what makes it read as a carousel
+               rather than a single image. */
+            <div className="scrollbar-thin flex h-full w-full snap-x snap-mandatory gap-1.5 overflow-x-auto p-1.5">
+              {carouselCards.map((card, i) => {
+                const url = cardPreviewUrl(card);
+                return (
+                  <div
+                    key={card.id || i}
+                    className="relative h-full w-[82%] shrink-0 snap-start overflow-hidden rounded-lg bg-gray-200 dark:bg-[#111]"
+                  >
+                    {url ? (
+                      <img src={url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-1">
+                        <ImageIcon className="h-5 w-5 text-gray-300 dark:text-white/15" />
+                        <span className="text-10 text-gray-400 dark:text-white/30">Card {i + 1}</span>
+                      </div>
+                    )}
+                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 py-px text-[9px] font-bold text-white">
+                      {i + 1}/{carouselCards.length}
+                    </span>
+                    {(card.headline || card.description) && (
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-1.5 pb-1 pt-4">
+                        {card.headline && (
+                          <p className="truncate text-10 font-bold text-white">{card.headline}</p>
+                        )}
+                        {card.description && (
+                          <p className="truncate text-[9px] text-white/70">{card.description}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : mediaUrl ? (
             isVideo ? (
               <video
                 key={mediaUrl}
@@ -1742,7 +1912,17 @@ function AdPreviewCard({ form, pages, schema }) {
             </div>
           )}
         </div>
-        {(form.headline || form.description || ctaLabel) && (
+        {carouselCards ? (
+          ctaLabel && (
+            <div className="flex items-center justify-end border-t border-gray-200 px-3 py-2.5 dark:border-white/5">
+              {/* Headline/description live on each card for a carousel — Meta
+                  ignores the ad-level ones — so only the CTA belongs here. */}
+              <span className="shrink-0 rounded-lg border border-gray-200 bg-gray-100 px-2.5 py-1 text-10 font-semibold text-gray-900 dark:border-white/10 dark:bg-white/6 dark:text-white">
+                {ctaLabel}
+              </span>
+            </div>
+          )
+        ) : (form.headline || form.description || ctaLabel) ? (
           <div className="flex items-center justify-between gap-2 border-t border-gray-200 px-3 py-2.5 dark:border-white/5">
             <div className="min-w-0">
               {form.headline && (
@@ -1758,7 +1938,7 @@ function AdPreviewCard({ form, pages, schema }) {
               </span>
             )}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -1789,7 +1969,13 @@ function WizardSideRail({
   schema,
   pages,
 }) {
-  const currentMessages = Object.values(stepErrors || {});
+  // Defensive: the errors map is contractually field -> string, but a single
+  // non-string slipping in used to crash the entire wizard with React's
+  // "Objects are not valid as a React child". A malformed entry now just
+  // doesn't render.
+  const currentMessages = Object.values(stepErrors || {}).filter(
+    (m) => typeof m === 'string' && m.length > 0,
+  );
   const showAudienceWidget = currentStepId === 'adSet' && adAccountId && form;
   const showAdPreview = currentStepId === 'ad' && form;
   return (
@@ -2038,6 +2224,15 @@ function StepBody({
 
 // ─── Step: Objective ────────────────────────────────────────────────────────
 
+const OBJECTIVE_DESCRIPTIONS = {
+  OUTCOME_AWARENESS: 'Show your ads to people who are most likely to remember them.',
+  OUTCOME_TRAFFIC: 'Send people to a destination — site, app, Messenger, profile, or calls.',
+  OUTCOME_LEADS: 'Collect leads via Instant Forms, Messenger, calls, Instagram, WhatsApp, or your app.',
+  OUTCOME_APP_PROMOTION: 'Drive installs to a single store — Apple App Store or Google Play.',
+  OUTCOME_ENGAGEMENT: 'Drive messages, video views, calls, post engagement, or website visits.',
+  OUTCOME_SALES: 'Drive purchases on your site, app, in chat, on calls, or from your product catalog.',
+};
+
 function ObjectiveStep({ form, update, schema, applyTemplate }) {
   const objectives = Object.entries(schema.objectives || {});
   return (
@@ -2068,15 +2263,6 @@ function ObjectiveStep({ form, update, schema, applyTemplate }) {
     </div>
   );
 }
-
-const OBJECTIVE_DESCRIPTIONS = {
-  OUTCOME_AWARENESS: 'Show your ads to people who are most likely to remember them.',
-  OUTCOME_TRAFFIC: 'Send people to a destination — site, app, Messenger, profile, or calls.',
-  OUTCOME_LEADS: 'Collect leads via Instant Forms, Messenger, calls, Instagram, WhatsApp, or your app.',
-  OUTCOME_APP_PROMOTION: 'Drive installs to a single store — Apple App Store or Google Play.',
-  OUTCOME_ENGAGEMENT: 'Drive messages, video views, calls, post engagement, or website visits.',
-  OUTCOME_SALES: 'Drive purchases on your site, app, in chat, on calls, or from your product catalog.',
-};
 
 // ─── Step: Conversion Location ──────────────────────────────────────────────
 
@@ -3811,6 +3997,24 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
   const videoOnly = mediaKind === 'video';
   const imageOnly = mediaKind === 'image';
 
+  // Carousel — a media MODE on this cell, not a separate cell. Eligibility is
+  // derived backend-side from the creative shape and serialised onto the cell
+  // (see cellSupportsCarousel in wizardSchema.js); the frontend never
+  // re-derives it, so the two can't drift.
+  const cardLimits = schema?.carouselCardLimits || { min: 2, max: 10 };
+  // The Format TOGGLE is hidden in edit-ad — an existing ad's format can't be
+  // switched, since the creative's media is reused rather than re-uploaded.
+  const canCarousel = !!cell?.supportsCarousel && mode !== 'edit-ad';
+  // ...but a carousel ad must still RENDER as one when editing, or the wizard
+  // would show a multi-card ad as single-media and the save would drop its
+  // cards. resolveAdForEdit sets form.adFormat from child_attachments.
+  const editingCarousel =
+    mode === 'edit-ad' &&
+    form.adFormat === 'carousel' &&
+    Array.isArray(form.cards) &&
+    form.cards.length > 0;
+  const isCarousel = (canCarousel && form.adFormat === 'carousel') || editingCarousel;
+
   // Add-Ad inherits the ad set's Page silently. The picker only appears as
   // a fallback if the page couldn't be resolved (and only on cells without
   // a Lead Form step, which owns the fallback picker otherwise).
@@ -3847,9 +4051,65 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
         error={errors.adName}
       />
 
+      {/* Format — Single image/video vs Carousel. Only on cells whose creative
+          shape can carry child_attachments; everything else never sees it. */}
+      {canCarousel && !isCatalog && (
+        <FieldShell
+          label="Format"
+          hint={
+            isCarousel
+              ? 'Two or more scrollable cards, each with its own media and link'
+              : 'One image or video'
+          }
+        >
+          <div className="flex items-stretch gap-2 max-w-sm">
+            <SegButton
+              active={!isCarousel}
+              onClick={() => update({ adFormat: 'single' })}
+            >
+              Single image or video
+            </SegButton>
+            <SegButton
+              active={isCarousel}
+              onClick={() =>
+                update({
+                  adFormat: 'carousel',
+                  // Seed the minimum so the editor opens usable rather than
+                  // empty — Meta rejects a carousel below `min` anyway.
+                  cards:
+                    form.cards && form.cards.length >= cardLimits.min
+                      ? form.cards
+                      : Array.from({ length: cardLimits.min }, () => newCard()),
+                })
+              }
+            >
+              Carousel
+            </SegButton>
+          </div>
+        </FieldShell>
+      )}
+
       {/* Sales/CATALOG — product images come from the catalog feed. No
           upload UI; explain why so users don't go looking for it. */}
-      {isCatalog ? (
+      {isCarousel ? (
+        <CarouselCardEditor
+          cards={form.cards || []}
+          onChange={(cards) => update({ cards })}
+          min={cardLimits.min}
+          max={cardLimits.max}
+          mediaKind={mediaKind}
+          mediaLocked={editingCarousel}
+          cardErrors={
+            validateCarouselCards(form.cards, {
+              mediaKind,
+              min: cardLimits.min,
+              max: cardLimits.max,
+              mediaLocked: editingCarousel,
+            }).perCard
+          }
+          error={errors.media}
+        />
+      ) : isCatalog ? (
         <FieldShell label="Media" hint="Meta picks one product image per delivery from your selected Product Set.">
           <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/3">
             <div className="flex h-16 w-24 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
@@ -4000,7 +4260,10 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
           buildAdSchemaV2 (meta.v2.validator.js). Applies to Sales/CATALOG
           too — see isCatalog's docblock above for why the caps are no
           longer skipped there. */}
-      {requiredFields.has('headline') && (
+      {/* Ad-level headline is hidden on a carousel: Meta keeps the headline on
+          each CARD and link_data has no ad-level equivalent, so anything typed
+          here would be collected and then dropped by the payload builder. */}
+      {requiredFields.has('headline') && !isCarousel && (
         <div className="flex flex-col gap-1.5">
           <TextField
             label="Headline"
@@ -4025,21 +4288,36 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
           error={errors.primaryText}
         />
       )}
-      <TextField
-        label="Description"
-        value={form.description}
-        onChange={(v) => update({ description: v })}
-        maxLength={30}
-        placeholder="Optional secondary copy"
-      />
+      {/* Per-card on a carousel, same as the headline above. */}
+      {!isCarousel && (
+        <TextField
+          label="Description"
+          value={form.description}
+          onChange={(v) => update({ description: v })}
+          maxLength={30}
+          placeholder="Optional secondary copy"
+        />
+      )}
       {showLinkUrl && (
         <TextField
-          label={isLeadGen ? 'Website URL' : isCatalog ? 'Destination URL' : 'Destination URL'}
+          label={
+            isLeadGen
+              ? 'Website URL'
+              : isCarousel
+                ? 'Default destination URL'
+                : 'Destination URL'
+          }
           hint={
             isLeadGen
               ? 'Meta requires a real website URL on lead ads, but the ad opens your form — this link is only a fallback, not where the button goes.'
               : isCatalog
               ? "Meta sends shoppers to each product's own page automatically. Enter a real URL here as the fallback — usually your store's homepage."
+              : isCarousel
+              ? // Without this the field reads exactly like a single-image ad's
+                // and people reasonably conclude every card goes to one place.
+                // Each card can override it; Meta also uses this as the See
+                // More link at the end of the carousel, so it stays required.
+                "Used by any card that doesn't set its own link — and by the See More card at the end of the carousel."
               : undefined
           }
           required={requiredFields.has('linkUrl')}

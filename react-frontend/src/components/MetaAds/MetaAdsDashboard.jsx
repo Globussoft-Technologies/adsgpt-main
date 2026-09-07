@@ -67,6 +67,17 @@ const FEATURE_WIZARD_V2 = import.meta.env.VITE_FEATURE_WIZARD_V2 === 'true';
 import { useSelector } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+// Module scope, not per-render: the tab id is read out of the URL in a
+// useState initialiser, which runs before anything declared inside the
+// component body exists.
+const TABS = [
+  { id: 'analytics', label: 'Analytics', icon: TrendingUp },
+  // { id: 'audit', label: 'Audit', icon: ClipboardList },
+  { id: 'campaigns', label: 'Campaigns', icon: Layers },
+  { id: 'leads', label: 'Leads', icon: Inbox },
+];
+const TAB_IDS = new Set(TABS.map((t) => t.id));
+
 export default function MetaAdsDashboard() {
   const { userData } = useSelector((state) => state.socket);
   const navigate = useNavigate();
@@ -85,6 +96,9 @@ export default function MetaAdsDashboard() {
   // point (see its plan-limit check), this is just avoiding a wasted trip
   // through the whole wizard when the cap is already known to be hit.
   const [campaignUsage, setCampaignUsage] = useState(null);
+  // Meta's account-level Opportunity Score (0-100). Null whenever Meta doesn't
+  // return one — the pill is omitted rather than showing a wrong number.
+  const [opportunityScore, setOpportunityScore] = useState(null);
   // Campaign ids holding a plan slot. `null` = the plan is uncapped and the
   // backend sent no managed-slot state, so NOTHING is locked — distinct from
   // an empty Set, which means "capped, and the user manages none yet".
@@ -138,12 +152,34 @@ export default function MetaAdsDashboard() {
     // setSearchParams identity is stable; only the window should retrigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
-  // A refresh with a drilled-down campaign/ad set/ad still in the URL should
-  // land back on the Campaigns tab (where TableViewCampaigns restores the
-  // drill-down itself) instead of bouncing to Analytics.
-  const [activeTab, setActiveTab] = useState(() =>
-    searchParams.get('campaignId') ? 'campaigns' : 'analytics',
-  );
+  // The active tab lives in the URL (`?tab=`), so a refresh — or a link
+  // someone pasted to a colleague — reopens where they were instead of
+  // bouncing to Analytics. Validated against TAB_IDS so a stale or hand-edited
+  // value can't select a tab that doesn't render.
+  //
+  // The campaignId fallback stays for links predating the `tab` param: a
+  // drilled-down campaign in the URL implies the Campaigns tab, where
+  // TableViewCampaigns restores the drill-down itself.
+  const [activeTab, setActiveTab] = useState(() => {
+    const fromUrl = searchParams.get('tab');
+    if (fromUrl && TAB_IDS.has(fromUrl)) return fromUrl;
+    return searchParams.get('campaignId') ? 'campaigns' : 'analytics';
+  });
+
+  // Mirror the tab back into the URL. `replace` so switching tabs doesn't
+  // stack a history entry per click — otherwise Back walks the tab bar instead
+  // of leaving the page.
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (next.get('tab') === activeTab) return next;
+        next.set('tab', activeTab);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [activeTab, setSearchParams]);
 
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
@@ -291,6 +327,9 @@ export default function MetaAdsDashboard() {
         setCampaigns(r.campaigns || []);
         setCampaignUsage(readPlanLimit(r, PLAN_LIMITS.metaCampaigns));
         setManagedCampaignIds(readManagedCampaignIds(r));
+        setOpportunityScore(
+          Number.isFinite(r.opportunityScore) ? r.opportunityScore : null,
+        );
       }
     } catch { /* noop */ } finally {
       if (requestId === campaignsRequestRef.current) {
@@ -423,6 +462,7 @@ export default function MetaAdsDashboard() {
     (async () => {
       setLoadingCampaigns(true);
       setCampaigns([]);
+      setOpportunityScore(null);
       setAnalyticsData(null);
       try {
         const res = await getCampaigns(selectedAccount.id, { facebookId });
@@ -430,6 +470,9 @@ export default function MetaAdsDashboard() {
           setCampaigns(res.campaigns || []);
           setCampaignUsage(readPlanLimit(res, PLAN_LIMITS.metaCampaigns));
           setManagedCampaignIds(readManagedCampaignIds(res));
+          setOpportunityScore(
+            Number.isFinite(res.opportunityScore) ? res.opportunityScore : null,
+          );
         }
       } catch {
         /* noop */
@@ -509,14 +552,6 @@ export default function MetaAdsDashboard() {
   };
 
   const activeCampaigns = campaigns.filter((c) => c.status === 'ACTIVE').length;
-
-  const TABS = [
-    { id: 'analytics', label: 'Analytics', icon: TrendingUp },
-   
-    // { id: 'audit', label: 'Audit', icon: ClipboardList },
-    { id: 'campaigns', label: 'Campaigns', icon: Layers },
-    { id: 'leads', label: 'Leads', icon: Inbox },
-  ];
 
   return (
     // Row layout: the main dashboard column (flex-1) sits beside the docked
@@ -663,7 +698,6 @@ export default function MetaAdsDashboard() {
                         // the filter has to be reset here too or it persists
                         // into the next open.
                         setAccountQuery('');
-                        setActiveTab('analytics');
                       }}
                       className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-gray-100 dark:hover:bg-white/5 ${selectedAccount?.id === acc.id ? 'bg-gray-100 dark:bg-white/5' : ''}`}
                     >
@@ -851,6 +885,7 @@ export default function MetaAdsDashboard() {
                 onRefresh={reloadCampaigns}
                 onNewCampaign={() => openWizard('create-full')}
                 campaignUsage={campaignUsage}
+                opportunityScore={opportunityScore}
                 managedCampaignIds={managedCampaignIds}
                 onManagedCampaignsChanged={reloadCampaigns}
                 facebookId={activeFacebookId}

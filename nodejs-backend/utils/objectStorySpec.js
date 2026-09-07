@@ -53,10 +53,21 @@ function buildObjectStorySpec(shape, params) {
   // videoId explicitly (caller bug: shouldn't have set them).
   const hasImage = !!params.imageHash;
   const hasVideo = !!params.videoId;
+  const isCarousel = Array.isArray(params.cards) && params.cards.length > 0;
   if (shape === "template_data") {
     if (hasImage || hasVideo) {
       throw new Error(
         "buildObjectStorySpec('template_data'): images come from the catalog feed — do not supply imageHash or videoId",
+      );
+    }
+  } else if (isCarousel) {
+    // Carousel — media lives on each card, so BOTH ad-level fields are empty
+    // by design and the exactly-one rule below would reject a valid payload.
+    // Sending one anyway is a caller bug with a silent failure mode: Meta
+    // renders the single image and ignores child_attachments entirely.
+    if (hasImage || hasVideo) {
+      throw new Error(
+        "buildObjectStorySpec: carousel media lives on each card — do not also supply imageHash or videoId",
       );
     }
   } else if (hasImage === hasVideo) {
@@ -82,8 +93,14 @@ function buildObjectStorySpec(shape, params) {
   // shape + media kind. template_data is its own top-level key Meta
   // recognises for Dynamic Product Ads — same level as link_data /
   // video_data, NOT nested.
+  // Carousel is always link_data, even when every card is a video —
+  // child_attachments has no video_data equivalent.
   const dataKey =
-    shape === "template_data" ? "template_data" : hasVideo ? "video_data" : "link_data";
+    shape === "template_data"
+      ? "template_data"
+      : hasVideo && !isCarousel
+        ? "video_data"
+        : "link_data";
   const buildPair = (data) => ({ ...base, [dataKey]: data });
 
   switch (shape) {
@@ -202,7 +219,77 @@ function attachCopy(data, p) {
 
 // ─── link_data — Traffic/Website (V1-verified shape) ─────────────────────────
 
+/**
+ * buildChildAttachments — Meta's carousel. `child_attachments` is an ordered
+ * array of 2-10 cards living INSIDE link_data; there is no separate carousel
+ * creative type, which is why carousel is a media mode on existing cells
+ * rather than a cell of its own (see cellSupportsCarousel in wizardSchema.js).
+ *
+ * Per-card fields intentionally mirror the single-media ones: each card can
+ * carry its own destination, headline and description, and falls back to the
+ * ad-level value when it doesn't. That fallback is what lets the wizard offer
+ * "same link for every card" without duplicating it N times in the payload.
+ */
+function buildChildAttachments(cards, p) {
+  return cards.map((card, i) => {
+    const hasVideo = !!card.videoId;
+    if (!hasVideo && !card.imageHash) {
+      throw new Error(
+        `child_attachments[${i}]: imageHash or videoId is required`,
+      );
+    }
+
+    const att = hasVideo
+      ? { video_id: card.videoId }
+      : { image_hash: card.imageHash };
+    // Poster frame, same optionality as the single-media path — Meta picks a
+    // thumbnail itself when the encoder hasn't produced one yet.
+    if (hasVideo && card.videoThumbnailUrl) att.image_url = card.videoThumbnailUrl;
+
+    const link = card.link || p.linkUrl;
+    if (!link) throw new Error(`child_attachments[${i}]: link is required`);
+    att.link = link;
+
+    // `name` is the card headline; `description` the subtext. Unlike the
+    // single-media path these keys do NOT differ by media kind — a video card
+    // inside child_attachments still uses name/description, not
+    // title/link_description.
+    if (card.headline) att.name = card.headline;
+    if (card.description) att.description = card.description;
+
+    const cta = card.callToAction || p.callToAction;
+    if (cta && cta !== "NO_BUTTON") {
+      att.call_to_action = { type: cta, value: { link } };
+    }
+    return att;
+  });
+}
+
 function buildLinkData(p) {
+  // ── Carousel branch ──────────────────────────────────────────────────────
+  // Cards replace the single media entirely: emitting image_hash alongside
+  // child_attachments makes Meta render the single image and silently ignore
+  // the cards, which looks like "carousel didn't work" with no error.
+  if (Array.isArray(p.cards) && p.cards.length > 0) {
+    if (!p.linkUrl) throw new Error("link_data: linkUrl is required");
+    const data = {
+      link: p.linkUrl,
+      child_attachments: buildChildAttachments(p.cards, p),
+    };
+    // Primary text is shared across the carousel; headline and description are
+    // per-card, so attachCopy's name/description are deliberately NOT applied
+    // here — Meta ignores them at this level once child_attachments is set.
+    if (p.primaryText) data.message = p.primaryText;
+    // Let Meta reorder cards by performance. Off unless asked for: it changes
+    // the order the advertiser authored, which matters when the cards tell a
+    // sequence.
+    if (p.multiShareOptimized === true) data.multi_share_optimized = true;
+    // Trailing card showing the Page profile. Meta defaults this ON, so only
+    // an explicit false is worth sending.
+    if (p.multiShareEndCard === false) data.multi_share_end_card = false;
+    return data;
+  }
+
   const isVideo = !!p.videoId;
   if (!isVideo && !p.imageHash) {
     throw new Error("link_data: imageHash or videoId is required");

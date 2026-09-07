@@ -1,7 +1,8 @@
 import React, { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Layers, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
-import { STATUS_MAP } from './metaAdsUtils';
+import { Layers, ArrowUpRight, ArrowDownRight, Minus, GraduationCap, ShieldAlert } from 'lucide-react';
+import { STATUS_MAP, deliveryTone } from './metaAdsUtils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 // ─── chart tooltip ────────────────────────────────────────────────────────────
 
@@ -38,6 +39,133 @@ export function StatusBadge({ status }) {
       <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${s.dot}`} />
       {status}
     </span>
+  );
+}
+
+// ─── delivery badge ───────────────────────────────────────────────────────────
+// What Meta is ACTUALLY doing with the entity, as opposed to what the user last
+// set. Rendered next to StatusBadge only when the two disagree — showing
+// "Active / Active" on every healthy row would be pure noise, while a rejected
+// ad reading "Active" was the bug this exists to fix.
+
+export function DeliveryBadge({ delivery, issues }) {
+  if (!delivery) return null;
+
+  // Nothing to add when Meta agrees with the user's setting and there are no
+  // issues attached.
+  const issueList = Array.isArray(issues) ? issues.filter(Boolean) : [];
+  if (!delivery.diverged && issueList.length === 0) return null;
+
+  const t = deliveryTone(delivery.tone);
+
+  const badge = (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold tracking-wide uppercase ${t.bg} ${t.text}`}
+    >
+      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${t.dot}`} />
+      {delivery.label}
+    </span>
+  );
+
+  // Meta's issues_info carries the human-readable "why", which is the whole
+  // point of surfacing this — a badge alone still leaves the user guessing.
+  if (issueList.length === 0) return badge;
+
+  return (
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <span className="inline-flex cursor-help">{badge}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="max-w-80">
+        <div className="space-y-1.5">
+          {issueList.slice(0, 3).map((issue, i) => (
+            <p key={i} className="text-xs leading-relaxed">
+              {issue.error_summary || issue.error_message || issue.error_type}
+            </p>
+          ))}
+          {issueList.length > 3 && (
+            <p className="text-[11px] opacity-70">+{issueList.length - 3} more</p>
+          )}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ─── learning phase badge ─────────────────────────────────────────────────────
+// Only rendered for ad sets still learning or stuck learning-limited; an ad set
+// that finished learning normally gets nothing (the backend returns null).
+
+export function LearningBadge({ learning }) {
+  if (!learning) return null;
+  const t = deliveryTone(learning.tone);
+
+  const limited = learning.stage === 'LEARNING_LIMITED';
+
+  return (
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <span
+          className={`inline-flex cursor-help items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold tracking-wide uppercase ${t.bg} ${t.text}`}
+        >
+          <GraduationCap className="h-2.5 w-2.5 shrink-0" />
+          {learning.label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="max-w-80">
+        <p className="text-xs leading-relaxed">
+          {limited
+            ? "This ad set left the learning phase without enough optimisation events, so delivery stays unstable and costs more. Widening the audience, raising the budget, or consolidating it with a similar ad set usually fixes it."
+            : "Meta is still learning who responds best. Performance is unreliable and costs fluctuate until it exits — roughly 50 optimisation events."}
+          {typeof learning.conversions === 'number' && (
+            <> {' '}<span className="font-semibold">{learning.conversions}</span> events so far.</>
+          )}
+        </p>
+        {learning.lastSignificantEditTime && (
+          <p className="mt-1.5 text-[11px] opacity-70">
+            Learning restarted on {new Date(learning.lastSignificantEditTime).toLocaleDateString()} — significant
+            edits reset it.
+          </p>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ─── ad review / rejection badge ──────────────────────────────────────────────
+// A rejected ad is otherwise visually identical to a running one, because its
+// `status` stays ACTIVE — the user never paused it, Meta stopped it.
+
+export function ReviewBadge({ review }) {
+  if (!review?.reasons?.length) return null;
+
+  return (
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <span className="inline-flex cursor-help items-center gap-1 rounded-full border border-red-400/30 bg-red-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-600 dark:border-red-400/20 dark:text-red-400">
+          <ShieldAlert className="h-2.5 w-2.5 shrink-0" />
+          {review.count === 1 ? 'Policy issue' : `${review.count} policy issues`}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="max-w-80">
+        <div className="space-y-2">
+          {review.reasons.slice(0, 3).map((r, i) => (
+            <div key={i}>
+              <p className="text-xs font-semibold">
+                {r.policy}
+                {r.placement && (
+                  <span className="ml-1 font-normal opacity-70">({r.placement})</span>
+                )}
+              </p>
+              <p className="text-xs leading-relaxed opacity-90">{r.reason}</p>
+            </div>
+          ))}
+          {review.reasons.length > 3 && (
+            <p className="text-[11px] opacity-70">+{review.reasons.length - 3} more</p>
+          )}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

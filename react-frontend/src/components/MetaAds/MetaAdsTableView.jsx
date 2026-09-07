@@ -23,12 +23,17 @@ import {
   Lock,
   Check,
   Lightbulb,
+  Copy,
+  Layers,
 } from 'lucide-react';
 import {
   getAdSets,
   getAdSetAds,
   updateAdStatus,
   deleteMetaCampaign,
+  deleteMetaAdSet,
+  deleteMetaAd,
+  duplicateMetaEntity,
   resolveCellForAdSet,
   resolveCampaignForAdd,
   resolveAdSetForEdit,
@@ -40,14 +45,31 @@ import {
 import { globalToast } from '@/utils/globalToast';
 import { GA4Events } from '@/utils/ga4';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { StatusBadge, Spinner, EmptyState } from './MetaAdsAtoms';
+import {
+  StatusBadge,
+  Spinner,
+  EmptyState,
+  DeliveryBadge,
+  LearningBadge,
+  ReviewBadge,
+} from './MetaAdsAtoms';
 import {
   labelObjective,
   labelBillingEvent,
   labelOptimizationGoal,
   labelBidType,
   labelCTA,
+  matchesTableFilter,
 } from './metaAdsUtils';
+import {
+  FilterPills,
+  useTableSelection,
+  useBulkActions,
+  SelectAllCheckbox,
+  RowCheckbox,
+  BulkActionBar,
+  DeleteConfirmModal,
+} from './MetaAdsTableControls';
 import MetricsPicker from './MetricsPicker';
 import {
   useTableMetricColumns,
@@ -253,7 +275,13 @@ function MetaRecommendationsModal({ entity, onClose }) {
             {recommendations.map((recommendation, index) => {
               // Meta ships no title with these — `title` is the humanised
               // `type` enum; the substance is in `body`.
+              // Meta's own popover leads with the outcome and shows the
+              // category underneath; `headline` is composed backend-side from
+              // lift_estimate, falling back to the enum label when Meta sends
+              // no usable lift.
               const title = metaText(recommendation.title) || 'Recommendation from Meta';
+              const headline = metaText(recommendation.headline) || title;
+              const hasDistinctCategory = headline !== title;
               const body = metaText(recommendation.body);
               const lift = metaText(recommendation.liftEstimate);
               const scoreLift = recommendation.opportunityScoreLift;
@@ -282,7 +310,10 @@ function MetaRecommendationsModal({ entity, onClose }) {
                       </span>
                     )}
                   </div>
-                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h4>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{headline}</h4>
+                  {hasDistinctCategory && (
+                    <p className="mt-0.5 text-[11px] font-medium text-gray-400 dark:text-white/40">{title}</p>
+                  )}
                   {body && <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-white/70">{body}</p>}
                   {(time || url) && (
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-gray-200 pt-2 dark:border-white/8">
@@ -536,7 +567,7 @@ function TableShell({ toolbar, children, colSpan, loading, emptyMsg }) {
 
 // ─── campaign table ───────────────────────────────────────────────────────────
 
-function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown, onRefresh, onNewCampaign, campaignUsage, managedCampaignIds, onManagedCampaignsChanged, facebookId, onLaunchWizard, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+function CampaignTable({ campaigns, loading, adAccountId, currency, opportunityScore, onDrillDown, onRefresh, onNewCampaign, campaignUsage, managedCampaignIds, onManagedCampaignsChanged, facebookId, onLaunchWizard, query, onQueryChange, filter, onFilterChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
   // Plan-slot state. `managedCampaignIds === null` means the plan is uncapped
   // — every helper below then reports "managed", so no lock UI renders and
   // paying tiers see the table exactly as before this feature.
@@ -586,8 +617,9 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
     metricKeys,
     onMetricKeysSaved,
   });
-  // 7 structural columns + metric columns + Actions, plus Manage when capped.
-  const colCount = 8 + metrics.entries.length + (slotsCapped ? 1 : 0);
+  // 1 select + 7 structural columns + metric columns + Actions, plus Manage
+  // when capped.
+  const colCount = 9 + metrics.entries.length + (slotsCapped ? 1 : 0);
   // Search by campaign name — client-side over the already-fetched list
   // (same list `useSortedRows` sorts), not a separate API call. Matches
   // the search-input pattern already used in DetailedTargetingPicker.jsx
@@ -597,14 +629,50 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
   // local state would reset the search every time the user comes back.
   const filteredCampaigns = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return campaigns;
-    return campaigns.filter((c) => (c.name || '').toLowerCase().includes(q));
-  }, [campaigns, query]);
+    return campaigns.filter(
+      (c) =>
+        (!q || (c.name || '').toLowerCase().includes(q)) &&
+        matchesTableFilter(c, filter),
+    );
+  }, [campaigns, query, filter]);
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(
     filteredCampaigns,
     'name',
     metrics.resolveSortValue,
   );
+
+  // Only managed campaigns are actionable — the same rule that makes unmanaged
+  // rows undrillable. Selecting one would offer bulk actions the backend's
+  // plan gate rejects row by row.
+  const selection = useTableSelection(sorted, { selectable: (c) => isManaged(c.id) });
+  const bulk = useBulkActions({
+    level: 'campaign',
+    adAccountId,
+    selection,
+    onRefresh,
+  });
+
+  const [duplicatingId, setDuplicatingId] = useState(null);
+
+  const handleDuplicate = async (e, c) => {
+    e.stopPropagation();
+    setDuplicatingId(c.id);
+    try {
+      const res = await duplicateMetaEntity({
+        adAccountId,
+        level: 'campaign',
+        id: c.id,
+      });
+      globalToast.success(res?.message || 'Campaign duplicated');
+      onRefresh?.();
+    } catch (err) {
+      globalToast.error(
+        err?.response?.data?.error || 'Failed to duplicate campaign',
+      );
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
 
   // Edit — read FRESH campaign settings (the list is cached + budgets are
   // formatted strings, useless for editing) then open the wizard prefilled.
@@ -682,6 +750,26 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
           <p className="truncate text-xs font-semibold text-gray-500 dark:text-white/70">
             {campaigns.length} campaign{campaigns.length === 1 ? '' : 's'}
           </p>
+          {/* Meta's account-level Opportunity Score — the aggregate each
+              recommendation's "+N" lift adds up to. Omitted entirely when Meta
+              returns none, rather than rendering a misleading 0. */}
+          {Number.isFinite(opportunityScore) && (
+            <Tooltip delayDuration={150}>
+              <TooltipTrigger asChild>
+                <span className="flex shrink-0 cursor-help items-center gap-1 rounded-lg bg-sky-50 px-2 py-0.5 text-10 font-semibold text-sky-700 dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]">
+                  <Lightbulb className="h-2.5 w-2.5" />
+                  {opportunityScore}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6} className="max-w-72">
+                <p className="text-xs leading-relaxed">
+                  Meta&apos;s Opportunity Score for this ad account (0–100). Applying the
+                  suggestions on the rows below raises it — each one shows the points it
+                  is worth.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           {slotsCapped && slotsAllowed !== null && (
             <span
               className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-0.5 text-10 font-semibold ${
@@ -697,6 +785,7 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
           )}
         </div>
         <div className="flex items-center gap-2">
+          <FilterPills rows={campaigns} value={filter} onChange={onFilterChange} />
           <div className="relative w-56">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
             <input
@@ -757,14 +846,23 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
         </div>
       </div>
 
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table
           className="w-full min-w-[700px] border-collapse"
-          style={{ minWidth: 850 + 120 * metrics.entries.length }}
+          style={{ minWidth: 900 + 120 * metrics.entries.length }}
         >
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
-              <SortTh label="Campaign"         colKey="name"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[36%] pl-5" />
+              <th className="w-10 pl-5 pr-1 py-3 text-left">
+                <SelectAllCheckbox
+                  checked={selection.allVisibleSelected}
+                  indeterminate={selection.someVisibleSelected}
+                  onChange={selection.toggleAll}
+                  disabled={selection.selectableCount === 0}
+                />
+              </th>
+              <SortTh label="Campaign"         colKey="name"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[34%] pl-1" />
               <SortTh label="Status"           colKey="status"           sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Objective"        colKey="objective"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Daily Budget"     colKey="daily_budget"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -807,8 +905,17 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
                       : 'cursor-default bg-gray-50/60 dark:bg-white/1.5'
                   }`}
                 >
+                  {/* select */}
+                  <td className="pl-5 pr-1 py-4" onClick={(e) => e.stopPropagation()}>
+                    <RowCheckbox
+                      checked={selection.isSelected(c.id)}
+                      onChange={() => selection.toggle(c.id)}
+                      disabled={!managed}
+                      label={`Select ${c.name}`}
+                    />
+                  </td>
                   {/* campaign name */}
-                  <td className="pl-5 pr-4 py-4">
+                  <td className="pl-1 pr-4 py-4">
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-0.5 shrink-0 rounded-full bg-gray-300 dark:bg-white/20" />
                       <div className="min-w-0 flex-1">
@@ -820,7 +927,7 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
                   </td>
                   {/* status */}
                   <td className="px-4 py-4">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <StatusBadge status={status} />
                       <ToggleSwitch
                         status={status}
@@ -831,6 +938,9 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
                         toggling={!!toggling[c.id]}
                         disabled={!managed}
                       />
+                      {/* Only renders when Meta disagrees with `status` or
+                          there are delivery issues to explain. */}
+                      <DeliveryBadge delivery={c.delivery} issues={c.issues_info} />
                     </div>
                   </td>
                   {/* objective */}
@@ -928,6 +1038,18 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
                         </button>
                       )}
                       <button
+                        onClick={(e) => handleDuplicate(e, c)}
+                        disabled={duplicatingId === c.id || !managed}
+                        title={managed ? 'Duplicate campaign (creates a paused copy)' : 'Manage this campaign to duplicate it'}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {duplicatingId === c.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setPendingDelete(c);
@@ -945,6 +1067,19 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
             })}
           </tbody>
         </table>
+      </div>
+
+      <BulkActionBar
+        level="campaign"
+        count={selection.selectedCount}
+        busy={bulk.busy}
+        progress={bulk.progress}
+        onActivate={bulk.onActivate}
+        onPause={bulk.onPause}
+        onDuplicate={bulk.onDuplicate}
+        onDelete={bulk.onDelete}
+        onClear={selection.clear}
+      />
       </div>
 
       {/* delete confirmation modal */}
@@ -1065,7 +1200,7 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, onDrillDown,
 
 // ─── ad-set table ─────────────────────────────────────────────────────────────
 
-function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWizard, manageNonce, restoreAdSetId, query, onQueryChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWizard, manageNonce, restoreAdSetId, query, onQueryChange, filter, onFilterChange, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
   const metrics = useTableMetricColumns({
     level: 'adset',
     adAccountId,
@@ -1088,9 +1223,12 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
   // state would reset the search every time the user comes back.
   const filteredAdSets = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return adSets;
-    return adSets.filter((s) => (s.name || '').toLowerCase().includes(q));
-  }, [adSets, query]);
+    return adSets.filter(
+      (s) =>
+        (!q || (s.name || '').toLowerCase().includes(q)) &&
+        matchesTableFilter(s, filter),
+    );
+  }, [adSets, query, filter]);
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(
     filteredAdSets,
     'name',
@@ -1263,6 +1401,64 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
     finally  { setToggling((p) => ({ ...p, [s.id]: false })); }
   };
 
+  // Every ad set here belongs to a campaign the user already drilled into,
+  // which is only possible for a managed campaign — so unlike the campaign
+  // table there's no per-row selectability rule.
+  const selection = useTableSelection(sorted);
+  const bulk = useBulkActions({
+    level: 'adset',
+    adAccountId,
+    campaignId: campaign?.id,
+    selection,
+    onRefresh: handleRefresh,
+  });
+
+  const [duplicatingId, setDuplicatingId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDuplicate = async (e, s) => {
+    e.stopPropagation();
+    setDuplicatingId(s.id);
+    try {
+      const res = await duplicateMetaEntity({
+        adAccountId,
+        level: 'adset',
+        id: s.id,
+        campaignId: campaign?.id,
+      });
+      globalToast.success(res?.message || 'Ad set duplicated');
+      await handleRefresh();
+    } catch (err) {
+      globalToast.error(
+        err?.response?.data?.error || 'Failed to duplicate ad set',
+      );
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete || !adAccountId) return;
+    setDeleting(true);
+    try {
+      const res = await deleteMetaAdSet({
+        adAccountId,
+        adSetId: pendingDelete.id,
+        campaignId: campaign?.id,
+      });
+      globalToast.success(res?.message || 'Ad set deleted');
+      setPendingDelete(null);
+      await handleRefresh();
+    } catch (err) {
+      globalToast.error(
+        err?.response?.data?.error || 'Failed to delete ad set',
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 workspace-card dark:border-white/10 dark:bg-[#141414]">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2.5 dark:border-white/10 dark:bg-[#181818]">
@@ -1270,6 +1466,7 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
           Ad sets in <span className="text-gray-900 dark:text-white">{campaign.name}</span>
         </p>
         <div className="flex items-center gap-2">
+          <FilterPills rows={adSets} value={filter} onChange={onFilterChange} />
           <div className="relative w-56">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
             <input
@@ -1298,14 +1495,23 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
           {canAdd && <AddButton label="Add Ad Set" onClick={handleAddAdSet} busy={resolvingAdd} />}
         </div>
       </div>
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div className="scrollbar-thin flex-1 overflow-auto">
         <table
           className="w-full min-w-[680px] border-collapse"
-          style={{ minWidth: 830 + 120 * metrics.entries.length }}
+          style={{ minWidth: 900 + 120 * metrics.entries.length }}
         >
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
-              <SortTh label="Ad Set"            colKey="name"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[34%] pl-5" />
+              <th className="w-10 pl-5 pr-1 py-3 text-left">
+                <SelectAllCheckbox
+                  checked={selection.allVisibleSelected}
+                  indeterminate={selection.someVisibleSelected}
+                  onChange={selection.toggleAll}
+                  disabled={selection.selectableCount === 0}
+                />
+              </th>
+              <SortTh label="Ad Set"            colKey="name"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[32%] pl-1" />
               <SortTh label="Status"            colKey="status"           sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Daily Budget"      colKey="daily_budget"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Billing Event"     colKey="billing_event"    sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -1313,17 +1519,17 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
               <SortTh label="Start Date"        colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <th className="min-w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Recommendations</th>
               <MetricHeaderCells entries={metrics.entries} SortTh={SortTh} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
+              <th className="w-24 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={(canAdd ? 8 : 7) + metrics.entries.length} className="py-14"><Spinner /></td></tr>
+              <tr><td colSpan={9 + metrics.entries.length} className="py-14"><Spinner /></td></tr>
             )}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={(canAdd ? 8 : 7) + metrics.entries.length} className="py-14"><EmptyState message={query ? `No ad sets match "${query}"` : 'No ad sets in this campaign'} /></td></tr>
+              <tr><td colSpan={9 + metrics.entries.length} className="py-14"><EmptyState message={query || filter !== 'all' ? 'No ad sets match the current filters' : 'No ad sets in this campaign'} /></td></tr>
             )}
-            {sorted.map((s, idx) => {
+            {!loading && sorted.map((s, idx) => {
               const status = getStatus(s);
               return (
                 <motion.tr
@@ -1334,7 +1540,14 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
                   onClick={() => onDrillDown(s)}
                   className="group cursor-pointer border-b border-gray-200 transition-colors hover:bg-gray-100 dark:border-white/10 dark:hover:bg-white/3 last:border-b-0"
                 >
-                  <td className="pl-5 pr-4 py-4">
+                  <td className="pl-5 pr-1 py-4" onClick={(e) => e.stopPropagation()}>
+                    <RowCheckbox
+                      checked={selection.isSelected(s.id)}
+                      onChange={() => selection.toggle(s.id)}
+                      label={`Select ${s.name}`}
+                    />
+                  </td>
+                  <td className="pl-1 pr-4 py-4">
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-0.5 shrink-0 rounded-full bg-gray-300 dark:bg-white/20" />
                       <div className="min-w-0">
@@ -1344,9 +1557,13 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <StatusBadge status={status} />
                       <ToggleSwitch status={status} onToggle={(e) => handleToggle(e, s)} toggling={!!toggling[s.id]} />
+                      <DeliveryBadge delivery={s.delivery} issues={s.issues_info} />
+                      {/* Null unless the ad set is still learning or stuck
+                          learning-limited — see utils/metaDelivery.js. */}
+                      <LearningBadge learning={s.learning} />
                     </div>
                   </td>
                   <td className="px-4 py-4 text-sm font-medium text-gray-600 dark:text-white/80">
@@ -1380,9 +1597,11 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
                     loading={metrics.loading}
                     currency={currency}
                   />
-                  {canAdd && (
-                    <td className="pr-5 pl-2 py-4">
-                      <div className="flex items-center justify-end">
+                  <td className="pr-5 pl-2 py-4">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {/* Edit needs the V2 wizard; duplicate and delete work on
+                          any objective, so they render unconditionally. */}
+                      {canAdd && (
                         <button
                           onClick={(e) => handleEditAdSet(e, s)}
                           disabled={editingId === s.id}
@@ -1395,15 +1614,58 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
                             <Pencil className="h-3.5 w-3.5" />
                           )}
                         </button>
-                      </div>
-                    </td>
-                  )}
+                      )}
+                      <button
+                        onClick={(e) => handleDuplicate(e, s)}
+                        disabled={duplicatingId === s.id}
+                        title="Duplicate ad set (creates a paused copy)"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
+                      >
+                        {duplicatingId === s.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPendingDelete(s);
+                        }}
+                        title="Delete ad set"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-red-500/40 hover:bg-red-50 hover:text-red-600 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
                 </motion.tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      <BulkActionBar
+        level="adset"
+        count={selection.selectedCount}
+        busy={bulk.busy}
+        progress={bulk.progress}
+        onActivate={bulk.onActivate}
+        onPause={bulk.onPause}
+        onDuplicate={bulk.onDuplicate}
+        onDelete={bulk.onDelete}
+        onClear={selection.clear}
+      />
+      </div>
+
+      <DeleteConfirmModal
+        entity={pendingDelete}
+        level="adset"
+        busy={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={handleConfirmDelete}
+      />
+
 
       <MetricsPicker
         open={metrics.pickerOpen}
@@ -1463,6 +1725,14 @@ function AdDrawer({ ad, onClose }) {
   // drawer opens.
   const [media, setMedia] = useState(null);
   const [mediaLoading, setMediaLoading] = useState(false);
+  // Carousel is detected from the RESOLVED preview, not from the creative:
+  // object_type doesn't distinguish a carousel from a single image, and the
+  // cards only exist in object_story_spec.link_data.child_attachments, which
+  // the preview resolver reads for us.
+  //
+  // MUST stay below `media` — reading it above the useState put it in the
+  // temporal dead zone, which threw on every render of this drawer.
+  const carouselCards = media?.kind === 'carousel' ? media.cards || [] : null;
   useEffect(() => {
     let cancelled = false;
     setMedia(null);
@@ -1542,6 +1812,55 @@ function AdDrawer({ ad, onClose }) {
             {mediaLoading && !media ? (
               <div className="flex h-full w-full items-center justify-center">
                 <Spinner />
+              </div>
+            ) : carouselCards ? (
+              /* Carousel — horizontally scrollable strip in card order, which
+                 is the order Meta renders them. Each card keeps its own
+                 headline and description, since those differ per card. */
+              <div className="scrollbar-thin flex h-full w-full snap-x snap-mandatory gap-2 overflow-x-auto p-2">
+                {carouselCards.map((card, i) => (
+                  <div
+                    key={i}
+                    className="relative flex h-full w-[78%] shrink-0 snap-start flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#161616]"
+                  >
+                    <div className="relative flex-1 overflow-hidden bg-gray-100 dark:bg-[#111]">
+                      {card.imageUrl || media.fallbackImageUrl ? (
+                        <img
+                          src={card.imageUrl || media.fallbackImageUrl}
+                          alt={card.headline || `Card ${i + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <ImageIcon className="h-6 w-6 text-gray-300 dark:text-[#2a2a2a]" />
+                        </div>
+                      )}
+                      <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-10 font-bold text-white">
+                        {i + 1}/{carouselCards.length}
+                      </span>
+                      {card.isVideo && (
+                        <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-10 font-semibold text-white">
+                          <Play className="h-2.5 w-2.5 fill-white" />
+                          Video
+                        </span>
+                      )}
+                    </div>
+                    {(card.headline || card.description) && (
+                      <div className="shrink-0 border-t border-gray-200 px-2 py-1.5 dark:border-white/10">
+                        {card.headline && (
+                          <p className="truncate text-11 font-semibold text-gray-900 dark:text-white">
+                            {card.headline}
+                          </p>
+                        )}
+                        {card.description && (
+                          <p className="truncate text-10 text-gray-500 dark:text-white/50">
+                            {card.description}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             ) : isVideo ? (
               /* Video — preference cascade from getAdPreviewMedia:
@@ -1718,7 +2037,7 @@ function AdDrawer({ ad, onClose }) {
 
 // ─── ads table ────────────────────────────────────────────────────────────────
 
-function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, restoreAdId, onSelectAdChange, query, onQueryChange, adAccountId, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
+function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, restoreAdId, onSelectAdChange, query, onQueryChange, filter, onFilterChange, adAccountId, metricsCatalog, metricKeys, onMetricKeysSaved, dateParams, dateLabel }) {
   const metrics = useTableMetricColumns({
     level: 'ad',
     adAccountId,
@@ -1742,9 +2061,12 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
   // state would reset the search every time the user comes back.
   const filteredAds = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return ads;
-    return ads.filter((a) => (a.name || '').toLowerCase().includes(q));
-  }, [ads, query]);
+    return ads.filter(
+      (a) =>
+        (!q || (a.name || '').toLowerCase().includes(q)) &&
+        matchesTableFilter(a, filter),
+    );
+  }, [ads, query, filter]);
   const { sorted, sortKey, sortDir, toggleSort } = useSortedRows(
     filteredAds,
     'name',
@@ -1866,6 +2188,10 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
           videoId: r.videoId || null,
           videoThumbnailUrl: r.videoThumbnailUrl || null,
           previewUrl: r.previewUrl || null,
+          // Carousel — the cards must round-trip, because updateAdV2 rebuilds
+          // the creative from scratch and anything not resent is dropped.
+          adFormat: r.adFormat || 'single',
+          cards: Array.isArray(r.cards) ? r.cards : [],
         },
       });
     } catch (err) {
@@ -1891,6 +2217,64 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
     finally  { setToggling((p) => ({ ...p, [a.id]: false })); }
   };
 
+  // Reachable only by drilling through a managed campaign, so every row here
+  // is actionable — no per-row selectability rule needed.
+  const selection = useTableSelection(sorted);
+  const bulk = useBulkActions({
+    level: 'ad',
+    adAccountId,
+    campaignId: campaign?.id,
+    selection,
+    onRefresh: handleRefresh,
+  });
+
+  const [duplicatingId, setDuplicatingId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDuplicate = async (e, a) => {
+    e.stopPropagation();
+    setDuplicatingId(a.id);
+    try {
+      const res = await duplicateMetaEntity({
+        adAccountId,
+        level: 'ad',
+        id: a.id,
+        campaignId: campaign?.id,
+      });
+      globalToast.success(res?.message || 'Ad duplicated');
+      await handleRefresh();
+    } catch (err) {
+      globalToast.error(err?.response?.data?.error || 'Failed to duplicate ad');
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete || !adAccountId) return;
+    setDeleting(true);
+    try {
+      const res = await deleteMetaAd({
+        adAccountId,
+        adId: pendingDelete.id,
+        campaignId: campaign?.id,
+      });
+      globalToast.success(res?.message || 'Ad deleted');
+      // The preview pane points at a row that no longer exists.
+      if (selectedAd?.id === pendingDelete.id) {
+        setSelectedAd(null);
+        onSelectAdChange?.(null);
+      }
+      setPendingDelete(null);
+      await handleRefresh();
+    } catch (err) {
+      globalToast.error(err?.response?.data?.error || 'Failed to delete ad');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 gap-4">
       {/* main table */}
@@ -1900,6 +2284,7 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
             Ads in <span className="text-gray-900 dark:text-white">{adSet.name}</span>
           </p>
           <div className="flex items-center gap-2">
+            <FilterPills rows={ads} value={filter} onChange={onFilterChange} />
             <div className="relative w-56">
               <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-white/40" />
               <input
@@ -1928,14 +2313,23 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
             {canAdd && <AddButton label="Add Ad" onClick={handleAddAd} busy={resolving} />}
           </div>
         </div>
+        <div className="relative flex min-h-0 flex-1 flex-col">
         <div className="scrollbar-thin flex-1 overflow-auto">
           <table
             className="w-full min-w-140 border-collapse"
-            style={{ minWidth: 710 + 120 * metrics.entries.length }}
+            style={{ minWidth: 790 + 120 * metrics.entries.length }}
           >
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 dark:border-white/12 dark:bg-[#181818]">
-                <th className="w-18 py-3 pl-5 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Preview</th>
+                <th className="w-10 py-3 pl-5 pr-1 text-left">
+                  <SelectAllCheckbox
+                    checked={selection.allVisibleSelected}
+                    indeterminate={selection.someVisibleSelected}
+                    onChange={selection.toggleAll}
+                    disabled={selection.selectableCount === 0}
+                  />
+                </th>
+                <th className="w-18 py-3 pl-1 pr-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Preview</th>
                 <SortTh label="Ad Name"  colKey="name"         sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[34%]" />
                 <SortTh label="Status"   colKey="status"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortTh label="Bid Type" colKey="bid_type"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -1943,17 +2337,17 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
                 <SortTh label="Created"  colKey="created_time" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <th className="min-w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Recommendations</th>
                 <MetricHeaderCells entries={metrics.entries} SortTh={SortTh} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                {canAdd && <th className="w-14 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Edit</th>}
+                <th className="w-24 pr-5 pl-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={(canAdd ? 8 : 7) + metrics.entries.length} className="py-14"><Spinner /></td></tr>
+                <tr><td colSpan={9 + metrics.entries.length} className="py-14"><Spinner /></td></tr>
               )}
               {!loading && sorted.length === 0 && (
-                <tr><td colSpan={(canAdd ? 8 : 7) + metrics.entries.length} className="py-14"><EmptyState message={query ? `No ads match "${query}"` : 'No ads in this ad set'} /></td></tr>
+                <tr><td colSpan={9 + metrics.entries.length} className="py-14"><EmptyState message={query || filter !== 'all' ? 'No ads match the current filters' : 'No ads in this ad set'} /></td></tr>
               )}
-              {sorted.map((a, idx) => {
+              {!loading && sorted.map((a, idx) => {
                 const status     = getStatus(a);
                 const isSelected = selectedAd?.id === a.id;
                 return (
@@ -1966,7 +2360,14 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
                     className={`group cursor-pointer border-b border-gray-200 transition-colors last:border-b-0 dark:border-white/10
                       ${isSelected ? 'bg-gray-100 dark:bg-white/5' : 'hover:bg-gray-100 dark:hover:bg-white/3'}`}
                   >
-                    <td className="py-3 pl-5 pr-3">
+                    <td className="py-3 pl-5 pr-1" onClick={(e) => e.stopPropagation()}>
+                      <RowCheckbox
+                        checked={selection.isSelected(a.id)}
+                        onChange={() => selection.toggle(a.id)}
+                        label={`Select ${a.name}`}
+                      />
+                    </td>
+                    <td className="py-3 pl-1 pr-3">
                       <div className="relative h-11 w-16 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
                         {a.creative?.thumbnail_url ? (
                           <img src={a.creative.thumbnail_url} alt={a.name} className="h-full w-full object-cover" />
@@ -1980,6 +2381,19 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
                             <Play className="h-3 w-3 fill-white text-white" />
                           </div>
                         )}
+                        {/* Carousel — the row thumbnail is only ever the first
+                            card, so say how many there are. */}
+                        {(() => {
+                          const cardCount =
+                            a.creative?.object_story_spec?.link_data?.child_attachments?.length || 0;
+                          if (cardCount < 2) return null;
+                          return (
+                            <span className="absolute bottom-0.5 right-0.5 flex items-center gap-0.5 rounded bg-black/70 px-1 py-px text-[9px] font-bold text-white">
+                              <Layers className="h-2 w-2" />
+                              {cardCount}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -1994,9 +2408,13 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <StatusBadge status={status} />
                         <ToggleSwitch status={status} onToggle={(e) => handleToggle(e, a)} toggling={!!toggling[a.id]} />
+                        <DeliveryBadge delivery={a.delivery} issues={a.issues_info} />
+                        {/* A rejected ad reports status ACTIVE — this badge is
+                            the only thing that says otherwise. */}
+                        <ReviewBadge review={a.review} />
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-white/80">{labelBidType(a.bid_type) ?? '—'}</td>
@@ -2011,9 +2429,11 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
                       loading={metrics.loading}
                       currency={currency}
                     />
-                    {canAdd && (
-                      <td className="pr-5 pl-2 py-3">
-                        <div className="flex items-center justify-end">
+                    <td className="pr-5 pl-2 py-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* Edit needs the V2 wizard; duplicate and delete work
+                            on any objective. */}
+                        {canAdd && (
                           <button
                             onClick={(e) => handleEditAd(e, a)}
                             disabled={editingId === a.id}
@@ -2026,16 +2446,59 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
                               <Pencil className="h-3.5 w-3.5" />
                             )}
                           </button>
-                        </div>
-                      </td>
-                    )}
+                        )}
+                        <button
+                          onClick={(e) => handleDuplicate(e, a)}
+                          disabled={duplicatingId === a.id}
+                          title="Duplicate ad (creates a paused copy)"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-gray-300 hover:bg-gray-200 hover:text-gray-900 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-white/20 dark:hover:bg-white/8 dark:hover:text-white disabled:opacity-50"
+                        >
+                          {duplicatingId === a.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPendingDelete(a);
+                          }}
+                          title="Delete ad"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 transition-all hover:border-red-500/40 hover:bg-red-50 hover:text-red-600 dark:border-white/8 dark:bg-white/2 dark:text-white/40 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
                   </motion.tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+
+        <BulkActionBar
+          level="ad"
+          count={selection.selectedCount}
+          busy={bulk.busy}
+          progress={bulk.progress}
+          onActivate={bulk.onActivate}
+          onPause={bulk.onPause}
+          onDuplicate={bulk.onDuplicate}
+          onDelete={bulk.onDelete}
+          onClear={selection.clear}
+        />
+        </div>
       </div>
+
+      <DeleteConfirmModal
+        entity={pendingDelete}
+        level="ad"
+        busy={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={handleConfirmDelete}
+      />
 
       {/* side drawer */}
       <AnimatePresence>
@@ -2089,6 +2552,9 @@ export function TableViewCampaigns({
   // The ad account's ISO currency code — money-formatted metric columns
   // render in it instead of a hardcoded ₹.
   currency,
+  // Meta's account-level Opportunity Score (0-100), or null when Meta has
+  // none for this account. Account-scoped, so it rides the campaigns response.
+  opportunityScore,
   onRefresh,
   onNewCampaign,
   // { allowed, managed } when the plan caps managed campaigns, else null —
@@ -2128,6 +2594,12 @@ export function TableViewCampaigns({
   const [campaignQuery, setCampaignQuery] = useState('');
   const [adSetQuery, setAdSetQuery] = useState('');
   const [adQuery, setAdQuery] = useState('');
+  // Status/delivery filter, held here for the same reason `query` is: each
+  // table unmounts on drill-down, so table-local state would reset the filter
+  // every time the user came back.
+  const [campaignFilter, setCampaignFilter] = useState('all');
+  const [adSetFilter, setAdSetFilter] = useState('all');
+  const [adFilter, setAdFilter] = useState('all');
 
   const selectedCampaign = campaignIdParam
     ? campaigns.find((c) => c.id === campaignIdParam) || null
@@ -2193,7 +2665,7 @@ export function TableViewCampaigns({
         <AnimatePresence mode="wait">
           {level === 'campaigns' && (
             <motion.div key="campaigns" className="flex min-h-0 flex-1 flex-col" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} currency={currency} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} campaignUsage={campaignUsage} managedCampaignIds={managedCampaignIds} onManagedCampaignsChanged={onManagedCampaignsChanged} facebookId={facebookId} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} metricsCatalog={metricsCatalog} metricKeys={tableMetricKeys.campaign} onMetricKeysSaved={onTableMetricsSaved} dateParams={dateParams} dateLabel={dateLabel} />
+              <CampaignTable campaigns={campaigns} loading={loadingCampaigns} adAccountId={adAccountId} currency={currency} opportunityScore={opportunityScore} onDrillDown={drillToCampaign} onRefresh={onRefresh} onNewCampaign={onNewCampaign} campaignUsage={campaignUsage} managedCampaignIds={managedCampaignIds} onManagedCampaignsChanged={onManagedCampaignsChanged} facebookId={facebookId} onLaunchWizard={onLaunchWizard} query={campaignQuery} onQueryChange={setCampaignQuery} filter={campaignFilter} onFilterChange={setCampaignFilter} metricsCatalog={metricsCatalog} metricKeys={tableMetricKeys.campaign} onMetricKeysSaved={onTableMetricsSaved} dateParams={dateParams} dateLabel={dateLabel} />
             </motion.div>
           )}
           {level === 'adsets' && selectedCampaign && (
@@ -2208,6 +2680,8 @@ export function TableViewCampaigns({
                 restoreAdSetId={adSetIdParam}
                 query={adSetQuery}
                 onQueryChange={setAdSetQuery}
+                filter={adSetFilter}
+                onFilterChange={setAdSetFilter}
                 metricsCatalog={metricsCatalog}
                 metricKeys={tableMetricKeys.adset}
                 onMetricKeysSaved={onTableMetricsSaved}
@@ -2228,6 +2702,8 @@ export function TableViewCampaigns({
                 onSelectAdChange={setAdId}
                 query={adQuery}
                 onQueryChange={setAdQuery}
+                filter={adFilter}
+                onFilterChange={setAdFilter}
                 adAccountId={adAccountId}
                 metricsCatalog={metricsCatalog}
                 metricKeys={tableMetricKeys.ad}

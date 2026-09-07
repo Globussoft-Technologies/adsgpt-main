@@ -404,6 +404,63 @@ function validateAdSet(form, cell, ctx, mode) {
 }
 
 // ── Step: Ad ────────────────────────────────────────────────────────────
+/**
+ * validateCarouselCards — the per-card rules, mirroring the `cards` schema in
+ * buildAdSchemaV2.
+ *
+ * Exported so CarouselCardEditor can render field-level errors inline while
+ * validateAd folds the same results into one-line strings for the step
+ * summary. One rule source; two presentations.
+ */
+export function validateCarouselCards(
+  rawCards,
+  { mediaKind = 'any', min = 2, max = 10, mediaLocked = false } = {},
+) {
+  const cards = Array.isArray(rawCards) ? rawCards : [];
+  let countError = null;
+  if (cards.length < min) countError = `A carousel needs at least ${min} cards.`;
+  else if (cards.length > max) countError = `A carousel can have at most ${max} cards.`;
+
+  const perCard = {};
+  cards.forEach((card, i) => {
+    const errs = {};
+    const isVideo = card.mediaType === 'video';
+    // In edit mode a card's media is an EXISTING Meta asset (imageHash /
+    // videoId), not an upload, and it is never re-uploaded — so an absent
+    // display thumbnail (the adimages lookup is best-effort) must not read as
+    // "no media" and block the save.
+    const hasMedia = mediaLocked
+      ? !!(card.imageHash || card.videoId)
+      : isVideo
+        ? !!(card.videoFile || !isBlank(card.videoUrl))
+        : !!(card.imageFile || card.imageUrl);
+    if (!hasMedia) {
+      errs.media = isVideo
+        ? 'Upload a video or pick one from the library.'
+        : 'Upload an image or pick one from the library.';
+    }
+    // Video cards are impossible on an image-locked cell (Meta rejects the
+    // creative); carousel-eligible cells are never video-locked.
+    if (mediaKind === 'image' && isVideo) {
+      errs.media = 'This ad type requires images — swap this card to an image.';
+    }
+    // A card link is OPTIONAL: blank falls back to the ad's main link in
+    // buildChildAttachments. Only a non-blank invalid URL is an error.
+    if (!isBlank(card.link) && !isHttpUrl(card.link)) {
+      errs.link = 'Enter a valid URL starting with http:// or https://';
+    }
+    if ((card.headline || '').length > 40) {
+      errs.headline = 'Keep the headline to 40 characters.';
+    }
+    if ((card.description || '').length > 30) {
+      errs.description = 'Keep the description to 30 characters.';
+    }
+    if (Object.keys(errs).length) perCard[i] = errs;
+  });
+
+  return { countError, perCard };
+}
+
 function validateAd(form, cell, mode) {
   const e = {};
   if (isBlank(form.adName)) e.adName = 'Ad name is required.';
@@ -432,7 +489,31 @@ function validateAd(form, cell, mode) {
   // THRUPLAY-optimised ad sets); 'image' forces image-only. When unset
   // the cell accepts either kind.
   const mediaKind = cell?.ad?.mediaKind || 'any';
-  if (mode !== 'edit-ad' && !isCatalog) {
+
+  // Carousel — mirrors the `cards` rules in buildAdSchemaV2. Card media
+  // replaces the single-media check entirely: the backend rejects ad-level
+  // media alongside cards, because Meta would otherwise render the single
+  // image and silently ignore every card.
+  const isCarousel = !!cell?.supportsCarousel && form.adFormat === 'carousel';
+  // Editing a carousel keeps its cards but never re-uploads their media.
+  const cardsMediaLocked = mode === 'edit-ad';
+
+  if (isCarousel) {
+    const { countError, perCard } = validateCarouselCards(form.cards, {
+      mediaKind,
+      mediaLocked: cardsMediaLocked,
+    });
+    if (countError) e.media = countError;
+    // IMPORTANT: the errors map is a FLAT field -> string map. WizardSideRail
+    // renders Object.values(errors) directly as React children, so putting a
+    // nested object here crashes the whole wizard. Per-card detail therefore
+    // goes to the editor via validateCarouselCards (which AdStep calls
+    // itself); only one-line strings land in the map.
+    Object.entries(perCard).forEach(([index, errs]) => {
+      const first = Object.values(errs)[0];
+      if (first) e[`card${Number(index) + 1}`] = `Card ${Number(index) + 1}: ${first}`;
+    });
+  } else if (mode !== 'edit-ad' && !isCatalog) {
     if (mediaKind === 'video' || form.mediaType === 'video') {
       if (!form.videoFile && isBlank(form.videoUrl)) {
         e.media = 'Upload a video or pick one from the library.';
@@ -447,9 +528,15 @@ function validateAd(form, cell, mode) {
   // required field is validated automatically. `imageHash` / `videoId`
   // are satisfied by the media check above, so they're skipped here.
   const MEDIA_REQUIRED = new Set(['imageHash', 'videoId']);
+  // Headline / description are per-card on a carousel and Meta has no ad-level
+  // equivalent, so buildLinkData never sends them. Requiring them here made the
+  // wizard collect a headline it then discarded. Mirrors the same exemption in
+  // buildAdSchemaV2.
+  const CAROUSEL_EXEMPT = new Set(['headline', 'description']);
   const req = cell?.ad?.requiredFields || [];
   for (const field of req) {
     if (MEDIA_REQUIRED.has(field)) continue;
+    if (isCarousel && CAROUSEL_EXEMPT.has(field)) continue;
     if (field === 'linkUrl') {
       if (isBlank(form.linkUrl)) {
         e.linkUrl = 'Destination URL is required.';

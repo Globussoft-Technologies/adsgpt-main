@@ -762,6 +762,64 @@ export const deleteMetaCampaign = async ({ adAccountId, campaignId }) => {
   return data;
 };
 
+// `campaignId` is the PARENT of the thing being deleted, not the thing itself.
+// Same optional-parent convention as updateAdStatus — it lets the
+// managed-campaign plan gate run without a Meta lookup.
+export const deleteMetaAdSet = async ({ adAccountId, adSetId, campaignId }) => {
+  const { data } = await axios.delete(`${BASE_URL}/adsgpt/meta-ads/delete-adset`, {
+    headers: getAuthHeaders(),
+    data: { adAccountId, adSetId, ...(campaignId ? { campaignId } : {}) },
+  });
+  return data;
+};
+
+export const deleteMetaAd = async ({ adAccountId, adId, campaignId }) => {
+  const { data } = await axios.delete(`${BASE_URL}/adsgpt/meta-ads/delete-ad`, {
+    headers: getAuthHeaders(),
+    data: { adAccountId, adId, ...(campaignId ? { campaignId } : {}) },
+  });
+  return data;
+};
+
+/**
+ * Duplicate a campaign / ad set / ad via Meta's own /copies edge.
+ *
+ * The copy is created PAUSED unless the caller says otherwise — duplicating a
+ * live campaign must never start spending on its own.
+ */
+export const duplicateMetaEntity = async ({
+  adAccountId,
+  level,
+  id,
+  campaignId,
+  targetCampaignId,
+  targetAdSetId,
+  deepCopy,
+  statusOption,
+  renamePrefix,
+  renameSuffix,
+}) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/adsgpt/meta-ads/duplicate`,
+    {
+      adAccountId,
+      level,
+      id,
+      ...(campaignId ? { campaignId } : {}),
+      ...(targetCampaignId ? { targetCampaignId } : {}),
+      ...(targetAdSetId ? { targetAdSetId } : {}),
+      // Ads are the leaf level; the backend rejects deepCopy there outright
+      // rather than ignoring it, so never send it for an ad.
+      ...(level !== 'ad' && deepCopy !== undefined ? { deepCopy } : {}),
+      ...(statusOption ? { statusOption } : {}),
+      ...(renamePrefix ? { renamePrefix } : {}),
+      ...(renameSuffix ? { renameSuffix } : {}),
+    },
+    { headers: getAuthHeaders() },
+  );
+  return data;
+};
+
 // LLM Audit + Fix moved to @/apis/autopilot/llmAuditApi (mounted under
 // /meta-ads/autopilot/llm-audit/* on the backend). Import from there.
 

@@ -975,6 +975,13 @@ async function buildAdCreativeOr400(account, cell, value) {
     customProductPage: value.customProductPage || undefined,
     autoTranslate: value.autoTranslate || false,
     phoneNumber,
+    // Carousel. Undefined for every single-media ad, which keeps the builder
+    // on its existing path — the validator has already guaranteed cards and
+    // ad-level media are mutually exclusive, and that cards only reach cells
+    // whose shape can render them.
+    cards: Array.isArray(value.cards) && value.cards.length ? value.cards : undefined,
+    multiShareOptimized: value.multiShareOptimized,
+    multiShareEndCard: value.multiShareEndCard,
   });
 
   const creativeParams = {
@@ -2002,6 +2009,7 @@ async function resolveAdForEdit(req, res) {
         "name",
         "status",
         "adset_id",
+        "account_id",
         "creative{object_story_spec,url_tags}",
       ]);
       adData = ad?._data || ad || {};
@@ -2031,7 +2039,22 @@ async function resolveAdForEdit(req, res) {
     const oss = creative.object_story_spec || {};
     const link = oss.link_data || {};
     const video = oss.video_data || {};
-    const cta = link.call_to_action || video.call_to_action || {};
+    // Carousel cards. Declared before `cta` because on a carousel the
+    // call_to_action lives on each CARD, not at link_data level — see below.
+    const childAttachments = Array.isArray(link.child_attachments)
+      ? link.child_attachments
+      : [];
+    const firstCard = childAttachments[0] || {};
+
+    // On a carousel, link_data carries `message` (primary text) and `link`,
+    // but NOT name / description / call_to_action — Meta keeps those per card
+    // and ignores any ad-level equivalents. Reading only the top level left
+    // Headline, Description and CTA blank in the edit form, and headline is a
+    // required field, so the edit couldn't be saved. Fall back to card 1,
+    // which is what every card shares in practice (buildChildAttachments
+    // seeds each card's CTA from the ad-level one at create time).
+    const cta =
+      link.call_to_action || video.call_to_action || firstCard.call_to_action || {};
     const isVideo = !!video.video_id;
 
     // Subcode 1885270 fix ("app ID and link should resolve to the same
@@ -2048,6 +2071,54 @@ async function resolveAdForEdit(req, res) {
     // types that don't carry `value.application`. Then still re-derive
     // live as a backstop (resolveObjectStoreUrlForApp) in case even the
     // ad's own historical pairing has since gone stale.
+    // ── Carousel read-back ──
+    // Without this the wizard opened a carousel as a single-media ad with no
+    // media at all (link_data.image_hash is null on a carousel), so Save failed
+    // Joi with "Provide exactly one of imageHash OR videoId". The cards have to
+    // come back so the edit can RESEND them — buildAdCreativeOr400 rebuilds the
+    // creative from scratch on every save, so anything not resent is lost.
+    let editCards = [];
+    if (childAttachments.length > 0) {
+      // Resolve card thumbnails for the editor in ONE adimages call, the same
+      // way getAdPreviewMedia does — card count must not cost round trips.
+      const hashes = [
+        ...new Set(childAttachments.map((a) => a.image_hash).filter(Boolean)),
+      ];
+      const urlByHash = {};
+      if (hashes.length && adData.account_id) {
+        try {
+          const acct = String(adData.account_id).startsWith("act_")
+            ? String(adData.account_id)
+            : `act_${adData.account_id}`;
+          const api = bizSdk.FacebookAdsApi.getDefaultApi();
+          const img = await api.call("GET", [acct, "adimages"], {
+            hashes: JSON.stringify(hashes),
+            fields: "hash,url,permalink_url",
+          });
+          for (const row of img?.data || img?._data?.data || []) {
+            if (row?.hash) urlByHash[row.hash] = row.url || row.permalink_url || null;
+          }
+        } catch (err) {
+          // Thumbnails are decoration; losing them must not block the edit.
+          logger.warn(`resolveAdForEdit: card image lookup failed: ${err.message}`);
+        }
+      }
+
+      editCards = childAttachments.map((att) => ({
+        // Identifiers are what get RESENT on save — the media itself is never
+        // re-uploaded in edit mode.
+        imageHash: att.image_hash || null,
+        videoId: att.video_id || null,
+        videoThumbnailUrl: att.video_id ? att.image_url || null : null,
+        // Display only.
+        imageUrl: att.image_url || urlByHash[att.image_hash] || null,
+        mediaType: att.video_id ? "video" : "image",
+        headline: att.name || "",
+        description: att.description || "",
+        link: att.link || "",
+      }));
+    }
+
     const editApplicationId = cta?.value?.application || adSetData.promoted_object?.application_id || null;
     const editObjectStoreUrl = await resolveObjectStoreUrlForApp(
       editApplicationId,
@@ -2074,10 +2145,13 @@ async function resolveAdForEdit(req, res) {
       // extra API call needed; the data was already in hand.
       instagramUserId: oss.instagram_user_id || null,
       name: adData.name || "",
-      headline: link.name || video.title || "",
+      // Carousel fallbacks (see the `cta` note above): headline and description
+      // are per-card, so without card 1's values these render empty on a
+      // carousel — and headline is required, blocking the save.
+      headline: link.name || video.title || firstCard.name || "",
       primaryText: link.message || video.message || "",
-      description: link.description || video.link_description || "",
-      linkUrl: link.link || cta?.value?.link || "",
+      description: link.description || video.link_description || firstCard.description || "",
+      linkUrl: link.link || cta?.value?.link || firstCard.link || "",
       callToAction: cta?.type || "",
       urlTags: creative.url_tags || "",
       leadFormId: cta?.value?.lead_gen_form_id || "",
@@ -2085,6 +2159,10 @@ async function resolveAdForEdit(req, res) {
       // app_link creative on save. Harmless for non-app cells.
       objectStoreUrl: editObjectStoreUrl || "",
       applicationId: editApplicationId || "",
+      // Carousel — `adFormat` drives the wizard's Format toggle; `cards` carry
+      // the identifiers that get resent so the rebuilt creative keeps its cards.
+      adFormat: editCards.length > 0 ? "carousel" : "single",
+      cards: editCards,
       // Existing media — reused on save (v1 doesn't swap media).
       mediaType: isVideo ? "video" : "image",
       imageHash: link.image_hash || null,

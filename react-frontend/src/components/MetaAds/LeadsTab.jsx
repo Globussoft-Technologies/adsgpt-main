@@ -18,6 +18,11 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Search,
+  Users,
+  CalendarDays,
+  Megaphone,
+  Clock,
 } from 'lucide-react';
 import {
   getMetaPages,
@@ -138,6 +143,10 @@ function FieldDropdown({
   loadingText,
   emptyText,
   placeholder,
+  // Toolbar variant: no label row, auto width, shorter control — so the
+  // campaign filter sits beside Search/Refresh instead of stacking with the
+  // full-width Page/Form pickers above.
+  compact = false,
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.id === value) || null;
@@ -150,10 +159,12 @@ function FieldDropdown({
       : selected?.name || placeholder;
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[11px] font-medium text-gray-500 dark:text-white/50">
-        {label}
-      </label>
+    <div className={compact ? '' : 'flex flex-col gap-1.5'}>
+      {!compact && (
+        <label className="text-[11px] font-medium text-gray-500 dark:text-white/50">
+          {label}
+        </label>
+      )}
       <Dropdown
         open={open}
         onClose={() => setOpen(false)}
@@ -165,7 +176,9 @@ function FieldDropdown({
             aria-expanded={open}
             onClick={() => !isDisabled && setOpen((v) => !v)}
             disabled={isDisabled}
-            className="flex h-9 w-full items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 disabled:cursor-default disabled:opacity-70 dark:border-white/6 dark:bg-[#171717] dark:text-white dark:hover:border-white/10"
+            className={`flex items-center gap-2 rounded-xl border border-gray-200 bg-white text-xs text-gray-900 backdrop-blur-xl transition-all hover:border-gray-300 disabled:cursor-default disabled:opacity-70 dark:border-white/6 dark:bg-[#171717] dark:text-white dark:hover:border-white/10 ${
+              compact ? 'h-[30px] max-w-48 px-2.5' : 'h-9 w-full px-3'
+            }`}
           >
             {loading && (
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-gray-500 dark:text-white/60" />
@@ -227,6 +240,35 @@ function FieldDropdown({
   );
 }
 
+/**
+ * StatTile — one figure of context above the table. `truncate` is for values
+ * that are user-authored and unbounded (a campaign name), where the tile must
+ * not be allowed to set the row height.
+ */
+function StatTile({ icon: Icon, label, value, sub = null, truncate = false }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-white/8 dark:bg-white/3">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-gray-400 dark:bg-white/6 dark:text-white/40">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-10 font-semibold uppercase tracking-wide text-gray-400 dark:text-white/40">
+          {label}
+        </p>
+        <p
+          className={`text-sm font-bold text-gray-900 dark:text-white ${truncate ? 'truncate' : ''}`}
+          title={truncate ? String(value) : undefined}
+        >
+          {value}
+        </p>
+        {sub && (
+          <p className="truncate text-10 text-gray-400 dark:text-white/35">{sub}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function LeadsTab({ adAccountId, facebookId }) {
   const [pages, setPages] = useState([]);
   const [pagesLoading, setPagesLoading] = useState(false);
@@ -247,6 +289,13 @@ export default function LeadsTab({ adAccountId, facebookId }) {
   const [scopeMissing, setScopeMissing] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [tablePage, setTablePage] = useState(1);
+
+  // Client-side narrowing over the already-loaded set. Deliberately NOT a
+  // server round trip: the leads edge is rate-limited by lead volume (one
+  // uncached read can cost 100 paginated calls), and everything the user
+  // could filter on is already in hand.
+  const [query, setQuery] = useState('');
+  const [campaignFilter, setCampaignFilter] = useState('');
 
   // Bumped on a timer purely so the relative "Updated N min ago" label
   // re-renders as it ages; nothing reads the value itself.
@@ -282,7 +331,14 @@ export default function LeadsTab({ adAccountId, facebookId }) {
     getMetaPages(adAccountId, { facebookId })
       .then((r) => {
         if (requestId !== pagesRequestRef.current) return;
-        setPages(r?.pages || []);
+        const list = r?.pages || [];
+        setPages(list);
+        // Auto-select rather than leaving the picker empty. Most accounts have
+        // exactly one Page, and requiring a choice from a list of one meant
+        // landing on a blank screen with two placeholders. The form effect
+        // below then chains off this, so the common case is data on arrival
+        // with no clicks at all.
+        if (list.length) setPageId(list[0].id);
       })
       .catch(() => {
         if (requestId !== pagesRequestRef.current) return;
@@ -311,7 +367,15 @@ export default function LeadsTab({ adAccountId, facebookId }) {
     getLeadForms(pageId, { facebookId })
       .then((r) => {
         if (requestId !== formsRequestRef.current) return;
-        setForms(r?.forms || []);
+        const list = r?.forms || [];
+        setForms(list);
+        // Prefer a form that has captured something. Picking a genuinely empty
+        // form first would land the user on "No leads captured on this form
+        // yet", which reads like the feature is broken rather than like an
+        // unused form. Falls back to the first form when none have leads.
+        const withLeads = list.find((f) => Number(f.leadsCount) > 0);
+        const pick = withLeads || list[0];
+        if (pick) setFormId(pick.id);
       })
       .catch((e) => {
         if (requestId !== formsRequestRef.current) return;
@@ -398,6 +462,77 @@ export default function LeadsTab({ adAccountId, facebookId }) {
     [leads],
   );
 
+  // Campaign options for the filter — derived from the loaded leads rather
+  // than fetched, so it can only ever offer campaigns that actually appear in
+  // this form's results.
+  const campaignOptions = useMemo(() => {
+    const seen = new Map();
+    for (const l of leads) {
+      const name = l.campaignName;
+      if (name) seen.set(name, (seen.get(name) || 0) + 1);
+    }
+    return [...seen.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ id: name, name, sub: `${count} lead${count === 1 ? '' : 's'}` }));
+  }, [leads]);
+
+  // Free-text runs over every ANSWER field rather than a hardcoded
+  // name/email/phone trio — Instant Forms are user-defined, so which fields
+  // exist varies per form and guessing would silently miss the one someone
+  // searches by. Attribution names are matched too, since "find that lead from
+  // the diwali campaign" is the other way people look.
+  const filteredLeads = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q && !campaignFilter) return leads;
+    return leads.filter((l) => {
+      if (campaignFilter && l.campaignName !== campaignFilter) return false;
+      if (!q) return true;
+      const haystack = [
+        ...Object.values(l.fields || {}),
+        l.campaignName,
+        l.adsetName,
+        l.adName,
+      ];
+      return haystack.some((v) => String(v || '').toLowerCase().includes(q));
+    });
+  }, [leads, query, campaignFilter]);
+
+  const isFiltered = !!(query.trim() || campaignFilter);
+
+  // Header stats. Computed over ALL loaded leads, not the filtered view — they
+  // describe the form, and having them move as you type would make them read
+  // as search results rather than context.
+  const stats = useMemo(() => {
+    if (!leads.length) return null;
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    let thisWeek = 0;
+    let mostRecent = null;
+    const byCampaign = new Map();
+    for (const l of leads) {
+      const t = l.createdTime ? new Date(l.createdTime).getTime() : NaN;
+      if (!Number.isNaN(t)) {
+        if (t >= weekAgo) thisWeek += 1;
+        if (mostRecent === null || t > mostRecent) mostRecent = t;
+      }
+      if (l.campaignName) {
+        byCampaign.set(l.campaignName, (byCampaign.get(l.campaignName) || 0) + 1);
+      }
+    }
+    const top = [...byCampaign.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+    return {
+      total: leads.length,
+      thisWeek,
+      topCampaign: top ? { name: top[0], count: top[1] } : null,
+      mostRecent: mostRecent ? new Date(mostRecent).toISOString() : null,
+    };
+  }, [leads]);
+
+  // Filtering changes how many pages exist; staying on page 4 of a now
+  // 1-page result set renders an empty table.
+  useEffect(() => {
+    setTablePage(1);
+  }, [query, campaignFilter]);
+
   const onDownload = async () => {
     if (!formId || !pageId) return;
     setDownloading(true);
@@ -418,9 +553,9 @@ export default function LeadsTab({ adAccountId, facebookId }) {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / PAGE_SIZE));
   const safePage = Math.min(tablePage, totalPages);
-  const visibleLeads = leads.slice(
+  const visibleLeads = filteredLeads.slice(
     (safePage - 1) * PAGE_SIZE,
     safePage * PAGE_SIZE,
   );
@@ -464,13 +599,53 @@ export default function LeadsTab({ adAccountId, facebookId }) {
         />
       </div>
 
+      {/* Stats — context about the form, sitting where the page used to be
+          blank. Hidden until leads exist so an empty form doesn't render four
+          zeroes. */}
+      {stats && !leadsLoading && (
+        <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4">
+          <StatTile
+            icon={Users}
+            label={truncated ? 'Leads loaded' : 'Total leads'}
+            value={stats.total.toLocaleString()}
+            sub={truncated ? 'capped — form has more' : null}
+          />
+          <StatTile
+            icon={CalendarDays}
+            label="Last 7 days"
+            value={stats.thisWeek.toLocaleString()}
+            sub={
+              stats.total
+                ? `${Math.round((stats.thisWeek / stats.total) * 100)}% of loaded`
+                : null
+            }
+          />
+          <StatTile
+            icon={Megaphone}
+            label="Top campaign"
+            value={stats.topCampaign?.name || '—'}
+            sub={stats.topCampaign ? `${stats.topCampaign.count} leads` : null}
+            truncate
+          />
+          <StatTile
+            icon={Clock}
+            label="Most recent"
+            value={stats.mostRecent ? fmtDate(stats.mostRecent) : '—'}
+          />
+        </div>
+      )}
+
       {/* Toolbar */}
       {formId && (
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-gray-500 dark:text-white/50">
             {leadsLoading
               ? 'Loading leads…'
-              : `${truncated ? 'First ' : ''}${leads.length} lead${leads.length === 1 ? '' : 's'}`}
+              : isFiltered
+                ? // Say what's hidden. A bare "23 leads" while a filter is
+                  // active reads as the form only having 23.
+                  `${filteredLeads.length} of ${leads.length} lead${leads.length === 1 ? '' : 's'}`
+                : `${truncated ? 'First ' : ''}${leads.length} lead${leads.length === 1 ? '' : 's'}`}
             {/* Freshness — the server may have served this from a short-lived
                 cache, so without it a Refresh that changes nothing is
                 indistinguishable from stale data. */}
@@ -481,7 +656,42 @@ export default function LeadsTab({ adAccountId, facebookId }) {
               </span>
             )}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-gray-400 dark:text-white/40" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name, email, phone…"
+                className="w-56 rounded-xl border border-gray-200 bg-gray-100 py-1.5 pl-8 pr-7 text-xs text-gray-900 placeholder:text-gray-400 transition-colors hover:border-gray-300 focus:border-gray-400 focus:outline-none dark:border-white/6 dark:bg-[#171717] dark:text-white dark:placeholder:text-white/35 dark:hover:border-white/10"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  aria-label="Clear search"
+                  className="absolute top-1/2 right-2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-white/40 dark:hover:text-white/70"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            {/* Only worth showing once the leads actually span more than one
+                campaign — a one-option filter is noise. */}
+            {campaignOptions.length > 1 && (
+              <FieldDropdown
+                value={campaignFilter}
+                onChange={setCampaignFilter}
+                options={[
+                  { id: '', name: 'All campaigns' },
+                  ...campaignOptions,
+                ]}
+                placeholder="All campaigns"
+                emptyText="No campaigns"
+                compact
+              />
+            )}
             <button
               onClick={() => loadLeads(true)}
               disabled={leadsLoading}
@@ -565,9 +775,26 @@ export default function LeadsTab({ adAccountId, facebookId }) {
             <Inbox className="h-6 w-6" />
             <p className="text-sm">No leads captured on this form yet.</p>
           </div>
-        ) : leads.length > 0 ? (
+        ) : filteredLeads.length === 0 ? (
+          // Distinct from "no leads captured" — the form HAS leads, the filter
+          // just excluded them all, and the fix is to clear it.
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-gray-400 dark:text-white/40">
+            <Search className="h-6 w-6" />
+            <p className="text-sm">No leads match your search.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setQuery('');
+                setCampaignFilter('');
+              }}
+              className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-500 transition-all hover:border-gray-300 hover:text-gray-700 dark:border-white/10 dark:text-white/50 dark:hover:border-white/25 dark:hover:text-white"
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : filteredLeads.length > 0 ? (
           <table className="w-full border-collapse text-left text-13">
-            <thead className="sticky top-0 bg-gray-50 text-gray-500 dark:bg-[#1A1A1A] dark:text-white/55">
+            <thead className="sticky top-0 z-10 bg-gray-50 text-gray-500 shadow-[0_1px_0_rgba(0,0,0,0.06)] dark:bg-[#1A1A1A] dark:text-white/55 dark:shadow-[0_1px_0_rgba(255,255,255,0.08)]">
               <tr>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold">Captured</th>
                 {fieldNames.map((f) => (
@@ -588,22 +815,49 @@ export default function LeadsTab({ adAccountId, facebookId }) {
             <tbody>
               {visibleLeads.map((l) => (
                 <tr key={l.id} className="border-t border-gray-200 text-gray-700 dark:border-white/6 dark:text-white/85">
-                  <td className="whitespace-nowrap px-3 py-2 text-gray-500 dark:text-white/55">
+                  <td className="whitespace-nowrap px-3 py-2 align-top text-gray-500 dark:text-white/55">
                     {fmtDate(l.createdTime)}
                   </td>
-                  {fieldNames.map((f) => (
-                    <td key={f} className="px-3 py-2">
-                      {l.fields?.[f] || <span className="text-gray-300 dark:text-white/25">—</span>}
-                    </td>
-                  ))}
-                  <td className="whitespace-nowrap px-3 py-2 text-gray-500 dark:text-white/55">
-                    {l.campaignName || '—'}
+                  {fieldNames.map((f) => {
+                    const v = l.fields?.[f];
+                    return (
+                      <td key={f} className="px-3 py-2 align-top">
+                        {v ? (
+                          // Clamped, not truncated: a two-line cap keeps every
+                          // row the same height while still showing most
+                          // answers in full, with the title carrying the rest.
+                          // Free-text fields (a full postal address) otherwise
+                          // ran to four lines and set the height for the table.
+                          //
+                          // The width cap sits on this div, NOT the <td>:
+                          // browsers ignore max-width on a cell in an
+                          // auto-layout table.
+                          <div
+                            className="line-clamp-2 max-w-56 break-words"
+                            title={String(v)}
+                          >
+                            {v}
+                          </div>
+                        ) : (
+                          <span className="text-gray-300 dark:text-white/25">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                  <td className="px-3 py-2 align-top text-gray-500 dark:text-white/55">
+                    <div className="max-w-44 truncate" title={l.campaignName || ''}>
+                      {l.campaignName || '—'}
+                    </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-gray-500 dark:text-white/55">
-                    {l.adsetName || '—'}
+                  <td className="px-3 py-2 align-top text-gray-500 dark:text-white/55">
+                    <div className="max-w-44 truncate" title={l.adsetName || ''}>
+                      {l.adsetName || '—'}
+                    </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-gray-500 dark:text-white/55">
-                    {l.adName || '—'}
+                  <td className="px-3 py-2 align-top text-gray-500 dark:text-white/55">
+                    <div className="max-w-44 truncate" title={l.adName || ''}>
+                      {l.adName || '—'}
+                    </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-gray-500 capitalize dark:text-white/55">
                     {l.platform || '—'}
@@ -649,7 +903,10 @@ export default function LeadsTab({ adAccountId, facebookId }) {
       {!leadsLoading && totalPages > 1 && (
         <div className="flex shrink-0 items-center justify-between text-xs text-gray-500 dark:text-white/55">
           <span>
-            Page {safePage} of {totalPages} · {leads.length.toLocaleString()} loaded
+            Page {safePage} of {totalPages} ·{' '}
+            {isFiltered
+              ? `${filteredLeads.length.toLocaleString()} matching`
+              : `${leads.length.toLocaleString()} loaded`}
           </span>
           <div className="flex gap-1">
             <button

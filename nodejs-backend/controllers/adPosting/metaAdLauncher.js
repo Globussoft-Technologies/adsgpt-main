@@ -22,9 +22,16 @@ const {
   getCampaignFields,
   plainMetaList,
 } = require("../../utils/metaHelpers");
+// Pure module — safe to require at top level, it never requires this file back.
+const {
+  normalizeDeliveryStatus,
+  normalizeLearningStage,
+  normalizeReviewFeedback,
+} = require("../../utils/metaDelivery");
 const {
   RECOMMENDATIONS_TTL,
   fetchAccountRecommendations,
+  fetchOpportunityScore,
   fetchAccountHierarchy,
   indexRecommendationsByObjectId,
   collectDescendants,
@@ -55,6 +62,9 @@ const {
   createAdSetSchema,
   createAdSchema,
   deleteCampaignSchema,
+  deleteAdSetSchema,
+  deleteAdSchema,
+  duplicateEntitySchema,
 } = require("../../Validations/meta.validator");
 const { runAuditForAccount } = require("../../services/metaAuditService");
 const {
@@ -93,18 +103,29 @@ async function fetchAllPaged(firstPageCursor, label = "items") {
 // useful while bounding the temporal skew users can observe.
 const VOLATILE_TTL = 300;
 
-// Bumped whenever the shape of a cached entity payload changes. Without it a
-// release that adds a field keeps serving rows that predate it for the full
-// REDIS_TTL, so the new field reads as permanently empty. Old keys are simply
+// Bumped whenever the shape of ANY cached payload changes. Without it a
+// release that adds a field keeps serving entries that predate it for the full
+// TTL, so the new field reads as permanently empty. Old keys are simply
 // orphaned and expire on their own.
-const CACHE_SHAPE = "v2";
+//
+// EVERY cached response shape belongs behind this, not just the entity lists.
+// Real hit (2026-08-28): carousel support added `kind:"carousel"` + `cards` to
+// getAdPreviewMedia, but `metaAdPreview:` had no CACHE_SHAPE segment — so a
+// launched carousel kept rendering as a single image for 30 minutes, and the
+// network response said `kind:"image"` with the new code deployed. Same latent
+// bug in `metaRecommendations:`, whose shape also changed this cycle
+// (opportunityScore + composed headline).
+//
+// When you add a cached endpoint, put CACHE_SHAPE in its key. When you change
+// what an existing one returns, bump this.
+const CACHE_SHAPE = "v3";
 
 // Meta's suggestions come from the ad-account edge, not from the entities
 // themselves, and are attached AFTER the entity cache is read — same reasoning
 // as attachPlanUsage. They turn over on their own schedule, so baking them
 // into the 2-hour entity blob would pin them to the wrong clock.
 async function getRecommendationState(userId, facebookId, adAccountId) {
-  const cacheKey = `metaRecommendations:${metaCacheScope(userId, facebookId)}:${adAccountId}`;
+  const cacheKey = `metaRecommendations:${CACHE_SHAPE}:${metaCacheScope(userId, facebookId)}:${adAccountId}`;
   const cached = await redisClient.get(cacheKey);
   if (cached) return JSON.parse(cached);
 
@@ -116,9 +137,20 @@ async function getRecommendationState(userId, facebookId, adAccountId) {
     ? await fetchAccountHierarchy(adAccountId)
     : { adSetToCampaign: {}, adToCampaign: {}, adToAdSet: {} };
 
+  // Fetched alongside the suggestions because it turns over on the same clock
+  // and is the aggregate the per-recommendation `+N` lifts add up to. Failing
+  // open to null keeps a missing score from taking the suggestions down too.
+  let opportunityScore = null;
+  try {
+    opportunityScore = await fetchOpportunityScore(adAccountId);
+  } catch (err) {
+    logger.warn(`getRecommendationState: opportunity score unavailable: ${err.message}`);
+  }
+
   const state = {
     index: indexRecommendationsByObjectId(recommendations),
     descendants: collectDescendants(hierarchy),
+    opportunityScore,
   };
   await redisClient.set(
     cacheKey,
@@ -159,6 +191,28 @@ async function attachRecommendations(items, level, userId, facebookId, adAccount
     for (const item of items) item.recommendations = [];
   }
   return items;
+}
+
+// Account-level Opportunity Score onto the campaigns response. Account-scoped,
+// so it rides the response object rather than each row. Reads the same cached
+// state attachRecommendations just populated, so this costs a Redis read, not a
+// second Meta call.
+async function attachOpportunityScore(response, userId, facebookId, adAccountId) {
+  if (!response || !adAccountId) return response;
+  try {
+    const { opportunityScore } = await getRecommendationState(
+      userId,
+      facebookId,
+      String(adAccountId).replace(/^act_/, ""),
+    );
+    response.opportunityScore = Number.isFinite(opportunityScore)
+      ? opportunityScore
+      : null;
+  } catch (err) {
+    logger.warn(`attachOpportunityScore: ${err.message}`);
+    response.opportunityScore = null;
+  }
+  return response;
 }
 
 // Cache key prefixes whose payloads embed status fields and therefore
@@ -686,6 +740,9 @@ class MetaAdLauncher {
     this.uploadAdVideo = this.uploadAdVideo.bind(this);
     this.createAd = this.createAd.bind(this);
     this.deleteCampaign = this.deleteCampaign.bind(this);
+    this.deleteAdSet = this.deleteAdSet.bind(this);
+    this.duplicateEntity = this.duplicateEntity.bind(this);
+    this.deleteAd = this.deleteAd.bind(this);
   }
 
   // * GET analytics data (stats with comparison and chart)
@@ -1172,6 +1229,12 @@ class MetaAdLauncher {
             getFacebookIdFromRequest(req),
             adAccountId,
           );
+          await attachOpportunityScore(
+            parsed,
+            userId,
+            getFacebookIdFromRequest(req),
+            adAccountId,
+          );
           return res
             .status(200)
             .json(await attachCampaignPlanState(parsed, userId));
@@ -1218,6 +1281,8 @@ class MetaAdLauncher {
         issues_info: plainMetaList(
           campaign.issues_info || campaign?._data?.issues_info,
         ),
+        effective_status: campaign.effective_status || null,
+        delivery: normalizeDeliveryStatus(campaign),
       }));
 
       const response = {
@@ -1257,6 +1322,12 @@ class MetaAdLauncher {
       await attachRecommendations(
         response.campaigns,
         "campaign",
+        userId,
+        getFacebookIdFromRequest(req),
+        adAccountId,
+      );
+      await attachOpportunityScore(
+        response,
         userId,
         getFacebookIdFromRequest(req),
         adAccountId,
@@ -1358,6 +1429,9 @@ class MetaAdLauncher {
         issues_info: plainMetaList(
           adSet.issues_info || adSet?._data?.issues_info,
         ),
+        effective_status: adSet.effective_status || null,
+        delivery: normalizeDeliveryStatus(adSet),
+        learning: normalizeLearningStage(adSet),
       }));
 
       const response = {
@@ -1447,6 +1521,10 @@ class MetaAdLauncher {
       const formattedAds = ads.map((ad) => ({
         ...(ad?._data || {}),
         issues_info: plainMetaList(ad?.issues_info || ad?._data?.issues_info),
+        delivery: normalizeDeliveryStatus(ad),
+        // Null for every ad that was never rejected, so the UI can treat a
+        // non-null value as "show the rejection panel" without extra checks.
+        review: normalizeReviewFeedback(ad),
       }));
 
       const response = {
@@ -1539,6 +1617,10 @@ class MetaAdLauncher {
       const formattedAds = ads.map((ad) => ({
         ...(ad?._data || {}),
         issues_info: plainMetaList(ad?.issues_info || ad?._data?.issues_info),
+        delivery: normalizeDeliveryStatus(ad),
+        // Null for every ad that was never rejected, so the UI can treat a
+        // non-null value as "show the rejection panel" without extra checks.
+        review: normalizeReviewFeedback(ad),
       }));
 
       const response = {
@@ -2139,7 +2221,7 @@ class MetaAdLauncher {
       // 30-min cache — these URLs are CDN-signed but stable for the
       // creative's lifetime. Image URLs are valid 24h+, video source URLs
       // are valid for hours. Keep TTL conservative.
-      const cacheKey = `metaAdPreview:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adId}`;
+      const cacheKey = `metaAdPreview:${CACHE_SHAPE}:${metaCacheScope(userId, getFacebookIdFromRequest(req))}:${adId}`;
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.status(200).json(JSON.parse(cached));
 
@@ -2159,8 +2241,60 @@ class MetaAdLauncher {
       const imageHash = link.image_hash || creative.image_hash || null;
       const isVideo = !!videoId;
 
+      // Carousel — the media lives in link_data.child_attachments, so none of
+      // the single-media fields above are set. Without this branch the
+      // resolver fell through to creative.thumbnail_url and the drawer showed
+      // ONE image (Meta's auto-thumbnail of the first card) for what is
+      // actually a multi-card ad.
+      const childAttachments = Array.isArray(link.child_attachments)
+        ? link.child_attachments
+        : [];
+
       let response;
-      if (isVideo) {
+      if (childAttachments.length > 0) {
+        // Resolve every card's image in a SINGLE adimages call — the edge
+        // takes an array of hashes, so this stays one round trip no matter
+        // how many cards. Video cards reuse the poster we set at build time
+        // (child_attachments[].image_url) rather than costing a call each.
+        const hashes = [
+          ...new Set(childAttachments.map((a) => a.image_hash).filter(Boolean)),
+        ];
+        const urlByHash = {};
+        if (hashes.length && adData.account_id) {
+          try {
+            const adAccountId = String(adData.account_id);
+            const acct = adAccountId.startsWith("act_")
+              ? adAccountId
+              : `act_${adAccountId}`;
+            const img = await api.call("GET", [acct, "adimages"], {
+              hashes: JSON.stringify(hashes),
+              fields: "hash,url,permalink_url",
+            });
+            for (const row of img?.data || img?._data?.data || []) {
+              if (row?.hash) urlByHash[row.hash] = row.url || row.permalink_url || null;
+            }
+          } catch (e) {
+            logger.warn(
+              `getAdPreviewMedia: carousel adimages lookup failed: ${e.message}`,
+            );
+          }
+        }
+
+        response = {
+          status: true,
+          kind: "carousel",
+          // Order matters — this is the order Meta renders the cards in.
+          cards: childAttachments.map((att) => ({
+            imageUrl: att.image_url || urlByHash[att.image_hash] || null,
+            isVideo: !!att.video_id,
+            headline: att.name || "",
+            description: att.description || "",
+            link: att.link || "",
+          })),
+          // Kept so a card that fails to resolve still has something to show.
+          fallbackImageUrl: creative.thumbnail_url || null,
+        };
+      } else if (isVideo) {
         // Resolve video playback URL. Meta exposes several fields on the
         // AdVideo node; we try them in preference order because:
         //   • `source` — direct MP4 URL, but Meta restricts it on many
@@ -2267,9 +2401,13 @@ class MetaAdLauncher {
       // permission glitch or Meta API hiccup. Caching a dead response
       // would lock the preview as broken for 30 min.
       const isEmpty =
-        response.kind === "video"
-          ? !response.videoUrl && !response.embedUrl && !response.permalinkUrl
-          : !response.imageUrl;
+        response.kind === "carousel"
+          ? // Cards resolved but every image missing = a transient adimages
+            // failure, not a real state. Don't cache that for 30 minutes.
+            !response.cards.some((c) => c.imageUrl) && !response.fallbackImageUrl
+          : response.kind === "video"
+            ? !response.videoUrl && !response.embedUrl && !response.permalinkUrl
+            : !response.imageUrl;
       if (!isEmpty) {
         await redisClient.set(cacheKey, JSON.stringify(response), "EX", 1800);
       } else {
@@ -4836,6 +4974,294 @@ class MetaAdLauncher {
       return res.status(status).json({
         status: false,
         error: m.title || "Failed to delete campaign",
+        details: m.message,
+        meta: {
+          code: m.code,
+          subcode: m.subcode,
+          fbtraceId: m.fbtraceId,
+          data: m.data,
+        },
+      });
+    }
+  }
+
+  /**
+   * Duplicate a campaign / ad set / ad through Meta's `/copies` edge.
+   *
+   * Deliberately NOT a read-then-recreate: `/copies` makes Meta clone every
+   * field server-side, including the dozens we never read back (creative
+   * enhancements, attribution windows, targeting automation flags). Rebuilding
+   * from our own field lists would silently drop anything not in
+   * getCampaignFields/getAdSetFields/getAdFields, and those lists exist for
+   * table rendering, not for round-tripping an entity.
+   */
+  async duplicateEntity(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Duplicate a campaign, ad set or ad via Meta /copies'
+    */
+    try {
+      const { error, value } = duplicateEntitySchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({
+          status: false,
+          error: error.details[0].context?.message || error.details[0].message,
+        });
+      }
+
+      const {
+        adAccountId,
+        level,
+        id,
+        campaignId,
+        targetCampaignId,
+        targetAdSetId,
+        deepCopy,
+        statusOption,
+        renamePrefix,
+        renameSuffix,
+      } = value;
+      const userId = req.user.user_id;
+
+      // Lazy requires — see createCampaign's note on the circular-import trap.
+      const {
+        requireManagedCampaign,
+        claimCampaign,
+      } = require("../../services/managedCampaigns");
+
+      if (level === "campaign") {
+        // A campaign copy IS a new campaign, so it consumes a plan slot and
+        // has to pass the same cap as create — not the managed-campaign gate,
+        // which only asks whether the SOURCE is managed.
+        const { checkPlanLimit } = require("../../utils/planLimits");
+        const campaignLimit = await checkPlanLimit(userId, "meta:campaigns");
+        if (!campaignLimit.ok) {
+          return res.status(campaignLimit.status).json({
+            status: false,
+            code: campaignLimit.code,
+            limitKey: campaignLimit.limitKey,
+            error: campaignLimit.error,
+            limit: campaignLimit.limit,
+            current: campaignLimit.current,
+          });
+        }
+      } else {
+        const gate = await requireManagedCampaign(userId, campaignId);
+        if (!gate.ok) {
+          return res.status(gate.status).json({
+            status: false,
+            code: gate.code,
+            limitKey: gate.limitKey,
+            error: gate.error,
+            limit: gate.limit,
+          });
+        }
+      }
+
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
+
+      const params = { status_option: statusOption };
+
+      // Without a rename the copy is name-identical to its source and the two
+      // are indistinguishable in the table. Default to a " - Copy" suffix,
+      // matching what Ads Manager itself does.
+      const prefix = renamePrefix || "";
+      const suffix = renameSuffix || (renamePrefix ? "" : " - Copy");
+      params.rename_options = {
+        rename_strategy: "ONLY_TOP_LEVEL_RENAME",
+        ...(prefix ? { rename_prefix: prefix } : {}),
+        ...(suffix ? { rename_suffix: suffix } : {}),
+      };
+
+      let source;
+      if (level === "campaign") {
+        source = new bizSdk.Campaign(id);
+        params.deep_copy = deepCopy;
+      } else if (level === "adset") {
+        source = new bizSdk.AdSet(id);
+        params.deep_copy = deepCopy;
+        // Omitted = copy into the same campaign, which is the common case.
+        if (targetCampaignId) params.campaign_id = targetCampaignId;
+      } else {
+        source = new bizSdk.Ad(id);
+        if (targetAdSetId) params.adset_id = targetAdSetId;
+      }
+
+      const copy = await source.createCopy([], params);
+
+      // Meta's response shape varies by level and by deep-vs-shallow copy:
+      // a plain `{id}` for shallow copies, `copied_campaign_id` /
+      // `copied_adset_id` on some deep-copy responses. Read defensively rather
+      // than trusting one key.
+      const data = copy?._data || copy || {};
+      const newId =
+        data.id ||
+        data.copied_campaign_id ||
+        data.copied_adset_id ||
+        data.ad_object_id ||
+        null;
+
+      if (level === "campaign" && newId) {
+        // Claim the slot for the campaign that now exists. `force` because
+        // checkPlanLimit above already reserved room for it.
+        await claimCampaign(userId, {
+          campaignId: newId,
+          adAccountId,
+          facebookId: getFacebookIdFromRequest(req),
+          source: "duplicate",
+          force: true,
+        });
+      }
+
+      // A deep copy creates entities at every level below the one copied, so
+      // bust the whole status-bearing set rather than threading child ids we
+      // were never told about.
+      await invalidateUserMetaCache(userId);
+
+      return res.status(201).json({
+        status: true,
+        message: `${level} duplicated`,
+        level,
+        sourceId: id,
+        id: newId,
+        deepCopy: level === "ad" ? false : deepCopy,
+        statusOption,
+      });
+    } catch (error) {
+      const m = logMetaError("Duplicate entity error", error);
+      const status = error.statusCode || 500;
+      return res.status(status).json({
+        status: false,
+        error: m.title || "Failed to duplicate",
+        details: m.message,
+        meta: {
+          code: m.code,
+          subcode: m.subcode,
+          fbtraceId: m.fbtraceId,
+          data: m.data,
+        },
+      });
+    }
+  }
+
+  /**
+   * Delete a single ad set. Meta cascades to the ad set's ads, but NOT upward
+   * — the campaign survives, so unlike deleteCampaign there is no plan slot to
+   * release here.
+   */
+  async deleteAdSet(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Delete a Meta ad set — Meta cascades the delete to its ads'
+    */
+    try {
+      const { error, value } = deleteAdSetSchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({
+          status: false,
+          error: error.details[0].context?.message || error.details[0].message,
+        });
+      }
+
+      const { adAccountId, adSetId, campaignId } = value;
+      const userId = req.user.user_id;
+
+      // Lazy require — see createCampaign's note on the circular-import trap.
+      const { requireManagedCampaign } = require("../../services/managedCampaigns");
+      const gate = await requireManagedCampaign(userId, campaignId);
+      if (!gate.ok) {
+        return res.status(gate.status).json({
+          status: false,
+          code: gate.code,
+          limitKey: gate.limitKey,
+          error: gate.error,
+          limit: gate.limit,
+        });
+      }
+
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
+
+      const adSet = new bizSdk.AdSet(adSetId);
+      await adSet.delete();
+
+      // The ad set's ads went with it, so ad lists keyed by BOTH the campaign
+      // and the ad set are stale, as are the parent's rolled-up budgets.
+      await invalidateUserMetaCache(userId);
+      await invalidateMetaCacheByPrefixes(userId, ["metaAnalytics", "metaAudit"]);
+
+      return res.status(200).json({
+        status: true,
+        message: "Ad set deleted",
+        adSetId,
+        campaignId: campaignId || null,
+        adAccountId,
+      });
+    } catch (error) {
+      const m = logMetaError("Delete ad set error", error);
+      const status = error.statusCode || 500;
+      return res.status(status).json({
+        status: false,
+        error: m.title || "Failed to delete ad set",
+        details: m.message,
+        meta: {
+          code: m.code,
+          subcode: m.subcode,
+          fbtraceId: m.fbtraceId,
+          data: m.data,
+        },
+      });
+    }
+  }
+
+  /** Delete a single ad. Nothing cascades — this is the leaf level. */
+  async deleteAd(req, res) {
+    /* #swagger.tags = ['Meta Ads Launcher']
+       #swagger.description = 'Delete a single Meta ad'
+    */
+    try {
+      const { error, value } = deleteAdSchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({
+          status: false,
+          error: error.details[0].context?.message || error.details[0].message,
+        });
+      }
+
+      const { adAccountId, adId, campaignId } = value;
+      const userId = req.user.user_id;
+
+      // Lazy require — see createCampaign's note on the circular-import trap.
+      const { requireManagedCampaign } = require("../../services/managedCampaigns");
+      const gate = await requireManagedCampaign(userId, campaignId);
+      if (!gate.ok) {
+        return res.status(gate.status).json({
+          status: false,
+          code: gate.code,
+          limitKey: gate.limitKey,
+          error: gate.error,
+          limit: gate.limit,
+        });
+      }
+
+      await initApiForUser(userId, getFacebookIdFromRequest(req));
+
+      const ad = new bizSdk.Ad(adId);
+      await ad.delete();
+
+      await invalidateUserMetaCache(userId);
+      await invalidateMetaCacheByPrefixes(userId, ["metaAnalytics", "metaAudit"]);
+
+      return res.status(200).json({
+        status: true,
+        message: "Ad deleted",
+        adId,
+        campaignId: campaignId || null,
+        adAccountId,
+      });
+    } catch (error) {
+      const m = logMetaError("Delete ad error", error);
+      const status = error.statusCode || 500;
+      return res.status(status).json({
+        status: false,
+        error: m.title || "Failed to delete ad",
         details: m.message,
         meta: {
           code: m.code,

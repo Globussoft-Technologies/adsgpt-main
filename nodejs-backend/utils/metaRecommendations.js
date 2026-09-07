@@ -41,12 +41,37 @@ function labelRecommendationEnum(value, fallback = "") {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+// Meta's own popover leads with the OUTCOME ("You could get 8% lower cost per
+// result by optimising your Reels format"), not the enum — but the API ships no
+// title, so Meta composes that sentence client-side from the same two pieces we
+// already receive. We do the same, with one restriction: only the outcome half
+// is composed. Deriving "by optimising your Reels format" would mean inventing
+// grammar for an enum set we have never seen in full (labelRecommendationEnum
+// exists precisely because Meta keeps adding types), so the enum stays a
+// separate label rather than being forced into a sentence.
+//
+// `lift_estimate` is prose from Meta ("8% lower cost per result"). Guard on it
+// reading as a phrase — a bare "8%" would make "You could get 8%" nonsense — and
+// fall back to the enum label when it doesn't.
+function composeHeadline(liftEstimate, enumLabel) {
+  const lift = String(liftEstimate || "").trim();
+  const looksLikePhrase = lift.length > 0 && /\s/.test(lift);
+  return looksLikePhrase ? `You could get ${lift}` : enumLabel;
+}
+
 function normalizeRecommendation(raw) {
   const content = raw?.recommendation_content || {};
   const lift = Number(content.opportunity_score_lift);
+  const enumLabel = labelRecommendationEnum(
+    raw?.type,
+    "Recommendation from Meta",
+  );
   return {
     type: raw?.type || null,
-    title: labelRecommendationEnum(raw?.type, "Recommendation from Meta"),
+    title: enumLabel,
+    // Benefit-led headline for the card; `title` stays the enum label so the
+    // two can be shown together the way Meta's popover does.
+    headline: composeHeadline(content.lift_estimate, enumLabel),
     body: content.body || "",
     liftEstimate: content.lift_estimate || "",
     opportunityScoreLift: Number.isFinite(lift) ? lift : null,
@@ -71,6 +96,36 @@ async function fetchAccountRecommendations(adAccountId) {
     const list = group?._data?.recommendations || group?.recommendations;
     return Array.isArray(list) ? list.map(normalizeRecommendation) : [];
   });
+}
+
+// Account-level Opportunity Score — the 0-100 pill Meta shows next to the ad
+// account name, of which each recommendation's `opportunity_score_lift` is one
+// increment.
+//
+// Read defensively on purpose. The per-object `recommendations` field on this
+// same API looks supported and silently returns nothing (see the note at the
+// top of this file), so a sibling field being *documented* is not evidence it
+// comes back populated. Meta has also shipped this as a bare number and as an
+// object across versions. Anything unrecognised resolves to null and the UI
+// simply omits the pill rather than rendering a wrong score.
+async function fetchOpportunityScore(adAccountId) {
+  const account = new AdAccount(`act_${adAccountId}`);
+  const res = await account.read([AdAccount.Fields.opportunity_score]);
+  const raw = res?.opportunity_score ?? res?._data?.opportunity_score;
+
+  const pick = (v) => {
+    if (v == null) return null;
+    if (typeof v === "number") return v;
+    if (typeof v === "string" && v.trim() !== "") return Number(v);
+    if (typeof v === "object") {
+      // Seen as {score}, and as an edge-style {data:[{score}]}.
+      return pick(v.score ?? v.opportunity_score ?? v?.data?.[0]?.score);
+    }
+    return null;
+  };
+
+  const score = pick(raw);
+  return Number.isFinite(score) ? score : null;
 }
 
 function indexRecommendationsByObjectId(recommendations) {
@@ -169,6 +224,8 @@ function recommendationsForIds(index, ids) {
 module.exports = {
   RECOMMENDATIONS_TTL,
   fetchAccountRecommendations,
+  fetchOpportunityScore,
+  composeHeadline,
   fetchAccountHierarchy,
   indexRecommendationsByObjectId,
   collectDescendants,

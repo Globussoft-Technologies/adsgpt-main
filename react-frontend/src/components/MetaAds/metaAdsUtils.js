@@ -318,3 +318,110 @@ export const labelBillingEvent = (v) => lookup(BILLING_EVENT_LABELS, v);
 export const labelOptimizationGoal = (v) => lookup(OPTIMIZATION_GOAL_LABELS, v);
 export const labelBidType = (v) => lookup(BID_TYPE_LABELS, v);
 export const labelCTA = (v) => lookup(CTA_LABELS, v);
+
+// ─── delivery state ───────────────────────────────────────────────────────────
+// The backend derives a `delivery` object per entity (utils/metaDelivery.js)
+// from Meta's `effective_status`, because `status` alone is a lie on any
+// rejected or parent-paused entity. These maps turn its `tone` into classes;
+// the labels themselves come from the backend so the two never drift.
+
+export const DELIVERY_TONES = {
+  good: {
+    dot: 'bg-emerald-500 dark:bg-emerald-400',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    bg: 'bg-emerald-400/10 border-emerald-400/30 dark:border-emerald-400/20',
+  },
+  bad: {
+    dot: 'bg-red-500 dark:bg-red-400',
+    text: 'text-red-600 dark:text-red-400',
+    bg: 'bg-red-400/10 border-red-400/30 dark:border-red-400/20',
+  },
+  warn: {
+    dot: 'bg-amber-500 dark:bg-amber-400',
+    text: 'text-amber-600 dark:text-amber-400',
+    bg: 'bg-amber-400/10 border-amber-400/30 dark:border-amber-400/20',
+  },
+  neutral: {
+    dot: 'bg-sky-500 dark:bg-sky-400',
+    text: 'text-sky-600 dark:text-sky-400',
+    bg: 'bg-sky-400/10 border-sky-400/30 dark:border-sky-400/20',
+  },
+  muted: {
+    dot: 'bg-gray-400 dark:bg-[#AFAFAF]',
+    text: 'text-gray-500 dark:text-[#BEBEBE]',
+    bg: 'bg-gray-200/70 border-gray-300 dark:bg-white/5 dark:border-white/10',
+  },
+  unknown: {
+    dot: 'bg-gray-400 dark:bg-[#AFAFAF]',
+    text: 'text-gray-500 dark:text-[#BEBEBE]',
+    bg: 'bg-gray-200/70 border-gray-300 dark:bg-white/5 dark:border-white/10',
+  },
+};
+
+export const deliveryTone = (tone) => DELIVERY_TONES[tone] ?? DELIVERY_TONES.unknown;
+
+// ─── table filtering ──────────────────────────────────────────────────────────
+// Client-side over the already-fetched list, like the existing name search —
+// these lists are one Meta page each, so filtering server-side would cost a
+// round trip to narrow data we already hold.
+
+export const TABLE_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
+  { key: 'paused', label: 'Paused' },
+  // Anything Meta is unhappy about: rejected, billing-blocked, or carrying a
+  // delivery issue. This is the bucket users actually go looking for.
+  { key: 'issues', label: 'Needs attention' },
+];
+
+const NOT_DELIVERING_TONES = new Set(['bad']);
+
+/**
+ * matchesTableFilter — one predicate for all three levels.
+ *
+ * Reads the derived `delivery` object when present and falls back to raw
+ * `status`, so rows served from a cache written before the delivery fields
+ * were requested still filter correctly instead of vanishing.
+ */
+export const matchesTableFilter = (row, filterKey) => {
+  if (!filterKey || filterKey === 'all') return true;
+
+  const delivery = row?.delivery || null;
+
+  // Active / Paused match the USER-SET status — the same value StatusBadge
+  // renders — not effective_status.
+  //
+  // Filtering on effective_status was a real bug: an ad the user set ACTIVE
+  // that Meta is still reviewing has effective_status PENDING_REVIEW, so it
+  // matched neither bucket. The table showed a green ACTIVE badge next to
+  // "Active 0", which reads as the filter being broken. Same for a paused ad
+  // reporting IN_PROCESS.
+  //
+  // Meta's own Ads Manager behaves this way too — its "Active ads" filter
+  // includes in-review ads. Delivery divergence is what the delivery badge and
+  // the "Needs attention" bucket below are for.
+  const userStatus = row?.status || null;
+
+  if (filterKey === 'active') return userStatus === 'ACTIVE';
+
+  if (filterKey === 'paused') return userStatus === 'PAUSED';
+
+  if (filterKey === 'issues') {
+    if (delivery?.tone && NOT_DELIVERING_TONES.has(delivery.tone)) return true;
+    if (Array.isArray(row?.issues_info) && row.issues_info.length > 0) return true;
+    // Learning-limited is a delivery problem the user can act on, so it
+    // belongs in this bucket even though Meta reports the ad set as ACTIVE.
+    if (row?.learning?.stage === 'LEARNING_LIMITED') return true;
+    if (row?.review) return true;
+    return false;
+  }
+
+  return true;
+};
+
+/** Count per filter, for the pill badges. */
+export const countByFilter = (rows = []) =>
+  TABLE_FILTERS.reduce((acc, f) => {
+    acc[f.key] = rows.filter((r) => matchesTableFilter(r, f.key)).length;
+    return acc;
+  }, {});

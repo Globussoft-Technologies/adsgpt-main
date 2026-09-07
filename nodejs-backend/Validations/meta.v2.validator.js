@@ -16,6 +16,9 @@ const Joi = require("joi");
 const {
   getCell,
   isCellImplemented,
+  cellSupportsCarousel,
+  CAROUSEL_MIN_CARDS,
+  CAROUSEL_MAX_CARDS,
   listObjectives,
   getAllowedBillingEvents,
   getAllowedBidStrategies,
@@ -718,14 +721,27 @@ function buildAdSchemaV2(objective, conversionLocation) {
     // check of Meta Ads Manager's own Catalog-ad creation flow found no
     // such placeholder affordance there at all (see gotchas.md). Catalog
     // ad copy is plain literal text like every other cell now.
+    // Headline / description are REQUIRED for single-media ads but meaningless
+    // on a carousel: Meta keeps both per card and link_data has no ad-level
+    // equivalent, so buildLinkData's carousel branch never emits them. Keeping
+    // them required there made the wizard collect a headline and silently throw
+    // it away — and then edit mode had nothing to read back.
+    //
+    // On carousel-capable cells they're optional at key level and the
+    // requirement is enforced in the .custom() below, which can see whether
+    // `cards` is present. Cells that can't carry a carousel are unchanged.
     headline: req.has("headline")
-      ? Joi.string().min(1).max(40).required()
+      ? cellSupportsCarousel(cell)
+        ? Joi.string().allow("").max(40).default("")
+        : Joi.string().min(1).max(40).required()
       : Joi.string().allow("").max(40).default(""),
     primaryText: req.has("primaryText")
       ? Joi.string().min(1).max(125).required()
       : Joi.string().allow("").max(125).default(""),
     description: req.has("description")
-      ? Joi.string().min(1).max(30).required()
+      ? cellSupportsCarousel(cell)
+        ? Joi.string().allow("").max(30).default("")
+        : Joi.string().min(1).max(30).required()
       : Joi.string().allow("").max(30).default(""),
 
     // `.trim()` before `.uri()` so a stray space from a paste doesn't
@@ -788,6 +804,62 @@ function buildAdSchemaV2(objective, conversionLocation) {
       .valid(...cell.ctas.allowed)
       .default(cell.ctas.default),
 
+    // ── Carousel ────────────────────────────────────────────────────────────
+    // Present only on cells whose creative shape emits link_data (see
+    // cellSupportsCarousel). `forbidden` elsewhere so a caller can't send
+    // cards to a cell whose builder would silently drop them.
+    //
+    // Per-card link / headline / description / CTA are all OPTIONAL: each
+    // falls back to the ad-level value in buildChildAttachments, which is what
+    // makes "same destination on every card" cheap to express. Copy caps match
+    // the ad-level ones — Meta truncates carousel card text harder in practice,
+    // but shipping a tighter cap than Meta enforces would reject payloads Meta
+    // accepts, so these stay aligned until we have live evidence.
+    cards: cellSupportsCarousel(cell)
+      ? Joi.array()
+          .min(CAROUSEL_MIN_CARDS)
+          .max(CAROUSEL_MAX_CARDS)
+          .items(
+            Joi.object({
+              imageHash: Joi.string().optional().allow(""),
+              videoId: Joi.string().optional().allow(""),
+              videoThumbnailUrl: Joi.string().trim().uri().optional().allow("", null),
+              link: Joi.string().trim().uri().optional().allow(""),
+              headline: Joi.string().allow("").max(40).default(""),
+              description: Joi.string().allow("").max(30).default(""),
+              callToAction: Joi.string()
+                .valid(...cell.ctas.allowed)
+                .optional(),
+            }).custom((card, helpers) => {
+              const img = !!card.imageHash;
+              const vid = !!card.videoId;
+              if (img === vid) {
+                return helpers.error("any.invalid", {
+                  message:
+                    "Each carousel card needs exactly one of imageHash or videoId",
+                });
+              }
+              return card;
+            }),
+          )
+          .optional()
+          .messages({
+            "array.min": `A carousel needs at least ${CAROUSEL_MIN_CARDS} cards`,
+            "array.max": `A carousel can have at most ${CAROUSEL_MAX_CARDS} cards`,
+          })
+      : Joi.forbidden(),
+
+    // Let Meta reorder cards by performance. Off by default: it overrides the
+    // order the advertiser authored, which matters when cards tell a sequence.
+    multiShareOptimized: cellSupportsCarousel(cell)
+      ? Joi.boolean().default(false)
+      : Joi.forbidden(),
+    // Trailing Page-profile card. Meta defaults it on, so this only ever
+    // carries an explicit opt-out.
+    multiShareEndCard: cellSupportsCarousel(cell)
+      ? Joi.boolean().default(true)
+      : Joi.forbidden(),
+
     // Auto-translate ad copy into viewers' languages. Maps to
     // `link_data.automatic_translation: true` on the creative.
     autoTranslate: Joi.boolean().default(false),
@@ -823,7 +895,38 @@ function buildAdSchemaV2(objective, conversionLocation) {
             "This cell uses your catalog for product images — don't supply imageHash or videoId.",
         });
       }
+    } else if (Array.isArray(value.cards) && value.cards.length > 0) {
+      // Carousel — every card carries its own media, so the ad-level fields
+      // must be empty. Sending one anyway fails SILENTLY at Meta: it renders
+      // the single image and ignores child_attachments, which reads as
+      // "carousel didn't work" with no error to debug.
+      if (value.imageHash || value.videoId) {
+        return helpers.error("any.invalid", {
+          message:
+            "Carousel media lives on each card — don't also send imageHash or videoId",
+        });
+      }
+      // A carousel card set can mix images and videos, but not on a cell whose
+      // ad set is ThruPlay-optimised (subcode 1815869). cellSupportsCarousel
+      // already excludes mediaKind:'video' cells; this guards the inverse.
+      if (cell.ad.mediaKind === "image" && value.cards.some((c) => c.videoId)) {
+        return helpers.error("any.invalid", {
+          message: "This cell requires image creatives — remove the video cards.",
+        });
+      }
     } else {
+      // Ad-level copy is only required when this ISN'T a carousel — see the
+      // headline/description notes above. Enforced here rather than at key
+      // level because only here can we see whether `cards` was sent.
+      if (cellSupportsCarousel(cell)) {
+        for (const field of ["headline", "description"]) {
+          if (req.has(field) && !String(value[field] || "").trim()) {
+            return helpers.error("any.invalid", {
+              message: `${field === "headline" ? "Headline" : "Description"} is required.`,
+            });
+          }
+        }
+      }
       // Standard cells — exactly one of imageHash OR videoId must be
       // present. The wizard surfaces a tabbed picker; we enforce here so
       // direct API callers can't slip past with both or neither.

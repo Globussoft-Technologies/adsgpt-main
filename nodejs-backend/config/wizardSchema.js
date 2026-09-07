@@ -403,12 +403,58 @@ const CONVERSION_LOCATION_TO_META_DESTINATION = {
 //       requiredFields: string[],      // wizard form fields, NOT Meta API fields
 //       optionalFields: string[],
 //       objectStorySpecShape: string,  // key for utils/objectStorySpec.js
+//       mediaKind: 'any'|'image'|'video',  // optional; defaults to 'any'
+//       carousel: false,               // optional OPT-OUT only — see below
 //     },
 //     ctas: { allowed: string[], default: string },
 //     identity: { required: string[], optional: string[] },
 //     additionalSteps: string[],       // extra wizard steps (e.g. "leadForm")
 //     notes: string,                   // human-readable, surfaced in UI tooltips
 //   }
+
+// ─── Carousel eligibility ─────────────────────────────────────────────────────
+//
+// Carousel is a MEDIA MODE on cells that already exist, not a new cell. Adding
+// carousel variants to the matrix would take 34 cells to ~53 and double every
+// sweep test for no new behaviour, so eligibility is DERIVED from the cell's
+// creative shape and declared once here.
+//
+// Eligible shapes emit `link_data`, whose `child_attachments` array IS Meta's
+// carousel. Deliberately excluded:
+//
+//   - `template_data` (Sales/CATALOG) already renders a carousel server-side
+//     from the bound product set; offering a manual one would collide.
+//   - `lead_gen_form*`, `messenger_*`, `whatsapp_*`, `click_to_call`,
+//     `instagram_direct` — Meta supports carousel on some of these, but each
+//     carries bespoke `call_to_action.value` plumbing (form ids, page refs,
+//     phone payloads) with its own error-subcode history. Each is its own
+//     verification job rather than a free ride on this one.
+//   - `app_link` — eligible in principle and a likely fast follow, but every
+//     card's CTA needs `value.application` alongside `value.link`, which is an
+//     untested Meta path. Held back until the link_data carousel is confirmed
+//     against a live account rather than shipped on the same unverified pass.
+//
+// A cell may opt OUT with `ad.carousel: false` (e.g. a shape-eligible cell
+// Meta later rejects); nothing opts in individually.
+const CAROUSEL_ELIGIBLE_SHAPES = new Set(["link_data", "pixel_website"]);
+
+/**
+ * cellSupportsCarousel — may this cell's Ad step offer a multi-card format?
+ *
+ * Video-only cells are excluded: their lock exists because Meta rejects image
+ * creatives on ThruPlay-optimised ad sets (subcode 1815869), and a mixed-media
+ * carousel would reintroduce exactly that.
+ */
+function cellSupportsCarousel(cell) {
+  if (!cell || !cell.ad) return false;
+  if (cell.ad.carousel === false) return false;
+  if (cell.ad.mediaKind === "video") return false;
+  return CAROUSEL_ELIGIBLE_SHAPES.has(cell.ad.objectStorySpecShape);
+}
+
+// Meta's own limits on `child_attachments`.
+const CAROUSEL_MIN_CARDS = 2;
+const CAROUSEL_MAX_CARDS = 10;
 
 const CELLS = {
   // Traffic — matches Meta Ads Manager's 6 conversion-location options.
@@ -1804,6 +1850,10 @@ function toJSON() {
                 label: CONVERSION_LOCATION_LABELS[loc],
                 metaDestinationType: getMetaDestinationType(objective, loc),
                 ...cell,
+                // Derived, not stored — the frontend can't call
+                // cellSupportsCarousel, and duplicating the shape list there
+                // would let the two drift. One source of truth, serialised.
+                supportsCarousel: cellSupportsCarousel(cell),
               },
             ]),
           ),
@@ -1825,6 +1875,9 @@ function toJSON() {
     // see subcode 1885204. Frontend uses this to narrow the bid-strategy
     // dropdown when the goal changes.
     autobidOnlyOptimizationGoals: [...AUTOBID_ONLY_OPTIMIZATION_GOALS],
+    // Meta's child_attachments bounds, shipped so the card editor enforces the
+    // same numbers the Joi schema does without hardcoding them twice.
+    carouselCardLimits: { min: CAROUSEL_MIN_CARDS, max: CAROUSEL_MAX_CARDS },
   };
 }
 
@@ -1839,6 +1892,9 @@ module.exports = {
   CONVERSION_LOCATION_TO_META_DESTINATION,
   BILLING_EVENTS_BY_OPTIMIZATION_GOAL,
   AUTOBID_ONLY_OPTIMIZATION_GOALS,
+  CAROUSEL_ELIGIBLE_SHAPES,
+  CAROUSEL_MIN_CARDS,
+  CAROUSEL_MAX_CARDS,
 
   // Accessors — the consumer surface.
   listObjectives,
@@ -1850,5 +1906,6 @@ module.exports = {
   getAllowedOptimizationGoals,
   getAllowedBillingEvents,
   getAllowedBidStrategies,
+  cellSupportsCarousel,
   toJSON,
 };

@@ -171,6 +171,78 @@ const deleteCampaignSchema = Joi.object({
   campaignId: Joi.string().required(),
 });
 
+// Ad-set / ad delete. `campaignId` is OPTIONAL for the same reason it is on
+// updateAdStatusSchema — the frontend knows the parent from the drill-down URL
+// and supplies it so the managed-campaign plan gate can run without a Meta
+// lookup. Absent = allowed. See services/managedCampaigns.js.
+const deleteAdSetSchema = Joi.object({
+  adAccountId: Joi.string().required(),
+  adSetId: Joi.string().required().messages({
+    "any.required": "adSetId is required",
+  }),
+  campaignId: Joi.string().optional(),
+});
+
+const deleteAdSchema = Joi.object({
+  adAccountId: Joi.string().required(),
+  adId: Joi.string().required().messages({
+    "any.required": "adId is required",
+  }),
+  campaignId: Joi.string().optional(),
+});
+
+/**
+ * Duplicate a campaign / ad set / ad via Meta's `/copies` edge.
+ *
+ * Shaped like updateAdStatusSchema (level + id + optional parent campaignId)
+ * so the frontend can drive single-row and bulk duplication through one call.
+ */
+const duplicateEntitySchema = Joi.object({
+  adAccountId: Joi.string().required(),
+
+  level: Joi.string().valid("campaign", "adset", "ad").required().messages({
+    "any.only": "level must be one of campaign, adset, ad",
+    "any.required": "level is required",
+  }),
+
+  id: Joi.string().required().messages({
+    "any.required": "id is required",
+  }),
+
+  // Parent campaign of the thing being copied. Same optional-parent convention
+  // as updateAdStatusSchema — used for the managed-campaign gate on
+  // adset/ad-level copies. Ignored when level is 'campaign'.
+  campaignId: Joi.string().optional(),
+
+  // Destination parent. Omitted = copy alongside the original, which is what
+  // "Duplicate" means in Ads Manager. Only meaningful for adset (into another
+  // campaign) and ad (into another ad set).
+  targetCampaignId: Joi.string().optional(),
+  targetAdSetId: Joi.string().optional(),
+
+  // Copy the children too. Meaningless for ads (they're the leaf level), so
+  // it's rejected there rather than silently ignored.
+  deepCopy: Joi.boolean().default(true).when("level", {
+    is: "ad",
+    then: Joi.valid(false).messages({
+      "any.only": "deepCopy is not applicable when duplicating an ad",
+    }),
+  }),
+
+  // PAUSED by default and deliberately: a duplicate that inherits ACTIVE
+  // starts spending the moment it's created, which is never what someone
+  // clicking "Duplicate" on a live campaign expects.
+  statusOption: Joi.string()
+    .valid("PAUSED", "ACTIVE", "INHERITED_FROM_SOURCE")
+    .default("PAUSED"),
+
+  // Meta appends/prepends these to the copy's name. Without a suffix the copy
+  // is name-identical to the original and the two are indistinguishable in the
+  // table, so the controller supplies a default when neither is given.
+  renamePrefix: Joi.string().max(60).optional().allow(""),
+  renameSuffix: Joi.string().max(60).optional().allow(""),
+});
+
 const createAdSchema = Joi.object({
   adAccountId: Joi.string().required(),
   adSetId: Joi.string().required(),
@@ -225,6 +297,9 @@ module.exports = {
   createAdSetSchema,
   createAdSchema,
   deleteCampaignSchema,
+  deleteAdSetSchema,
+  deleteAdSchema,
+  duplicateEntitySchema,
   generateAdCopySchema,
   META_OBJECTIVES,
   SPECIAL_AD_CATEGORIES,
