@@ -4,6 +4,8 @@ const UnifiedCreditController = require("../UnifiedCreditController");
 const { buildEffectiveCostStages } = require("../../config/modelAggregation");
 const modelConfigurationService = require("../../services/modelConfigurationService");
 const MetaLaunchTrace = require("../../Module/adPosting/metaLaunchTrace");
+const { fetchAllMembers } = require("../../services/amemberUserDirectory");
+const { applyMemberData, paginateRows } = require("../../utils/adminUserMembers");
 const axios = require("axios");
 
 let amemberProductsCache = null;
@@ -397,7 +399,7 @@ exports.usersFilterOptions = async (req, res) => {
   }
 };
 
-// GET /admin/users?from&to&search&sort&page&limit&type&model&plan&generationsMin&generationsMax&creditsMin&creditsMax&costMin&costMax&lastActivityFrom&lastActivityTo
+// GET /admin/users?from&to&signUpFrom&signUpTo&search&sort&page&limit&type&model&plan&generationsMin&generationsMax&creditsMin&creditsMax&costMin&costMax&lastActivityFrom&lastActivityTo
 exports.usersList = async (req, res) => {
   try {
     const {
@@ -415,6 +417,8 @@ exports.usersList = async (req, res) => {
       costMax,
       lastActivityFrom,
       lastActivityTo,
+      signUpFrom = "",
+      signUpTo = "",
       sort = "cost", // cost | generations | credits | recent
       page = 1,
       limit = 20,
@@ -422,7 +426,6 @@ exports.usersList = async (req, res) => {
 
     const pageNumber = Math.max(1, parseInt(page));
     const limitNumber = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip = (pageNumber - 1) * limitNumber;
 
     const match = buildDateMatch(from, to);
     if (["image", "video"].includes(type)) match.type = type;
@@ -480,6 +483,7 @@ exports.usersList = async (req, res) => {
         name_f: 1,
         name_l: 1,
         email: 1,
+        amember_user_id: 1,
         subscription_plan_id: 1,
         subscription_plan_name: 1,
         subscription_expiry: 1,
@@ -539,6 +543,31 @@ exports.usersList = async (req, res) => {
       );
     }
 
+    let memberDirectory = { members: [], stale: false };
+    let memberDataAvailable = true;
+    try {
+      memberDirectory = await fetchAllMembers();
+      if (memberDirectory.stale) {
+        console.warn("[admin users list] Using stale cached aMember user directory");
+      }
+    } catch (error) {
+      memberDataAvailable = false;
+      console.warn(
+        "[admin users list] aMember user directory unavailable:",
+        error.code || error.message,
+      );
+    }
+
+    const memberResult = applyMemberData({
+      rows: merged,
+      profileMap,
+      members: memberDirectory.members,
+      signUpFrom: String(signUpFrom || "").trim(),
+      signUpTo: String(signUpTo || "").trim(),
+      available: memberDataAvailable,
+    });
+    merged = memberResult.rows;
+
     merged.sort((a, b) => {
       const av = a[sortField] ?? 0;
       const bv = b[sortField] ?? 0;
@@ -548,16 +577,21 @@ exports.usersList = async (req, res) => {
       return bv - av;
     });
 
-    const total = merged.length;
-    const pageData = merged.slice(skip, skip + limitNumber);
+    const paginated = paginateRows(merged, pageNumber, limitNumber);
 
     return res.json({
       success: true,
       page: pageNumber,
       limit: limitNumber,
-      total,
-      hasMore: skip + pageData.length < total,
-      data: pageData,
+      total: paginated.total,
+      hasMore: paginated.hasMore,
+      data: paginated.data,
+      memberData: {
+        available: memberDataAvailable,
+        stale: Boolean(memberDirectory.stale),
+        signupFilterRequested: memberResult.signupFilterRequested,
+        signupFilterApplied: memberResult.signupFilterApplied,
+      },
     });
   } catch (error) {
     console.error("Admin users list error:", error);

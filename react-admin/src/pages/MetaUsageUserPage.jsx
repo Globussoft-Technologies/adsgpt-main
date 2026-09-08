@@ -108,6 +108,7 @@ export default function MetaUsageUserPage() {
           </p>
         </div>
         <DateRangePicker
+          preset={range.preset}
           from={range.from}
           to={range.to}
           onChange={(r) => {

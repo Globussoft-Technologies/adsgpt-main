@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import Badge from "@/components/Badge.jsx";
+import DateRangePicker from "@/components/DateRangePicker.jsx";
 import Select from "@/components/Select.jsx";
 import { adminApi } from "@/lib/api";
 
@@ -381,7 +382,7 @@ export default function ModelsPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI Models</h1>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Control the canonical model names, credit rules, and module availability used by generation and internal AI flows.</p>
         </div>
-        <button onClick={startCreate} className="flex min-h-11 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><Plus className="h-4 w-4" /> Add model</button>
+        <div className="flex flex-wrap items-center gap-2"><DateRangePicker /><button onClick={startCreate} className="flex min-h-11 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"><Plus className="h-4 w-4" /> Add model</button></div>
       </header>
 
       {error ? <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}

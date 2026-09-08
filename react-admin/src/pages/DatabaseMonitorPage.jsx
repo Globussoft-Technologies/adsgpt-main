@@ -23,6 +23,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import DateRangePicker from "@/components/DateRangePicker.jsx";
 import Badge from "@/components/Badge.jsx";
 import { adminApi } from "@/lib/api";
 import { formatDate, formatNumber } from "@/lib/utils";
@@ -214,7 +215,7 @@ export default function DatabaseMonitorPage() {
 
   const connected = health?.connection?.state === "connected";
   return <div className="space-y-5">
-    <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h1 className="text-2xl font-semibold tracking-tight text-slate-900">Database Monitor</h1><p className="mt-1 text-sm text-slate-500">Read-only MongoDB health, performance, storage, and query diagnostics.</p></div><div className="flex items-center gap-2"><Badge tone={connected ? "emerald" : "rose"} className="gap-1.5 py-1">{connected ? <CheckCircle2 className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}{health?.connection?.state || "Checking"}</Badge><button onClick={() => loadTab()} disabled={loadingTab} className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-50" title="Refresh"><RefreshCw className={`h-4 w-4 ${loadingTab ? "animate-spin" : ""}`} /></button></div></header>
+    <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h1 className="text-2xl font-semibold tracking-tight text-slate-900">Database Monitor</h1><p className="mt-1 text-sm text-slate-500">Read-only MongoDB health, performance, storage, and query diagnostics.</p></div><div className="flex flex-wrap items-center gap-2"><DateRangePicker /><Badge tone={connected ? "emerald" : "rose"} className="gap-1.5 py-1">{connected ? <CheckCircle2 className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}{health?.connection?.state || "Checking"}</Badge><button onClick={() => loadTab()} disabled={loadingTab} className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-50" title="Refresh"><RefreshCw className={`h-4 w-4 ${loadingTab ? "animate-spin" : ""}`} /></button></div></header>
     {healthError ? <Notice tone="rose">{healthError}</Notice> : null}
     <div className="overflow-x-auto border-b border-slate-200"><nav className="flex min-w-max gap-1">{TABS.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => setTab(id)} className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition ${tab === id ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}><Icon className="h-4 w-4" />{label}</button>)}</nav></div>
     {tab === "overview" ? health ? <Overview health={health} /> : <Loading /> : null}

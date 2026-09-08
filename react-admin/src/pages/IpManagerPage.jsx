@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import Badge from "@/components/Badge.jsx";
+import DateRangePicker from "@/components/DateRangePicker.jsx";
 import { adminApi } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 
@@ -195,9 +196,12 @@ export default function IpManagerPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">IP Manager</h1>
           <p className="mt-1 text-sm text-slate-500">Maintain trusted and blocked IPv4, IPv6, and CIDR entries.</p>
         </div>
-        <button onClick={() => { setSaveError(""); setDialogRule(null); }} className="flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
-          <CirclePlus className="h-4 w-4" /> Add IP rule
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker />
+          <button onClick={() => { setSaveError(""); setDialogRule(null); }} className="flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
+            <CirclePlus className="h-4 w-4" /> Add IP rule
+          </button>
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, KeyRound, Loader2, Plus, TriangleAlert } from "lucide-react";
 import Badge from "@/components/Badge.jsx";
+import DateRangePicker from "@/components/DateRangePicker.jsx";
 import { adminApi } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 
@@ -77,11 +78,14 @@ export default function PartnerApiKeysPage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Partner API Keys</h1>
-        <p className="text-sm text-slate-500">
-          Credentials for the partner-facing Meta Ads reporting API (<code>/partner-api/v1/meta-ads</code>).
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Partner API Keys</h1>
+          <p className="text-sm text-slate-500">
+            Credentials for the partner-facing Meta Ads reporting API (<code>/partner-api/v1/meta-ads</code>).
+          </p>
+        </div>
+        <DateRangePicker />
       </header>
 
       <form

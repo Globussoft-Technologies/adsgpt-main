@@ -14,7 +14,7 @@ import Badge from "@/components/Badge.jsx";
 import DateRangePicker from "@/components/DateRangePicker.jsx";
 import Select from "@/components/Select.jsx";
 import { adminApi } from "@/lib/api";
-import { formatDate, formatNumber, formatUsd } from "@/lib/utils";
+import { formatDate, formatDateOnly, formatNumber, formatUsd } from "@/lib/utils";
 import { getStoredDateRange, setStoredDateRange } from "@/lib/dateRangeStore";
 
 const SORT_OPTIONS = [
@@ -43,6 +43,8 @@ const EMPTY_FILTERS = {
   creditsMax: "",
   costMin: "",
   costMax: "",
+  signUpFrom: "",
+  signUpTo: "",
 };
 
 function pruneEmptyParams(params) {
@@ -85,16 +87,20 @@ function isInvalidRange(min, max) {
 
 function readUsersStateFromSearch(searchString) {
   const rawSearch = searchString.replace(/^\?/, "");
-  const hasUrlState = rawSearch.length > 0;
   const params = new URLSearchParams(rawSearch);
   const storedRange = getStoredDateRange();
+  const hasActivityRange = params.has("activityPreset") || params.has("from") || params.has("to");
   const parsedPage = Number.parseInt(params.get("page") || "1", 10);
   const sort = params.get("sort") || "cost";
   const type = params.get("type") || EMPTY_FILTERS.type;
 
   return {
-    range: hasUrlState
-      ? { from: params.get("from") || "", to: params.get("to") || "" }
+    range: hasActivityRange
+      ? {
+          preset: params.get("activityPreset") || "custom",
+          from: params.get("from") || "",
+          to: params.get("to") || "",
+        }
       : storedRange,
     search: params.get("search") || "",
     sort: SORT_OPTIONS.some((option) => option.value === sort) ? sort : "cost",
@@ -110,12 +116,15 @@ function readUsersStateFromSearch(searchString) {
       creditsMax: params.get("creditsMax") || "",
       costMin: params.get("costMin") || "",
       costMax: params.get("costMax") || "",
+      signUpFrom: params.get("signUpFrom") || "",
+      signUpTo: params.get("signUpTo") || "",
     },
   };
 }
 
 function buildUsersSearchParams({ range, search, sort, page, filters }) {
   const params = new URLSearchParams();
+  if (range.preset) params.set("activityPreset", range.preset);
   if (range.from) params.set("from", range.from);
   if (range.to) params.set("to", range.to);
   if (search) params.set("search", search);
@@ -127,6 +136,15 @@ function buildUsersSearchParams({ range, search, sort, page, filters }) {
   });
 
   return params;
+}
+
+function buildUserDetailPath(userId, range) {
+  const params = new URLSearchParams();
+  if (range.preset) params.set("activityPreset", range.preset);
+  if (range.from) params.set("from", range.from);
+  if (range.to) params.set("to", range.to);
+  const query = params.toString();
+  return `/users/${encodeURIComponent(userId)}${query ? `?${query}` : ""}`;
 }
 
 function FilterField({ label, children, className = "" }) {
@@ -491,6 +509,8 @@ export default function UsersPage() {
         creditsMax: filters.creditsMax,
         costMin: filters.costMin,
         costMax: filters.costMax,
+        signUpFrom: filters.signUpFrom,
+        signUpTo: filters.signUpTo,
         sort,
         page,
         limit: 25,
@@ -520,6 +540,8 @@ export default function UsersPage() {
     filters.creditsMax,
     filters.costMin,
     filters.costMax,
+    filters.signUpFrom,
+    filters.signUpTo,
     hasRangeErrors,
   ]);
 
@@ -549,6 +571,7 @@ export default function UsersPage() {
           <p className="mt-1 text-sm text-slate-500">Per-user generation activity, credits, and cost.</p>
         </div>
         <DateRangePicker
+          preset={range.preset}
           from={range.from}
           to={range.to}
           onChange={(r) => {
@@ -575,6 +598,21 @@ export default function UsersPage() {
             />
           </div>
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 p-2 lg:border-l lg:border-t-0">
+            <DateRangePicker
+              preset="custom"
+              from={filters.signUpFrom}
+              to={filters.signUpTo}
+              onChange={(nextRange) => {
+                setFilters((current) => ({
+                  ...current,
+                  signUpFrom: nextRange.from,
+                  signUpTo: nextRange.to,
+                }));
+                setPage(1);
+              }}
+              ariaLabel="Sign up date range"
+              className="h-10 min-w-64 justify-between rounded-md"
+            />
             <Select
               value={filters.type}
               onChange={(value) => updateFilter("type", value)}
@@ -659,6 +697,11 @@ export default function UsersPage() {
       {error ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
       ) : null}
+      {data?.memberData?.signupFilterRequested && !data.memberData.signupFilterApplied ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Sign-up dates are temporarily unavailable, so the sign-up date filter could not be applied.
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
@@ -675,48 +718,65 @@ export default function UsersPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <table className="min-w-[1180px] text-sm xl:min-w-full">
             <thead className="sticky top-0 z-10 bg-slate-50 text-left text-[11px] uppercase tracking-[0.08em] text-slate-500">
               <tr>
                 <th className="px-5 py-3">User</th>
                 <th className="px-5 py-3">Plan</th>
+                <th className="px-5 py-3">Contact no.</th>
+                <th className="px-5 py-3">Sign up date</th>
                 <th className="px-5 py-3 text-right">Generations</th>
                 <th className="px-5 py-3 text-right">Img / Vid</th>
                 <th className="px-5 py-3 text-right">Credits</th>
                 <th className="px-5 py-3 text-right">Cost (USD)</th>
                 <th className="px-5 py-3">Last activity</th>
-                <th className="w-10 px-5 py-3" />
+                <th className="sticky right-0 z-20 w-12 bg-slate-50 px-3 py-3" aria-label="Open user" />
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-t border-slate-100">
-                    <td colSpan={8} className="px-5 py-3">
+                    <td colSpan={10} className="px-5 py-3">
                       <div className="h-9 animate-pulse rounded-md bg-slate-100" />
                     </td>
                   </tr>
                 ))
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-slate-500">
+                  <td colSpan={10} className="px-5 py-12 text-center text-slate-500">
                     No users in range
                   </td>
                 </tr>
               ) : (
                 rows.map((u) => {
                   const display = u.name || u.login || u.userId;
+                  const detailPath = buildUserDetailPath(u.userId, range);
                   return (
-                    <tr key={u.userId} className="group border-t border-slate-100 transition hover:bg-indigo-50/30">
+                    <tr
+                      key={u.userId}
+                      onClick={(event) => {
+                        if (event.ctrlKey || event.metaKey) {
+                          window.open(detailPath, "_blank", "noopener,noreferrer");
+                          return;
+                        }
+                        navigate(detailPath, {
+                          state: { usersBackTo: `${location.pathname}${location.search}` },
+                        });
+                      }}
+                      className="group cursor-pointer border-t border-slate-100 transition hover:bg-indigo-50/30 focus-within:bg-indigo-50/50 focus-within:outline focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-indigo-500"
+                    >
                       <td className="px-5 py-3">
                         <Link
-                          to={`/users/${encodeURIComponent(u.userId)}`}
+                          to={detailPath}
                           state={{ usersBackTo: `${location.pathname}${location.search}` }}
-                          className="flex items-center gap-3"
+                          onClick={(event) => event.stopPropagation()}
+                          className="flex items-center gap-3 rounded-sm outline-none"
+                          aria-label={`Open details for ${display}`}
                         >
                           <Avatar name={display} seed={u.userId} size="sm" />
                           <div className="min-w-0">
-                            <div className="truncate font-semibold text-slate-900 group-hover:text-indigo-700">
+                            <div className="truncate font-semibold text-slate-900 transition group-hover:text-indigo-700 group-focus-within:text-indigo-700">
                               {display}
                             </div>
                             <div className="truncate text-xs text-slate-500">{u.email || u.userId}</div>
@@ -726,6 +786,8 @@ export default function UsersPage() {
                       <td className="px-5 py-3">
                         {u.plan ? <Badge tone={planTone(u.plan)}>{u.plan}</Badge> : <span className="text-slate-400">-</span>}
                       </td>
+                      <td className="whitespace-nowrap px-5 py-3 text-slate-600">{u.contactNo || "-"}</td>
+                      <td className="whitespace-nowrap px-5 py-3 text-slate-600">{formatDateOnly(u.signUpDate)}</td>
                       <td className="px-5 py-3 text-right tabular-nums text-slate-700">
                         {formatNumber(u.generations)}
                       </td>
@@ -741,8 +803,8 @@ export default function UsersPage() {
                         {formatUsd(u.cost)}
                       </td>
                       <td className="px-5 py-3 text-slate-600">{formatDate(u.lastActivity)}</td>
-                      <td className="px-5 py-3 text-slate-400">
-                        <ChevronRight className="h-4 w-4 transition group-hover:translate-x-0.5 group-hover:text-indigo-600" />
+                      <td className="sticky right-0 w-12 bg-white px-3 py-3 text-slate-400 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)] transition-colors group-hover:bg-indigo-50 group-hover:text-indigo-600 group-focus-within:bg-indigo-50 group-focus-within:text-indigo-600">
+                        <ChevronRight aria-hidden="true" className="mx-auto h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-focus-within:translate-x-0.5" />
                       </td>
                     </tr>
                   );

@@ -86,11 +86,22 @@ function planTone(plan) {
   return "sky";
 }
 
+function readActivityRangeFromSearch(search) {
+  const params = new URLSearchParams(search);
+  const from = params.get("from") || "";
+  const to = params.get("to") || "";
+  const preset = params.get("activityPreset") || "";
+  if (!from && !to && !preset) return null;
+  return { preset: preset || "custom", from, to };
+}
+
 export default function UserDetailPage() {
   const { userId } = useParams();
   const location = useLocation();
   const usersBackTo = location.state?.usersBackTo || "/users";
-  const [range, setRange] = useState(() => getStoredDateRange());
+  const [range, setRange] = useState(
+    () => readActivityRangeFromSearch(location.search) || getStoredDateRange(),
+  );
   const [type, setType] = useState("all");
   const [model, setModel] = useState("");
   const [page, setPage] = useState(1);
@@ -100,6 +111,13 @@ export default function UserDetailPage() {
   const [engagement, setEngagement] = useState(null);
   const [tokenData, setTokenData] = useState(null);
   const [tokenLoading, setTokenLoading] = useState(true);
+
+  useEffect(() => {
+    const linkedRange = readActivityRangeFromSearch(location.search);
+    if (!linkedRange) return;
+    setRange(linkedRange);
+    setStoredDateRange(linkedRange);
+  }, [location.search]);
 
   // Page-view summary is keyed only on user — no date/type/model filtering.
   useEffect(() => {
@@ -220,8 +238,9 @@ export default function UserDetailPage() {
               <div className="mt-1 font-mono text-xs text-slate-400">{userId}</div>
             </div>
           </div>
-          <DateRangePicker
-            from={range.from}
+        <DateRangePicker
+          preset={range.preset}
+          from={range.from}
             to={range.to}
             onChange={(r) => {
               setRange(r);

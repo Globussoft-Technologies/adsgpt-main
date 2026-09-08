@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, Layers, Loader2 } from "lucide-react";
+import DateRangePicker from "@/components/DateRangePicker.jsx";
 import { adminApi } from "@/lib/api";
 
 // Columns are generated from the limit registry the API returns
@@ -90,12 +91,15 @@ export default function PlansPage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Plans &amp; Limits</h1>
-        <p className="text-sm text-slate-500">
-          Cap what a user on each subscription plan may manage. Leave a field empty for unlimited.
-          Only active (non-disabled, non-archived) aMember plans are listed.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Plans &amp; Limits</h1>
+          <p className="text-sm text-slate-500">
+            Cap what a user on each subscription plan may manage. Leave a field empty for unlimited.
+            Only active (non-disabled, non-archived) aMember plans are listed.
+          </p>
+        </div>
+        <DateRangePicker />
       </header>
 
       {error ? (

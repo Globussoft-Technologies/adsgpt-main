@@ -1,100 +1,135 @@
-/* react-date-range tweaks to match the panel's indigo/slate look */
-.rdrCalendarWrapper,
-.rdrDateDisplayWrapper,
-.rdrMonthAndYearWrapper {
-  background: #ffffff;
-  font-family: inherit;
-  color: #0f172a;
+.admin-date-range-trigger {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid #d8dce5;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 0.5rem 0.75rem;
+  color: #1e293b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 
-.rdrMonthAndYearPickers select {
-  color: #0f172a;
-  font-weight: 500;
+.admin-date-range-trigger:hover {
+  border-color: #a5b4fc;
+  background: #f8fafc;
 }
 
-.rdrDayNumber span {
-  color: #0f172a;
-  font-weight: 500;
+.admin-date-range-trigger:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
 }
 
-.rdrDayPassive .rdrDayNumber span {
-  color: #cbd5e1;
+.admin-date-range-trigger svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
 }
 
-.rdrDayDisabled {
-  background: transparent;
+.admin-date-range-trigger svg:first-child { color: #4f46e5; }
+.admin-date-range-trigger svg:last-child { color: #64748b; }
+
+.admin-date-range-popover {
+  z-index: 80;
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.875rem;
+  background: #fff;
+  box-shadow: 0 20px 45px rgb(15 23 42 / 0.18);
+  animation: admin-date-range-enter 140ms ease-out;
 }
 
-.rdrDayToday .rdrDayNumber span:after {
-  background: #6366f1;
+.admin-date-range-layout { display: flex; align-items: stretch; }
+
+.admin-date-range-presets {
+  width: 10.75rem;
+  max-height: 28rem;
+  overflow-y: auto;
+  flex: none;
+  border-right: 1px solid #e2e8f0;
+  padding: 0.5rem;
+  scrollbar-width: thin;
 }
 
-.rdrDayHovered .rdrDayNumber span,
-.rdrDayInPreview .rdrDayNumber span,
-.rdrDayStartPreview .rdrDayNumber span,
-.rdrDayEndPreview .rdrDayNumber span {
-  color: #0f172a;
+.admin-date-range-presets button {
+  display: block;
+  width: 100%;
+  border-radius: 0.6rem;
+  padding: 0.48rem 0.65rem;
+  color: #334155;
+  font-size: 0.75rem;
+  text-align: left;
+  transition: background 140ms ease, color 140ms ease;
 }
 
-/* Selection pill — round the start/end edges */
-.rdrStartEdge,
-.rdrEndEdge {
-  border-radius: 999px;
-}
-.rdrStartEdge {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-}
-.rdrEndEdge {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-}
-.rdrStartEdge.rdrEndEdge {
-  border-radius: 999px;
-}
-.rdrInRange {
-  border-radius: 0;
+.admin-date-range-presets button:hover { background: #f1f5f9; }
+.admin-date-range-presets button.is-active { background: #eef2ff; color: #4f46e5; font-weight: 600; }
+.admin-date-range-presets button:focus-visible { outline: 2px solid #6366f1; outline-offset: -2px; }
+
+.admin-date-range-calendar { display: flex; min-width: 0; flex-direction: column; padding: 0.5rem; }
+.admin-date-range-calendar .rdrCalendarWrapper { background: #fff; color: #0f172a; font-family: inherit; font-size: 12px; }
+.admin-date-range-calendar .rdrDateDisplayWrapper,
+.admin-date-range-calendar .rdrMonthAndYearWrapper { background: #fff; }
+.admin-date-range-calendar .rdrDateDisplayItem { border-color: #d7dce4; border-radius: 0.5rem; box-shadow: none; }
+.admin-date-range-calendar .rdrDateDisplayItemActive { border-color: #6366f1; }
+.admin-date-range-calendar .rdrDateDisplayItem input { color: #334155; }
+.admin-date-range-calendar .rdrMonthAndYearPickers select,
+.admin-date-range-calendar .rdrDayNumber span { color: #334155; font-weight: 500; }
+.admin-date-range-calendar .rdrDayPassive .rdrDayNumber span { color: #b6bfcc; }
+.admin-date-range-calendar .rdrDayToday .rdrDayNumber span::after { background: #4f46e5; }
+.admin-date-range-calendar .rdrNextPrevButton { background: #f1f5f9; }
+.admin-date-range-calendar .rdrNextPrevButton:hover { background: #e2e8f0; }
+.admin-date-range-calendar .rdrStartEdge { border-radius: 999px 0 0 999px; }
+.admin-date-range-calendar .rdrEndEdge { border-radius: 0 999px 999px 0; }
+.admin-date-range-calendar .rdrStartEdge.rdrEndEdge { border-radius: 999px; }
+.admin-date-range-calendar .rdrInRange { border-radius: 0; }
+
+.admin-date-range-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid #f1f5f9;
+  padding: 0.55rem 0.4rem 0.1rem;
+  color: #64748b;
+  font-size: 0.65rem;
 }
 
-/* When the selected day is also start AND end (single day), keep it pill */
-.rdrDayStartOfMonth .rdrInRange,
-.rdrDayEndOfMonth .rdrInRange,
-.rdrDayStartOfWeek .rdrInRange,
-.rdrDayEndOfWeek .rdrInRange {
-  border-radius: 0;
+.admin-date-range-footer button {
+  flex: none;
+  border-radius: 0.55rem;
+  background: linear-gradient(90deg, #14b8a6, #6366f1);
+  padding: 0.38rem 0.7rem;
+  color: #fff;
+  font-weight: 700;
 }
 
-.rdrSelected,
-.rdrInRange,
-.rdrStartEdge,
-.rdrEndEdge {
-  color: #6366f1 !important;
+.admin-date-range-footer button:hover { opacity: 0.9; }
+.admin-date-range-footer button:disabled { cursor: not-allowed; opacity: 0.4; }
+
+@keyframes admin-date-range-enter {
+  from { opacity: 0; transform: translateY(-4px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.rdrDayStartPreview,
-.rdrDayInPreview,
-.rdrDayEndPreview {
-  border-color: #6366f1;
+@media (max-width: 640px) {
+  .admin-date-range-layout { max-height: min(78vh, 620px); flex-direction: column; overflow-y: auto; }
+  .admin-date-range-presets {
+    width: 100%;
+    max-height: 9.5rem;
+    border-right: 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .admin-date-range-calendar { padding: 0.25rem; }
+  .admin-date-range-calendar .rdrCalendarWrapper { width: 100%; }
+  .admin-date-range-calendar .rdrMonth { width: min(100%, 20rem); padding: 0 0.25rem 0.5rem; }
 }
 
-/* Make the selected day text white to read on the indigo pill */
-.rdrDay.rdrDayStartOfWeek .rdrInRange,
-.rdrDay.rdrDayEndOfWeek .rdrInRange {
-  border-radius: 0;
-}
-.rdrDay .rdrStartEdge ~ .rdrDayNumber span,
-.rdrDay .rdrEndEdge ~ .rdrDayNumber span,
-.rdrDay .rdrInRange ~ .rdrDayNumber span {
-  color: #ffffff;
-}
-
-.rdrNextPrevButton {
-  background: #f1f5f9;
-}
-.rdrNextPrevButton:hover {
-  background: #e2e8f0;
-}
-
-.rdrMonthAndYearWrapper {
-  padding-top: 4px;
+@media (prefers-reduced-motion: reduce) {
+  .admin-date-range-popover { animation: none; }
 }

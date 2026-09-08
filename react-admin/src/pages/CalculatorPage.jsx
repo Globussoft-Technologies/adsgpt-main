@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Calculator, Coins, Image as ImageIcon, Loader2, RotateCcw, Video } from "lucide-react";
+import DateRangePicker from "@/components/DateRangePicker.jsx";
 import { fetchModelCredits, fetchAdCreativeImageTiers } from "../lib/api";
 
 const GDP_TIERS = {
@@ -111,6 +112,7 @@ export default function CalculatorPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <DateRangePicker />
           {/* GDP Toggle */}
           <div className="flex items-center rounded-full border border-slate-200 bg-white p-1 shadow-sm">
             {Object.entries(GDP_TIERS).map(([key, tier]) => (

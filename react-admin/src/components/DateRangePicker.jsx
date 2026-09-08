@@ -1,58 +1,152 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { DateRange } from "react-date-range";
-import { format } from "date-fns";
+import { addDays, format, subMonths } from "date-fns";
+import { CalendarDays, ChevronDown } from "lucide-react";
+import { useAdminDateRange } from "@/lib/dateRangeStore";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 import "./date-range-picker.css";
 
-function toISO(d) {
-  if (!d) return "";
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+const PRESETS = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "last_3d", label: "Last 3 Days" },
+  { value: "last_7d", label: "Last 7 Days" },
+  { value: "last_14d", label: "Last 14 Days" },
+  { value: "last_28d", label: "Last 28 Days" },
+  { value: "last_30d", label: "Last 30 Days" },
+  { value: "last_90d", label: "Last 90 Days" },
+  { value: "last_2m", label: "Last 2 Months" },
+  { value: "this_month", label: "This Month" },
+  { value: "last_month", label: "Last Month" },
+  { value: "this_quarter", label: "This Quarter" },
+  { value: "last_quarter", label: "Last Quarter" },
+  { value: "this_year", label: "This Year" },
+  { value: "last_year", label: "Last Year" },
+  { value: "lifetime", label: "Lifetime" },
+  { value: "maximum", label: "Maximum" },
+];
+
+function toISO(date) {
+  return format(date, "yyyy-MM-dd");
 }
 
-function fromISO(s) {
-  if (!s) return null;
-  const [y, m, d] = s.split("-").map(Number);
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
+function fromISO(value) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function todayISO() {
-  return toISO(new Date());
+function startOfQuarter(date) {
+  return new Date(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
 }
 
-// Whole current calendar month, with the end clamped to today
-// (so we don't ship a future end date to the API).
-export function currentMonthRangeISO() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const end = lastOfMonth > now ? now : lastOfMonth;
-  return { from: toISO(start), to: toISO(end) };
-}
-
-export default function DateRangePicker({ from, to, onChange }) {
-  const [open, setOpen] = useState(false);
+function resolvePreset(value) {
   const today = new Date();
-  const startDate = fromISO(from) || today;
-  const endDate = fromISO(to) || today;
-  const isStartActive = !!from;
-  const isEndActive = !!to;
-  const hasFilter = isStartActive || isEndActive;
+  const day = (offset) => new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset);
+  let from = today;
+  let to = today;
 
-  function handleSelect(item) {
-    const s = item.selection.startDate;
-    const e = item.selection.endDate;
-    onChange({ from: toISO(s), to: toISO(e) });
+  switch (value) {
+    case "yesterday":
+      from = to = day(-1);
+      break;
+    case "last_3d":
+    case "last_7d":
+    case "last_14d":
+    case "last_28d":
+    case "last_30d":
+    case "last_90d": {
+      const days = Number(value.match(/\d+/)?.[0] || 1);
+      from = day(-(days - 1));
+      break;
+    }
+    case "last_2m":
+      from = addDays(subMonths(today, 2), 1);
+      break;
+    case "this_month":
+      from = new Date(today.getFullYear(), today.getMonth(), 1);
+      break;
+    case "last_month":
+      from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      to = new Date(today.getFullYear(), today.getMonth(), 0);
+      break;
+    case "this_quarter":
+      from = startOfQuarter(today);
+      break;
+    case "last_quarter": {
+      const currentQuarter = startOfQuarter(today);
+      from = new Date(currentQuarter.getFullYear(), currentQuarter.getMonth() - 3, 1);
+      to = new Date(currentQuarter.getFullYear(), currentQuarter.getMonth(), 0);
+      break;
+    }
+    case "this_year":
+      from = new Date(today.getFullYear(), 0, 1);
+      break;
+    case "last_year":
+      from = new Date(today.getFullYear() - 1, 0, 1);
+      to = new Date(today.getFullYear() - 1, 11, 31);
+      break;
+    case "lifetime":
+    case "maximum":
+      return { preset: value, from: "", to: "" };
+    default:
+      break;
   }
 
-  function handleClear(e) {
-    e.stopPropagation();
-    onChange({ from: "", to: "" });
+  return { preset: value, from: toISO(from), to: toISO(to) };
+}
+
+function seedDraft(range) {
+  const today = new Date();
+  return {
+    startDate: fromISO(range.from) || new Date(today.getFullYear(), today.getMonth(), today.getDate() - 13),
+    endDate: fromISO(range.to) || today,
+    key: "selection",
+  };
+}
+
+export default function DateRangePicker({ from, to, preset, onChange, className = "", ariaLabel = "Date range" }) {
+  const [storedRange, setStoredRange] = useAdminDateRange();
+  const controlled = typeof from === "string" && typeof to === "string" && typeof onChange === "function";
+  const range = controlled ? { preset: preset || "custom", from, to } : storedRange;
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(() => seedDraft(range));
+
+  useEffect(() => {
+    if (open) setDraft(seedDraft(range));
+  }, [open, range.from, range.to]);
+
+  const label = useMemo(() => {
+    const preset = PRESETS.find((item) => item.value === range.preset);
+    if (preset) return preset.label;
+    if (!range.from || !range.to) return "Select dates";
+    const from = fromISO(range.from);
+    const to = fromISO(range.to);
+    if (!from || !to) return "Custom Range";
+    return range.from === range.to
+      ? format(from, "MMM d, yyyy")
+      : `${format(from, "MMM d")} – ${format(to, "MMM d, yyyy")}`;
+  }, [range]);
+
+  const valid = draft.startDate && draft.endDate && draft.startDate <= draft.endDate;
+
+  function selectPreset(preset) {
+    const nextRange = resolvePreset(preset.value);
+    if (controlled) onChange(nextRange);
+    else setStoredRange(nextRange);
+    setOpen(false);
+  }
+
+  function applyCustomRange() {
+    if (!valid) return;
+    const nextRange = { preset: "custom", from: toISO(draft.startDate), to: toISO(draft.endDate) };
+    if (controlled) onChange(nextRange);
+    else setStoredRange(nextRange);
+    setOpen(false);
   }
 
   return (
@@ -60,70 +154,50 @@ export default function DateRangePicker({ from, to, onChange }) {
       <Popover.Trigger asChild>
         <button
           type="button"
-          className="flex items-center gap-2 rounded-md focus:outline-none"
+          className={`admin-date-range-trigger ${className}`.trim()}
+          aria-label={`${ariaLabel}: ${label}`}
         >
-          <PillButton
-            active={isStartActive}
-            label={isStartActive ? format(startDate, "MMM d, yyyy") : "Any date"}
-          />
-          <PillButton
-            active={isEndActive}
-            label={isEndActive ? format(endDate, "MMM d, yyyy") : "Any date"}
-          />
+          <CalendarDays aria-hidden="true" />
+          <span>{label}</span>
+          <ChevronDown aria-hidden="true" />
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
-          align="end"
-          sideOffset={8}
-          className="z-50 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"
-        >
-          <DateRange
-            ranges={[{ startDate, endDate, key: "selection" }]}
-            onChange={handleSelect}
-            moveRangeOnFirstSelection={false}
-            months={1}
-            direction="horizontal"
-            rangeColors={["#6366f1"]}
-            color="#6366f1"
-            showDateDisplay={false}
-            maxDate={new Date()}
-            shownDate={endDate}
-          />
-          <div className="flex items-center justify-between border-t border-slate-100 px-2 pt-2 text-xs">
-            <button
-              type="button"
-              onClick={handleClear}
-              disabled={!hasFilter}
-              className="rounded-md px-2 py-1 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600"
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="rounded-md bg-indigo-600 px-3 py-1 font-medium text-white transition hover:bg-indigo-700"
-            >
-              Done
-            </button>
+        <Popover.Content align="end" sideOffset={8} collisionPadding={12} className="admin-date-range-popover">
+          <div className="admin-date-range-layout">
+            <div className="admin-date-range-presets" aria-label="Date range presets">
+              {PRESETS.map((preset) => (
+                <button
+                  type="button"
+                  key={preset.value}
+                  className={range.preset === preset.value ? "is-active" : ""}
+                  onClick={() => selectPreset(preset)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <div className="admin-date-range-calendar">
+              <DateRange
+                editableDateInputs
+                onChange={(item) => setDraft(item.selection)}
+                moveRangeOnFirstSelection={false}
+                ranges={[draft]}
+                months={1}
+                direction="horizontal"
+                rangeColors={["#22d3ee"]}
+                color="#22d3ee"
+                maxDate={new Date()}
+              />
+              <div className="admin-date-range-footer">
+                <span>{valid ? `${toISO(draft.startDate)} → ${toISO(draft.endDate)}` : "Pick a start and end date"}</span>
+                <button type="button" disabled={!valid} onClick={applyCustomRange}>Apply</button>
+              </div>
+            </div>
           </div>
+          <Popover.Arrow className="fill-white" />
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
-  );
-}
-
-function PillButton({ label, active }) {
-  return (
-    <span
-      className={
-        "inline-flex items-center rounded-full px-4 py-1.5 text-sm font-medium transition " +
-        (active
-          ? "border-2 border-indigo-500 text-slate-900 bg-white"
-          : "border border-slate-300 text-slate-500 bg-white hover:border-slate-400")
-      }
-    >
-      {label}
-    </span>
   );
 }
