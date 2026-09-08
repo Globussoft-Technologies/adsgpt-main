@@ -79,6 +79,29 @@ async function run(user, anchor) {
   return updateCalls;
 }
 
+/** A FREE-7-DAYS trial user who has spent the whole 35-credit allocation. */
+function makeTrialUser(overrides = {}) {
+  return {
+    user_id: "GPT-TRIAL",
+    subscription_plan_id: "8",
+    base_subscription_credits: 35,
+    used_subscription_credits: 35,
+    rolledover_credits: 0,
+    used_rolledover_credits: 0,
+    topup_credits_purchased: 0,
+    topup_credits_used: 0,
+    plan_snapshot: { credits: 35, durationDays: 7 },
+    ...overrides,
+  };
+}
+
+async function runTrial(user, anchor) {
+  currentUser = user;
+  updateCalls = [];
+  await UnifiedCreditController.refreshBillingCycle("GPT-TRIAL", "8", anchor);
+  return updateCalls;
+}
+
 let failures = 0;
 async function test(name, fn) {
   try {
@@ -187,6 +210,60 @@ async function test(name, fn) {
       new Date("not-a-date"),
     );
     assert.equal(sets.length, 0);
+  });
+
+  // ── A 7-day trial is a one-time grant, not a 7-day recurring plan ────────
+  //
+  // Production case (GPT-4529): signed up Sep 1, spent all 35 credits by Sep 7,
+  // logged in Sep 8 and was handed a fresh 35 — while the reset also wiped
+  // `used_subscription_credits`, so an exhausted trial read as "0 used".
+  // 21 accounts had accumulated between 1 and 6 extra allocations this way.
+  await test("does not refill an exhausted 7-day trial once the week elapses", async () => {
+    const now = Date.now();
+    const sets = await runTrial(
+      makeTrialUser({ billing_cycle_start: new Date(now - 7.2 * DAY) }),
+      null,
+    );
+    assert.equal(sets.length, 0, "a trial must never be re-granted");
+  });
+
+  await test("does not refill a trial even when aMember's anchor advances", async () => {
+    const now = Date.now();
+    const sets = await runTrial(
+      makeTrialUser({ billing_cycle_start: new Date(now - 7.2 * DAY) }),
+      new Date(now - 0.1 * DAY), // aMember extended the access row
+    );
+    assert.equal(
+      sets.length,
+      0,
+      "an extended access row must not re-grant trial credits",
+    );
+  });
+
+  await test("leaves the exhausted trial balance intact rather than zeroing usage", async () => {
+    const now = Date.now();
+    const user = makeTrialUser({
+      billing_cycle_start: new Date(now - 9 * DAY),
+    });
+    const sets = await runTrial(user, null);
+    assert.equal(sets.length, 0);
+    assert.equal(
+      user.used_subscription_credits,
+      35,
+      "usage must survive — it is the only record that the trial was spent",
+    );
+  });
+
+  // A real recurring plan that happens to be short must still refill; the
+  // guard keys off the 7-day trial duration specifically.
+  await test("still refills a 30-day plan (guard is trial-specific)", async () => {
+    const now = Date.now();
+    const sets = await run(
+      makeUser({ billing_cycle_start: new Date(now - 31 * DAY) }),
+      null,
+    );
+    assert.equal(sets.length, 1, "non-trial plans must keep renewing");
+    assert.equal(sets[0].base_subscription_credits, 300);
   });
 
   console.log(

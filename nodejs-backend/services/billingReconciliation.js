@@ -168,6 +168,7 @@ async function reconcileBillingCycles({ dryRun = true } = {}) {
     noActiveAccess: 0,
     planMismatch: 0,
     skippedFrozen: 0,
+    skippedTrial: 0,
     unresolvableAnchor: 0,
     errors: 0,
   };
@@ -218,6 +219,15 @@ async function reconcileBillingCycles({ dryRun = true } = {}) {
       }
 
       const durationDays = profile.plan_snapshot?.durationDays;
+
+      // Short trials are a one-time grant and never refill — refreshBillingCycle
+      // returns early for them. Skip here too so the `refilled` counter reports
+      // work actually done instead of counting a no-op as a refill.
+      if (durationDays === 7) {
+        stats.skippedTrial++;
+        continue;
+      }
+
       const anchor = resolveAnchor(activeAccess, durationDays);
       if (!anchor) {
         stats.unresolvableAnchor++;
@@ -311,6 +321,7 @@ async function reconcileBillingCycles({ dryRun = true } = {}) {
       `scanned ${stats.scanned}, ${dryRun ? "would refill" : "refilled"} ${stats.refilled}, ` +
       `current ${stats.alreadyCurrent}, no-access ${stats.noActiveAccess}, ` +
       `plan-mismatch ${stats.planMismatch}, frozen-skip ${stats.skippedFrozen}, ` +
+      `trial-skip ${stats.skippedTrial}, ` +
       `bad-anchor ${stats.unresolvableAnchor}, errors ${stats.errors}`,
   );
 

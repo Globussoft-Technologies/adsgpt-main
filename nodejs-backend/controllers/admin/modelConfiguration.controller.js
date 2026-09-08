@@ -51,8 +51,18 @@ function createModelConfigurationController({ model = AIModelConfiguration, audi
     await auditModel.create({ action, canonicalKey, adminUsername: req.admin?.username, before, after });
   }
 
+  // NOTE: do NOT invalidate before refreshing.
+  //
+  // invalidateCache() nulls the caches synchronously; refreshCache() then
+  // spends a DB round-trip rebuilding them. For the length of that round-trip
+  // getCachedModel() returns null for EVERY model, getRuntimeCredit() returns
+  // 0 for every price, and freezeCredits() treats a 0 amount as a no-op — so
+  // any generation started in that window renders completely unmetered. That
+  // window opened on every admin model save.
+  //
+  // refreshCache() already reads first and assigns afterwards, so calling it
+  // alone swaps the caches in place with no empty interval.
   async function refresh() {
-    configurationService.invalidateCache();
     await configurationService.refreshCache();
   }
 

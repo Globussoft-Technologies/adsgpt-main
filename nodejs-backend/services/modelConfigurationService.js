@@ -48,6 +48,10 @@ function createModelConfigurationService({ model = AIModelConfiguration } = {}) 
   let activeCache = null;
   let syncCache = null;
 
+  // The read-then-assign ordering here is load-bearing: the caches must never
+  // be empty while the DB round-trip is in flight. getCachedModel() returns
+  // null on an empty cache, which prices every model at 0, which freezeCredits
+  // treats as a free generation. Never null the caches ahead of a refresh.
   async function refreshCache() {
     const rows = await model.find({}).sort({ sortOrder: 1, canonicalKey: 1 }).lean();
     syncCache = rows.map(toLegacyEntry);

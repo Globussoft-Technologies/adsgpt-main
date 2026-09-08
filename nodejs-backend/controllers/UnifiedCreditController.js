@@ -785,17 +785,44 @@ class UnifiedCreditController {
       // Cycle still active and aMember hasn't renewed — nothing to do.
       if (!anchorAdvanced && elapsedDays < durationDays) return user;
 
+      // A short trial is a ONE-TIME grant, not a 7-day recurring plan.
+      //
+      // Everything below re-grants `base_subscription_credits` and resets
+      // `used_subscription_credits` to 0. For a trial that means a user who
+      // exhausts their allocation gets a fresh one on their next login: 21
+      // accounts had accumulated between 1 and 6 extra allocations this way,
+      // one of them ~210 credits against a 35-credit trial. The refill also
+      // erased the usage counter, so the spend only survived in
+      // `generatedmedias` — which is why an exhausted trial could read as
+      // "0 credits used" while showing real generations.
+      //
+      // Returning here leaves the exhausted balance in place, which is what a
+      // trial is supposed to mean. `billing_cycle_start` deliberately does NOT
+      // advance: the branch simply re-evaluates and returns early on every
+      // subsequent login.
+      //
+      // NOTE: this closes the recurring refill only. syncUserProfile can still
+      // re-grant a trial via its resubscribe / plan-change branches; making the
+      // grant once-ever needs a persisted marker on the profile (see
+      // docs/CREDIT_TRIAL_GRANT.md) and is deliberately not attempted here.
+      if (durationDays === 7) {
+        logger.info(
+          `[credits] cycle NOT refreshed for user ${userId}: plan ${planId} is a ` +
+            `${durationDays}-day trial and does not renew ` +
+            `(base ${user.base_subscription_credits}, used ${user.used_subscription_credits})`,
+        );
+        return user;
+      }
+
       // Rule: Rollover only applies to same-plan recurring (monthly) renewals — not yearly plans.
       // Only the current cycle's leftover BASE carries forward. Any unused
       // rollover from the prior cycle is forfeited so credits can't compound
       // across multiple cycles of light usage.
       // No rollover for yearly plans (paid up-front, no churn-protection
-      // value) OR for the 7-day trial (free trials shouldn't accumulate
-      // leftover credits across cycles, defeats the trial limit).
+      // value). Short trials never reach here — they returned above.
       const isYearlyPlan = durationDays >= 365;
-      const isShortTrial = durationDays === 7;
       const totalCarryForward =
-        isYearlyPlan || isShortTrial
+        isYearlyPlan
           ? 0
           : Math.max(
               0,
@@ -844,9 +871,7 @@ class UnifiedCreditController {
           `start ${newCycleStart.toISOString()}, trigger ${anchorAdvanced ? "amember-renewal" : "elapsed"}): ` +
           (isYearlyPlan
             ? `yearly plan — no rollover, new allocation: ${newBaseCredits}`
-            : isShortTrial
-              ? `short-trial plan — no rollover, new allocation: ${newBaseCredits}`
-              : `carried forward ${totalCarryForward} credits, new allocation: ${newBaseCredits}`),
+            : `carried forward ${totalCarryForward} credits, new allocation: ${newBaseCredits}`),
       );
 
       return updatedUser;
