@@ -157,12 +157,19 @@ export default function LockedVoiceCardSelector({
     request
       .then((items) => {
         if (ignore) return;
-        setVoices(
-          items.map((voice) => ({
-            ...voice,
-            name: voice.voice_name || voice.name,
-          })),
-        );
+        const seen = new Set();
+        const uniqueVoices = [];
+        for (const voice of Array.isArray(items) ? items : []) {
+          const key = voice.voice_id || voice.voice_name || voice.name;
+          if (!key || !seen.has(key)) {
+            if (key) seen.add(key);
+            uniqueVoices.push({
+              ...voice,
+              name: voice.voice_name || voice.name,
+            });
+          }
+        }
+        setVoices(uniqueVoices);
       })
       .catch(() => {
         if (!ignore) setVoicesError('Unable to load voices. Try changing a filter.');
@@ -219,8 +226,12 @@ export default function LockedVoiceCardSelector({
     if (field === 'gender') {
       next.accent = '';
       next.age = '';
+      setFilterOptions((current) => ({ ...current, accent: [], age: [] }));
     }
-    if (field === 'accent') next.age = '';
+    if (field === 'accent') {
+      next.age = '';
+      setFilterOptions((current) => ({ ...current, age: [] }));
+    }
     onChange?.(next);
     setOpenFilter(null);
   };
@@ -311,13 +322,15 @@ export default function LockedVoiceCardSelector({
               <button
                 ref={filterRefs[field]}
                 type="button"
-                onClick={() =>
-                  setOpenFilter((current) => (current === field ? null : field))
-                }
+                onClick={(e) => {
+                  if (e.target.closest('[data-clear-chip]')) return;
+                  setOpenFilter((current) => (current === field ? null : field));
+                }}
                 className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/70 dark:hover:text-white"
               >
                 {selected ? (
                   <span
+                    data-clear-chip
                     role="button"
                     tabIndex={0}
                     onClick={(event) => {

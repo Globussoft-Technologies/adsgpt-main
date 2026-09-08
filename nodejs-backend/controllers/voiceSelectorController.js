@@ -37,12 +37,29 @@ function pickSearchParams(query = {}) {
   return out;
 }
 
+function dedupeVoices(list) {
+  if (!Array.isArray(list)) return list;
+  const seen = new Set();
+  const deduped = [];
+  for (const item of list) {
+    const key = item.voice_id || item.voice_name || item.name;
+    if (!key || !seen.has(key)) {
+      if (key) seen.add(key);
+      deduped.push(item);
+    }
+  }
+  return deduped;
+}
+
 async function proxyGet(path, req, res, params) {
   try {
     const { data } = await axios.get(`${BASE}${path}`, {
       params: params ?? pickParams(req.query),
       timeout: 30000,
     });
+    if (path === "/voices" || path === "/search") {
+      return res.status(200).json(dedupeVoices(data));
+    }
     return res.status(200).json(data);
   } catch (err) {
     const status = err?.response?.status || 500;
@@ -76,6 +93,9 @@ async function sarvamProxyGet(path, req, res, params) {
       params,
       timeout: 30000,
     });
+    if (path === "/voices") {
+      return res.status(200).json(dedupeVoices(data));
+    }
     return res.status(200).json(data);
   } catch (err) {
     const status = err?.response?.status || 500;

@@ -137,7 +137,15 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
               lang: upstream.language,
               gender: upstream.gender,
             });
-            data = voices.map((v) => ({ ...v, name: v.voice_name || v.name }));
+            const seen = new Set();
+            data = (Array.isArray(voices) ? voices : [])
+              .filter((v) => {
+                const key = v.voice_id || v.voice_name || v.name;
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              })
+              .map((v) => ({ ...v, name: v.voice_name || v.name }));
           }
           setOptions((s) => ({ ...s, [field]: data }));
           return;
@@ -160,7 +168,16 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
         else if (field === 'gender') data = await getGenders({ language: upstream.language });
         else if (field === 'accent') data = await getAccents({ language: upstream.language, gender: upstream.gender });
         else if (field === 'age') data = await getAges({ language: upstream.language, gender: upstream.gender, accent: upstream.accent });
-        else if (field === 'voice') data = await getVoices(upstream);
+        else if (field === 'voice') {
+          const rawVoices = await getVoices(upstream);
+          const seen = new Set();
+          data = (Array.isArray(rawVoices) ? rawVoices : []).filter((v) => {
+            const key = v.voice_id || v.voice_name || v.name;
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        }
         setOptions((s) => ({ ...s, [field]: data }));
       } catch (e) {
         setErrors((s) => ({ ...s, [field]: 'Failed to load. Try again.' }));
