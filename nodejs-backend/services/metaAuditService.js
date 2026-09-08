@@ -782,21 +782,46 @@ async function runAuditForAccount({
   // part of why a single account could exhaust its Business Use Case budget
   // while the App Dashboard's call bucket still looked idle.
   //
-  // The old value was chosen defensively: large `limit` values combined with
-  // the HEAVY shared field set (video breakdowns, action arrays, outbound
-  // clicks, …) trip Meta's "Please reduce the amount of data you're asking
-  // for" error (code 100). Two things have changed since:
+  // Pulling the other way: large `limit` values trip Meta's "Please reduce the
+  // amount of data you're asking for" (code 100). These are a genuine trade
+  // between two DIFFERENT ceilings — call count on one side, per-response size
+  // on the other — so neither extreme is safe.
   //
-  //   1. The Autopilot path now requests 16 fields instead of ~37
-  //      (`getAutopilotInsightsFields`), so each row is far smaller.
-  //   2. These values match what `mcps/meta` already runs in production
-  //      against these same accounts — insights at 500, entity lists at 100 —
-  //      rather than being a fresh guess.
+  // THIS HAS ALREADY OSCILLATED ONCE, EXPENSIVELY. d8356602 (2026-08-27)
+  // raised the insights limit 20 -> 500 to cut call count, reasoning that
+  // (a) the Autopilot path now asks for 16 fields instead of ~37 so rows are
+  // smaller, and (b) `mcps/meta` runs 500 against these same accounts. It sat
+  // on main for a week, shipped to production in PR #1448 on 2026-09-03, and
+  // code 100 came back the same day on three accounts at once. Both premises
+  // were weaker than they looked:
+  //
+  //   (a) Fewer fields shrinks each ROW, but the ceiling is on the whole
+  //       response: 500 ads each aggregated over the rule's window. Rules in
+  //       production run `lookbackDays: 200`. Trimming fields bought maybe
+  //       2x; the limit went up 25x.
+  //   (b) The MCP serves interactive single-account queries over short
+  //       ranges. Same accounts, nothing like the same query shape — a
+  //       200-day ad-level sweep across ten accounts on a cron is not that.
+  //
+  // The value it replaced was not a guess: 20 was recorded as "a conservative
+  // page size that Meta accepts even on the heaviest accounts", and it ran
+  // clean in production until #1448. So the default is 20 rather than a
+  // compromise — during an incident you restore what is known to work and
+  // climb back deliberately. The call count that motivated the raise is a
+  // real cost, but an audit that 500s is not cheaper.
+  //
+  // Env-overridable because the right value is empirical and account-shaped,
+  // and climbing back should not need a deploy per step: raise
+  // AUTOPILOT_INSIGHTS_PAGE_LIMIT one notch at a time (20 -> 50 -> 100),
+  // watching for code 100 after each.
   //
   // Split because the two reads have very different row weights: an insights
-  // row carries aggregations, a campaign row is a name and a status.
-  const ENTITY_PAGE_LIMIT = 100;
-  const INSIGHTS_PAGE_LIMIT = 500;
+  // row carries aggregations, a campaign row is a name and a status. Entity
+  // reads keep 100 — they were never what tripped the ceiling.
+  const ENTITY_PAGE_LIMIT =
+    parseInt(process.env.AUTOPILOT_ENTITY_PAGE_LIMIT || "100", 10) || 100;
+  const INSIGHTS_PAGE_LIMIT =
+    parseInt(process.env.AUTOPILOT_INSIGHTS_PAGE_LIMIT || "20", 10) || 20;
 
   // Insights are filtered to ACTIVE entities (paused/archived ones deliver
   // no new data in the lookback, and a pause against an already-paused
