@@ -109,7 +109,15 @@ function seedDraft(range) {
   };
 }
 
-export default function DateRangePicker({ from, to, preset, onChange, className = "", ariaLabel = "Date range" }) {
+export default function DateRangePicker({
+  from,
+  to,
+  preset,
+  onChange,
+  className = "",
+  ariaLabel = "Date range",
+  emptyLabel = "Select dates",
+}) {
   const [storedRange, setStoredRange] = useAdminDateRange();
   const controlled = typeof from === "string" && typeof to === "string" && typeof onChange === "function";
   const range = controlled ? { preset: preset || "custom", from, to } : storedRange;
@@ -123,14 +131,14 @@ export default function DateRangePicker({ from, to, preset, onChange, className 
   const label = useMemo(() => {
     const preset = PRESETS.find((item) => item.value === range.preset);
     if (preset) return preset.label;
-    if (!range.from || !range.to) return "Select dates";
+    if (!range.from || !range.to) return emptyLabel;
     const from = fromISO(range.from);
     const to = fromISO(range.to);
     if (!from || !to) return "Custom Range";
     return range.from === range.to
       ? format(from, "MMM d, yyyy")
       : `${format(from, "MMM d")} – ${format(to, "MMM d, yyyy")}`;
-  }, [range]);
+  }, [emptyLabel, range]);
 
   const valid = draft.startDate && draft.endDate && draft.startDate <= draft.endDate;
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
+  Activity,
   ArrowDownWideNarrow,
   ChevronRight,
   Filter,
@@ -30,10 +31,16 @@ const TYPE_OPTIONS = [
   { value: "video", label: "Videos" },
 ];
 
+const ACTIVITY_VIEW_OPTIONS = [
+  { value: "all", label: "All Users" },
+  { value: "active", label: "Active Users" },
+];
+
 const ALL_MODEL_OPTION = { value: "all", label: "All models" };
 const ALL_PLAN_OPTION = { value: "all", label: "All plans" };
 
 const EMPTY_FILTERS = {
+  activityView: "all",
   type: "all",
   model: "all",
   plan: "all",
@@ -107,6 +114,9 @@ function readUsersStateFromSearch(searchString) {
     page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
     filters: {
       ...EMPTY_FILTERS,
+      activityView: ACTIVITY_VIEW_OPTIONS.some((option) => option.value === params.get("activityView"))
+        ? params.get("activityView")
+        : EMPTY_FILTERS.activityView,
       type: TYPE_OPTIONS.some((option) => option.value === type) ? type : EMPTY_FILTERS.type,
       model: params.get("model") || EMPTY_FILTERS.model,
       plan: params.get("plan") || EMPTY_FILTERS.plan,
@@ -503,6 +513,7 @@ export default function UsersPage() {
         type: filters.type === "all" ? undefined : filters.type,
         model: filters.model === "all" ? undefined : filters.model,
         plan: filters.plan === "all" ? undefined : filters.plan,
+        activityView: filters.activityView,
         generationsMin: filters.generationsMin,
         generationsMax: filters.generationsMax,
         creditsMin: filters.creditsMin,
@@ -534,6 +545,7 @@ export default function UsersPage() {
     filters.type,
     filters.model,
     filters.plan,
+    filters.activityView,
     filters.generationsMin,
     filters.generationsMax,
     filters.creditsMin,
@@ -597,7 +609,7 @@ export default function UsersPage() {
               className="h-14 w-full border-0 bg-white pl-11 pr-4 text-base font-medium text-slate-900 outline-none placeholder:text-sm placeholder:font-normal placeholder:text-slate-400 focus:ring-0"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 p-2 lg:border-l lg:border-t-0">
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 p-2 lg:border-l lg:border-t-0 xl:flex-nowrap">
             <DateRangePicker
               preset="custom"
               from={filters.signUpFrom}
@@ -611,14 +623,22 @@ export default function UsersPage() {
                 setPage(1);
               }}
               ariaLabel="Sign up date range"
-              className="h-10 min-w-64 justify-between rounded-md"
+              emptyLabel="Sign-up date"
+              className="h-10 min-w-48 justify-between rounded-md"
+            />
+            <Select
+              value={filters.activityView}
+              onChange={(value) => updateFilter("activityView", value)}
+              options={ACTIVITY_VIEW_OPTIONS}
+              leadingIcon={Activity}
+              className="h-10 min-w-36 rounded-md border-slate-200 shadow-xs"
             />
             <Select
               value={filters.type}
               onChange={(value) => updateFilter("type", value)}
               options={TYPE_OPTIONS}
               leadingIcon={Filter}
-              className="h-10 min-w-40 rounded-md border-slate-200 shadow-xs"
+              className="h-10 min-w-32 rounded-md border-slate-200 shadow-xs"
             />
             <Select
               value={sort}
@@ -628,7 +648,7 @@ export default function UsersPage() {
               }}
               options={SORT_OPTIONS}
               leadingIcon={ArrowDownWideNarrow}
-              className="h-10 min-w-44 rounded-md border-slate-200 shadow-xs"
+              className="h-10 min-w-40 rounded-md border-slate-200 shadow-xs"
             />
             <button
               type="button"
@@ -702,13 +722,21 @@ export default function UsersPage() {
           Sign-up dates are temporarily unavailable, so the sign-up date filter could not be applied.
         </div>
       ) : null}
+      {data?.activityData?.view === "active" && !data.activityData.applied ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Activity data is temporarily incomplete, so the Active Users filter could not be applied safely.
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
           <div>
-            <div className="text-sm font-semibold text-slate-900">User activity</div>
+            <div className="text-sm font-semibold text-slate-900">
+              {filters.activityView === "active" ? "Active Users" : "All Users"}
+            </div>
             <div className="mt-0.5 text-xs text-slate-500">
-              Showing {formatNumber(rows.length)} of {formatNumber(total)} matching users
+              Showing {formatNumber(rows.length)} of {formatNumber(total)} matching
+              {filters.activityView === "active" ? " active" : ""} users
             </div>
           </div>
           <div className="flex flex-wrap gap-4">

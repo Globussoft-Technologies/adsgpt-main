@@ -6,6 +6,11 @@ const modelConfigurationService = require("../../services/modelConfigurationServ
 const MetaLaunchTrace = require("../../Module/adPosting/metaLaunchTrace");
 const { fetchAllMembers } = require("../../services/amemberUserDirectory");
 const { applyMemberData, paginateRows } = require("../../utils/adminUserMembers");
+const {
+  findActiveUserIds,
+  isActiveUser,
+  matchesActivityFilters,
+} = require("../../services/adminUserActivity");
 const axios = require("axios");
 
 let amemberProductsCache = null;
@@ -81,29 +86,6 @@ async function addEffectiveGenerationCredits(media) {
   }
 
   return result;
-}
-
-function parseFiniteNumber(value) {
-  if (value === undefined || value === null || value === "") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function addNumberRange(match, field, min, max) {
-  const range = {};
-  const minValue = parseFiniteNumber(min);
-  const maxValue = parseFiniteNumber(max);
-  if (minValue !== null) range.$gte = minValue;
-  if (maxValue !== null) range.$lte = maxValue;
-  if (Object.keys(range).length) match[field] = range;
-}
-
-function addDateRange(match, field, from, to) {
-  if (!from && !to) return;
-  const range = {};
-  if (from) range.$gte = parseRangeStart(from);
-  if (to) range.$lte = parseRangeEnd(to);
-  match[field] = range;
 }
 
 function toOption(value) {
@@ -399,7 +381,7 @@ exports.usersFilterOptions = async (req, res) => {
   }
 };
 
-// GET /admin/users?from&to&signUpFrom&signUpTo&search&sort&page&limit&type&model&plan&generationsMin&generationsMax&creditsMin&creditsMax&costMin&costMax&lastActivityFrom&lastActivityTo
+// GET /admin/users?from&to&activityView&signUpFrom&signUpTo&search&sort&page&limit&type&model&plan&generationsMin&generationsMax&creditsMin&creditsMax&costMin&costMax&lastActivityFrom&lastActivityTo
 exports.usersList = async (req, res) => {
   try {
     const {
@@ -419,6 +401,7 @@ exports.usersList = async (req, res) => {
       lastActivityTo,
       signUpFrom = "",
       signUpTo = "",
+      activityView = "all",
       sort = "cost", // cost | generations | credits | recent
       page = 1,
       limit = 20,
@@ -430,12 +413,6 @@ exports.usersList = async (req, res) => {
     const match = buildDateMatch(from, to);
     if (["image", "video"].includes(type)) match.type = type;
     if (model.trim()) match.model = { $in: modelValuesForFilter(model) };
-
-    const aggregateRangeMatch = {};
-    addNumberRange(aggregateRangeMatch, "generations", generationsMin, generationsMax);
-    addNumberRange(aggregateRangeMatch, "credits", creditsMin, creditsMax);
-    addNumberRange(aggregateRangeMatch, "cost", costMin, costMax);
-    addDateRange(aggregateRangeMatch, "lastActivity", lastActivityFrom, lastActivityTo);
 
     const sortField = {
       cost: "cost",
@@ -470,12 +447,10 @@ exports.usersList = async (req, res) => {
           lastActivity: 1,
         },
       },
-      ...(Object.keys(aggregateRangeMatch).length ? [{ $match: aggregateRangeMatch }] : []),
     ]);
 
-    const userIds = aggregated.map((u) => u.userId);
     const profiles = await UserProfile.find(
-      { user_id: { $in: userIds } },
+      {},
       {
         user_id: 1,
         login: 1,
@@ -492,7 +467,21 @@ exports.usersList = async (req, res) => {
     ).lean();
 
     const profileMap = new Map(profiles.map((p) => [p.user_id, p]));
-    let merged = aggregated.map((row) => {
+    const aggregateMap = new Map(aggregated.map((row) => [String(row.userId), row]));
+    const userIds = new Set([
+      ...profiles.map((profile) => String(profile.user_id)),
+      ...aggregated.map((row) => String(row.userId)),
+    ]);
+    let merged = Array.from(userIds).map((userId) => {
+      const row = aggregateMap.get(userId) || {
+        userId,
+        generations: 0,
+        cost: 0,
+        credits: 0,
+        images: 0,
+        videos: 0,
+        lastActivity: null,
+      };
       const profile = profileMap.get(row.userId) || {};
       const fullName =
         profile.name ||
@@ -509,6 +498,21 @@ exports.usersList = async (req, res) => {
         createdFrom: profile.created_from || "",
       };
     });
+
+    if ((["image", "video"].includes(type) || model.trim()) && merged.length) {
+      merged = merged.filter((row) => row.generations > 0);
+    }
+
+    merged = merged.filter((row) => matchesActivityFilters(row, {
+      generationsMin,
+      generationsMax,
+      creditsMin,
+      creditsMax,
+      costMin,
+      costMax,
+      lastActivityFrom,
+      lastActivityTo,
+    }));
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -541,6 +545,25 @@ exports.usersList = async (req, res) => {
           );
         },
       );
+    }
+
+    const normalizedActivityView = activityView === "active" ? "active" : "all";
+    let activityData = {
+      view: normalizedActivityView,
+      available: true,
+      applied: normalizedActivityView === "all",
+      failedSources: [],
+    };
+    if (normalizedActivityView === "active") {
+      const activeResult = await findActiveUserIds({ from, to });
+      activityData.failedSources = activeResult.failedSources;
+      activityData.available = activeResult.failedSources.length === 0;
+      activityData.applied = activityData.available;
+      if (activityData.applied) {
+        merged = merged.filter((row) =>
+          isActiveUser(row, profileMap.get(row.userId), activeResult.activeUserIds),
+        );
+      }
     }
 
     let memberDirectory = { members: [], stale: false };
@@ -592,6 +615,7 @@ exports.usersList = async (req, res) => {
         signupFilterRequested: memberResult.signupFilterRequested,
         signupFilterApplied: memberResult.signupFilterApplied,
       },
+      activityData,
     });
   } catch (error) {
     console.error("Admin users list error:", error);
