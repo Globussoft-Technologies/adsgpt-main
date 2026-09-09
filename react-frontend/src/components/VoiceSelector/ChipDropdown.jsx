@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, Loader2, Search } from 'lucide-react';
 
@@ -25,35 +26,70 @@ const ChipDropdown = ({
   value,           // selected value (string for filters, voice_id for voice)
   onSelect,        // (val, meta?) => void
   onClose,
+  maxListHeight = 190,
+  constrainToScrollContainer = false,
 }) => {
   const ref = useRef(null);
   const [playingId, setPlayingId] = useState(null);
   const [query, setQuery] = useState('');
-  const [alignRight, setAlignRight] = useState(false);
+  const [position, setPosition] = useState({
+    top: 0,
+    left: 0,
+    width: 256,
+    listMaxHeight: 190,
+  });
   const audioRef = useRef(null);
 
-  // Check if dropdown would overflow the container or screen boundary on the right
-  useEffect(() => {
+  // Rendered through document.body below, then constrained to the requested
+  // scroll container so it remains visible without escaping the form card.
+  useLayoutEffect(() => {
     if (!open || !anchorRef?.current) return;
-    const updateAlignment = () => {
+    const updatePosition = () => {
       const rect = anchorRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const dropdownWidth = 256;
-
-      const containerEl = anchorRef.current?.closest(
-        '[role="dialog"], .workspace-card, .rounded-3xl, .rounded-\\[30px\\], [class*="max-w-"], .overflow-y-auto'
+      const viewportPadding = 12;
+      const gap = 8;
+      const menuChromeHeight = field === 'voice' ? 54 : 14;
+      const scrollContainer = constrainToScrollContainer
+        ? anchorRef.current.closest('.overflow-y-auto')
+        : null;
+      const containerRect = scrollContainer?.getBoundingClientRect();
+      const leftBoundary = Math.max(
+        viewportPadding,
+        (containerRect?.left ?? 0) + viewportPadding,
       );
-      const rightBoundary = containerEl
-        ? containerEl.getBoundingClientRect().right - 16
-        : window.innerWidth - 16;
+      const rightBoundary = Math.min(
+        window.innerWidth - viewportPadding,
+        (containerRect?.right ?? window.innerWidth) - viewportPadding,
+      );
+      const bottomBoundary = Math.min(
+        window.innerHeight - viewportPadding,
+        (containerRect?.bottom ?? window.innerHeight) - viewportPadding,
+      );
+      const dropdownWidth = Math.min(256, Math.max(0, rightBoundary - leftBoundary));
+      const availableListHeight =
+        bottomBoundary - rect.bottom - gap - menuChromeHeight;
+      const left = Math.min(
+        Math.max(rect.left, leftBoundary),
+        Math.max(leftBoundary, rightBoundary - dropdownWidth),
+      );
 
-      setAlignRight(rect.left + dropdownWidth > rightBoundary || field === 'age' || field === 'voice');
+      setPosition({
+        top: rect.bottom + gap,
+        left,
+        width: dropdownWidth,
+        listMaxHeight: Math.max(0, Math.min(maxListHeight, availableListHeight)),
+      });
     };
 
-    updateAlignment();
-    window.addEventListener('resize', updateAlignment);
-    return () => window.removeEventListener('resize', updateAlignment);
-  }, [open, anchorRef, field]);
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, anchorRef, constrainToScrollContainer, field, maxListHeight]);
 
   useEffect(() => {
     if (!open) return;
@@ -200,7 +236,9 @@ const ChipDropdown = ({
       ? options.filter((opt) => opt.name?.toLowerCase().includes(query.toLowerCase()))
       : options;
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -209,9 +247,14 @@ const ChipDropdown = ({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -4, scale: 0.98 }}
           transition={{ duration: 0.12 }}
-          className={`absolute top-full z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#1C1C1E]/95 dark:shadow-[0_20px_50px_rgba(0,0,0,0.7)] ${
-            alignRight ? 'right-0' : 'left-0'
-          }`}
+          style={{
+            position: 'fixed',
+            top: `${position.top}px`,
+            left: `${position.left}px`,
+            width: `${position.width}px`,
+            zIndex: 999999,
+          }}
+          className="overflow-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#1C1C1E]/95 dark:shadow-[0_20px_50px_rgba(0,0,0,0.7)]"
         >
           {field === 'voice' && (
             <div className="mb-1 px-1 pt-0.5">
@@ -231,7 +274,8 @@ const ChipDropdown = ({
           )}
 
           <div
-            className="max-h-[190px] overflow-y-auto pr-0.5 [scrollbar-width:thin]"
+            style={{ maxHeight: `${position.listMaxHeight}px` }}
+            className="overflow-y-auto pr-0.5 [scrollbar-width:thin]"
           >
             {loading && (
               <div className="flex items-center justify-center gap-2 py-4 text-[12px] text-gray-500 dark:text-white/50">
@@ -248,7 +292,8 @@ const ChipDropdown = ({
           </div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 };
 

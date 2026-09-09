@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Check, Undo2 } from 'lucide-react';
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
 import { labelForLanguage } from '@/apis/voiceSelector/voiceSelectorApi';
@@ -25,6 +26,8 @@ export default function VideoVersionControls({
   onRevert,
   onKeep,
 }) {
+  const controlsRef = useRef(null);
+  const [menuWidth, setMenuWidth] = useState(256);
   const options = results.map((r, i) => ({ value: String(i), label: versionLabel(r, i) }));
   const value = {
     value: String(shownVersion),
@@ -32,28 +35,47 @@ export default function VideoVersionControls({
   };
   const isPreviewing = shownVersion !== committedVersion;
 
+  useLayoutEffect(() => {
+    const card = controlsRef.current?.closest('.my-space-media-card');
+    if (!card) return undefined;
+
+    const updateMenuWidth = () => {
+      setMenuWidth(Math.max(0, card.getBoundingClientRect().width - 16));
+    };
+
+    updateMenuWidth();
+    const observer = new ResizeObserver(updateMenuWidth);
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div
-      className="absolute top-2 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2"
+      ref={controlsRef}
+      className="pointer-events-none absolute top-2 right-2 left-2 z-30 flex min-w-0 flex-col items-center gap-1.5"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="rounded-full bg-black/50 backdrop-blur">
+      <div className="pointer-events-auto max-w-full rounded-full bg-black/50 backdrop-blur">
         <CommonDropdown
           label="Version"
           options={options}
           value={value}
           onChange={(v) => onPreview(Number(v))}
           side="bottom"
+          className="max-w-full whitespace-normal data-[size=default]:h-auto data-[size=default]:min-h-6 [&>div]:min-w-0 [&>div]:py-1 [&>div>span]:break-words [&>div>span]:text-center [&>div>span]:leading-tight [&>div>span]:whitespace-normal"
+          contentAlign="center"
+          contentClassName="min-w-0"
+          contentStyle={{ width: menuWidth, minWidth: menuWidth, maxWidth: menuWidth }}
         />
       </div>
 
       {isPreviewing && (
-        <>
+        <div className="pointer-events-auto flex max-w-full items-center justify-center gap-2">
           <button
             type="button"
             title="Keep this one"
             onClick={() => onKeep(shownVersion)}
-            className="flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-emerald-700"
+            className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-emerald-700"
           >
             <Check size={13} /> Keep
           </button>
@@ -61,11 +83,11 @@ export default function VideoVersionControls({
             type="button"
             title="Back to current version"
             onClick={onRevert}
-            className="flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur transition hover:bg-white/25"
+            className="flex shrink-0 items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur transition hover:bg-white/25"
           >
             <Undo2 size={13} /> Revert
           </button>
-        </>
+        </div>
       )}
     </div>
   );

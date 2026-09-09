@@ -30,6 +30,7 @@ export const PROVIDER_RECOMMENDATION =
   'Sarvam is tuned best for Indian languages';
 
 const DEFAULT_PROVIDER = 'elevenlabs';
+const FOUR_OPTION_LIST_HEIGHT = 104;
 
 // Sentinel language code for the "Other" option. Picking it swaps the cascade
 // for a free-text search box (→ /search) so users can find voices for
@@ -548,6 +549,8 @@ const VoiceSelector = ({ value = {}, onChange, error, rightSlot, compactHeader =
                 }
                 onSelect={(val, meta) => handleSelect(field, val, meta)}
                 onClose={() => setOpenChip(null)}
+                maxListHeight={FOUR_OPTION_LIST_HEIGHT}
+                constrainToScrollContainer
               />
             </div>
           );

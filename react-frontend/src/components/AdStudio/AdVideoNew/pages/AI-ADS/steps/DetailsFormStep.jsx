@@ -598,6 +598,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       label="Model"
                       type="b-roll"
                       side="top"
+                      showChevron
                       className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
                       options={visibleModelOptions}
                       value={visibleModelOptions.find((opt) => opt.value === formData.model)}
@@ -612,6 +613,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       label="Duration"
                       type="b-roll"
                       side="top"
+                      showChevron
                       className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
                       options={configuredDurationOptions}
                       value={configuredDurationOptions.find((opt) => opt.value === selectedVideoDuration)}
@@ -626,6 +628,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       label={isAspectRatioLoading ? 'Loading ratios...' : 'Aspect Ratio'}
                       type="b-roll"
                       side="top"
+                      showChevron
                       className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
                       options={aspectRatioOptions}
                       value={aspectRatioOptions.find((opt) => opt.value === formData.aspectRatio) || (isAspectRatioLoading ? { label: 'Loading ratios...', Icon: <Loader2 className="h-3 w-3 animate-spin" /> } : undefined)}

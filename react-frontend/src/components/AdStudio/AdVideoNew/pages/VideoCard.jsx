@@ -69,6 +69,11 @@ export default function VideoCard({
   getVideoAt,
   hasMore,
   onFetchMore,
+  isMuted,
+  volume,
+  onAudioSettingsChange,
+  isPlaybackActive,
+  onPlaybackStart,
   onOpenPostAdModal,
 }) {
   const videoRef = useRef();
@@ -104,8 +109,6 @@ export default function VideoCard({
   const infoTimeout = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef(null);
-  const [isMuted, setIsMuted] = useState(true);
-  const [volume, setVolume] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [activeNavIndex, setActiveNavIndex] = useState(videoIndex);
@@ -127,6 +130,21 @@ export default function VideoCard({
     setCurrentTime(0);
     setDuration(0);
   }, [activeVideoSrc]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = isMuted;
+    video.volume = volume;
+  }, [activeVideoSrc, isMuted, volume]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || isPlaybackActive || video.paused) return;
+
+    video.pause();
+    setIsPlaying(false);
+  }, [isPlaybackActive]);
 
   useEffect(() => {
     if (isAiAds || !primaryVideoUrl) return;
@@ -311,30 +329,20 @@ export default function VideoCard({
 
   const toggleMute = (e) => {
     e.stopPropagation();
-    const video = videoRef.current;
-    if (!video) return;
-    video.muted = !video.muted;
-    setIsMuted(video.muted);
-    if (!video.muted && volume === 0) {
-      setVolume(0.5);
-      video.volume = 0.5;
-    }
+    const nextMuted = !isMuted;
+    onAudioSettingsChange({
+      isMuted: nextMuted,
+      volume: !nextMuted && volume === 0 ? 0.5 : volume,
+    });
   };
 
   const handleVolumeChange = (e) => {
     e.stopPropagation();
     const newVolume = parseFloat(e.target.value);
-    const video = videoRef.current;
-    if (!video) return;
-    video.volume = newVolume;
-    setVolume(newVolume);
-    if (newVolume > 0) {
-      video.muted = false;
-      setIsMuted(false);
-    } else {
-      video.muted = true;
-      setIsMuted(true);
-    }
+    onAudioSettingsChange({
+      isMuted: newVolume === 0,
+      volume: newVolume,
+    });
   };
 
   const handleFullscreen = (e) => {
@@ -492,7 +500,7 @@ export default function VideoCard({
   })();
 
   const InfoTooltip = () => (
-    <div className="absolute top-3 right-3 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+    <div className="absolute top-3 right-3 z-50 flex items-center gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
       {item?.status === 'completed' && hasPlan8 && (
         <button
           className="flex items-center gap-2 rounded-full border border-white/40 px-4 py-1.5 text-[10px] font-medium text-white shadow-lg backdrop-blur-md transition-all hover:scale-105 active:scale-95 sm:text-xs"
@@ -516,6 +524,7 @@ export default function VideoCard({
 
       <div className="relative" onMouseEnter={handleInfoEnter} onMouseLeave={handleInfoLeave}>
         <button
+          type="button"
           className={`rounded-full p-2 text-gray-500 backdrop-blur hover:bg-black/10 dark:text-white dark:hover:bg-black/60 ${showInfo ? 'bg-black/10 dark:bg-black/60' : ''}`}
         >
           <Info size={18} />
@@ -918,6 +927,11 @@ export default function VideoCard({
                 setIsPlaying(true);
               }
             }}
+            onPlay={() => {
+              setIsPlaying(true);
+              onPlaybackStart?.();
+            }}
+            onPause={() => setIsPlaying(false)}
             onMouseEnter={handleHoverPlay}
             onMouseLeave={handleHoverPause}
             onClick={togglePlay}
@@ -968,7 +982,7 @@ export default function VideoCard({
           )}
 
           {/* AI Ads: version switcher (only when more than one version exists) */}
-          {isAiAds && (item?.results?.length || 0) > 1 && (
+          {isAiAds && !isThisFullscreen && (item?.results?.length || 0) > 1 && (
             <VideoVersionControls
               results={item.results}
               shownVersion={shownVersion}

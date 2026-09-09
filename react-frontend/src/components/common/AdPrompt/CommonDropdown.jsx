@@ -12,6 +12,10 @@ const CommonDropdown = ({
   side,
   triggerVariant = 'default',
   disabled = false,
+  showChevron = false,
+  contentAlign,
+  contentClassName = '',
+  contentStyle,
 }) => {
   const Icon = value?.Icon;
   const dropdownLabel = label;
@@ -23,14 +27,14 @@ const CommonDropdown = ({
   return (
     <Select value={value?.value ?? ''} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
-        hideIcon
+        hideIcon={!showChevron}
         disabled={disabled}
         className={
           isVoiceChip
             ? `group relative flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-400/10 px-3 py-1 text-[12px] font-medium text-gray-900 opacity-100 shadow-[0_0_8px_rgba(52,211,153,0.2)] transition hover:bg-emerald-400/10 focus-visible:border-emerald-400/50 focus-visible:ring-0 sm:text-[13px] dark:bg-emerald-400/10 dark:text-white dark:hover:bg-emerald-400/10 ${className}`
             : isField
               ? `group relative flex !h-11 w-full items-center rounded-lg border border-black/10 bg-black/[0.03] px-3 text-sm text-gray-700 opacity-100 shadow-none transition hover:bg-black/[0.045] focus-visible:border-emerald-400/50 focus-visible:ring-1 focus-visible:ring-emerald-400/20 dark:border-white/10 dark:bg-white/[0.035] dark:text-white/75 dark:hover:bg-white/[0.05] [&>svg]:block ${className}`
-            : `prompt_selection_button_no_gradient group 2xl:text-13 relative flex md:text-[11px] 2xl:py-[18px] ${label === 'AI Model' || type === 'b-roll' || type === 'ugc' ? '[&>svg]:block' : '[&>svg]:hidden'} items-center gap-0 rounded-[50px] text-[9px] shadow-none transition-all duration-200 ease-in hover:bg-slate-100 dark:border-none [&_img]:opacity-80 [&_img]:brightness-0 dark:[&_img]:opacity-100 dark:[&_img]:brightness-100 [&_svg]:text-current! opacity-80 hover:opacity-100 ${type === 'b-roll' ? 'dark:bg-[#909294]/10 dark:text-[#f0f0f0]' : 'dark:bg-[#202020]/50 dark:text-[#AFAFAF]'} ${className}`
+            : `prompt_selection_button_no_gradient group 2xl:text-13 relative flex md:text-[11px] 2xl:py-[18px] ${showChevron || label === 'AI Model' || type === 'b-roll' || type === 'ugc' ? '[&>svg]:block' : '[&>svg]:hidden'} items-center gap-0 rounded-[50px] text-[9px] shadow-none transition-all duration-200 ease-in hover:bg-slate-100 dark:border-none [&_img]:opacity-80 [&_img]:brightness-0 dark:[&_img]:opacity-100 dark:[&_img]:brightness-100 [&_svg]:text-current! opacity-80 hover:opacity-100 ${type === 'b-roll' ? 'dark:bg-[#909294]/10 dark:text-[#f0f0f0]' : 'dark:bg-[#202020]/50 dark:text-[#AFAFAF]'} ${className}`
         }
       >
         <div className="flex items-center gap-1 pr-1 capitalize 2xl:gap-1.5">
@@ -51,7 +55,9 @@ const CommonDropdown = ({
 
       <SelectContent
         side={side}
-        className="z-[999999] min-w-fit border border-black/10 bg-white text-zinc-800 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white"
+        align={contentAlign}
+        style={contentStyle}
+        className={`z-[999999] min-w-fit border border-black/10 bg-white text-zinc-800 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white ${contentClassName}`}
       >
         {label && (
           <div className="text-10 px-2 py-1 font-normal tracking-wide text-[#636363] 2xl:py-2 2xl:text-xs dark:text-[#D9D9D9]">

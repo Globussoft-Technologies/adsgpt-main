@@ -20,6 +20,8 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
   const dispatch = useDispatch();
   const { allVideos = [], isLoading } = useSelector((state) => state.adVideoNew);
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
+  const [audioSettings, setAudioSettings] = useState({ isMuted: true, volume: 0 });
+  const [activePlaybackId, setActivePlaybackId] = useState(null);
   const displayedVideos = useMemo(() => {
     return allVideos.filter((v) => {
       const hasReadyAiAdsScenes =
@@ -251,6 +253,11 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
             getVideoAt={(i) => displayedVideos[i]}
             hasMore={hasMore}
             onFetchMore={fetchMoreForNav}
+            isMuted={audioSettings.isMuted}
+            volume={audioSettings.volume}
+            onAudioSettingsChange={setAudioSettings}
+            isPlaybackActive={activePlaybackId === videoItem._id}
+            onPlaybackStart={() => setActivePlaybackId(videoItem._id)}
             onOpenPostAdModal={(payload) =>
               setPostAdState({ open: true, payload, autoAdvance: false })
             }
