@@ -184,6 +184,39 @@ group("THE TRAP: filter before slicing, never after", () => {
   });
 });
 
+group("THE BUG: completed services must not keep the run generating", () => {
+  test("all requested service counters complete an otherwise in-progress run", () => {
+    const c = campaign({ image: [img(1)], text: [txt(1)] }, 1);
+    c.status = "in-progress";
+    c.results.status = "in-progress";
+    c.services.servicesSelected.forEach((service) => {
+      service.generated = 1;
+    });
+
+    const v = briefGenerationView(c);
+    assert.equal(v.status, "success");
+    assert.equal(v.pending, 0);
+  });
+
+  test("image completion alone does not finish a run while copy is pending", () => {
+    const c = campaign({ image: [img(1)], text: [pendingSlot()] }, 1);
+    c.status = "in-progress";
+    c.results.status = "in-progress";
+    c.services.servicesSelected.find((service) => service.serviceName === "image").generated = 1;
+    c.services.servicesSelected.find((service) => service.serviceName === "text").generated = 0;
+
+    assert.equal(briefGenerationView(c).status, "running");
+  });
+
+  test("missing counters preserve legacy in-progress behaviour", () => {
+    const c = campaign({ image: [img(1)], text: [txt(1)] }, 1);
+    c.status = "in-progress";
+    c.results.status = "in-progress";
+
+    assert.equal(briefGenerationView(c).status, "running");
+  });
+});
+
 group("partial and failed runs are distinguishable", () => {
   test("some worked, some didn't → partial", () => {
     const v = briefGenerationView(

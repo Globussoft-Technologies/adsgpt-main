@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   AlertCircle,
@@ -109,6 +109,7 @@ export default function RunGallery({
   );
   const [customPairs, setCustomPairs] = useState([]);
   const [addImageOpen, setAddImageOpen] = useState(false);
+  const [editingImageUrl, setEditingImageUrl] = useState(null);
 
   const userData = useSelector((state) => state.auth?.userData || state.socket?.userData);
   const userId = userData?.user_id;
@@ -116,30 +117,29 @@ export default function RunGallery({
   const handleAddCustomImage = useCallback(
     (img) => {
       if (!img?.src) return;
-      const defaultHeadline = brandName ? `${brandName}` : 'Special Offer';
-      const defaultText = 'Experience the difference. Explore our offers and get started today.';
       const newPair = {
         imageUrl: img.src,
         isCustom: true,
         copy: {
-          headline: defaultHeadline,
-          primaryText: defaultText,
-          description: defaultText,
+          headline: '',
+          primaryText: '',
+          description: '',
           meta: {
-            headline: defaultHeadline,
-            primary_text: defaultText,
+            headline: '',
+            primary_text: '',
           },
           google: {
-            headline: defaultHeadline.slice(0, 30),
-            description: defaultText.slice(0, 90),
+            headline: '',
+            description: '',
           },
         },
       };
       setCustomPairs((prev) => [newPair, ...prev]);
       setSelected((prev) => new Set([...prev, img.src]));
+      setEditingImageUrl(img.src);
       setAddImageOpen(false);
     },
-    [brandName]
+    []
   );
 
   const displayRuns = useMemo(() => {
@@ -566,6 +566,13 @@ export default function RunGallery({
                                 [pair.imageUrl]: newCopy,
                               }));
                             }}
+                            isAutoEditing={pair.imageUrl === editingImageUrl}
+                            onClearAutoEdit={() => {
+                              if (editingImageUrl === pair.imageUrl) {
+                                setEditingImageUrl(null);
+                              }
+                            }}
+                            brandName={brandName}
                           />
                         ))}
 
@@ -759,14 +766,32 @@ function Tile({
   googleChosen = false,
   effectiveCopy,
   onSaveCopy,
+  isAutoEditing = false,
+  onClearAutoEdit,
+  brandName,
 }) {
   const dispatch = useDispatch();
+  const tileRef = useRef(null);
+  const headlineInputRef = useRef(null);
   const src = srcOf(pair.imageUrl);
   const [broken, setBroken] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(Boolean(isAutoEditing));
 
   const [draftHeadline, setDraftHeadline] = useState(effectiveCopy?.headline || '');
   const [draftPrimaryText, setDraftPrimaryText] = useState(effectiveCopy?.primaryText || '');
+
+  useEffect(() => {
+    if (isAutoEditing) {
+      setIsEditing(true);
+      if (tileRef.current) {
+        tileRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      setTimeout(() => {
+        headlineInputRef.current?.focus();
+        headlineInputRef.current?.select?.();
+      }, 60);
+    }
+  }, [isAutoEditing]);
 
   useEffect(() => {
     if (!isEditing) {
@@ -806,6 +831,7 @@ function Tile({
         : {}),
     });
     setIsEditing(false);
+    onClearAutoEdit?.();
   };
 
   const handleCancel = (e) => {
@@ -813,6 +839,7 @@ function Tile({
     setDraftHeadline(effectiveCopy?.headline || '');
     setDraftPrimaryText(effectiveCopy?.primaryText || '');
     setIsEditing(false);
+    onClearAutoEdit?.();
   };
 
   const handleKeyDown = (e) => {
@@ -825,6 +852,7 @@ function Tile({
 
   return (
     <article
+      ref={tileRef}
       className={`group relative flex flex-col overflow-hidden ${CARD} ${
         selected ? 'ring-2 ring-[#5867EB] dark:ring-[#15DCFF]' : ''
       }`}
@@ -924,12 +952,13 @@ function Tile({
                 </span>
               </div>
               <input
+                ref={headlineInputRef}
                 type="text"
                 autoFocus
                 maxLength={headlineMax}
                 value={draftHeadline}
                 onChange={(e) => setDraftHeadline(e.target.value.slice(0, headlineMax))}
-                placeholder="Enter headline..."
+                placeholder={brandName ? `e.g. ${brandName}` : 'Enter headline...'}
                 className={`w-full rounded-lg border-2 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-900 shadow-xs outline-none transition-all dark:bg-[#1E1E1E] dark:text-white ${
                   draftHeadlineOver
                     ? 'border-red-500 ring-2 ring-red-500/20'
@@ -976,7 +1005,7 @@ function Tile({
                 maxLength={primaryMax}
                 onChange={(e) => setDraftPrimaryText(e.target.value.slice(0, primaryMax))}
                 rows={3}
-                placeholder={isGoogle ? 'Enter description...' : 'Enter primary text...'}
+                placeholder="e.g. Experience the difference. Explore our offers and get started today."
                 className={`w-full min-h-[68px] resize-none rounded-lg border-2 bg-white p-2.5 text-xs leading-relaxed text-gray-900 shadow-xs outline-none transition-all dark:bg-[#1E1E1E] dark:text-white ${
                   draftPrimaryOver
                     ? 'border-red-500 ring-2 ring-red-500/20'

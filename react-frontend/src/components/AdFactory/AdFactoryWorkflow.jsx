@@ -343,6 +343,7 @@ export default function AdFactoryWorkflowDarkReal() {
     distribution,
     adsDialogType,
     adsDialogOpen,
+    activeCampaign,
     loading,
     results,
   } = useSelector((state) => state.adFactoryNew);
@@ -451,6 +452,7 @@ export default function AdFactoryWorkflowDarkReal() {
   }, [automationEntry?.jobId, automationEntry?.status, selectedPlatforms]);
 
   const isGenerating = loading;
+  const showInitialLoader = loading && Object.keys(activeCampaign || {}).length === 0;
 
   const canEnablePreview = React.useMemo(
     () =>
@@ -1203,7 +1205,7 @@ export default function AdFactoryWorkflowDarkReal() {
         </button>
       </div>
       <div className="relative h-full w-full">
-        {loading && (
+        {showInitialLoader && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm dark:bg-gray-900/40">
             <Loader className="h-8 w-8 animate-spin text-gray-700 dark:text-white" />
           </div>
@@ -1273,6 +1275,7 @@ export default function AdFactoryWorkflowDarkReal() {
         onClose={() => dispatch(setActiveForm(null))}
         formProgress={formProgress[activeForm]}
         onProgressUpdate={handleFormProgressUpdate}
+        onServicesComplete={() => setManualExpanded(true)}
       />
 
       {/* Ads Dialog for Generation Nodes */}

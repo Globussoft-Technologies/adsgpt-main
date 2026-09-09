@@ -20,7 +20,7 @@ import { PiFacebookLogoBold, PiSnapchatLogo } from 'react-icons/pi';
 import { RiTwitterXFill } from 'react-icons/ri';
 import { AiOutlineYoutube } from 'react-icons/ai';
 import { FaInstagram, FaLinkedin, FaPlay } from 'react-icons/fa';
-import { fetchCampaignById, updateCampaign } from '@/store/actions/adFactoryNew/adFactoryActions';
+import { updateCampaign } from '@/store/actions/adFactoryNew/adFactoryActions';
 import {
   selectIsAutomationActive,
 } from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
@@ -310,8 +310,6 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
           servicesSelected: servicesArrayPayload,
         },
       };
-      dispatch(updateProductionAndServices(payload));
-
       // Get selected services for enabling generation nodes
       const selectedServices = {
         text: text > 0,
@@ -319,21 +317,14 @@ export default function ServicesForm({ onComplete, setShowGeneratingLoader }) {
         // video: video > 0,
       };
 
-      // Dispatch action to update selected services in Redux
-      dispatch(setSelectedServices(selectedServices));
-
       const result = await dispatch(updateCampaign(payload));
-      const campaignPayload = {
-        campaignId: campaignId,
-        userId: userData?.user_id,
-      };
-      // dispatch(fetchCampaignById(campaignPayload));
       if (updateCampaign.fulfilled.match(result)) {
-        // updateCampaign internally dispatches fetchCampaignById without
-        // awaiting it. Await an explicit refetch so the racey one is settled,
-        // then seed manual placeholders — otherwise filterManualResults wipes
-        // the status:null items and the "Generating" sphere never appears.
-        await dispatch(fetchCampaignById(campaignPayload));
+        // Keep the local state shape aligned with the campaign API response.
+        dispatch(updateProductionAndServices(payload.data));
+        dispatch(setSelectedServices(selectedServices));
+
+        // updateCampaign resolves only after its campaign refetch completes,
+        // so these placeholders cannot be wiped by a later response.
         if (text > 0) dispatch(initializeResults({ type: 'text', quantity: text }));
         if (image > 0) dispatch(initializeResults({ type: 'image', quantity: image }));
 

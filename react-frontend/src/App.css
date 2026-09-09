@@ -4212,4 +4212,40 @@ html:not(.dark) .adsgpt-cal-pop .rdrDayEndPreview {
   color: #15DCFF !important;
 }
 
+/* Full Control creative preview — Light Mode field/action contrast.
+   Kept component-scoped because the global transparent-input and rounded
+   progress-track rules intentionally serve unrelated embedded controls. */
+html:not(.dark) .adfactory-preview-canvas input.adfactory-preview-cta-input {
+  color: var(--ws-text-primary) !important;
+  caret-color: var(--ws-text-primary) !important;
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--ws-border-strong) !important;
+  box-shadow: var(--ws-shadow-inner) !important;
+}
+
+html:not(.dark) .adfactory-preview-canvas input.adfactory-preview-cta-input::placeholder {
+  color: var(--ws-text-secondary) !important;
+  opacity: 1 !important;
+}
+
+html:not(.dark) .adfactory-preview-canvas input.adfactory-preview-cta-input:focus,
+html:not(.dark) .adfactory-preview-canvas input.adfactory-preview-cta-input:focus-visible {
+  background: var(--ws-surface) !important;
+  border-color: var(--ws-text-secondary) !important;
+  box-shadow: 0 0 0 3px var(--ws-input-focus-ring), var(--ws-shadow-inner) !important;
+}
+
+html:not(.dark) .adfactory-preview-canvas input.adfactory-preview-cta-input.border-red-500 {
+  background: var(--ws-surface) !important;
+  border-color: #EF4444 !important;
+}
+
+html:not(.dark) .adfactory-preview-canvas .adfactory-preview-save-button--muted {
+  color: var(--ws-text-secondary) !important;
+  background: var(--ws-surface-muted) !important;
+  border: 1px solid var(--ws-border-strong) !important;
+  box-shadow: var(--ws-shadow-sm) !important;
+  opacity: 1 !important;
+}
+
 

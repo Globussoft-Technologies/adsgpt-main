@@ -15,7 +15,13 @@ import { X } from 'lucide-react';
 import { fetchCampaignById } from '@/store/actions/adFactoryNew/adFactoryActions';
 import { useSearchParams } from 'react-router-dom';
 
-export default function NodeModal({ open, nodeId, onClose, onProgressUpdate }) {
+export default function NodeModal({
+  open,
+  nodeId,
+  onClose,
+  onProgressUpdate,
+  onServicesComplete,
+}) {
   const dispatch = useDispatch();
   const [showGenerator, setShowGenerator] = useState(false);
   const [showGeneratingLoader, setShowGeneratingLoader] = useState(false);
@@ -37,6 +43,9 @@ export default function NodeModal({ open, nodeId, onClose, onProgressUpdate }) {
   const handleFormComplete = (nodeId, progress = 100) => {
     if (onProgressUpdate) {
       onProgressUpdate(nodeId, progress);
+    }
+    if (nodeId === 'services') {
+      onServicesComplete?.();
     }
 
     // Close modal after successful submission

@@ -200,7 +200,7 @@ export const updateCampaign = createAsyncThunk(
           campaignId: payload?.campaignId,
           userId: socket?.userData?.user_id,
         };
-        dispatch(fetchCampaignById(fetchPayload));
+        await dispatch(fetchCampaignById(fetchPayload));
         GA4Events.adFactoryCampaignUpdated({ source: 'ad_factory_form', success: true });
       }
       return res?.data;

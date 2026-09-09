@@ -746,6 +746,9 @@ export const initSocket = (url) => (dispatch, getState) => {
     // campaignId — one campaign can span multiple jobs (e.g. completed →
     // re-activated creates a new job) and the trace stays continuous.
     if (IS_AUTOMATION_ENABLED) socket.on('adsFactory:runComplete', (data) => {
+      // Broadcast on emitter so all components (e.g. AdFactory v2 deliveries) can react immediately
+      emitter.emit('adsfactory:runComplete', data);
+
       // jobId on the payload is still used for the reverse-lookup fallback
       // — older event shapes may not carry an explicit campaignId. The
       // activity cache itself is now keyed by AdsGPT campaignId (one

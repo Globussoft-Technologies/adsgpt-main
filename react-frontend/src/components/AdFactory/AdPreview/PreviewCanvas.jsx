@@ -520,7 +520,7 @@ const PreviewCanvas = ({
   };
 
   return (
-    <main className="relative mt-8 flex h-full flex-1 flex-col justify-center gap-4 overflow-auto p-4 pt-10 md:mt-0 lg:flex-row lg:p-6 2xl:pt-12">
+    <main className="adfactory-preview-canvas relative mt-8 flex h-full flex-1 flex-col justify-center gap-4 overflow-auto p-4 pt-10 md:mt-0 lg:flex-row lg:p-6 2xl:pt-12">
       {/* Mobile Preview Button */}
       <div className="ml-2 flex md:ml-5 lg:hidden">
         <button
@@ -651,7 +651,7 @@ const PreviewCanvas = ({
                     update?.({ ctaLink: e.target.value });
                     setCtaLinkError('');
                   }}
-                  className={`w-full rounded-3xl border ${
+                  className={`adfactory-preview-cta-input w-full rounded-3xl border ${
                     ctaLinkError
                       ? 'border-red-500 focus:ring-red-500'
                       : 'border-black/20 dark:border-white/40 focus:border-gray-900 dark:focus:border-white'
@@ -666,10 +666,10 @@ const PreviewCanvas = ({
                 type="button"
                 onClick={handleSave}
                 disabled={saveStatus === 'saving' || !creative?.canSave}
-                className={`flex items-center gap-2 rounded-full px-6 py-2 text-xs font-semibold text-white dark:text-[#0F1010] 2xl:text-base ${
+                className={`adfactory-preview-save-button flex items-center gap-2 rounded-full px-6 py-2 text-xs font-semibold text-white dark:text-[#0F1010] 2xl:text-base ${
                   saveStatus === 'saved' || !creative?.canSave
-                    ? 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-[#3C3C3C]/50 dark:text-white/50'
-                    : 'bg-gray-900 dark:bg-white hover:opacity-75'
+                    ? 'adfactory-preview-save-button--muted cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-[#3C3C3C]/50 dark:text-white/50'
+                    : 'adfactory-preview-save-button--active bg-gray-900 dark:bg-white hover:opacity-75'
                 } ${saveStatus === 'saving' ? 'cursor-not-allowed opacity-80' : ''} `}
               >
                 {saveStatus === 'saving' && (

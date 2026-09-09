@@ -459,6 +459,95 @@ export default function AdFactoryV2Page() {
     if (briefId && brief?.jobId) dispatch(fetchTimeline(briefId));
   }, [dispatch, briefId, brief?.jobId, activating]);
 
+  // ── Automation deliveries auto-refresh & socket reactivity ────────────────
+  //
+  // 1. WebSocket listener for `adsFactory:runComplete`:
+  //    Refreshes timeline & brief the moment the backend finishes generating & posting.
+  useEffect(() => {
+    const socket = getSocket();
+    if (!briefId) return undefined;
+
+    const onRunComplete = (data) => {
+      const incomingJobId = data?.jobId || data?.campaign?._id || data?.data?.[0]?.jobId;
+      const incomingCampId = data?.campaignId || data?.campaign?.campaignId;
+
+      const isMatch =
+        (!incomingJobId && !incomingCampId) ||
+        (brief?.jobId && incomingJobId && String(brief.jobId) === String(incomingJobId)) ||
+        (brief?.campaignId && incomingCampId && String(brief.campaignId) === String(incomingCampId)) ||
+        (liveCampaignId && incomingCampId && String(liveCampaignId) === String(incomingCampId));
+
+      if (isMatch) {
+        dispatch(fetchTimeline(briefId));
+        dispatch(fetchBrief(briefId));
+      }
+    };
+
+    if (socket) socket.on('adsFactory:runComplete', onRunComplete);
+    emitter.on('adsfactory:runComplete', onRunComplete);
+
+    return () => {
+      if (socket) socket.off('adsFactory:runComplete', onRunComplete);
+      emitter.off('adsfactory:runComplete', onRunComplete);
+    };
+  }, [dispatch, briefId, brief?.jobId, brief?.campaignId, liveCampaignId]);
+
+  // 2. Scheduled cycle due / in-flight polling:
+  //    When an automation is active and its scheduled nextRunAt is reached
+  //    (displaying "Any moment now"), poll deliveries every 10s until the
+  //    cycle completes and nextRunAt advances into the future.
+  const [dueTick, setDueTick] = useState(0);
+
+  const nextRunAtMs = useMemo(() => {
+    const raw = timeline?.summary?.nextRunAt;
+    if (!raw || timeline?.summary?.status !== 'active') return null;
+    const d = new Date(raw);
+    const t = d.getTime();
+    return Number.isNaN(t) ? null : t;
+  }, [timeline?.summary?.nextRunAt, timeline?.summary?.status]);
+
+  useEffect(() => {
+    if (!briefId || !nextRunAtMs) return undefined;
+
+    const msUntilDue = nextRunAtMs - Date.now();
+
+    if (msUntilDue > 0) {
+      // Schedule trigger exactly when the scheduled time arrives
+      const timer = setTimeout(() => {
+        setDueTick((t) => t + 1);
+        dispatch(fetchTimeline(briefId));
+        dispatch(fetchBrief(briefId));
+      }, Math.min(msUntilDue, 2147483647));
+      return () => clearTimeout(timer);
+    }
+
+    // nextRunAt is in the past (due / executing, e.g. "Any moment now"):
+    // Poll every 10 seconds until the cycle finishes and nextRunAt advances.
+    const poll = setInterval(() => {
+      dispatch(fetchTimeline(briefId));
+      dispatch(fetchBrief(briefId));
+    }, 10000);
+
+    return () => clearInterval(poll);
+  }, [dispatch, briefId, nextRunAtMs, dueTick]);
+
+  // 3. Manual "Run now" queued polling:
+  useEffect(() => {
+    if (!briefId || !runNowQueued) return undefined;
+    const poll = setInterval(() => {
+      dispatch(fetchTimeline(briefId));
+      dispatch(fetchBrief(briefId));
+    }, 6000);
+    return () => clearInterval(poll);
+  }, [dispatch, briefId, runNowQueued]);
+
+  const handleRefreshDeliveries = useCallback(() => {
+    if (briefId) {
+      dispatch(fetchTimeline(briefId));
+      dispatch(fetchBrief(briefId));
+    }
+  }, [dispatch, briefId]);
+
   // Keep the URL in step so a refresh resumes rather than restarting.
   useEffect(() => {
     if (briefId && searchParams.get('briefId') !== briefId) {
@@ -1459,6 +1548,7 @@ export default function AdFactoryV2Page() {
                 rows={timeline?.rows}
                 loading={timeline?.loading}
                 onRetry={handleRunNow}
+                onRefresh={handleRefreshDeliveries}
                 brandName={brief.brand?.name}
                 pairsPerCycle={cadence.pairsPerCycle}
               />

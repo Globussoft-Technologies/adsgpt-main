@@ -37,6 +37,28 @@ const arr = (v) => (Array.isArray(v) ? v : []);
 
 const DEFAULT_LIMIT = 3;
 
+// The result callback increments `generated` for the service whose slot it
+// filled. Those counters are reset when a new brief run is materialised, so
+// they describe the CURRENT run rather than the campaign's append-only result
+// arrays. In particular, they let the read side recognise the small window
+// where the final callback has filled every requested image/copy slot but the
+// campaign-level status is still `in-progress` (or its final status save was
+// interrupted). Without this check the UI keeps saying "Generating" until the
+// four-minute stale-run fallback fires even though the work is already done.
+const areRequestedServicesComplete = (campaign) => {
+  const selected = arr(plain(campaign).services?.servicesSelected).map(plain);
+  const requested = selected.filter((service) => {
+    const quantity = Number(plain(service.serviceParams).quantity);
+    return Number.isFinite(quantity) && quantity > 0;
+  });
+
+  return requested.length > 0 && requested.every((service) => {
+    const quantity = Number(plain(service.serviceParams).quantity);
+    const generated = Number(service.generated);
+    return Number.isFinite(generated) && generated >= quantity;
+  });
+};
+
 // A slot Python has actually answered with something usable.
 const isDelivered = (entry) => {
   const e = plain(entry);
@@ -184,8 +206,12 @@ function briefGenerationView(campaign, opts = {}) {
     c.updatedAt &&
     Date.now() - new Date(c.updatedAt).getTime() > 4 * 60 * 1000;
 
+  const servicesComplete = areRequestedServicesComplete(c);
+
   const running =
-    (results.status === "in-progress" || c.status === "in-progress") && !isStale;
+    (results.status === "in-progress" || c.status === "in-progress") &&
+    !servicesComplete &&
+    !isStale;
 
   // Skeletons are a promise that something is still coming. A run that has
   // stopped has nothing coming, whatever its slots look like — an empty slot
@@ -208,4 +234,7 @@ function briefGenerationView(campaign, opts = {}) {
   return { status, images, texts, pairs, pending, failed, requested };
 }
 
-module.exports = { briefGenerationView, _internals: { isDelivered, isFailed, normalizeCopy } };
+module.exports = {
+  briefGenerationView,
+  _internals: { isDelivered, isFailed, normalizeCopy, areRequestedServicesComplete },
+};

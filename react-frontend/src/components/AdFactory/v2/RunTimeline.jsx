@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Loader2,
   MessageCircle,
+  RotateCw,
   Share2,
   ThumbsUp,
   X,
@@ -66,6 +67,7 @@ export default function RunTimeline({
   rows = [],
   loading = false,
   onRetry,
+  onRefresh,
   brandName,
   pairsPerCycle,
 }) {
@@ -107,15 +109,28 @@ export default function RunTimeline({
         // of the same control on one screen — the thing that made "Keep these
         // coming" confusing the first time round.
         right={
-          <span
-            className={`rounded-md px-2 py-0.5 text-13 font-medium ${
-              live
-                ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
-                : 'bg-[#F3F4F6] text-[#6B7280] dark:bg-[#22272F] dark:text-[#AFB6C0]'
-            }`}
-          >
-            {live ? 'Live' : sentence(summary?.status || 'paused')}
-          </span>
+          <div className="flex items-center gap-2">
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={loading}
+                title="Refresh deliveries"
+                className="flex items-center justify-center p-1 rounded-md text-[#6B7280] hover:text-[#111827] dark:text-[#9CA3AF] dark:hover:text-white transition-colors disabled:opacity-50"
+              >
+                <RotateCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+            <span
+              className={`rounded-md px-2 py-0.5 text-13 font-medium ${
+                live
+                  ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
+                  : 'bg-[#F3F4F6] text-[#6B7280] dark:bg-[#22272F] dark:text-[#AFB6C0]'
+              }`}
+            >
+              {live ? 'Live' : sentence(summary?.status || 'paused')}
+            </span>
+          </div>
         }
       />
 

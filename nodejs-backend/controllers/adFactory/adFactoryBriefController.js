@@ -215,22 +215,24 @@ exports.getBrief = async (req, res) => {
       }).lean();
 
       if (campaign) {
+        const isInProgress =
+          campaign.status === "in-progress" || campaign.results?.status === "in-progress";
+
+        // The final result callback increments the last service counter before
+        // it saves the campaign-level success status. A GET can land in that
+        // window, and a failed final save can leave that status stale entirely.
+        // The counters are current-run state (materialisation resets them), so
+        // once every requested service reached its quantity there is no work
+        // left to wait for. Repair both statuses immediately instead of making
+        // the client display "Generating" until the four-minute stale guard.
+        const countersComplete =
+          isInProgress && genInternals.areRequestedServicesComplete(campaign);
+
         // Auto-heal stuck in-progress campaigns if older than 4 minutes
         const isStuckInProgress =
-          (campaign.status === "in-progress" || campaign.results?.status === "in-progress") &&
+          isInProgress &&
           campaign.updatedAt &&
           Date.now() - new Date(campaign.updatedAt).getTime() > 4 * 60 * 1000;
-
-        if (isStuckInProgress) {
-          const hasSuccess = (campaign.results?.image || []).some((img) => img?.status === 200);
-          const newStatus = hasSuccess ? "success" : "error";
-          await Campaign.updateOne(
-            { _id: campaign._id },
-            { $set: { status: newStatus, "results.status": newStatus } }
-          );
-          campaign.status = newStatus;
-          if (campaign.results) campaign.results.status = newStatus;
-        }
 
         // Snapshots hold the CUMULATIVE results as they stood at each
         // regenerate, so their lengths are boundaries between runs rather than
@@ -250,6 +252,22 @@ exports.getBrief = async (req, res) => {
         // boundary, unlike "the last N" which breaks as soon as ads-per-run
         // changes between runs.
         run = briefGenerationView(campaign, { since: currentFrom });
+
+        if (countersComplete || isStuckInProgress) {
+          // `results.image` is append-only, so checking the whole array here
+          // would let a successful OLD run turn a failed regeneration into a
+          // campaign success. `run` is already sliced at the latest history
+          // boundary and is therefore the only safe source for this repair.
+          const newStatus = ["success", "partial"].includes(run.status)
+            ? "success"
+            : "error";
+          await Campaign.updateOne(
+            { _id: campaign._id },
+            { $set: { status: newStatus, "results.status": newStatus } }
+          );
+          campaign.status = newStatus;
+          if (campaign.results) campaign.results.status = newStatus;
+        }
 
         // Newest first. Each run carries the SAME pair shape as the live run
         // (`imageUrl` + normalised `copy`), because the version picker renders

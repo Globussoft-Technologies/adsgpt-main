@@ -7,10 +7,11 @@ const InputCommonDropdown = ({
   value,
   onChange,
   disabled = false,
+  hideIcon = false,
 }) => {
   const selectedValue =
-    value !== undefined && value !== ''
-      ? options?.find((option) => option.value === value) || null
+    value !== undefined && value !== '' && value !== null
+      ? options?.find((option) => option.value === value || String(option.value) === String(value)) || null
       : null;
 
   const Icon = selectedValue?.Icon;
@@ -19,28 +20,30 @@ const InputCommonDropdown = ({
 
   return (
     <Select
-      value={value ?? ''}
+      value={value !== undefined && value !== null ? String(value) : ''}
       onValueChange={(val) => {
         if (onChange) {
-          onChange(val);
+          const matched = options?.find((o) => String(o.value) === String(val));
+          const returnVal = matched && typeof matched.value === 'number' ? Number(val) : val;
+          onChange(returnVal);
         }
       }}
       disabled={disabled}
     >
       <SelectTrigger
-        hideIcon
+        hideIcon={hideIcon}
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
-        className={`group placeholder:sm relative flex h-10! w-full items-center gap-0 rounded-full border border-gray-300 bg-gray-100 dark:border-none dark:bg-[#383838]/50 px-4! py-2.5 text-[9px] text-gray-900 shadow-none backdrop-blur-md transition duration-200 ease-in outline-none placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] hover:border-gray-400 hover:bg-gray-100 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] 2xl:text-base 2xl:placeholder:text-base dark:text-[#AFAFAF] ${
+        className={`group placeholder:sm relative flex h-10! w-full cursor-pointer items-center justify-between gap-2 rounded-full border border-gray-300 bg-gray-100 dark:border-none dark:bg-[#383838]/50 px-4! py-2.5 text-[9px] text-gray-900 shadow-none backdrop-blur-md transition duration-200 ease-in outline-none placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] hover:border-gray-400 hover:bg-gray-100 md:text-[11px] 2xl:h-[49px]! 2xl:py-[18px] 2xl:text-base 2xl:placeholder:text-base dark:text-[#AFAFAF] ${
           disabled ? 'cursor-not-allowed opacity-50' : ''
         }`}
         disabled={disabled}
       >
-        <div className="flex items-center gap-1 pr-1 capitalize 2xl:gap-1.5">
+        <div className="flex min-w-0 items-center gap-1 pr-1 capitalize 2xl:gap-1.5">
           {Icon
             ? Icon
             : icon && <img src={icon} alt="icon" className="h-3 w-3 2xl:h-full 2xl:w-full" />}
-          <span className="text-sm font-light text-gray-700 group-data-[state=open]:text-gray-900 2xl:text-base dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
+          <span className="truncate text-sm font-light text-gray-700 group-data-[state=open]:text-gray-900 2xl:text-base dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
             {triggerLabel}
           </span>
         </div>
@@ -58,7 +61,9 @@ const InputCommonDropdown = ({
             </div>
           ) : (
             options?.map(({ value: optionValue, Icon, label }) => {
-              const isSelected = value === optionValue;
+              const isSelected =
+                value === optionValue ||
+                (value !== undefined && value !== null && String(value) === String(optionValue));
 
               const isAuto = label?.toLowerCase() === 'auto';
               const [ratioW, ratioH] = (label || '').split(':');
@@ -72,8 +77,8 @@ const InputCommonDropdown = ({
 
               return (
                 <SelectItem
-                  key={optionValue}
-                  value={optionValue}
+                  key={String(optionValue)}
+                  value={String(optionValue)}
                   onClick={(e) => e.stopPropagation()}
                   onPointerDown={(e) => e.stopPropagation()}
                   className={`group cursor-pointer text-base hover:bg-[#DFDFDF] dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/30 dark:hover:text-white ${
