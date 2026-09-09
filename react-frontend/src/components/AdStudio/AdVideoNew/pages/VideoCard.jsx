@@ -40,7 +40,6 @@ import {
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
 import RegenerateVoiceModal from './RegenerateVoiceModal';
 import VideoVersionControls from './VideoVersionControls';
-import { IS_AI_ADS_CUSTOMIZE_SCRIPT_VOICE_ENABLED } from '@/utils/featureFlags';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
@@ -161,10 +160,7 @@ export default function VideoCard({
   const committedVersion = typeof item?.version === 'number' ? item.version : 0;
   const shownVersion = item?.previewVersion ?? committedVersion;
   const shownResult = item?.results?.[shownVersion] || item?.results?.[0];
-  const canEditAiAdsVoice =
-    IS_AI_ADS_CUSTOMIZE_SCRIPT_VOICE_ENABLED &&
-    isAiAds &&
-    item?.status === 'completed';
+  const canEditAiAdsVoice = isAiAds && item?.status === 'completed';
   // Idempotent for server results (which keep waterMarkUrl); correct for the
   // socket-appended version (raw url).
   const pickUrl = (r) => (hasPlan8 ? r?.waterMarkUrl || r?.url : r?.url);

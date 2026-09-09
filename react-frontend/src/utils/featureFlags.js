@@ -32,12 +32,6 @@ export const IS_LANDING_ANALYZER_ENABLED =
 export const IS_PROMPT_CATEGORIES_ENABLED =
   import.meta.env.VITE_FEATURE_PROMPT_CATEGORIES === 'true';
 
-// AI Ads "Customize Script & Voice-over" entry points. Hidden by default while
-// the workflow is under development. Set the flag to the literal string `true`
-// to expose the eligible original-video controls.
-export const IS_AI_ADS_CUSTOMIZE_SCRIPT_VOICE_ENABLED =
-  import.meta.env.VITE_FEATURE_AI_ADS_CUSTOMIZE_SCRIPT_VOICE === 'true';
-
 // AI Assistant navigation and route. Missing or any value other than the
 // literal string `true` keeps the feature inaccessible.
 export const IS_AI_ASSISTANT_ENABLED =
