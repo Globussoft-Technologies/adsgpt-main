@@ -596,7 +596,17 @@ exports.publishBrief = async (req, res) => {
       }
 
       const s3Base = (process.env.AWS_IMAGE_VIEW_URL || "").replace(/\/$/, "");
-      const destinationUrl = brief?.offer?.cta?.destination || brief?.offer?.cta?.url || brief?.source?.url || "https://example.com";
+      // The Google tab's own destination pair wins over the brief's. CTA and
+      // landing page are asked once per PLATFORM now, so a Google ad can point
+      // somewhere the Meta ad doesn't; the brief remains the fallback.
+      const destinationUrl =
+        body.googleConnection?.ctaUrl ||
+        body.googleTarget?.ctaUrl ||
+        brief?.offer?.cta?.destination ||
+        brief?.offer?.cta?.url ||
+        brief?.source?.url ||
+        "https://example.com";
+      const googleCta = body.googleConnection?.ctaButton || body.googleTarget?.ctaButton || "";
 
       const adsArray = pairs.map((pair) => {
         const rawImg = pair.imageUrl || "";
@@ -612,6 +622,9 @@ exports.publishBrief = async (req, res) => {
           description,
           imageUrl,
           finalUrl: destinationUrl,
+          // Unknown enums are mapped to null and the label omitted downstream,
+          // so Meta's CTA vocabulary is safe to send here as-is.
+          ...(googleCta ? { callToAction: googleCta } : {}),
           status: "ENABLED",
         };
       });

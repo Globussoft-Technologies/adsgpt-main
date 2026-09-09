@@ -31,6 +31,7 @@ import GoogleLaunchConnection, {
   isGoogleAccountConnected,
   isGoogleConnectionComplete,
 } from './GoogleLaunchConnection';
+import DestinationFields from './destinationFields';
 import { LABEL, CONTROL, CONTROL_H, MENU, MENU_ITEM, MUTED } from './_tokens';
 
 // ----------------------------------------------------------------------------
@@ -39,6 +40,11 @@ import { LABEL, CONTROL, CONTROL_H, MENU, MENU_ITEM, MUTED } from './_tokens';
 //   facebookId + connectionId  which Meta account we post through
 //   adAccountId + pageId       which account pays, which Page it runs under
 //   template (optional)        a saved Meta template to use instead of synthesis
+//   ctaButton + ctaUrl         the button on the ad and where it goes
+//
+// The last pair used to be brief-level (AdjustPanel's Campaign band) and is
+// per-platform now: Meta and Google each carry their own, so one destination
+// can point somewhere the other doesn't. See destinationFields.jsx.
 //
 // When a template is selected it is serialised into conn.template so the
 // activation payload builder can use its name + payload directly, skipping
@@ -49,6 +55,8 @@ export const emptyConnection = () => ({
   facebookId: '',
   connectionId: '',
   template: null,          // { id, name, objective, payload, ... } when saved template picked
+  ctaButton: '',           // Meta CTA enum, e.g. SHOP_NOW
+  ctaUrl: '',              // where that button goes
   ...emptyAutoSetup(),
 });
 
@@ -131,6 +139,13 @@ function MetaLaunchConnection({ value, onChange, disabled = false }) {
     [conn, onChange],
   );
 
+  // A patch, never a replace — DestinationFields edits one of the two fields
+  // at a time and knows nothing about the rest of the connection.
+  const handleDestination = useCallback(
+    (patch) => onChange?.({ ...conn, ...patch }),
+    [conn, onChange],
+  );
+
   const handleTemplateSelect = useCallback(
     (templateId) => {
       if (!templateId || templateId === 'auto') {
@@ -169,7 +184,12 @@ function MetaLaunchConnection({ value, onChange, disabled = false }) {
     [templates],
   );
 
-  const selectedTemplateId = conn.template?.id || 'auto';
+  // Empty string, not 'auto', when nothing is picked. Radix renders the
+  // placeholder only for a value it cannot match to an item, and 'auto' USED to
+  // match one — the "Build one for me automatically" row, now hidden — so the
+  // trigger came up blank instead of saying what happens when you leave it
+  // alone. The 'auto' default still lives in state; only the trigger differs.
+  const selectedTemplateId = conn.template?.id || '';
   const hasTemplates = !templatesLoading && templateOptions.length > 0;
   const noTemplates = !templatesLoading && templateOptions.length === 0 && !templatesError;
 
@@ -218,9 +238,19 @@ function MetaLaunchConnection({ value, onChange, disabled = false }) {
                   placeholder={
                     noTemplates
                       ? 'No templates — one will be built for you'
-                      : 'Use a saved template (optional)'
+                      : 'Choose a saved template'
                   }
-                />
+                >
+                  {/* Rendered as children so the label shows even when the
+                      picked id isn't in the list yet (the full template is
+                      fetched after selection), and the placeholder is never
+                      swallowed by an unmatched value. */}
+                  {templateOptions.find((t) => t.id === selectedTemplateId)?.label ??
+                    conn.template?.name ??
+                    (noTemplates
+                      ? 'No templates — one will be built for you'
+                      : 'Use a saved template (optional)')}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className={`z-9999 max-h-72 ${MENU}`}>
                 {/* Allow clearing selection */}
@@ -241,6 +271,19 @@ function MetaLaunchConnection({ value, onChange, disabled = false }) {
           )}
         </div>
       )}
+
+      {/* The button and its destination. Outside the facebookId gate on
+          purpose: neither depends on which account posts, so asking for them
+          before the account is picked loses nothing and keeps the panel's
+          height stable while the account dropdown resolves. */}
+      <DestinationFields
+        ctaButton={conn.ctaButton}
+        ctaUrl={conn.ctaUrl}
+        onChange={handleDestination}
+        objective={conn.template?.objective || conn.objective}
+        conversionLocation={conn.template?.conversionLocation || conn.conversionLocation}
+        disabled={disabled}
+      />
     </div>
   );
 }

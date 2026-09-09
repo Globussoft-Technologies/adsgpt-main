@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { FieldBlock, PillGroup, SelectField, Stepper, TogglePill } from './briefFields';
 import { CARD, FAINT, SECTION, SECTION_PAD } from './_tokens';
@@ -16,7 +16,11 @@ import { fetchAdFactoryConfig } from '@/utils/fetchAdCreativeConfig';
 // (`/adsgpt/usage/model-credit-value?media=ad_factory`) — Quick setup used to
 // hardcode "Google"/"OpenAI" here, which drifted from whatever the backend
 // actually offered.
-const AUTO_OPTION = { value: 'auto', label: 'Choose for me' };
+// "Choose for me" used to head this list. It is gone from Quick setup: the
+// picker offers real models only, so what the card prices and what the run uses
+// are the same named thing. Briefs still holding 'auto' (or the legacy 'google'
+// autofill) are migrated to the first real model below, once, on load.
+const AUTO_VALUE = 'auto';
 
 // ----------------------------------------------------------------------------
 // OutputPanel — what we make, at what sizes, how many, with which model.
@@ -48,39 +52,54 @@ export default function OutputPanel({ brief, onEditField, onEditFields }) {
   const delivery = brief?.delivery || {};
   const generation = brief?.generation || {};
 
-  const [imageModelOptions, setImageModelOptions] = useState([AUTO_OPTION]);
+  const [imageModelOptions, setImageModelOptions] = useState([]);
   useEffect(() => {
     let cancelled = false;
     fetchAdFactoryConfig()
       .then((models) => {
         if (cancelled) return;
-        setImageModelOptions([
-          AUTO_OPTION,
-          ...models.map((m) => ({
+        setImageModelOptions(
+          models.map((m) => ({
             value: m.apiId,
             label: m.label,
             aliases: Array.isArray(m.aliases) ? m.aliases : [],
           })),
-        ]);
+        );
       })
-      .catch(() => {}); // keep the "Choose for me" fallback on failure
+      .catch(() => {}); // an empty list reads as "Nothing to choose from"
     return () => {
       cancelled = true;
     };
   }, []);
 
   const selectedPlatforms = delivery.platforms?.length ? delivery.platforms : ['meta'];
-  const persistedImageModel = generation.imageModel || AUTO_OPTION.value;
+  const persistedImageModel = generation.imageModel || AUTO_VALUE;
+  // The old autofill wrote the bare provider name; that is not a user choice,
+  // so it is treated as unset rather than matched against an alias.
   const isLegacyAuto = persistedImageModel.toLowerCase() === 'google'
     && brief?.provenance?.['generation.imageModel']?.source !== 'user';
-  const legacySelectedModel = imageModelOptions.find((option) =>
-    option.aliases?.some((alias) => String(alias).toLowerCase() === persistedImageModel.toLowerCase()),
-  );
-  const selectedImageModel = isLegacyAuto
-    ? AUTO_OPTION.value
-    : imageModelOptions.some((option) => option.value === persistedImageModel)
-    ? persistedImageModel
-    : legacySelectedModel?.value || AUTO_OPTION.value;
+  // What the stored value resolves to in the offered list — by id, or by one of
+  // the model's aliases for briefs written before canonical ids existed.
+  const selectedImageModel = useMemo(() => {
+    if (isLegacyAuto || persistedImageModel === AUTO_VALUE) return '';
+    if (imageModelOptions.some((o) => o.value === persistedImageModel)) return persistedImageModel;
+    const byAlias = imageModelOptions.find((o) =>
+      o.aliases?.some((a) => String(a).toLowerCase() === persistedImageModel.toLowerCase()),
+    );
+    return byAlias?.value || '';
+  }, [imageModelOptions, persistedImageModel, isLegacyAuto]);
+
+  // With no "Choose for me" left to fall back to, a brief that never named a
+  // model has nothing to show and nothing to price. Adopt the first offered
+  // model — the backend orders this list — and write it once, so the picker,
+  // the credit estimate and the run all agree on one model rather than the UI
+  // showing a blank while the server quietly picks its own.
+  useEffect(() => {
+    if (!imageModelOptions.length) return;
+    if (selectedImageModel) return;
+    onEditField?.('generation', 'imageModel', imageModelOptions[0].value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageModelOptions, selectedImageModel]);
   const allowedRatios = ratiosFor(selectedPlatforms);
   const platformNames = selectedPlatforms.map((id) => platform(id)?.label || id).join(', ');
 
@@ -180,6 +199,7 @@ export default function OutputPanel({ brief, onEditField, onEditFields }) {
             <SelectField
               value={selectedImageModel}
               options={imageModelOptions}
+              placeholder={imageModelOptions.length ? 'Choose a model' : 'Loading models…'}
               onChange={(v) => onEditField?.('generation', 'imageModel', v)}
             />
           </FieldBlock>

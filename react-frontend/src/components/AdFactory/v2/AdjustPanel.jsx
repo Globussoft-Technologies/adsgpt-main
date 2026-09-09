@@ -240,6 +240,10 @@ export default function AdjustPanel({
         </span>
       </div>
 
+      {/* HIDE-MARK — objective/location/CTA schema notice hidden with the
+          Campaign band below. It names three fields that are no longer on this
+          screen, so it can only confuse. Unhide together with the band. */}
+      {/*
       {schemaFailed && (
         <div>
           <Notice tone="warn" icon={AlertCircle}>
@@ -259,10 +263,18 @@ export default function AdjustPanel({
           </Notice>
         </div>
       )}
+      */}
 
-      {/* ── Campaign ── objective decides which locations are legal, the
-          location decides which buttons are, and the button is what the
-          destination hangs off. One Meta unit, so one row. */}
+      {/* HIDE-MARK — the whole Campaign band is hidden.
+          CTA and "Button goes to" moved to the launch panel, where they are
+          asked once PER PLATFORM (Meta tab and Google tab each carry their
+          own) instead of once per brief — see v2/destinationFields.jsx.
+          Objective and Conversion location come from the Meta tab's
+          QuickTemplateSetup, or from whatever the autofill already stored on
+          the brief; hiding the pickers does not clear those values, so the
+          publish/activate payloads still resolve them exactly as before.
+          Unhide: uncomment the block below (and the schema notice above). */}
+      {/*
       <Section title="Campaign" badge={guessBadge('campaign')}>
         <FieldGrid cols={4}>
           <FieldBlock label="Objective" tooltip="What Meta optimises the campaign for.">
@@ -302,8 +314,12 @@ export default function AdjustPanel({
           </FieldBlock>
         </FieldGrid>
       </Section>
+      */}
 
-      <SectionRule />
+      {/* HIDE-MARK — the rule that separated Campaign from Brand. With the
+          band above hidden, Brand is the first section and a hairline above it
+          reads as a stray line. Unhide with the band. */}
+      {/* <SectionRule /> */}
 
       {/* ── Brand ── who is speaking, and what they look like. The three visual
           inputs sit here rather than behind a fold: they are what the generator

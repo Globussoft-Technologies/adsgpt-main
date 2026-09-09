@@ -644,14 +644,17 @@ export default function AdFactoryV2Page() {
 
   // Meta's enums are SHOUTY_SNAKE; render them as a human would read them.
   const ctaLabel = useMemo(() => {
-    const button = brief?.offer?.cta?.button;
+    // The Meta tab's own button is what will actually be printed on the ad, so
+    // the preview follows it; the brief's stays the fallback until one is
+    // picked. See v2/destinationFields.jsx.
+    const button = connection?.ctaButton || brief?.offer?.cta?.button;
     if (!button) return 'Learn more';
     return String(button)
       .toLowerCase()
       .split('_')
       .map((w, i) => (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
       .join(' ');
-  }, [brief]);
+  }, [brief, connection?.ctaButton]);
 
   // "OUTCOME_SALES" + "WEBSITE" -> "Sales · website". Both the summary chip and
   // the campaign row read it, so it is derived once.
@@ -909,6 +912,11 @@ export default function AdFactoryV2Page() {
               adAccountName: connection.adAccountName,
               pageId: connection.pageId,
               pageName: connection.pageName,
+              // Per-platform destination, collected on the Meta tab rather
+              // than in the brief. Whitelisted like every other id here, so
+              // it has to be named explicitly to reach the job.
+              ctaButton: connection.ctaButton || '',
+              ctaUrl: connection.ctaUrl || '',
             }
           : {},
         // `targets.google` for the activate endpoint. The backend does not
@@ -1472,7 +1480,7 @@ export default function AdFactoryV2Page() {
         ratio={brief?.delivery?.ratios?.[0] || '4:5'}
         callToAction={ctaLabel}
         brandName={brief?.brand?.name}
-        linkUrl={brief?.offer?.cta?.url || brief?.source?.url || ''}
+        linkUrl={connection?.ctaUrl || brief?.offer?.cta?.url || brief?.source?.url || ''}
         connection={connection}
         onConnectionChange={setConnection}
         platforms={briefPlatforms}

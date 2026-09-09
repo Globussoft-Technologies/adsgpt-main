@@ -179,8 +179,14 @@ function briefPublishPlan(brief = {}, connection = {}, opts = {}) {
   // ── The creatives. ────────────────────────────────────────────────────────
   const objective = str(offer.primaryObjective);
   const conversionLocation = str(offer.conversionLocation);
-  const linkUrl = str(offer.cta?.url);
-  const callToAction = ctaValidForCell(offer.cta?.button, objective, conversionLocation);
+  // The connection wins over the brief. CTA and destination are collected per
+  // PLATFORM in the launch panel now (Quick setup's Meta tab), so what the user
+  // just typed for THIS post is more current than whatever autofill left on the
+  // brief. The brief stays the fallback so older briefs and any caller that
+  // still sends only the four ids behave exactly as before.
+  const linkUrl = str(connection.ctaUrl) || str(offer.cta?.url);
+  const ctaButton = str(connection.ctaButton) || str(offer.cta?.button);
+  const callToAction = ctaValidForCell(ctaButton, objective, conversionLocation);
 
   const ads = buildAds(opts.pairs, { linkUrl, callToAction, s3Base: opts.s3Base });
   if (ads.length === 0) {

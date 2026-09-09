@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 import { toast } from 'react-toastify';
 
+import DestinationFields from './destinationFields';
 import { CONTROL, CONTROL_H, FAINT, LABEL, VALUE } from './_tokens';
 import {
   Select,
@@ -49,6 +50,11 @@ export const emptyGoogleConnection = () => ({
   conversionLocation: null,
   customerId: null,
   payload: null,
+  // Per-platform destination — Google's own button and landing page, kept
+  // separate from Meta's rather than shared through the brief. See
+  // destinationFields.jsx for why.
+  ctaButton: '',
+  ctaUrl: '',
 });
 
 export const isGoogleAccountConnected = (googleUser) =>
@@ -68,6 +74,10 @@ export const buildGoogleTarget = (g, { dailyBudget, ctaUrl } = {}) => {
     campaignId: g.campaignId,
     adGroupId: g.adGroupId,
     customerId: g.customerId || g.adAccountId,
+    // Google's own pair when the tab collected one; the caller's `ctaUrl` (the
+    // brief's) is the fallback so existing schedules keep the URL they had.
+    ...(g.ctaButton ? { ctaButton: g.ctaButton } : {}),
+    ...(g.ctaUrl || ctaUrl ? { ctaUrl: g.ctaUrl || ctaUrl } : {}),
   };
 };
 
@@ -453,6 +463,16 @@ export default function GoogleLaunchConnection({ value, onChange, disabled = fal
           </div>
         </div>
       )}
+
+      {/* Google's own button + landing page. Same two fields the Meta tab
+          asks for, answered separately per platform. */}
+      <DestinationFields
+        ctaButton={g.ctaButton}
+        ctaUrl={g.ctaUrl}
+        onChange={(patch) => onChange?.({ ...g, ...patch })}
+        disabled={disabled}
+        urlLabel="Destination URL"
+      />
 
       <p className={FAINT}>
         Select your Google Ads customer account, campaign, and ad group. Only <span className="font-semibold text-gray-700 dark:text-white/80">Display</span> campaigns can post an image asset.

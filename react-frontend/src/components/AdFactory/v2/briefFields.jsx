@@ -238,7 +238,12 @@ export function SelectField({
   return (
     <Select value={value || ''} onValueChange={(v) => onChange?.(v)} disabled={disabled || empty}>
       <SelectTrigger
-        className={`${CONTROL_H}! w-full ${CONTROL} px-3 shadow-none ${VALUE} ${flaggedBorder(
+        // `min-w-0` + the two value overrides are what stop a long model name
+        // ("Nano Banana Pro") from pushing the trigger wider than its grid
+        // column and spilling over the label above it. The base trigger sets
+        // the value span to `flex`, which line-clamp cannot truncate, so it is
+        // forced back to a truncating block here.
+        className={`${CONTROL_H}! w-full min-w-0 overflow-hidden ${CONTROL} px-3 shadow-none ${VALUE} *:data-[slot=select-value]:block! *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate ${flaggedBorder(
           flagged
         )} ${disabled || empty ? 'cursor-not-allowed opacity-60' : ''}`}
       >

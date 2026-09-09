@@ -177,6 +177,13 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
   //
   // Google target can arrive as an already-built saved template OR as a Quick Setup
   // selection with adAccountId, campaignId, and adGroupId.
+  // Whichever destination the platform's own tab collected, falling back to
+  // the brief's — the two are independent, so Meta pointing at a product page
+  // does not force Google to.
+  const trimmed = (v) => (typeof v === "string" ? v.trim() : "");
+  const metaCtaButton = trimmed(connection.ctaButton) || trimmed(offer.cta?.button);
+  const metaCtaUrl = trimmed(connection.ctaUrl) || trimmed(offer.cta?.url);
+
   let googleTarget = null;
   if (opts.google && opts.google.template) {
     googleTarget = opts.google;
@@ -196,7 +203,13 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
           adGroupId: String(opts.google.adGroupId),
           adGroupName: opts.google.adGroupName || "",
           destination,
-          finalUrl: offer.cta?.url || b.source?.url || "https://example.com",
+          finalUrl:
+            opts.google.ctaUrl ||
+            opts.google.finalUrl ||
+            offer.cta?.url ||
+            b.source?.url ||
+            "https://example.com",
+          ...(opts.google.ctaButton ? { callToAction: opts.google.ctaButton } : {}),
           dailyBudget: daily,
           ...(opts.google.cpcBid ? { cpcBid: opts.google.cpcBid } : {}),
         },
@@ -313,10 +326,13 @@ function briefToJobPayload(brief = {}, connection = {}, opts = {}) {
           ...(connection.instagramUserId
             ? { instagramUserId: String(connection.instagramUserId) }
             : {}),
-          ...(ctaValidForCell(offer.cta?.button, objective, conversionLocation)
-            ? { callToAction: offer.cta.button }
+          // Per-platform destination, collected on the launch panel's Meta
+          // tab. It wins over the brief's; the brief stays the fallback for
+          // callers that still send only the four ids.
+          ...(ctaValidForCell(metaCtaButton, objective, conversionLocation)
+            ? { callToAction: metaCtaButton }
             : {}),
-          ...(offer.cta?.url ? { linkUrl: offer.cta.url } : {}),
+          ...(metaCtaUrl ? { linkUrl: metaCtaUrl } : {}),
           ...(b.brand?.name ? { campaignName: String(b.brand.name).slice(0, 120) } : {}),
       },
     };
