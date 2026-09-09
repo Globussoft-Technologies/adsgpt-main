@@ -164,7 +164,33 @@ group("counts — a partial run must not read as a clean one", () => {
   test("a failed run reports no live ads and carries the reason", () => {
     assert.equal(byId("r3").liveCount, 0);
     assert.ok(byId("r3").failedCount >= 1);
-    assert.match(byId("r3").error, /20%/);
+    // The raw engineering string is preserved verbatim — it just moved off the
+    // field the UI prints. `error` is now the sentence a user can act on.
+    assert.match(byId("r3").errorDetail, /20%/);
+    assert.ok(byId("r3").error && !/20%/.test(byId("r3").error));
+  });
+
+  test("a failed run's reason is translated, never shown raw", () => {
+    const { friendlyRunError } = require("../../services/adsFactoryAuto/runTimelineSerializer");
+    // The one the user reported: a 4xx from the creative service read as
+    // "Request failed with status code 422" on the timeline.
+    assert.match(
+      friendlyRunError("Python API rejected: Request failed with status code 422"),
+      /image service/,
+    );
+    // A 429 is a 4xx that is NOT the brief's fault, so it gets the softer line.
+    assert.match(
+      friendlyRunError("Python API rejected: Request failed with status code 429"),
+      /didn't finish this cycle/,
+    );
+    assert.match(friendlyRunError("Insufficient credits: balance 3"), /Top up/);
+    assert.match(friendlyRunError("Facebook access token is missing"), /Reconnect/);
+    // Anything unmapped still says something human rather than leaking.
+    const unmapped = friendlyRunError("ECONNRESET at pipeline stage 4");
+    assert.ok(unmapped && !/ECONNRESET/.test(unmapped));
+    // Nothing in, nothing out.
+    assert.equal(friendlyRunError(null), null);
+    assert.equal(friendlyRunError("   "), null);
   });
 
   test("total ads published sums across every run", () => {

@@ -25,6 +25,75 @@
 const META_ADS_MANAGER = "https://adsmanager.facebook.com/adsmanager/manage/";
 const GOOGLE_ADS = "https://ads.google.com/aw/ads";
 
+// ─── What a failed cycle says to the person who scheduled it ────────────────
+//
+// `runHistory[].error` is an engineering string: it names the service that
+// refused ("Python API rejected"), the HTTP status it refused with, or the
+// field a payload was missing. That is exactly right in a log, and useless on
+// the timeline — "Request failed with status code 422" tells the user neither
+// what broke nor whether they can do anything about it.
+//
+// So each raw error is matched to a sentence that says what happened and what
+// to do next, and the original is kept alongside as `errorDetail` for support
+// and for anyone reading the API directly. Nothing is thrown away; only what
+// leads is different.
+//
+// Order matters — the first match wins, so the specific patterns come before
+// the general ones. An unmatched error falls through to a generic sentence
+// rather than leaking the raw text, because the raw text is the thing this
+// exists to stop showing.
+const ERROR_MESSAGES = [
+  // The image/copy generator. Two flavours worth separating: a 4xx means the
+  // brief it was handed was rejected, a 5xx/timeout means the service itself
+  // is unwell, and only one of those is worth the user retrying immediately.
+  // 408 and 429 are 4xx but say "try again", not "your brief is wrong", so they
+  // fall through to the softer sentence below.
+  {
+    match: /python api rejected.*\b4(?!08\b|29\b)\d{2}\b/i,
+    text: "We couldn't generate the creatives for this cycle — the brief was turned down by our image service. Check the brand details and prompt on this brief, then retry.",
+  },
+  {
+    match: /python api rejected|generation timed out|campaign generation failed/i,
+    text: "Our creative generator didn't finish this cycle. Nothing was charged for the ads it didn't make — retry when you're ready.",
+  },
+  { match: /no valid creatives/i, text: "This cycle produced no usable images, so there was nothing to post. Retry to generate a fresh set." },
+
+  // Money and limits — the user CAN act on these, and the action is specific.
+  { match: /insufficient credits/i, text: "Not enough credits to run this cycle. Top up and retry, and we'll pick up where this left off." },
+  { match: /credit freeze failed/i, text: "We couldn't hold the credits for this cycle, so it didn't run. Check your balance and retry." },
+  { match: /campaign limit|limit reached/i, text: "Your ad account has hit a campaign limit, so this cycle couldn't create anything. Clear some space in the account, then retry." },
+
+  // The connection. Almost always an expired token or a revoked app.
+  {
+    match: /access token|no facebook account linked|oauth|unauthor/i,
+    text: "We've lost access to your ad account. Reconnect it in this brief's launch panel, then retry.",
+  },
+
+  // A misconfigured destination. The launch panel is where every one of these
+  // is fixed, so all three point at the same place.
+  {
+    match: /template payload is missing|no template configured|missing finalurl|missing adaccountid/i,
+    text: "This brief's publishing setup is incomplete. Open the launch panel, re-pick the account, campaign and destination, then retry.",
+  },
+  { match: /did not return a created ad id|did not return a campaignid|did not return an adgroupid/i, text: "The ad platform accepted the request but didn't confirm what it created. Check the ad account before retrying, so nothing gets posted twice." },
+  { match: /requires at least \d+ unique (headlines|descriptions)/i, text: "The copy for this cycle was too short for the ad format. Retry to generate a longer set." },
+  { match: /destination.*not.*(reach|work)/i, text: "The destination URL on this brief isn't reachable, and the ad platform refuses ads that point at it. Check the link, then retry." },
+];
+
+const GENERIC_ERROR =
+  "This cycle didn't finish. Retry it, and if it keeps failing our team can look at the details.";
+
+/**
+ * The sentence a failed cycle shows. `null` in, `null` out — a run that did not
+ * fail has nothing to say.
+ */
+function friendlyRunError(raw) {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) return null;
+  const hit = ERROR_MESSAGES.find((e) => e.match.test(text));
+  return hit ? hit.text : GENERIC_ERROR;
+}
+
 const arr = (v) => (Array.isArray(v) ? v : []);
 const plain = (v) => (v && typeof v.toObject === "function" ? v.toObject() : v);
 
@@ -100,7 +169,9 @@ function serializeRun(run, index, context = {}) {
     completedAt: r.completedAt || null,
     liveCount,
     failedCount,
-    error: r.error || null,
+    // What the user reads, and — unchanged — what an engineer needs.
+    error: friendlyRunError(r.error),
+    errorDetail: r.error || null,
     creatives: creatives.map((c) => {
       const postedAdIds = mapToObject(c.postedAdIds);
       return {
@@ -220,5 +291,6 @@ function serializeRunTimeline(job, opts = {}) {
 
 module.exports = {
   serializeRunTimeline,
-  _internals: { serializeRun, metaAdLink, googleAdLink, mapToObject },
+  friendlyRunError,
+  _internals: { serializeRun, metaAdLink, googleAdLink, mapToObject, ERROR_MESSAGES },
 };
