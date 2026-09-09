@@ -15,7 +15,7 @@
  * uploads. Never sent to Meta.
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Plus,
   Trash2,
@@ -174,10 +174,33 @@ export default function CarouselCardEditor({
 
   const imageOnly = mediaKind === 'image';
 
+  // THE UPLOAD BUG. ImageField/VideoField call the handlers TWICE per action —
+  // `onChangeFile(file)` then `onChangeUrl(null)` on an upload, and the mirror
+  // pair when a URL is committed. Both land in the same React batch, so both
+  // read the `cards` array from the SAME render: the second call rebuilt the
+  // array from the pre-upload snapshot and threw the first one away. The file
+  // never reached form state, so the card stayed empty and kept its "Upload an
+  // image or pick one from the library" error immediately after uploading.
+  //
+  // Library picks were never affected — LibraryPicker's onPick does one patch
+  // with every field at once — which is exactly why this looked like "upload
+  // is broken, library works".
+  //
+  // The buffer lets consecutive patches inside one batch build on each other.
+  // It is cleared whenever the parent commits a new array, so it can never
+  // serve a stale card set across events.
+  const pendingRef = useRef(null);
+  useEffect(() => {
+    pendingRef.current = null;
+  }, [cards]);
+
   const patch = (index, changes) => {
-    const target = cards[index];
+    const base = pendingRef.current || cards;
+    const target = base[index];
     if (target) setInteractedById((p) => ({ ...p, [target.id]: true }));
-    onChange(cards.map((c, i) => (i === index ? { ...c, ...changes } : c)));
+    const next = base.map((c, i) => (i === index ? { ...c, ...changes } : c));
+    pendingRef.current = next;
+    onChange(next);
   };
 
   const add = () => {
