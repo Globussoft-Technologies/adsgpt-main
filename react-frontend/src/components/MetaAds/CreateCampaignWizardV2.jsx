@@ -4151,6 +4151,14 @@ function AdStep({ form, update, cell, schema, errors = {}, mode = 'create-full',
               mediaLocked: editingCarousel,
             }).perCard
           }
+          // A failed Continue touches `card1..cardN` (validateCarouselCards
+          // emits those flat keys), and `errors` here is already the wizard's
+          // touched-filtered map — so a `cardN` entry present in it means "the
+          // user has been shown this card as invalid". Deriving from that
+          // rather than letting the editor validate on sight: the rest of the
+          // wizard never shows an error before the user touches the field, and
+          // the per-card errors were the one exception.
+          revealedCards={(form.cards || []).map((_, i) => !!errors[`card${i + 1}`])}
           error={errors.media}
         />
       ) : isCatalog ? (

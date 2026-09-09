@@ -139,6 +139,13 @@ export default function CarouselCardEditor({
   mediaKind = 'any',
   // Per-card errors keyed by index: { 0: { media: '…', link: '…' } }
   cardErrors = {},
+  // Which cards may SHOW those errors, by index. A card the user just added is
+  // empty by definition, so validating it on sight paints a red "Upload an
+  // image or pick one from the library" the instant they click Add — QA
+  // reported exactly that. The wizard reveals a card when a failed Continue
+  // touches it; interacting with the card reveals it too. Mirrors the wizard's
+  // own `touched` rule, which the per-card errors were bypassing.
+  revealedCards = [],
   // Shown under the list when the *set* is wrong (too few cards, etc.)
   error,
   // Edit mode: the creative's media is reused as-is (it is never re-uploaded),
@@ -160,10 +167,18 @@ export default function CarouselCardEditor({
   // still unfilled at that moment, so it hides the next thing to do.
   const [browsingById, setBrowsingById] = useState({});
 
+  // Cards the user has actually put something into. `add` deliberately does
+  // NOT mark the new card — that is the whole point — while `patch` does, so
+  // a card given a headline but no image still surfaces its media error.
+  const [interactedById, setInteractedById] = useState({});
+
   const imageOnly = mediaKind === 'image';
 
-  const patch = (index, changes) =>
+  const patch = (index, changes) => {
+    const target = cards[index];
+    if (target) setInteractedById((p) => ({ ...p, [target.id]: true }));
     onChange(cards.map((c, i) => (i === index ? { ...c, ...changes } : c)));
+  };
 
   const add = () => {
     if (cards.length >= max) return;
@@ -216,7 +231,8 @@ export default function CarouselCardEditor({
         )}
         {cards.map((card, index) => {
           const expanded = expandedId === card.id;
-          const errs = cardErrors[index] || {};
+          const showErrs = !!revealedCards[index] || !!interactedById[card.id];
+          const errs = showErrs ? cardErrors[index] || {} : {};
           const hasError = Object.keys(errs).length > 0;
           const libraryMode = libraryModeById[card.id] !== false;
           // Media is picked once, then the grid stops earning its height.
