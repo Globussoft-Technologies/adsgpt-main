@@ -39,6 +39,7 @@ import {
   clearAiAdsTranslateScript,
   clearAiAdsVoicePreview,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
+import adCreativeLogo from '@/assets/layouts/profile/adcreative.svg';
 
 const S3_BASE_URL = (import.meta.env.VITE_S3_BASE_URL || '').replace(/\/$/, '');
 const GLASS_DIALOG_CLASS =
@@ -1053,6 +1054,15 @@ export default function RegenerateVoiceModal({
                 <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                   Script step 2 of 2
                 </span>
+                <span
+                  title="Voice regeneration is free (previously 1 credit)"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/60 bg-emerald-50 px-3 py-1 text-xs shadow-xs dark:border-emerald-400/50 dark:bg-emerald-950/40"
+                >
+                  <img src={adCreativeLogo} alt="Credit" className="h-5 w-5 shrink-0 object-contain" />
+                  <span className="line-through text-[13px] font-semibold text-gray-600 dark:text-white/75">1</span>
+                  <span className="font-extrabold text-emerald-700 dark:text-emerald-300">Free</span>
+                  <span className="font-bold text-emerald-900 dark:text-emerald-100">Voice Regeneration</span>
+                </span>
               </div>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-white/60">
                 {mode === 'rewrite'
@@ -1213,14 +1223,16 @@ export default function RegenerateVoiceModal({
                           .join(' · ')}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={continueToVoiceSelection}
-                  disabled={busy || defaultVoiceLoading}
-                  className="shrink-0 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-xs transition hover:bg-gray-100 hover:text-gray-900 dark:border-white/20 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/10 dark:hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Change voice
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={continueToVoiceSelection}
+                    disabled={busy || defaultVoiceLoading}
+                    className="rounded-md border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-xs transition hover:bg-gray-100 hover:text-gray-900 dark:border-white/20 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/10 dark:hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Change voice
+                  </button>
+                </div>
               </section>
             )}
             {mode === 'translate' && voiceError && (
@@ -1276,6 +1288,15 @@ export default function RegenerateVoiceModal({
               <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-white">Change voice</DialogTitle>
               <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 dark:border-blue-400/25 dark:bg-blue-400/15 dark:text-blue-300">
                 Regenerate voice-over
+              </span>
+              <span
+                title="Voice regeneration is free (previously 1 credit)"
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/60 bg-emerald-50 px-3 py-1 text-xs shadow-xs dark:border-emerald-400/50 dark:bg-emerald-950/40"
+              >
+                <img src={adCreativeLogo} alt="Credit" className="h-5 w-5 shrink-0 object-contain" />
+                <span className="line-through text-[13px] font-semibold text-gray-600 dark:text-white/75">1</span>
+                <span className="font-extrabold text-emerald-700 dark:text-emerald-300">Free</span>
+                <span className="font-bold text-emerald-900 dark:text-emerald-100">Voice Regeneration</span>
               </span>
             </div>
             <DialogDescription className="text-sm text-gray-500 dark:text-white/60">
@@ -1392,9 +1413,22 @@ export default function RegenerateVoiceModal({
                       <span className="text-base font-semibold text-gray-900 dark:text-white">{action.label}</span>
                     </span>
                     <span className="mt-2 block text-sm text-gray-600 dark:text-white/60">{action.description}</span>
-                    <span className="mt-3 inline-flex rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 dark:border-white/15 dark:bg-black/30 dark:text-white/70">
-                      {action.impact}
-                    </span>
+                    <div className="mt-3 flex items-center gap-2">
+                      <span className="inline-flex rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 dark:border-white/15 dark:bg-black/30 dark:text-white/70">
+                        {action.impact}
+                      </span>
+                      {action.id === 'voice' && (
+                        <span
+                          title="Voice regeneration is free (previously 1 credit)"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/60 bg-emerald-50 px-3 py-1 text-xs shadow-xs dark:border-emerald-400/50 dark:bg-emerald-950/40"
+                        >
+                          <img src={adCreativeLogo} alt="Credit" className="h-5 w-5 shrink-0 object-contain" />
+                          <span className="line-through text-[13px] font-semibold text-gray-600 dark:text-white/75">1</span>
+                          <span className="font-extrabold text-emerald-700 dark:text-emerald-300">Free</span>
+                          <span className="font-bold text-emerald-900 dark:text-emerald-100">Voice Regeneration</span>
+                        </span>
+                      )}
+                    </div>
                   </span>
                   <span
                     aria-hidden="true"

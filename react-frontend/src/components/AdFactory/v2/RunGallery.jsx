@@ -85,14 +85,28 @@ export default function RunGallery({
   publishError = null,
   onDismissResult,
 }) {
+  const { googleUser } = useSelector((state) => state.adFactoryNew) || {};
+
+  const googleChosen =
+    IS_GOOGLE_AUTOMATION_ENABLED &&
+    (Array.isArray(platforms) ? platforms : []).includes('google');
+  const metaChosen =
+    (Array.isArray(platforms) ? platforms : []).includes('meta') ||
+    (Array.isArray(platforms) ? platforms : []).length === 0;
+  const bothChosen = googleChosen && metaChosen;
+
   // Keyed by image url — the same identity the server filters on, and stable
   // across a refetch that hands back new pair objects.
   const [selected, setSelected] = useState(() => new Set());
   const [previewing, setPreviewing] = useState(null);
-  const [platform, setPlatform] = useState('meta');
-  const [galleryFilter, setGalleryFilter] = useState('all'); // 'all' | 'meta' | 'google'
+  const [platform, setPlatform] = useState(() => (googleChosen && !metaChosen ? 'google' : 'meta'));
+  const [galleryFilter, setGalleryFilter] = useState(() =>
+    bothChosen ? 'all' : googleChosen ? 'google' : 'meta'
+  ); // 'all' | 'meta' | 'google'
   const [editedCopies, setEditedCopies] = useState({}); // { [imageUrl]: { headline, primaryText, ... } }
-  const [previewPlatform, setPreviewPlatform] = useState('meta');
+  const [previewPlatform, setPreviewPlatform] = useState(() =>
+    googleChosen && !metaChosen ? 'google' : 'meta'
+  );
   const [customPairs, setCustomPairs] = useState([]);
   const [addImageOpen, setAddImageOpen] = useState(false);
 
@@ -145,15 +159,20 @@ export default function RunGallery({
     );
   }, [runs, customPairs]);
 
-  const { googleUser } = useSelector((state) => state.adFactoryNew) || {};
-
-  const googleChosen =
-    IS_GOOGLE_AUTOMATION_ENABLED &&
-    (Array.isArray(platforms) ? platforms : []).includes('google');
-
   useEffect(() => {
     if (!googleChosen && platform === 'google') setPlatform('meta');
-  }, [googleChosen, platform]);
+    if (!metaChosen && platform === 'meta' && googleChosen) setPlatform('google');
+  }, [googleChosen, metaChosen, platform]);
+
+  useEffect(() => {
+    if (!googleChosen && galleryFilter === 'google') {
+      setGalleryFilter('meta');
+    } else if (!metaChosen && galleryFilter === 'meta') {
+      setGalleryFilter('google');
+    } else if (!bothChosen && galleryFilter === 'all') {
+      setGalleryFilter(googleChosen ? 'google' : 'meta');
+    }
+  }, [googleChosen, metaChosen, bothChosen, galleryFilter]);
 
   const target = usePublishTarget({ connection, publishing });
 
@@ -177,7 +196,14 @@ export default function RunGallery({
     if (!open) return;
     setSelected(new Set());
     setPreviewing(null);
-  }, [open]);
+    if (!bothChosen) {
+      setGalleryFilter(googleChosen ? 'google' : 'meta');
+      setPlatform(googleChosen ? 'google' : 'meta');
+      setPreviewPlatform(googleChosen ? 'google' : 'meta');
+    } else {
+      setGalleryFilter('all');
+    }
+  }, [open, bothChosen, googleChosen]);
 
   // A run that regenerates while this is open can retire a selected ad. Drop
   // what no longer exists rather than sending the server a url it will refuse.
@@ -397,43 +423,59 @@ export default function RunGallery({
             {/* ── Platform Template Toggle (All / Meta / Google) ── */}
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface)] p-2 shadow-xs dark:border-[#2A2A2A] dark:bg-[#141414]">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1 rounded-lg bg-[var(--ws-surface-hover)] p-1 dark:bg-[#1f1f1f]">
-                  <button
-                    type="button"
-                    onClick={() => setGalleryFilter('all')}
-                    className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                      galleryFilter === 'all'
-                        ? 'bg-white text-gray-900 shadow-sm dark:bg-[#2C2C2C] dark:text-white'
-                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-                    }`}
-                  >
-                    <span>All</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGalleryFilter('meta')}
-                    className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                      galleryFilter === 'meta'
-                        ? 'bg-white text-gray-900 shadow-sm dark:bg-[#2C2C2C] dark:text-white'
-                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-                    }`}
-                  >
-                    <FaFacebookF className="h-3 w-3 text-[#1877F2] dark:text-[#5B9DF8]" />
-                    <span>Meta</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGalleryFilter('google')}
-                    className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                      galleryFilter === 'google'
-                        ? 'bg-white text-gray-900 shadow-sm dark:bg-[#2C2C2C] dark:text-white'
-                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-                    }`}
-                  >
-                    <FcGoogle className="h-3.5 w-3.5" />
-                    <span>Google</span>
-                  </button>
-                </div>
+                {bothChosen ? (
+                  <div className="flex items-center gap-1 rounded-lg bg-[var(--ws-surface-hover)] p-1 dark:bg-[#1f1f1f]">
+                    <button
+                      type="button"
+                      onClick={() => setGalleryFilter('all')}
+                      className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                        galleryFilter === 'all'
+                          ? 'bg-white text-gray-900 shadow-sm dark:bg-[#2C2C2C] dark:text-white'
+                          : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                      }`}
+                    >
+                      <span>All</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGalleryFilter('meta')}
+                      className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                        galleryFilter === 'meta'
+                          ? 'bg-white text-gray-900 shadow-sm dark:bg-[#2C2C2C] dark:text-white'
+                          : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                      }`}
+                    >
+                      <FaFacebookF className="h-3 w-3 text-[#1877F2] dark:text-[#5B9DF8]" />
+                      <span>Meta</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGalleryFilter('google')}
+                      className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                        galleryFilter === 'google'
+                          ? 'bg-white text-gray-900 shadow-sm dark:bg-[#2C2C2C] dark:text-white'
+                          : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                      }`}
+                    >
+                      <FcGoogle className="h-3.5 w-3.5" />
+                      <span>Google</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 rounded-lg border border-[var(--ws-border)] bg-[var(--ws-surface-hover)] px-3 py-1.5 text-xs font-semibold text-[var(--ws-text-primary)] dark:border-[#2A2A2A] dark:bg-[#1f1f1f] dark:text-white">
+                    {googleChosen ? (
+                      <>
+                        <FcGoogle className="h-3.5 w-3.5" />
+                        <span>Google</span>
+                      </>
+                    ) : (
+                      <>
+                        <FaFacebookF className="h-3 w-3 text-[#1877F2] dark:text-[#5B9DF8]" />
+                        <span>Meta</span>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 <button
                   type="button"
@@ -448,20 +490,20 @@ export default function RunGallery({
 
               {/* Template guidance & character caps */}
               <div className="flex items-center gap-2 text-[11px]">
-                {galleryFilter === 'google' ? (
+                {galleryFilter === 'google' && googleChosen ? (
                   <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 font-medium text-amber-700 dark:text-amber-300">
                     <span className="font-semibold">Google template:</span>
-                    <span>Headline max 30 chars · Description max 90 chars</span>
+                    <span>Headline max 30 chars · Description max 90 chars allowed only</span>
                   </span>
-                ) : galleryFilter === 'meta' ? (
+                ) : galleryFilter === 'meta' || !googleChosen ? (
                   <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/25 bg-blue-500/10 px-2.5 py-1 font-medium text-blue-700 dark:text-blue-300">
                     <span className="font-semibold">Meta template:</span>
-                    <span>Headline rec 40 chars · Primary text rec 125 chars</span>
+                    <span>Headline max 25 chars · Primary text max 125 chars allowed only</span>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 rounded-md border border-[#5867EB]/25 bg-[#5867EB]/10 px-2.5 py-1 font-medium text-[#4654D4] dark:border-[#15DCFF]/25 dark:bg-[#15DCFF]/10 dark:text-[#15DCFF]">
                     <span className="font-semibold">All templates:</span>
-                    <span>All generations for Meta &amp; Google</span>
+                    <span>Meta max 25/125 chars · Google max 30/90 chars allowed only</span>
                   </span>
                 )}
               </div>
@@ -513,9 +555,10 @@ export default function RunGallery({
                             onToggle={() => toggle(pair.imageUrl)}
                             onPreview={() => {
                               setPreviewing(pair);
-                              setPreviewPlatform(galleryFilter === 'google' ? 'google' : 'meta');
+                              setPreviewPlatform(galleryFilter === 'google' && googleChosen ? 'google' : 'meta');
                             }}
                             activeFilter={galleryFilter}
+                            googleChosen={googleChosen}
                             effectiveCopy={getEffectiveCopy(pair, galleryFilter)}
                             onSaveCopy={(newCopy) => {
                               setEditedCopies((prev) => ({
@@ -632,35 +675,37 @@ export default function RunGallery({
               onClick={(e) => e.stopPropagation()}
               role="presentation"
             >
-              {/* Preview Platform Switcher */}
-              <div className="flex items-center gap-1 rounded-full border border-white/20 bg-black/70 p-1 shadow-lg backdrop-blur-md">
-                <button
-                  type="button"
-                  onClick={() => setPreviewPlatform('meta')}
-                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
-                    previewPlatform === 'meta'
-                      ? 'bg-[#1877F2] text-white shadow-sm'
-                      : 'text-white/70 hover:text-white'
-                  }`}
-                >
-                  <FaFacebookF className="h-3 w-3" />
-                  <span>Meta Preview</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewPlatform('google')}
-                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
-                    previewPlatform === 'google'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-white/70 hover:text-white'
-                  }`}
-                >
-                  <FcGoogle className="h-3.5 w-3.5" />
-                  <span>Google Preview</span>
-                </button>
-              </div>
+              {/* Preview Platform Switcher - only show toggle if both platforms are enabled */}
+              {bothChosen && (
+                <div className="flex items-center gap-1 rounded-full border border-white/20 bg-black/70 p-1 shadow-lg backdrop-blur-md">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPlatform('meta')}
+                    className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
+                      previewPlatform === 'meta'
+                        ? 'bg-[#1877F2] text-white shadow-sm'
+                        : 'text-white/70 hover:text-white'
+                    }`}
+                  >
+                    <FaFacebookF className="h-3 w-3" />
+                    <span>Meta Preview</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPlatform('google')}
+                    className={`flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold transition-all ${
+                      previewPlatform === 'google'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-white/70 hover:text-white'
+                    }`}
+                  >
+                    <FcGoogle className="h-3.5 w-3.5" />
+                    <span>Google Preview</span>
+                  </button>
+                </div>
+              )}
 
-              {previewPlatform === 'google' ? (
+              {previewPlatform === 'google' && googleChosen ? (
                 <GoogleMobilePreview
                   image={srcOf(previewing.imageUrl)}
                   text={getEffectiveCopy(previewing, 'google')}
@@ -711,6 +756,7 @@ function Tile({
   onToggle,
   onPreview,
   activeFilter = 'all',
+  googleChosen = false,
   effectiveCopy,
   onSaveCopy,
 }) {
@@ -733,28 +779,30 @@ function Tile({
   const currentPrimaryText = isEditing ? draftPrimaryText : effectiveCopy?.primaryText || '';
 
   // Character caps & guidelines
-  const isGoogle = activeFilter === 'google';
-  const headlineMax = isGoogle ? 30 : 40;
+  const isGoogle = activeFilter === 'google' && googleChosen;
+  const headlineMax = isGoogle ? 30 : 25;
   const primaryMax = isGoogle ? 90 : 125;
 
-  const headlineOver = isGoogle
-    ? currentHeadline.length > 30
-    : currentHeadline.length > 40;
-  const primaryOver = isGoogle
-    ? currentPrimaryText.length > 90
-    : currentPrimaryText.length > 125;
+  const headlineOver = currentHeadline.length > headlineMax;
+  const primaryOver = currentPrimaryText.length > primaryMax;
+
+  const draftHeadlineOver = draftHeadline.length > headlineMax;
+  const draftPrimaryOver = draftPrimaryText.length > primaryMax;
+  const isHeadlineEmpty = !draftHeadline.trim();
+  const canSave = !draftHeadlineOver && !draftPrimaryOver && !isHeadlineEmpty;
 
   const handleSave = (e) => {
     e?.stopPropagation();
+    if (!canSave) return;
     onSaveCopy?.({
-      headline: draftHeadline,
-      primaryText: draftPrimaryText,
-      description: draftPrimaryText,
+      headline: draftHeadline.trim(),
+      primaryText: draftPrimaryText.trim(),
+      description: draftPrimaryText.trim(),
       ...(isGoogle
-        ? { google: { headline: draftHeadline, description: draftPrimaryText } }
+        ? { google: { headline: draftHeadline.trim(), description: draftPrimaryText.trim() } }
         : {}),
-      ...(activeFilter === 'meta'
-        ? { meta: { headline: draftHeadline, primary_text: draftPrimaryText } }
+      ...(activeFilter === 'meta' || !googleChosen
+        ? { meta: { headline: draftHeadline.trim(), primary_text: draftPrimaryText.trim() } }
         : {}),
     });
     setIsEditing(false);
@@ -771,7 +819,7 @@ function Tile({
     if (e.key === 'Escape') {
       handleCancel(e);
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      handleSave(e);
+      if (canSave) handleSave(e);
     }
   };
 
@@ -818,12 +866,12 @@ function Tile({
 
         {/* Platform tag badge on card */}
         <span className="absolute top-2 right-2 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-xs">
-          {activeFilter === 'google' ? (
+          {isGoogle ? (
             <>
               <FcGoogle className="h-3 w-3" />
               <span>Google</span>
             </>
-          ) : activeFilter === 'meta' ? (
+          ) : activeFilter === 'meta' || !googleChosen ? (
             <>
               <FaFacebookF className="h-2.5 w-2.5 text-[#5B9DF8]" />
               <span>Meta</span>
@@ -865,28 +913,44 @@ function Tile({
                 </label>
                 <span
                   className={`font-medium ${
-                    isGoogle && draftHeadline.length > 30
+                    draftHeadlineOver
                       ? 'font-bold text-red-500'
-                      : draftHeadline.length > headlineMax
-                        ? 'text-amber-500'
+                      : draftHeadline.length === headlineMax
+                        ? 'font-semibold text-amber-500'
                         : 'text-gray-400 dark:text-gray-500'
                   }`}
                 >
-                  {draftHeadline.length}/{headlineMax} {isGoogle ? 'max' : 'rec'}
+                  {draftHeadline.length}/{headlineMax} max
                 </span>
               </div>
               <input
                 type="text"
                 autoFocus
+                maxLength={headlineMax}
                 value={draftHeadline}
-                onChange={(e) => setDraftHeadline(e.target.value)}
+                onChange={(e) => setDraftHeadline(e.target.value.slice(0, headlineMax))}
                 placeholder="Enter headline..."
                 className={`w-full rounded-lg border-2 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-900 shadow-xs outline-none transition-all dark:bg-[#1E1E1E] dark:text-white ${
-                  isGoogle && draftHeadline.length > 30
+                  draftHeadlineOver
                     ? 'border-red-500 ring-2 ring-red-500/20'
                     : 'border-gray-300 hover:border-gray-400 focus:border-[#5867EB] focus:ring-2 focus:ring-[#5867EB]/25 dark:border-[#444] dark:hover:border-[#666] dark:focus:border-[#15DCFF] dark:focus:ring-[#15DCFF]/25'
                 }`}
               />
+              {draftHeadlineOver && (
+                <div className="flex items-center justify-between text-[10px] text-red-500">
+                  <span className="flex items-center gap-1 font-medium">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    <span>Max {headlineMax} characters allowed only</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDraftHeadline((prev) => prev.slice(0, headlineMax))}
+                    className="font-semibold underline hover:text-red-600 cursor-pointer"
+                  >
+                    Trim to {headlineMax}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Primary Text / Caption Input */}
@@ -897,23 +961,24 @@ function Tile({
                 </label>
                 <span
                   className={`font-medium ${
-                    isGoogle && draftPrimaryText.length > 90
+                    draftPrimaryOver
                       ? 'font-bold text-red-500'
-                      : draftPrimaryText.length > primaryMax
-                        ? 'text-amber-500'
+                      : draftPrimaryText.length === primaryMax
+                        ? 'font-semibold text-amber-500'
                         : 'text-gray-400 dark:text-gray-500'
                   }`}
                 >
-                  {draftPrimaryText.length}/{primaryMax} {isGoogle ? 'max' : 'rec'}
+                  {draftPrimaryText.length}/{primaryMax} max
                 </span>
               </div>
               <textarea
                 value={draftPrimaryText}
-                onChange={(e) => setDraftPrimaryText(e.target.value)}
+                maxLength={primaryMax}
+                onChange={(e) => setDraftPrimaryText(e.target.value.slice(0, primaryMax))}
                 rows={3}
                 placeholder={isGoogle ? 'Enter description...' : 'Enter primary text...'}
                 className={`w-full min-h-[68px] resize-none rounded-lg border-2 bg-white p-2.5 text-xs leading-relaxed text-gray-900 shadow-xs outline-none transition-all dark:bg-[#1E1E1E] dark:text-white ${
-                  isGoogle && draftPrimaryText.length > 90
+                  draftPrimaryOver
                     ? 'border-red-500 ring-2 ring-red-500/20'
                     : 'border-gray-300 hover:border-gray-400 focus:border-[#5867EB] focus:ring-2 focus:ring-[#5867EB]/25 dark:border-[#444] dark:hover:border-[#666] dark:focus:border-[#15DCFF] dark:focus:ring-[#15DCFF]/25'
                 }`}
@@ -922,6 +987,21 @@ function Tile({
                   scrollbarColor: 'rgba(156,163,175,0.6) transparent',
                 }}
               />
+              {draftPrimaryOver && (
+                <div className="flex items-center justify-between text-[10px] text-red-500">
+                  <span className="flex items-center gap-1 font-medium">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    <span>Max {primaryMax} characters allowed only</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDraftPrimaryText((prev) => prev.slice(0, primaryMax))}
+                    className="font-semibold underline hover:text-red-600 cursor-pointer"
+                  >
+                    Trim to {primaryMax}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Action buttons: Cancel & Save */}
@@ -936,7 +1016,13 @@ function Tile({
               <button
                 type="button"
                 onClick={handleSave}
-                className="flex items-center gap-1 rounded-md bg-[#5867EB] px-3 py-1 text-[11px] font-semibold text-white shadow-xs hover:bg-[#4755D6] dark:bg-[#15DCFF] dark:text-[#062024] cursor-pointer"
+                disabled={!canSave}
+                title={!canSave ? 'Character limit exceeded' : 'Save copy'}
+                className={`flex items-center gap-1 rounded-md px-3 py-1 text-[11px] font-semibold transition-all ${
+                  canSave
+                    ? 'bg-[#5867EB] text-white shadow-xs hover:bg-[#4755D6] dark:bg-[#15DCFF] dark:text-[#062024] cursor-pointer'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-[#2A2A2A] dark:text-gray-500'
+                }`}
               >
                 <Check className="h-3 w-3" strokeWidth={3} />
                 <span>Save</span>
@@ -969,10 +1055,10 @@ function Tile({
             </div>
 
             {/* Platform limit warnings */}
-            {isGoogle && (headlineOver || primaryOver) && (
+            {(headlineOver || primaryOver) && (
               <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
                 <AlertCircle className="h-3 w-3" />
-                <span>Exceeds Google limit</span>
+                <span>Exceeds {isGoogle ? 'Google' : 'Meta'} limit (max {headlineMax}/{primaryMax} chars allowed only)</span>
               </span>
             )}
 

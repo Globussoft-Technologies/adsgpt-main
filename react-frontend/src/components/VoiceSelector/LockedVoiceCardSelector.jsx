@@ -429,24 +429,26 @@ export default function LockedVoiceCardSelector({
                     {voiceDetails(catalogVoice) || displayLanguage}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => selectVoice(catalogVoice)}
-                  className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
-                    selected
-                      ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-300'
-                      : 'border-gray-200 bg-white text-gray-700 shadow-xs hover:bg-gray-100 hover:text-gray-900 dark:border-white/15 dark:bg-transparent dark:text-white/75 dark:hover:bg-white/5 dark:hover:text-white'
-                  }`}
-                >
-                  {selected ? (
-                    <span className="flex items-center gap-1">
-                      <Check className="h-3.5 w-3.5" />
-                      Selected
-                    </span>
-                  ) : (
-                    'Select'
-                  )}
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => selectVoice(catalogVoice)}
+                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
+                      selected
+                        ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-300'
+                        : 'border-gray-200 bg-white text-gray-700 shadow-xs hover:bg-gray-100 hover:text-gray-900 dark:border-white/15 dark:bg-transparent dark:text-white/75 dark:hover:bg-white/5 dark:hover:text-white'
+                    }`}
+                  >
+                    {selected ? (
+                      <span className="flex items-center gap-1">
+                        <Check className="h-3.5 w-3.5" />
+                        Selected
+                      </span>
+                    ) : (
+                      'Select'
+                    )}
+                  </button>
+                </div>
               </div>
             );
           })}
