@@ -665,7 +665,7 @@ export default function VideoCard({
       {/* Selection Checkbox */}
       {item?.status === 'completed' && (
         <div
-          className={`absolute top-3 left-3 z-30 transition-opacity duration-300 ${
+          className={`absolute top-3 left-3 z-40 transition-opacity duration-300 ${
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           }`}
           onClick={(e) => {

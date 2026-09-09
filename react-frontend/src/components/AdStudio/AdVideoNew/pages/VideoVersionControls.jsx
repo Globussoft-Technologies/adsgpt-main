@@ -3,14 +3,22 @@ import { Check, Undo2 } from 'lucide-react';
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
 import { labelForLanguage } from '@/apis/voiceSelector/voiceSelectorApi';
 
-// Label a results[] entry from its aiAds metadata, e.g. "Original · Kannada · anushka"
-// or "Translate · Hindi · Rachel".
+// Clean long voice descriptions like "Neelu - Relatable Gujarati Conversations"
+// down to just the voice name "Neelu".
+const cleanVoice = (name = '') => {
+  if (!name) return '';
+  const cleaned = name.split(/[-–—(,/]/)[0].trim();
+  return cleaned.length > 14 ? `${cleaned.slice(0, 12)}…` : cleaned;
+};
+
+// Label a results[] entry from its aiAds metadata, e.g. "V1 · Original",
+// "V2 · Translate · Hindi · Rachel", or "V4 · Translate · Gujarati · Neelu".
 const versionLabel = (r, i) => {
   const rt = r?.aiAds?.regenType;
   const base = rt ? rt.charAt(0).toUpperCase() + rt.slice(1) : 'Original';
   const lang = r?.aiAds?.language ? labelForLanguage(r.aiAds.language) : '';
-  const vn = r?.aiAds?.voiceName || '';
-  return [`v${i + 1}`, base, lang, vn].filter(Boolean).join(' · ');
+  const vn = cleanVoice(r?.aiAds?.voiceName);
+  return [`V${i + 1}`, base, lang, vn].filter(Boolean).join(' · ');
 };
 
 /**
@@ -52,17 +60,20 @@ export default function VideoVersionControls({
   return (
     <div
       ref={controlsRef}
-      className="pointer-events-none absolute top-2 right-2 left-2 z-30 flex min-w-0 flex-col items-center gap-1.5"
+      className="pointer-events-none absolute top-2.5 right-12 left-12 z-30 flex min-w-0 flex-col items-center gap-1.5"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="pointer-events-auto max-w-full rounded-full bg-black/50 backdrop-blur">
+      <div
+        className="pointer-events-auto max-w-full rounded-full bg-black/50 backdrop-blur"
+        title={value.label}
+      >
         <CommonDropdown
           label="Version"
           options={options}
           value={value}
           onChange={(v) => onPreview(Number(v))}
           side="bottom"
-          className="max-w-full whitespace-normal data-[size=default]:h-auto data-[size=default]:min-h-6 [&>div]:min-w-0 [&>div]:py-1 [&>div>span]:break-words [&>div>span]:text-center [&>div>span]:leading-tight [&>div>span]:whitespace-normal"
+          className="max-w-full data-[size=default]:h-auto data-[size=default]:min-h-6 [&>div]:min-w-0 [&>div]:max-w-full [&>div]:py-1 [&>div]:justify-center [&>div>span]:truncate [&>div>span]:max-w-full [&>div>span]:text-center [&>div>span]:leading-tight"
           contentAlign="center"
           contentClassName="min-w-0"
           contentStyle={{ width: menuWidth, minWidth: menuWidth, maxWidth: menuWidth }}

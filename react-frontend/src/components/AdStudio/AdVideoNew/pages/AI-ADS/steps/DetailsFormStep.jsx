@@ -528,6 +528,20 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     };
   });
 
+  const estimatedCredits = useMemo(() => {
+    if (!formData.model || !selectedVideoDuration) return 0;
+    const selectedModel = visibleModelOptions.find((model) => model.value === formData.model);
+    return estimateAdVideoCredits({
+      video_model: formData.model,
+      video_duration: selectedVideoDuration,
+      no_of_ads: 1,
+      modelCredits,
+      creditsPerSecond: selectedModel?.creditsPerSecond,
+    });
+  }, [formData.model, selectedVideoDuration, modelCredits, visibleModelOptions]);
+
+  const hasEnoughCredits = availableCredits >= estimatedCredits;
+
   useEffect(() => {
     if (formData.model) return;
     const defaultVideoModel = getFirstAvailableVideoModel(visibleModelOptions, userData);
@@ -943,35 +957,32 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               </button>
             </div>
 
-            <div className="flex min-w-0 flex-col sm:ml-auto">
-              <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  {(() => {
-                    const est = estimateAdVideoCredits({ video_model: formData.model, video_duration: selectedVideoDuration, no_of_ads: 1, modelCredits, creditsPerSecond: visibleModelOptions.find((model) => model.value === formData.model)?.creditsPerSecond });
-                    const enough = availableCredits >= est;
-                    if (!formData.model || !selectedVideoDuration) return null;
-                    return enough ? (
-                      <ShadcnTooltip label={`Will use : ${est} credits, ${availableCredits - est} left after`}>
-                        <span className="rounded-full bg-black/5 dark:bg-white/20 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-white/90">
-                          ~{est} credits
-                        </span>
-                      </ShadcnTooltip>
-                    ) : (
-                      <span className="shrink-0 whitespace-nowrap rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-[11px] font-medium text-white">
-                        Not enough credits — need {est}, you have {availableCredits}
-                      </span>
-                    );
-                  })()}
-                  <button
-                    onClick={onBack}
-                    disabled={submitting}
-                    className="rounded-sm border border-black/20 dark:border-[#efefef]/70 px-4 py-1.5 text-13 font-medium text-gray-900 dark:text-white transition hover:bg-black/5 dark:hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
-                  >
-                    Back
-                  </button>
-                  <button
-                    disabled={submitting || !formData.model || !selectedVideoDuration || availableCredits < estimateAdVideoCredits({ video_model: formData.model, video_duration: selectedVideoDuration, no_of_ads: 1, modelCredits, creditsPerSecond: visibleModelOptions.find((model) => model.value === formData.model)?.creditsPerSecond })}
-                    onClick={async () => {
+            <div className="flex min-w-0 flex-col items-end gap-1.5 sm:ml-auto">
+              {!hasEnoughCredits && estimatedCredits > 0 && (
+                <div className="flex items-center justify-end">
+                  <span className="shrink-0 whitespace-nowrap rounded-full border border-red-500 bg-red-500 px-3 py-1 text-[11px] font-medium text-white shadow-xs">
+                    Not enough credits — need {estimatedCredits}, you have {availableCredits}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-2 sm:gap-3">
+                {hasEnoughCredits && estimatedCredits > 0 && (
+                  <ShadcnTooltip label={`Will use : ${estimatedCredits} credits, ${availableCredits - estimatedCredits} left after`}>
+                    <span className="rounded-full bg-black/5 dark:bg-white/20 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-white/90">
+                      ~{estimatedCredits} credits
+                    </span>
+                  </ShadcnTooltip>
+                )}
+                <button
+                  onClick={onBack}
+                  disabled={submitting}
+                  className="rounded-sm border border-black/20 dark:border-[#efefef]/70 px-4 py-1.5 text-13 font-medium text-gray-900 dark:text-white transition hover:bg-black/5 dark:hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
+                >
+                  Back
+                </button>
+                <button
+                  disabled={submitting || !formData.model || !selectedVideoDuration || !hasEnoughCredits}
+                  onClick={async () => {
                       const validationErrors = validate();
                       if (Object.keys(validationErrors).length > 0) {
                         setErrors(validationErrors);
@@ -1048,11 +1059,10 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                 </div>
               </div>
             </div>
-            </div>
-          </div>
           </div>
         </div>
       </div>
+    </div>
 
       <AnimatePresence>
         {lightbox.open && (
