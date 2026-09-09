@@ -15,7 +15,7 @@
  * uploads. Never sent to Meta.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus,
   Trash2,
@@ -63,6 +63,43 @@ const shortUrl = (url) => {
 };
 
 /** A card counts as having media once either source is set. */
+/**
+ * CardThumb — a card's thumbnail, including media that has only been picked,
+ * not yet uploaded.
+ *
+ * THE BUG THIS FIXES: the thumbnail read `card.imageUrl` and ignored
+ * `card.imageFile`, so a card filled through Upload / URL rendered a grey
+ * placeholder in its collapsed row and in the "Image selected" panel. The
+ * image was visible ONLY inside the open Upload / URL panel, which has its own
+ * preview — so the upload looked like it had silently failed, and switching
+ * tabs looked like what "fixed" it. Library picks set `imageUrl` and were
+ * unaffected, which is why only uploads showed the symptom.
+ *
+ * A separate component rather than a value in the parent so the blob URL can
+ * be memoised on the File identity. Deriving it in the parent would rebuild
+ * every URL on each keystroke in a headline field (patch returns a new array),
+ * flickering every thumbnail in the list — the same trap ImageField documents.
+ *
+ * Video files get no blob preview: a video blob in an <img> renders nothing.
+ * They fall back to `videoThumbnailUrl`, then the icon.
+ */
+function CardThumb({ card, className, iconClassName }) {
+  const isVideo = card?.mediaType === 'video';
+  const file = isVideo ? null : card?.imageFile;
+  const src = useMemo(() => {
+    if (file) return URL.createObjectURL(file);
+    return (isVideo ? card?.videoThumbnailUrl : card?.imageUrl) || null;
+  }, [file, isVideo, card?.videoThumbnailUrl, card?.imageUrl]);
+  useEffect(() => {
+    if (!src?.startsWith('blob:')) return undefined;
+    return () => URL.revokeObjectURL(src);
+  }, [src]);
+
+  if (src) return <img src={src} alt="" className={className} />;
+  const Icon = isVideo ? VideoIcon : ImageIcon;
+  return <Icon className={iconClassName} />;
+}
+
 export const cardHasMedia = (card) =>
   card?.mediaType === 'video'
     ? !!(card.videoFile || card.videoUrl)
@@ -185,7 +222,6 @@ export default function CarouselCardEditor({
           // Media is picked once, then the grid stops earning its height.
           const hasPicked = !!(card.imageUrl || card.videoUrl || card.imageFile || card.videoFile);
           const browsing = browsingById[card.id] ?? !hasPicked;
-          const thumb = card.mediaType === 'video' ? card.videoThumbnailUrl : card.imageUrl;
 
           return (
             <div
@@ -199,13 +235,11 @@ export default function CarouselCardEditor({
               {/* ── header row ── */}
               <div className="flex items-center gap-3 p-3">
                 <div className="flex h-11 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
-                  {thumb ? (
-                    <img src={thumb} alt="" className="h-full w-full object-cover" />
-                  ) : card.mediaType === 'video' ? (
-                    <VideoIcon className="h-4 w-4 text-gray-400 dark:text-white/25" />
-                  ) : (
-                    <ImageIcon className="h-4 w-4 text-gray-400 dark:text-white/25" />
-                  )}
+                  <CardThumb
+                    card={card}
+                    className="h-full w-full object-cover"
+                    iconClassName="h-4 w-4 text-gray-400 dark:text-white/25"
+                  />
                 </div>
 
                 <button
@@ -295,17 +329,13 @@ export default function CarouselCardEditor({
                 <div className="flex flex-col gap-3 border-t border-gray-200 p-3 dark:border-white/10">
                   {mediaLocked ? (
                     <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3 dark:border-white/10 dark:bg-white/3">
-                      {thumb ? (
-                        <img
-                          src={thumb}
-                          alt=""
-                          className="h-16 w-24 shrink-0 rounded-lg border border-gray-200 object-cover dark:border-white/10"
+                      <div className="flex h-16 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
+                        <CardThumb
+                          card={card}
+                          className="h-full w-full object-cover"
+                          iconClassName="h-5 w-5 text-gray-400 dark:text-white/25"
                         />
-                      ) : (
-                        <div className="flex h-16 w-24 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
-                          <ImageIcon className="h-5 w-5 text-gray-400 dark:text-white/25" />
-                        </div>
-                      )}
+                      </div>
                       <div className="text-12 text-gray-600 dark:text-white/55">
                         {card.mediaType === 'video' ? 'Current video' : 'Current image'} · reused as-is
                       </div>
@@ -334,17 +364,13 @@ export default function CarouselCardEditor({
                       // fields, and the Add card button below the list) is now
                       // on screen instead of scrolled past.
                       <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3 dark:border-white/12 dark:bg-white/4">
-                        {thumb ? (
-                          <img
-                            src={thumb}
-                            alt=""
-                            className="h-12 w-20 shrink-0 rounded-lg border border-gray-200 object-cover dark:border-white/10"
+                        <div className="flex h-12 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
+                          <CardThumb
+                            card={card}
+                            className="h-full w-full object-cover"
+                            iconClassName="h-4 w-4 text-gray-400 dark:text-white/25"
                           />
-                        ) : (
-                          <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
-                            <ImageIcon className="h-4 w-4 text-gray-400 dark:text-white/25" />
-                          </div>
-                        )}
+                        </div>
                         <div className="min-w-0 flex-1 text-12 text-gray-600 dark:text-white/55">
                           {card.mediaType === 'video' ? 'Video selected' : 'Image selected'}
                         </div>
