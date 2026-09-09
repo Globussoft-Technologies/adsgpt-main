@@ -320,10 +320,17 @@ export function useBulkActions({ level, adAccountId, campaignId, selection, onRe
     (status) =>
       run(
         selection.selectedRows,
-        (row) => updateAdStatus(level, row.id, status, level === 'campaign' ? undefined : campaignId),
+        (row) =>
+          updateAdStatus(
+            level,
+            row.id,
+            status,
+            level === 'campaign' ? undefined : campaignId,
+            adAccountId,
+          ),
         status === 'ACTIVE' ? 'Activated' : 'Paused',
       ),
-    [run, selection.selectedRows, level, campaignId],
+    [run, selection.selectedRows, level, campaignId, adAccountId],
   );
 
   const duplicate = useCallback(

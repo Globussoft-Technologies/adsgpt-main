@@ -268,10 +268,20 @@ export const postGoogleAd = async (payload) => {
 // `campaignId` is only needed when level is 'adset'/'ad' — it lets the
 // managed-campaign plan gate identify the parent without a Meta lookup.
 // Optional: omitting it means the gate allows the call through.
-export const updateAdStatus = async (level, id, status, campaignId) => {
+// `adAccountId` is used only on the FAILURE path: it lets the backend read the
+// account's status so a bare "Permissions error" can be explained as unsettled
+// billing / risk review / policy disable. Optional — omitting it just yields a
+// less specific message.
+export const updateAdStatus = async (level, id, status, campaignId, adAccountId) => {
   const { data } = await axios.patch(
     `${BASE_URL}/adsgpt/meta-ads/update-status`,
-    campaignId ? { level, id, status, campaignId } : { level, id, status },
+    {
+      level,
+      id,
+      status,
+      ...(campaignId ? { campaignId } : {}),
+      ...(adAccountId ? { adAccountId } : {}),
+    },
     { headers: getAuthHeaders() },
   );
   return data;

@@ -111,6 +111,17 @@ export default function CarouselCardEditor({
 }) {
   const [expandedId, setExpandedId] = useState(cards[0]?.id || null);
   const [libraryModeById, setLibraryModeById] = useState({});
+  // Which cards are showing the full media grid. A card with media already
+  // picked collapses to a thumbnail: the grid is ~300px of tiles, and leaving
+  // it open pushed the headline/description/link fields AND the "Add card"
+  // button below the fold. QA's report was literally "where is the add more
+  // option?" followed by "after adding two images it's very confusing for the
+  // user what to do".
+  //
+  // Collapsing the PICKER rather than the whole card is the point: collapsing
+  // the card was the first suggestion and it's wrong — the text fields are
+  // still unfilled at that moment, so it hides the next thing to do.
+  const [browsingById, setBrowsingById] = useState({});
 
   const imageOnly = mediaKind === 'image';
 
@@ -122,6 +133,8 @@ export default function CarouselCardEditor({
     const card = newCard();
     onChange([...cards, card]);
     setExpandedId(card.id);
+    // Explicit so a new card can't inherit a stale collapsed picker.
+    setBrowsingById((p) => ({ ...p, [card.id]: true }));
   };
 
   const remove = (index) => {
@@ -148,11 +161,30 @@ export default function CarouselCardEditor({
         : cardCountHint(cards.length, max)}
     >
       <div className="flex flex-col gap-2">
+        {/* Add is duplicated at the top because the bottom button sits below
+            the expanded card and scrolls out of reach — QA's report was
+            "where is the add more option?". Header placement keeps it in view
+            whichever card is open. */}
+        {!mediaLocked && cards.length < max && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={add}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1 text-11 font-semibold text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:text-white/60 dark:hover:text-white"
+            >
+              <Plus className="h-3 w-3" />
+              Add card
+            </button>
+          </div>
+        )}
         {cards.map((card, index) => {
           const expanded = expandedId === card.id;
           const errs = cardErrors[index] || {};
           const hasError = Object.keys(errs).length > 0;
           const libraryMode = libraryModeById[card.id] !== false;
+          // Media is picked once, then the grid stops earning its height.
+          const hasPicked = !!(card.imageUrl || card.videoUrl || card.imageFile || card.videoFile);
+          const browsing = browsingById[card.id] ?? !hasPicked;
           const thumb = card.mediaType === 'video' ? card.videoThumbnailUrl : card.imageUrl;
 
           return (
@@ -296,7 +328,36 @@ export default function CarouselCardEditor({
                   </div>
 
                   {libraryMode ? (
-                    <div className="rounded-2xl border border-gray-200 bg-white p-3 dark:border-white/12 dark:bg-white/4">
+                    !browsing ? (
+                      // Picked state — thumbnail + Change, ~64px instead of the
+                      // grid's ~300px. What the user needs next (the text
+                      // fields, and the Add card button below the list) is now
+                      // on screen instead of scrolled past.
+                      <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3 dark:border-white/12 dark:bg-white/4">
+                        {thumb ? (
+                          <img
+                            src={thumb}
+                            alt=""
+                            className="h-12 w-20 shrink-0 rounded-lg border border-gray-200 object-cover dark:border-white/10"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-[#1e1e1e]">
+                            <ImageIcon className="h-4 w-4 text-gray-400 dark:text-white/25" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1 text-12 text-gray-600 dark:text-white/55">
+                          {card.mediaType === 'video' ? 'Video selected' : 'Image selected'}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setBrowsingById((p) => ({ ...p, [card.id]: true }))}
+                          className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1 text-11 font-semibold text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:text-white/60 dark:hover:text-white"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                    <div className="scrollbar-thin max-h-72 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-3 dark:border-white/12 dark:bg-white/4">
                       <LibraryPicker
                         type={imageOnly ? 'image' : 'all'}
                         selectedUrl={card.mediaType === 'video' ? card.videoUrl : card.imageUrl}
@@ -323,9 +384,11 @@ export default function CarouselCardEditor({
                               videoThumbnailUrl: null,
                             });
                           }
+                          setBrowsingById((p) => ({ ...p, [card.id]: false }));
                         }}
                       />
                     </div>
+                    )
                   ) : (
                     <>
                       {!imageOnly && (

@@ -425,3 +425,28 @@ export const countByFilter = (rows = []) =>
     acc[f.key] = rows.filter((r) => matchesTableFilter(r, f.key)).length;
     return acc;
   }, {});
+
+/**
+ * metaErrorText — the most useful sentence available from a failed request.
+ *
+ * The backend's Meta envelope is `{ error, details, meta }`, where `error` is
+ * Meta's `error_user_title` (short, e.g. "Permissions error") and `details` is
+ * the part that says what to actually do — Meta's `error_user_msg`, or our own
+ * ad-account explanation when Meta only sent a generic permission failure.
+ *
+ * Status toggles used to `catch { toast('Failed to update campaign status') }`
+ * without reading the response at all, so a disabled or unsettled ad account
+ * surfaced as an unexplained failure that reads like an AdsGPT bug. Both
+ * halves are joined here because on their own each is incomplete: the title
+ * without the detail says nothing actionable, and the detail without the title
+ * loses the category.
+ */
+export const metaErrorText = (err, fallback = 'Something went wrong.') => {
+  const body = err?.response?.data;
+  if (!body) return err?.message || fallback;
+  const title = typeof body.error === 'string' ? body.error.trim() : '';
+  const detail = typeof body.details === 'string' ? body.details.trim() : '';
+  // Meta sometimes repeats itself across the two fields; don't say it twice.
+  if (title && detail && detail !== title) return `${title} — ${detail}`;
+  return detail || title || err?.message || fallback;
+};

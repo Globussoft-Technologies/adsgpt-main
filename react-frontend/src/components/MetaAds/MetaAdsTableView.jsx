@@ -60,6 +60,7 @@ import {
   labelBidType,
   labelCTA,
   matchesTableFilter,
+  metaErrorText,
 } from './metaAdsUtils';
 import {
   FilterPills,
@@ -721,7 +722,7 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, opportunityS
     const next = getStatus(c) === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
     setToggling((p) => ({ ...p, [c.id]: true }));
     try {
-      const res = await updateAdStatus('campaign', c.id, next);
+      const res = await updateAdStatus('campaign', c.id, next, undefined, adAccountId);
       setStatuses((p) => ({ ...p, [c.id]: next }));
       if (next === 'ACTIVE') {
         GA4Events.adFactoryCampaignStarted(['meta'], { source: 'ads_manager', campaignId: c.id });
@@ -729,7 +730,7 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, opportunityS
         GA4Events.adFactoryCampaignStopped(['meta'], { source: 'ads_manager', campaignId: c.id });
       }
       globalToast.success(res?.message);
-    } catch { globalToast.error('Failed to update campaign status'); }
+    } catch (err) { globalToast.error(metaErrorText(err, 'Failed to update campaign status')); }
     finally  { setToggling((p) => ({ ...p, [c.id]: false })); }
   };
 
@@ -1419,10 +1420,10 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
     try {
       // Parent campaign passed so the managed-campaign plan gate can run
       // without a Meta lookup — see the validator note on updateAdStatusSchema.
-      const res = await updateAdStatus('adset', s.id, next, campaign?.id);
+      const res = await updateAdStatus('adset', s.id, next, campaign?.id, adAccountId);
       setStatuses((p) => ({ ...p, [s.id]: next }));
       globalToast.success(res?.message);
-    } catch { globalToast.error('Failed to update ad set status'); }
+    } catch (err) { globalToast.error(metaErrorText(err, 'Failed to update ad set status')); }
     finally  { setToggling((p) => ({ ...p, [s.id]: false })); }
   };
 
@@ -1786,7 +1787,7 @@ function AdDrawer({ ad, onClose }) {
       const res = await updateAdStatus('ad', ad.id, next);
       setCurrentStatus(next);
       globalToast.success(res?.message);
-    } catch { globalToast.error('Failed to update ad status'); }
+    } catch (err) { globalToast.error(metaErrorText(err, 'Failed to update ad status')); }
     finally  { setToggling(false); }
   };
 
@@ -2244,10 +2245,10 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
     const next = getStatus(a) === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
     setToggling((p) => ({ ...p, [a.id]: true }));
     try {
-      const res = await updateAdStatus('ad', a.id, next, campaign?.id);
+      const res = await updateAdStatus('ad', a.id, next, campaign?.id, adAccountId);
       setStatuses((p) => ({ ...p, [a.id]: next }));
       globalToast.success(res?.message);
-    } catch { globalToast.error('Failed to update ad status'); }
+    } catch (err) { globalToast.error(metaErrorText(err, 'Failed to update ad status')); }
     finally  { setToggling((p) => ({ ...p, [a.id]: false })); }
   };
 

@@ -60,6 +60,10 @@ const {
   CACHE_SHAPE,
   cacheInvalidationPatterns,
 } = require("../../utils/metaCacheKeys");
+const {
+  describeAccountStatus,
+  looksAccountLevel,
+} = require("../../utils/metaAccountStatus");
 const { resolveDateRange } = require("../../utils/metaDateRange");
 const {
   updateAdStatusSchema,
@@ -1972,7 +1976,7 @@ class MetaAdLauncher {
         });
       }
 
-      const { level, id, status, campaignId } = value;
+      const { level, id, status, campaignId, adAccountId } = value;
 
       // Managed-campaign plan gate. When level is 'campaign', `id` IS the
       // campaign; otherwise fall back to the parent the frontend supplied
@@ -2044,12 +2048,52 @@ class MetaAdLauncher {
         message: `${level} ${status.toLowerCase()} successfully`,
       });
     } catch (error) {
-      logger.error(`Update status error: ${error.message}`);
+      // Meta's rich error was being thrown away here: the response hardcoded
+      // "Failed to update status" and passed `error.message` — the SDK's
+      // terse string, e.g. a bare "Permissions error" — as the detail. On a
+      // disabled or unsettled ad account that reads as an AdsGPT bug or a
+      // login problem, when the real cause is billing or a review the user
+      // has to resolve in Meta. formatMetaError pulls Meta's own
+      // error_user_title / error_user_msg, which are written for end users.
+      const m = logMetaError("Update status error", error);
+
+      // Meta names the permission failure but never the CAUSE. When the error
+      // looks account-level, spend one GET to read the account's status so we
+      // can say which it is. Best-effort in every direction: a failure here
+      // must never replace the original error with a worse one.
+      let accountReason = null;
+      if (adAccountId && looksAccountLevel(m)) {
+        try {
+          const acct = await new bizSdk.AdAccount(`act_${adAccountId}`).get([
+            "account_status",
+            "disable_reason",
+          ]);
+          const d = acct?._data || acct || {};
+          const described = describeAccountStatus(d.account_status, d.disable_reason);
+          if (described.usable === false || described.reason) {
+            accountReason = described.reason;
+          }
+        } catch (lookupErr) {
+          logger.warn(
+            `updateStatus: couldn't read ad account ${adAccountId} status: ${lookupErr.message}`,
+          );
+        }
+      }
 
       return res.status(500).json({
         status: false,
-        error: "Failed to update status",
-        details: error.message,
+        error: m.title || "Failed to update status",
+        // The account explanation is more actionable than Meta's generic
+        // permission text, so it leads when we have one.
+        details: accountReason || m.message,
+        meta: {
+          code: m.code,
+          subcode: m.subcode,
+          fbtraceId: m.fbtraceId,
+          // Kept separate as well as inlined above so the UI can style it
+          // differently from a plain Meta message if it wants to.
+          accountReason,
+        },
       });
     }
   }

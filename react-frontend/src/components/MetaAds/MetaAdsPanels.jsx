@@ -46,6 +46,7 @@ import {
   METRIC_ICONS,
   currencySymbol,
   formatMetricValue,
+  metaErrorText,
 } from './metaAdsUtils';
 import { StatusBadge, Spinner, EmptyState, ChartTooltip } from './MetaAdsAtoms';
 
@@ -66,8 +67,8 @@ export const AdCard = ({ ad }) => {
       const res = await updateAdStatus('ad', ad.id, newStatus);
       setCurrentStatus(newStatus);
       globalToast.success(res?.message);
-    } catch {
-      globalToast.error('Failed to update ad status');
+    } catch (err) {
+      globalToast.error(metaErrorText(err, 'Failed to update ad status'));
     } finally {
       setToggling(false);
     }
@@ -258,8 +259,8 @@ export const AdSetRow = ({ adSet }) => {
       const res = await updateAdStatus('adset', adSet.id, newStatus);
       setCurrentStatus(newStatus);
       globalToast.success(res?.message);
-    } catch {
-      globalToast.error('Failed to update ad set status');
+    } catch (err) {
+      globalToast.error(metaErrorText(err, 'Failed to update ad set status'));
     } finally {
       setToggling(false);
     }
@@ -393,8 +394,8 @@ export const CampaignRow = ({ campaign, adAccountId, onInsights, isActive }) => 
       setCurrentStatus(newStatus);
 
       globalToast.success(res?.message);
-    } catch {
-      globalToast.error('Failed to update campaign status');
+    } catch (err) {
+      globalToast.error(metaErrorText(err, 'Failed to update campaign status'));
     } finally {
       setToggling(false);
     }

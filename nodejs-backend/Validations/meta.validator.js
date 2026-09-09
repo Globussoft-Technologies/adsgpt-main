@@ -15,6 +15,13 @@ const updateAdStatusSchema = Joi.object({
     "any.required": "status is required",
   }),
 
+  // Ad account the entity belongs to — OPTIONAL, and used only on the FAILURE
+  // path: when Meta rejects the change with a bare "Permissions error", the
+  // handler reads this account's status so it can say WHY (unsettled billing,
+  // risk review, policy disable) instead of leaving the user guessing. The
+  // frontend knows it from the URL. Absent just means a less specific message.
+  adAccountId: Joi.string().optional(),
+
   // Parent campaign — OPTIONAL, and only needed when `level` is adset/ad
   // (when level is 'campaign', `id` IS the campaign). Sent by the frontend,
   // which knows it from the drill-down URL, so the managed-campaign plan gate
