@@ -57,6 +57,15 @@ function deriveDisplayItem(item, now) {
 function normalizeToImageCardItem(row) {
   const status = normalizeStatus(row?.status);
   const url = row?.url || '';
+  const resultIndex = Number.isInteger(row?.resultIndex) ? row.resultIndex : 0;
+  // A generating AdCreative row used to be keyed as
+  // `<imageId>:pending:<index>`, then changed to `<imageId>:<index>` when the
+  // result arrived. Keeping one identity across both states lets React update
+  // the placeholder card instead of reusing another card's local state.
+  const stableId =
+    row?.source === 'adCreative' && row?.imageId
+      ? `${row.imageId}:${resultIndex}`
+      : row?.id || `${row?.source || 'my-space'}-${url || row?.timestamp || Math.random()}`;
   // Start from the generation's own inputs so "Recreate" can rehydrate the
   // form: the source images (productImages, keyVisualImages, modelReference
   // Images, brandLogo, ...) live only there. Building this object from the
@@ -86,10 +95,10 @@ function normalizeToImageCardItem(row) {
   };
 
   return {
-    _id: row?.id || `${row?.source || 'my-space'}-${url || row?.timestamp || Math.random()}`,
+    _id: stableId,
     _source: row?.source,
     _sourceLabel: row?.sourceLabel,
-    _resultIndex: 0,
+    _resultIndex: resultIndex,
     _recordId: row?.imageId || row?.id,
     sourceMetadata: row?.metadata || {},
     status,
@@ -182,7 +191,7 @@ function normalizeAdCreativeHistoryRecord(record) {
   );
 }
 
-function mergeMatchingAdCreative(existingItems, incomingItems) {
+function mergeMatchingAdCreative(existingItems, incomingItems, insertRecordIds = new Set()) {
   if (!incomingItems.length) return existingItems;
 
   const existingAdCreativeRecordIds = new Set(
@@ -191,23 +200,60 @@ function mergeMatchingAdCreative(existingItems, incomingItems) {
       .map((item) => item._recordId)
       .filter(Boolean),
   );
-  const matchingIncoming = incomingItems.filter((item) =>
-    existingAdCreativeRecordIds.has(item._recordId),
+  const matchingIncoming = incomingItems.filter(
+    (item) =>
+      existingAdCreativeRecordIds.has(item._recordId) || insertRecordIds.has(item._recordId),
   );
   if (!matchingIncoming.length) return existingItems;
 
-  const incomingRecordIds = new Set(matchingIncoming.map((item) => item._recordId));
-  const merged = [
-    ...matchingIncoming,
-    ...existingItems.filter(
-      (item) => item._source !== 'adCreative' || !incomingRecordIds.has(item._recordId),
-    ),
-  ];
+  const incomingByRecordId = new Map();
+  matchingIncoming.forEach((item) => {
+    const group = incomingByRecordId.get(item._recordId) || [];
+    group.push(item);
+    incomingByRecordId.set(item._recordId, group);
+  });
+  const existingByRecordId = new Map();
+  existingItems.forEach((item) => {
+    if (item._source !== 'adCreative' || !item._recordId) return;
+    const group = existingByRecordId.get(item._recordId) || [];
+    group.push(item);
+    existingByRecordId.set(item._recordId, group);
+  });
 
-  merged.sort((a, b) => {
-    const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
-    const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
-    return bTime - aTime;
+  const insertedRecordIds = new Set();
+  const merged = [];
+
+  // Replace each record at the position of its first placeholder/card. This
+  // preserves the gallery order while allowing a batch to grow or shrink.
+  existingItems.forEach((item) => {
+    const recordId = item._source === 'adCreative' ? item._recordId : null;
+    const replacements = recordId ? incomingByRecordId.get(recordId) : null;
+    if (!replacements) {
+      merged.push(item);
+      return;
+    }
+    if (!insertedRecordIds.has(recordId)) {
+      const existingGroup = existingByRecordId.get(recordId) || [];
+      const existingIsCompleted = existingGroup.some(
+        (candidate) => candidate.status === 'completed' && candidate.results?.[0]?.url,
+      );
+      const incomingIsCompleted = replacements.some(
+        (candidate) => candidate.status === 'completed' && candidate.results?.[0]?.url,
+      );
+      // Reconciliation is monotonic: a stale pending response must never
+      // downgrade a completed card, regardless of whether the API or socket
+      // delivered the completed version first.
+      merged.push(...(existingIsCompleted && !incomingIsCompleted ? existingGroup : replacements));
+      insertedRecordIds.add(recordId);
+    }
+  });
+
+  // A completion can beat the initial unified-history request. Only callers
+  // that explicitly identify the active generation may insert such a record.
+  incomingByRecordId.forEach((group, recordId) => {
+    if (insertRecordIds.has(recordId) && !insertedRecordIds.has(recordId)) {
+      merged.unshift(...group);
+    }
   });
 
   return merged;
@@ -289,7 +335,19 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
   const containerRef = useRef(null);
   const joinedRoomsRef = useRef(new Set());
   const refreshedCurrentRef = useRef('');
+  const liveAdCreativeRef = useRef({ items: [], currentSessionId: '' });
   const limit = 20;
+
+  const normalizedAdCreativeHistory = useMemo(
+    () => (adCreativeHistory || []).flatMap(normalizeAdCreativeHistoryRecord),
+    [adCreativeHistory],
+  );
+  liveAdCreativeRef.current = {
+    items: normalizedAdCreativeHistory,
+    // With an active date range, the server remains authoritative about
+    // whether an otherwise-new record belongs in this view.
+    currentSessionId: !startDate && !endDate ? adCreativeCurrent?.sessionId || '' : '',
+  };
 
   const [recreateAdsState, setRecreateAdsState] = useState({
     open: false,
@@ -324,7 +382,17 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
         endDate,
       });
       const page = Array.isArray(res?.data) ? res.data.map(normalizeToImageCardItem) : [];
-      setItems((prev) => (replace ? page : [...prev, ...page]));
+      setItems((prev) => {
+        const baseItems = replace ? page : [...prev, ...page];
+        const live = liveAdCreativeRef.current;
+        const insertRecordIds = live.currentSessionId
+          ? new Set([live.currentSessionId])
+          : new Set();
+        // A request started while the card was generating may resolve after
+        // the socket completion. Reapply the latest Redux-backed record before
+        // committing so that stale API data cannot erase the finished image.
+        return mergeMatchingAdCreative(baseItems, live.items, insertRecordIds);
+      });
       setHasMore(page.length === limit);
       setSkip(nextSkip + page.length);
     } catch (error) {
@@ -345,12 +413,18 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
   }, [startDate, endDate]);
 
   useEffect(() => {
-    const incoming = (adCreativeHistory || []).flatMap(normalizeAdCreativeHistoryRecord);
-    setItems((prev) => mergeMatchingAdCreative(prev, incoming));
-  }, [adCreativeHistory]);
+    const insertRecordIds =
+      !startDate && !endDate && adCreativeCurrent?.sessionId
+        ? new Set([adCreativeCurrent.sessionId])
+        : new Set();
+    setItems((prev) => mergeMatchingAdCreative(prev, normalizedAdCreativeHistory, insertRecordIds));
+  }, [adCreativeCurrent?.sessionId, endDate, normalizedAdCreativeHistory, startDate]);
 
   useEffect(() => {
-    if (!adCreativeCurrent?.sessionId || adCreativeCurrent.status === 'idle') return;
+    // Fetch once when generation starts so the pending placeholder appears.
+    // Completion is applied from Redux/socket history above; refetching here
+    // raced that live update and could replace it with an older API snapshot.
+    if (!adCreativeCurrent?.sessionId || adCreativeCurrent.status !== 'pending') return;
     const signature = `${adCreativeCurrent.sessionId}:${adCreativeCurrent.status}`;
     if (refreshedCurrentRef.current === signature) return;
     refreshedCurrentRef.current = signature;
