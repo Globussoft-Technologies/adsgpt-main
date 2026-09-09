@@ -2,7 +2,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { ChevronLeft, PlayCircle, Library, Images, Video, PanelLeft } from 'lucide-react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { motion } from 'framer-motion';
-import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { toast } from 'react-toastify';
@@ -161,7 +161,6 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const pollingRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const location = useLocation();
   // Recreate may clear its query parameters while the form is mounting, so
   // remember its origin rather than deciding later from the current URL.
   const [fromRecreate] = useState(() =>
@@ -415,19 +414,9 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
               >
                 <PanelLeft className="h-5" aria-hidden="true" />
               </SidebarTrigger>
-              {location.pathname === '/my-space' ? (
-                <h1 className="mr-4 text-lg font-semibold whitespace-nowrap text-[#24211D] md:text-xl lg:mr-4 2xl:mr-6 2xl:text-[30px] dark:text-white">
-                  My Space
-                </h1>
-              ) : !libraryOnly && (
-                <button
-                  onClick={handleBackNavigation}
-                  className="flex items-center gap-2 text-xl 2xl:text-3xl"
-                >
-                  <ChevronLeft className="h-6.5 w-6.5 2xl:h-9 2xl:w-9" />
-                  {page?.title}
-                </button>
-              )}
+              <h1 className="mr-4 text-lg font-semibold whitespace-nowrap text-[#24211D] md:text-xl lg:mr-4 2xl:mr-6 2xl:text-[30px] dark:text-white">
+                My Space
+              </h1>
 
               {/* Tabs — visual style + position mirror Brand IQ's HeaderTabs */}
               <div className="relative flex items-center gap-0 rounded-full border border-black/10 bg-white/80 p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)] backdrop-blur-md dark:border-transparent dark:bg-[#0D0D0D]">
