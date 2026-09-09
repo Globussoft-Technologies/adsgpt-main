@@ -22,6 +22,30 @@ import { fetchAdFactoryConfig } from '@/utils/fetchAdCreativeConfig';
 // autofill) are migrated to the first real model below, once, on load.
 const AUTO_VALUE = 'auto';
 
+// The value we PERSIST for a picked model, which is not always its canonical
+// id. This mirrors Full control's AutomationForm exactly (see its `modelOptions`
+// memo), and the parity is the whole point rather than a coincidence:
+//
+// The scheduled run stamps `job.model` onto every service it sends to Python —
+// text as well as image — and the Node→Python translation only rewrites the
+// IMAGE service's value. So a canonical id like "ADSGPT-2.0" reaches Python raw
+// on the text service, which its contract does not accept, and the cycle comes
+// back 422. Full control has never hit that because it downgrades the model to
+// the legacy 'google' / 'openai' selector here, before it is ever stored.
+// Quick setup sent the canonical id, so its schedules failed where Full
+// control's identical ones succeeded.
+//
+// A model carrying neither legacy alias keeps its canonical id — again exactly
+// what Full control does, so neither mode is ahead of the other.
+const persistedValueFor = (model) => {
+  const aliases = (Array.isArray(model?.aliases) ? model.aliases : []).map((a) =>
+    String(a).toLowerCase(),
+  );
+  if (aliases.includes('google')) return 'google';
+  if (aliases.includes('openai')) return 'openai';
+  return model?.apiId;
+};
+
 // ----------------------------------------------------------------------------
 // OutputPanel — what we make, at what sizes, how many, with which model.
 //
@@ -58,12 +82,25 @@ export default function OutputPanel({ brief, onEditField, onEditFields }) {
     fetchAdFactoryConfig()
       .then((models) => {
         if (cancelled) return;
+        // Two catalog rows can downgrade to the same legacy selector; keep the
+        // first, because a Select with duplicate values cannot say which one
+        // is chosen.
+        const seen = new Set();
         setImageModelOptions(
-          models.map((m) => ({
-            value: m.apiId,
-            label: m.label,
-            aliases: Array.isArray(m.aliases) ? m.aliases : [],
-          })),
+          models.reduce((acc, m) => {
+            const value = persistedValueFor(m);
+            if (!value || seen.has(value)) return acc;
+            seen.add(value);
+            acc.push({
+              value,
+              label: m.label,
+              // Kept for matching a brief saved before this mapping existed,
+              // which may hold the canonical id instead of the legacy value.
+              apiId: m.apiId,
+              aliases: Array.isArray(m.aliases) ? m.aliases : [],
+            });
+            return acc;
+          }, []),
         );
       })
       .catch(() => {}); // an empty list reads as "Nothing to choose from"
@@ -83,10 +120,15 @@ export default function OutputPanel({ brief, onEditField, onEditFields }) {
   const selectedImageModel = useMemo(() => {
     if (isLegacyAuto || persistedImageModel === AUTO_VALUE) return '';
     if (imageModelOptions.some((o) => o.value === persistedImageModel)) return persistedImageModel;
-    const byAlias = imageModelOptions.find((o) =>
-      o.aliases?.some((a) => String(a).toLowerCase() === persistedImageModel.toLowerCase()),
+    // A brief saved earlier can hold the canonical id, or one of the model's
+    // other aliases. Both resolve to the option that now represents it.
+    const lower = persistedImageModel.toLowerCase();
+    const byOther = imageModelOptions.find(
+      (o) =>
+        String(o.apiId || '').toLowerCase() === lower ||
+        o.aliases?.some((a) => String(a).toLowerCase() === lower),
     );
-    return byAlias?.value || '';
+    return byOther?.value || '';
   }, [imageModelOptions, persistedImageModel, isLegacyAuto]);
 
   // With no "Choose for me" left to fall back to, a brief that never named a
