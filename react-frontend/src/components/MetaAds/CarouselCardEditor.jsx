@@ -68,6 +68,30 @@ export const cardHasMedia = (card) =>
     ? !!(card.videoFile || card.videoUrl)
     : !!(card.imageFile || card.imageUrl);
 
+// Meta's own guidance on card count, which its API does NOT enforce — both
+// of these launch clean and then underperform, so the only place a user can
+// learn them is here.
+//
+// The ceiling was verified live against the API (2026-09-09) rather than
+// taken from the docs, which disagree with each other: the
+// ad-creative-link-data reference claims 2-5 unless `multi_share_optimized`
+// is set. That is wrong. 11 cards is rejected with "(#105) param
+// child_attachments has too many elements" whether the flag is on or off,
+// and 10 passes either way — the flag changes card ORDER, never the limit.
+function cardCountHint(count, max) {
+  const base = `${count} of ${max} cards · shown left-to-right in this order`;
+  // "You should use at least 3 objects for optimal performance; 2 objects is
+  // for enabling lightweight integrations and using 2 objects can result in
+  // sub-optimal campaign results." — Meta's carousel guide.
+  if (count <= 2) return `${base} · Meta suggests at least 3 for better results`;
+  // "You can add up to 10 products and Facebook will automatically select the
+  // best performing 5 to show in the ad." — Meta's own carousel_ad.py sample.
+  // Not verifiable through the API (it is a delivery behaviour, invisible to
+  // creative validation), so this is worded as Meta's claim, not ours.
+  if (count > 5) return `${base} · above 5, Meta shows the best-performing 5`;
+  return base;
+}
+
 export default function CarouselCardEditor({
   cards = [],
   onChange,
@@ -119,11 +143,9 @@ export default function CarouselCardEditor({
       label="Carousel cards"
       required
       error={error}
-      hint={
-        mediaLocked
-          ? `${cards.length} cards · media can't be changed here — edit the text and links`
-          : `${cards.length} of ${max} cards · shown left-to-right in this order`
-      }
+      hint={mediaLocked
+        ? `${cards.length} cards · media can't be changed here — edit the text and links`
+        : cardCountHint(cards.length, max)}
     >
       <div className="flex flex-col gap-2">
         {cards.map((card, index) => {
