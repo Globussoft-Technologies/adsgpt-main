@@ -715,7 +715,16 @@ export default function RegenerateVoiceModal({
     }
     onOpenChange(true);
   };
-  const blockOutsideClose = (e) => e.preventDefault();
+  const blockOutsideClose = (e) => {
+    if (
+      e?.target?.closest?.(
+        '[data-chip-dropdown], [data-radix-popper-content-wrapper], [role="listbox"], [role="option"], [data-radix-select-viewport]'
+      )
+    ) {
+      return;
+    }
+    e.preventDefault();
+  };
 
   if (voicePreview?.preview) {
     const previewAsset = voicePreview.preview;

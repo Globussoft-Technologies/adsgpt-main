@@ -1,5 +1,4 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, Loader2, Search } from 'lucide-react';
 
@@ -32,64 +31,57 @@ const ChipDropdown = ({
   const ref = useRef(null);
   const [playingId, setPlayingId] = useState(null);
   const [query, setQuery] = useState('');
-  const [position, setPosition] = useState({
-    top: 0,
-    left: 0,
-    width: 256,
-    listMaxHeight: 190,
-  });
+  const [alignRight, setAlignRight] = useState(false);
+  const [listHeight, setListHeight] = useState(maxListHeight);
   const audioRef = useRef(null);
 
-  // Rendered through document.body below, then constrained to the requested
-  // scroll container so it remains visible without escaping the form card.
   useLayoutEffect(() => {
     if (!open || !anchorRef?.current) return;
-    const updatePosition = () => {
+
+    const updatePositioning = () => {
       const rect = anchorRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const viewportPadding = 12;
-      const gap = 8;
+
+      const dropdownWidth = 256;
+      const containerEl = anchorRef.current?.closest(
+        '[role="dialog"], [data-slot="dialog-content"], .workspace-card, .rounded-3xl, .rounded-2xl, form, main'
+      );
+      const containerRect = containerEl?.getBoundingClientRect();
+      const rightBoundary = containerEl
+        ? containerRect.right - 12
+        : window.innerWidth - 12;
+      const leftBoundary = containerEl
+        ? containerRect.left + 12
+        : 12;
+      const bottomBoundary = containerEl
+        ? containerRect.bottom - 12
+        : window.innerHeight - 12;
+
+      const fitsRight = rect.left + dropdownWidth <= rightBoundary;
+      const fitsLeft = rect.right - dropdownWidth >= leftBoundary;
+
+      let shouldAlignRight = false;
+      if (!fitsRight && fitsLeft) {
+        shouldAlignRight = true;
+      } else if (fitsRight) {
+        shouldAlignRight = false;
+      } else {
+        shouldAlignRight = rect.right - leftBoundary > rightBoundary - rect.left;
+      }
+      setAlignRight(shouldAlignRight);
+
       const menuChromeHeight = field === 'voice' ? 54 : 14;
-      const scrollContainer = constrainToScrollContainer
-        ? anchorRef.current.closest('.overflow-y-auto')
-        : null;
-      const containerRect = scrollContainer?.getBoundingClientRect();
-      const leftBoundary = Math.max(
-        viewportPadding,
-        (containerRect?.left ?? 0) + viewportPadding,
+      const gap = 8;
+      const availableListHeight = bottomBoundary - rect.bottom - gap - menuChromeHeight;
+      setListHeight(
+        Math.max(60, Math.min(maxListHeight, availableListHeight > 60 ? availableListHeight : maxListHeight))
       );
-      const rightBoundary = Math.min(
-        window.innerWidth - viewportPadding,
-        (containerRect?.right ?? window.innerWidth) - viewportPadding,
-      );
-      const bottomBoundary = Math.min(
-        window.innerHeight - viewportPadding,
-        (containerRect?.bottom ?? window.innerHeight) - viewportPadding,
-      );
-      const dropdownWidth = Math.min(256, Math.max(0, rightBoundary - leftBoundary));
-      const availableListHeight =
-        bottomBoundary - rect.bottom - gap - menuChromeHeight;
-      const left = Math.min(
-        Math.max(rect.left, leftBoundary),
-        Math.max(leftBoundary, rightBoundary - dropdownWidth),
-      );
-
-      setPosition({
-        top: rect.bottom + gap,
-        left,
-        width: dropdownWidth,
-        listMaxHeight: Math.max(0, Math.min(maxListHeight, availableListHeight)),
-      });
     };
 
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-    return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
-    };
-  }, [open, anchorRef, constrainToScrollContainer, field, maxListHeight]);
+    updatePositioning();
+    window.addEventListener('resize', updatePositioning);
+    return () => window.removeEventListener('resize', updatePositioning);
+  }, [open, anchorRef, field, maxListHeight]);
 
   useEffect(() => {
     if (!open) return;
@@ -236,25 +228,19 @@ const ChipDropdown = ({
       ? options.filter((opt) => opt.name?.toLowerCase().includes(query.toLowerCase()))
       : options;
 
-  if (typeof document === 'undefined') return null;
-
-  return createPortal(
+  return (
     <AnimatePresence>
       {open && (
         <motion.div
           ref={ref}
+          data-chip-dropdown
           initial={{ opacity: 0, y: -4, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -4, scale: 0.98 }}
           transition={{ duration: 0.12 }}
-          style={{
-            position: 'fixed',
-            top: `${position.top}px`,
-            left: `${position.left}px`,
-            width: `${position.width}px`,
-            zIndex: 999999,
-          }}
-          className="overflow-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#1C1C1E]/95 dark:shadow-[0_20px_50px_rgba(0,0,0,0.7)]"
+          className={`absolute top-full z-[999] mt-2 w-64 overflow-hidden rounded-2xl border border-black/10 bg-white/95 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#1C1C1E]/95 dark:shadow-[0_20px_50px_rgba(0,0,0,0.7)] ${
+            alignRight ? 'right-0' : 'left-0'
+          }`}
         >
           {field === 'voice' && (
             <div className="mb-1 px-1 pt-0.5">
@@ -274,7 +260,7 @@ const ChipDropdown = ({
           )}
 
           <div
-            style={{ maxHeight: `${position.listMaxHeight}px` }}
+            style={{ maxHeight: `${listHeight}px` }}
             className="overflow-y-auto pr-0.5 [scrollbar-width:thin]"
           >
             {loading && (
@@ -292,8 +278,7 @@ const ChipDropdown = ({
           </div>
         </motion.div>
       )}
-    </AnimatePresence>,
-    document.body,
+    </AnimatePresence>
   );
 };
 
