@@ -104,17 +104,37 @@ async function createServer() {
   console.log("AI model configuration cache warmed");
   runCronJobs();
 
-  // * Ads Factory Auto-Pilot — start BullMQ worker + reload active jobs
-  try {
-    const { startWorker, reloadActiveJobs } = require("./services/adsFactoryAuto/adsFactoryAutoQueue");
-    // reloadActiveJobs MUST run before startWorker — it cancels stale/orphan BullMQ
-    // entries from Redis. If the worker starts first it will pick up those stale jobs
-    // and fire them immediately (past-due one-shots, orphan jobs from deleted campaigns).
-    await reloadActiveJobs();
-    startWorker();
-  } catch (err) {
-    console.error("[adsFactory] failed to start autopilot queue:", err.message);
-  }
+  // * Ads Factory Auto-Pilot — start BullMQ worker + reload active jobs.
+  //
+  // DEFINED HERE, INVOKED AFTER `listen()`. This used to be awaited inline and
+  // was almost the entire startup cost: on 2026-09-10 the boot log showed
+  // 12:13:30 "MongoDB connected" -> 12:14:07 "reloaded 28 active autopilot
+  // jobs" -> 12:14:08 "Server Started". Thirty-seven of thirty-eight seconds
+  // were spent in this one call, because it walks each job sequentially and
+  // every `cancelJob` / `scheduleJob` is its own Redis round trip.
+  //
+  // None of that has anything to do with serving HTTP, and blocking the
+  // listener on it meant ~38s of downtime on EVERY restart — on a process that
+  // has restarted over two thousand times, and long enough that a health check
+  // with a sub-40s timeout fails on every deploy.
+  //
+  // THE ORDERING INSIDE IS LOAD-BEARING and must not be split:
+  // `reloadActiveJobs` cancels stale and orphan BullMQ entries, and a worker
+  // started before it finishes will pick those up and fire them immediately —
+  // past-due one-shots, jobs from deleted campaigns. So the pair moves
+  // together, off the critical path but still in order.
+  const startAdsFactoryQueue = async () => {
+    try {
+      const {
+        startWorker,
+        reloadActiveJobs,
+      } = require("./services/adsFactoryAuto/adsFactoryAutoQueue");
+      await reloadActiveJobs();
+      startWorker();
+    } catch (err) {
+      console.error("[adsFactory] failed to start autopilot queue:", err.message);
+    }
+  };
 
   // * Warm up push (FCM) so the boot log confirms whether it's configured.
   // Init is otherwise lazy; this just surfaces enabled/disabled state per env.
@@ -229,6 +249,22 @@ async function createServer() {
   const port = process.env.PORT;
   server.listen(port, () => {
     console.log(`Server Started: port: ${port}`);
+
+    // Ads Factory queue reload — deliberately AFTER the listener is up. See
+    // the note where `startAdsFactoryQueue` is defined for why.
+    //
+    // Not awaited: this callback is not async, and the point is that HTTP is
+    // already being served while the reload runs. It logs its own completion
+    // ("reloaded N active autopilot jobs"), so the boot sequence is still
+    // readable in order — the line simply arrives after "Server Started"
+    // rather than before it.
+    //
+    // Known window: for the ~30s the reload takes, the server accepts requests
+    // while stale BullMQ entries are still being cleared. A job created in
+    // that gap can interleave with the cleanup. Narrow, and much cheaper than
+    // refusing all traffic for the same period.
+    startAdsFactoryQueue();
+
     // Register the Autopilot Telegram webhook with Telegram (setWebhook).
     // No-op if AUTOPILOT_TELEGRAM_BOT_TOKEN / _WEBHOOK_URL aren't set.
     // Idempotent, so re-registering on every boot is safe. Unlike the
