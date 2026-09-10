@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -445,21 +445,37 @@ function shortZone(tz) {
   }
 }
 
-function TimelinePreviewDialog({ creative, open, onOpenChange, brandName }) {
-  const failed = creative?.posted === false;
+function TimelinePreviewDialog({ creative: incoming, open, onOpenChange, brandName }) {
+  // Closing clears the selection before the dialog has finished animating out,
+  // so for those few frames the content renders against no creative — and the
+  // badge, which reads `postedAdIds`, flashed "Failed" on the way out even on a
+  // platform that posted fine. Hold the last one until it is genuinely gone.
+  const lastCreative = useRef(null);
+  if (incoming) lastCreative.current = incoming;
+  const creative = incoming || lastCreative.current;
+
   const link = (creative?.adLinks || [])[0];
   const detectedPlatform = (link?.platform || creative?.platform || 'meta').toLowerCase();
   const initialPlatform = detectedPlatform.includes('google') ? 'google' : 'meta';
   const [platform, setPlatform] = useState(initialPlatform);
 
   useEffect(() => {
-    if (creative) {
-      const p = (link?.platform || creative?.platform || 'meta').toLowerCase();
+    if (incoming) {
+      const p = (link?.platform || incoming?.platform || 'meta').toLowerCase();
       setPlatform(p.includes('google') ? 'google' : 'meta');
     }
-  }, [creative, link]);
+  }, [incoming, link]);
 
   const isGoogle = platform === 'google';
+
+  // The badge follows the tab, not the creative. `postedAdIds` is keyed by
+  // platform and only ever holds the ones that actually went live, so a run
+  // that reached Meta and failed on Google used to read "Posted" on both tabs
+  // — the one screen where the difference matters. See the serializer's
+  // per-creative `postedAdIds` (runTimelineSerializer.js).
+  const postedAdIds = creative?.postedAdIds || {};
+  const failed = !postedAdIds[platform];
+
   const ctaLabel = formatCta(creative?.cta || creative?.callToAction);
 
   // Extract headlines & descriptions for Google vs Meta
