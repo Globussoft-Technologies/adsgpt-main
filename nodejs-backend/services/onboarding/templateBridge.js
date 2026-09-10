@@ -48,8 +48,16 @@ const pageKey = ({ sessionId, kind, limit, skip }) => `${sessionId}:${kind}:${li
 // The contract's own bounds: `limit` 1..20, `skip` 0..15. Sending anything
 // outside them is a 400 before the stream even opens, so the ceiling on how far
 // paging can go is upstream's, not ours.
-const MAX_LIMIT = 30;
-const MAX_SKIP = 35;
+// Verified against TEMPLATE_RECOMMENDATIONS_API_CONTRACT: out-of-range is a
+// 400 BEFORE the stream opens, so these are hard ceilings, not preferences.
+//
+// They were 30 and 35, which contradicted the comment directly above them and
+// was live-reachable: `nextPage` widens `limit` by the overlap it cannot skip
+// past, so a session holding 30 templates asked for `limit=25` — outside the
+// contract, and a 400 rather than a page. Nothing had hit it yet only because
+// the first page asks for 20 and few sessions ever paged that far.
+const MAX_LIMIT = 20;
+const MAX_SKIP = 15;
 
 /**
  * The window to ask for next, given how many are already stored.

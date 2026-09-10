@@ -9,7 +9,7 @@
  *
  * Two things write to this document, and they must not fight:
  *
- *   • `controllers/ai/jobWebhookController.js` — Python's callback. The durable
+ *   • `controllers/Ai/jobWebhookController.js` — Python's callback. The durable
  *     path. Survives a browser closing, a deploy, a dropped socket.
  *   • `services/onboarding/jobStreamBridge.js` — the live SSE hop, which exists
  *     only to make the waiting screen feel immediate.

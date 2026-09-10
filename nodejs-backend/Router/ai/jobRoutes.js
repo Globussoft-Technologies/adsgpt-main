@@ -1,5 +1,8 @@
 const express = require("express");
-const ctrl = require("../../controllers/ai/jobWebhookController");
+// `Ai`, capital A — that is the directory's real name in git, and therefore on
+// the server. Windows and macOS resolve either spelling, so a lowercase `ai`
+// here works everywhere a developer looks and fails only on the Linux box.
+const ctrl = require("../../controllers/Ai/jobWebhookController");
 const { authenticateJWT, verifySecretKey } = require("../../services/authService");
 
 // AI job surface — one set of routes for every module: onboarding, storyboards,
