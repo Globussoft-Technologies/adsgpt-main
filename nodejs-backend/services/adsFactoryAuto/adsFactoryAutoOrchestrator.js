@@ -1152,8 +1152,24 @@ const PLATFORM_POSTERS = {
 
 async function waitForGenerationComplete(campaignId, timeoutMs = 15 * 60 * 1000) {
   const POLL_INTERVAL = 5_000;
+  // How many CONSECUTIVE error readings it takes to believe one.
+  //
+  // A single reading is not evidence. `status: "error"` is written on the
+  // campaign by paths that have nothing to do with this run — the Quick setup
+  // brief's manual generate rolls back that way when Python turns it down, and
+  // the boot-time stuck-run recovery stamps it on anything it finds
+  // in-progress. Either can land on a campaign that is generating perfectly
+  // well, and the next result that arrives overwrites it back to
+  // "in-progress". Believing the first reading is what failed live runs whose
+  // images landed 24 seconds later, refunding the credits and posting nothing
+  // while the creatives sat finished in the database.
+  //
+  // Three readings across ~15s outlasts that overwrite window while still
+  // failing a genuinely dead run quickly.
+  const ERROR_CONFIRM_TICKS = 3;
   const start = Date.now();
   let tick = 0;
+  let errorTicks = 0;
   let lastServices = [];
 
   while (Date.now() - start < timeoutMs) {
@@ -1168,13 +1184,31 @@ async function waitForGenerationComplete(campaignId, timeoutMs = 15 * 60 * 1000)
     const elapsedSec = Math.round((Date.now() - start) / 1000);
     const progress = services.map((s) => `${s.serviceName}:${s.generated || 0}/${s.serviceParams?.quantity || 0}`).join(",");
     const allDone = services.every((srv) => (srv.generated || 0) >= (srv.serviceParams?.quantity || 0));
-    if (allDone) {
+    // "success" is the campaign's own word for finished, written when the last
+    // result lands. It used to be ignored here, so a run whose counters lagged
+    // behind its results could only ever end in the 15-minute timeout.
+    const finished =
+      allDone || campaign.status === "success" || campaign.results?.status === "success";
+    if (finished) {
       logger.info(`[adsFactoryAuto][poll] generation complete after ${tick} ticks (${elapsedSec}s)`);
       return campaign;
     }
     if (campaign.results?.status === "error" || campaign.status === "error") {
-      logger.error(`[adsFactoryAuto][poll] campaign status=error after tick=${tick} (${elapsedSec}s)`);
-      throw new Error("Campaign generation failed (status updated to error)");
+      errorTicks++;
+      if (errorTicks < ERROR_CONFIRM_TICKS) {
+        logger.warn(
+          `[adsFactoryAuto][poll] campaign status=error at tick=${tick} (${elapsedSec}s) — reading ${errorTicks}/${ERROR_CONFIRM_TICKS}, re-checking before giving up  progress=${progress}`,
+        );
+      } else {
+        logger.error(`[adsFactoryAuto][poll] campaign status=error confirmed over ${errorTicks} readings after tick=${tick} (${elapsedSec}s)`);
+        throw new Error("Campaign generation failed (status updated to error)");
+      }
+    } else if (errorTicks) {
+      // Overwritten by a result that arrived after the stamp — exactly the race
+      // this counter exists for. Say so, because a silent recovery here is the
+      // difference between a delivered cycle and a refunded one.
+      logger.info(`[adsFactoryAuto][poll] campaign status recovered after ${errorTicks} error reading(s) — continuing  progress=${progress}`);
+      errorTicks = 0;
     }
 
     // Flag the "Python never actually started" case distinctly from "still

@@ -521,9 +521,28 @@ async function reloadActiveJobs() {
   // further down, otherwise the same job gets a second, contradictory
   // "missed" runHistory entry appended right after its "interrupted" one.
   const interruptedJobIds = new Set();
+  // A campaign that is in-progress RIGHT NOW is not necessarily stuck. More
+  // than one process can share this database — the instance serving Python's
+  // result callbacks is not always the instance running the scheduler — so a
+  // boot here can land in the middle of a healthy run over there. Stamping it
+  // "error" kills that run: its poll reads the stamp and gives up, credits are
+  // refunded, and the creatives Python delivers seconds later are never
+  // posted. That is not hypothetical; it is what took two live cycles.
+  //
+  // `updatedAt` separates the two cases without needing to know about the
+  // other process. A live run writes to its campaign continuously — results
+  // land, `generated` counters advance — while a campaign abandoned by a dead
+  // process goes silent the moment that process died. Anything touched inside
+  // the grace window is presumed alive and left alone; the next boot, or the
+  // run's own timeout, will deal with it if it really is stuck.
+  const STUCK_GRACE_MS = 5 * 60 * 1000;
   if (campaignObjectIds.length) {
     const stuckCampaigns = await Campaign.find(
-      { _id: { $in: campaignObjectIds }, $or: [{ status: "in-progress" }, { "results.status": "in-progress" }] },
+      {
+        _id: { $in: campaignObjectIds },
+        $or: [{ status: "in-progress" }, { "results.status": "in-progress" }],
+        updatedAt: { $lt: new Date(Date.now() - STUCK_GRACE_MS) },
+      },
       { _id: 1 }
     ).lean();
     if (stuckCampaigns.length) {

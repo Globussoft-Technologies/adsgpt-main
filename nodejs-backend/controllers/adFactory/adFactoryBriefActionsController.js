@@ -126,6 +126,31 @@ exports.generateFromBrief = async (req, res) => {
     // Found in a live run: two images and two copies came back from Python and
     // all four were lost here. The orchestrator has always done this before its
     // own runs; the manual generate path had not.
+    // A run already in flight owns this campaign. Starting a second one over
+    // it is the collision behind every "Failed" cycle whose creatives actually
+    // arrived: the slot pre-allocation below re-stamps the campaign, Python
+    // turns the duplicate request down, and the rollback further down used to
+    // write `status: "error"` onto the campaign the SCHEDULED run was polling.
+    // That run then gave up and refunded, seconds before its own images landed.
+    //
+    // Quick setup is the only mode where this can happen, because it is the
+    // only one where a brief's manual "Regenerate" and its schedule drive the
+    // same campaign document. The same grace window the boot-time recovery
+    // uses decides when an in-progress campaign is stale rather than busy, so
+    // a genuinely abandoned run can never wedge this endpoint shut.
+    const IN_FLIGHT_GRACE_MS = 5 * 60 * 1000;
+    const busy =
+      (campaign.status === "in-progress" || campaign.results?.status === "in-progress") &&
+      campaign.updatedAt &&
+      Date.now() - new Date(campaign.updatedAt).getTime() < IN_FLIGHT_GRACE_MS;
+    if (busy) {
+      return res.status(409).json({
+        success: false,
+        code: "RUN_IN_PROGRESS",
+        error: "This brief is already generating. Wait for it to finish, then try again.",
+      });
+    }
+
     const { update: slotUpdate } = buildResultSlotUpdate(
       campaign.services?.servicesSelected,
     );
@@ -211,9 +236,20 @@ exports.generateFromBrief = async (req, res) => {
       );
       // Put the campaign back too — it was flipped to in-progress for a run
       // that isn't happening, and the orchestrator skips a tick on that.
+      //
+      // "success", not "error". Both clear in-progress, which is all this
+      // rollback needs; only "error" is also a failure signal that
+      // waitForGenerationComplete acts on, and this campaign may be shared
+      // with a scheduled run that is generating perfectly well. Full control's
+      // equivalent rollback (updateErrorResult in controllers/adFactory.js)
+      // has always written "success" here — this path was the odd one out, and
+      // being the odd one out is why the bug was Quick-setup-only.
+      //
+      // Guarded on still being in-progress so it cannot overwrite a status
+      // some other run has since moved on.
       await Campaign.updateOne(
-        { _id: campaign._id },
-        { $set: { status: "error", "results.status": "error" } },
+        { _id: campaign._id, status: "in-progress" },
+        { $set: { status: "success", "results.status": "success" } },
       ).catch(() => {});
       return res.status(502).json({
         success: false,
