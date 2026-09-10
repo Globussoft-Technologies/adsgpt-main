@@ -78,6 +78,8 @@ const logger = require("../utils/logger");
 if (installGlobalUsageTracking(bizSdk, { logger })) {
   logger.info("[meta usage] global API usage tracking installed");
 }
+const onboardingRoutes = require("./onboarding/onboardingRoutes");
+const { webhookRouter: aiJobWebhookRouter, jobsRouter: aiJobsRouter } = require("./ai/jobRoutes");
 
 const app = express();
 // Labels each request with its user and product surface so the Meta calls it
@@ -149,5 +151,13 @@ app.use("/landing-page-analyzer", landingPageAnalyzerRoutes);
 app.use("/device-tokens", authenticateJWT, deviceTokenRoutes);
 app.use("/ads", authenticateJWT, adsSearchRoutes);
 app.use("/my-space", authenticateJWT, mySpaceRoutes);
+// Onboarding module 1 — brand setup. Auth here, no plan gate and no credit
+// charge; see Router/onboarding/onboardingRoutes.js.
+app.use("/onboarding", authenticateJWT, onboardingRoutes);
+// AI jobs. Two mounts, because the two halves have different callers:
+// Python posts state changes to /internal/jobs/callback with x-secret-key, and
+// browsers read /jobs/* with their JWT. Auth lives inside each router.
+app.use("/internal/jobs", aiJobWebhookRouter);
+app.use("/jobs", aiJobsRouter);
 
 module.exports = app;

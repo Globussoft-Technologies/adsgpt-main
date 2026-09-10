@@ -72,6 +72,25 @@ const brandSchema = new mongoose.Schema({
   categoryJob: { type: categoryJobSchema, default: null },
   // ─────────────────────────────────────────────────────────────────────
   createdAt: { type: Date, default: Date.now },
+
+  // ── Where this brand came from ───────────────────────────────────
+  //
+  // Set only by the onboarding hand-off (`services/onboarding/brandIQEntry.js`).
+  // `onboardingSessionId` is its idempotency key: the webhook that files a
+  // brand is at-least-once and the SSE bridge delivers the same terminal result
+  // again, so the same brand arrives more than once as a matter of course.
+  //
+  // It MUST be declared here. Mongoose drops undeclared fields on `$push`
+  // without complaint, which is exactly what happened first time round — the id
+  // was written, silently discarded, and every redelivery then added another
+  // copy of the same brand because the dedupe query could never match.
+  //
+  // Keyed on the session rather than the name on purpose: a user can onboard
+  // the same brand twice (a second run, a corrected prompt) and those are two
+  // real rows, not one.
+  onboardingSessionId: { type: String, default: null, index: true },
+  source: { type: String, default: null },
+
   campaignIds: {
     type: [mongoose.Types.ObjectId],   // metadata.campaignId from AdFactory
     default: [],

@@ -1,5 +1,6 @@
 import getCookies from '@/utils/getCookies';
 import { createSlice } from '@reduxjs/toolkit';
+import { jobEvent } from '@/store/reducers/brandSetup/brandSetupSlice';
 import { io } from 'socket.io-client';
 import Cookies from 'js-cookie';
 import { triggerLogout } from '@/utils/logout';
@@ -195,6 +196,14 @@ export const initSocket = (url) => (dispatch, getState) => {
     // relay to the open result page via the app emitter. The backend emits this
     // to the user's room for both progress events (type:'event') and the final
     // report (type:'result').
+    // Brand setup (onboarding module 1). Node emits this for BOTH of its
+    // ingest paths — the live SSE bridge and Python's webhook — in one shape,
+    // so nothing downstream needs to know which delivered a given update.
+    // The reducer ignores events for a job that is not on screen.
+    socket.on('aiJobUpdate', (data) => {
+      dispatch(jobEvent(data));
+    });
+
     socket.on('landingPageAnalysisEvent', (data) => {
       if (data?.sessionId) {
         const buf = lpaBuffer.get(data.sessionId) || { events: [], result: null };

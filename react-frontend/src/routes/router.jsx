@@ -18,6 +18,7 @@ import AutopilotHomePage from '@/pages/Autopilot/AutopilotHomePage';
 import AutopilotPage from '@/pages/Autopilot/AutopilotPage';
 import BrandIQPage from '@/pages/BrandIQ/BrandIQPage';
 import UserOnBoardPage from '@/pages/OnBoard/UserOnBoardPage';
+import OnboardingRoute from '@/pages/OnBoard/OnboardingRoute';
 import AuthWrapper from '@/utils/AuthWrapper';
 import DevAuthPage from '@/pages/DevAuth/DevAuthPage';
 import OAuthRelayPage from '@/pages/OAuthRelay/OAuthRelayPage';
@@ -162,17 +163,46 @@ const router = createBrowserRouter([
           </WorkspaceFeatureRoute>
         ),
       },
-      {
-        path: 'onboarding',
-        element: (
-          <WorkspaceFeatureRoute ownerOnly>
-            <UserOnBoardPage />
-          </WorkspaceFeatureRoute>
-        ),
-      },
+      // Onboarding moved OUT of this subtree — see the top-level route below.
+      // It cannot live here: AuthWrapper redirects any already-onboarded user
+      // off `/onboarding` the moment `checkUserExists` resolves, and Layout
+      // wraps it in the sidebar shell when the screen is meant to be full-bleed.
+      // {
+      //   path: 'onboarding',
+      //   element: (
+      //     <WorkspaceFeatureRoute ownerOnly>
+      //       <UserOnBoardPage />
+      //     </WorkspaceFeatureRoute>
+      //   ),
+      // },
       // { path: 'adfactory-demo', element: <AdFactoryWorkflowDarkReal2 /> },
     ],
   },
+  {
+    // Full-screen, outside RunBackLog / AuthWrapper / Layout. No sidebar, no
+    // header, and nothing that can bounce the user to /adstudio mid-render.
+    path: '/onboarding',
+    // Guarded here rather than by AuthWrapper, which this route deliberately
+    // sits outside of. Without it the wizard was reachable by URL to anyone —
+    // signed out, already onboarded, or an account that predates the feature.
+    element: (
+      <OnboardingRoute>
+        <UserOnBoardPage />
+      </OnboardingRoute>
+    ),
+  },
+  // Two design harnesses used to live here, both already switched off:
+  //   /brand-preview    the post-onboarding workspace, on captured sample data
+  //   /mosaic-preview   the keyframe loading animation, with its knobs exposed
+  //
+  // Their routes were commented out but their imports were not, so the pages
+  // and their fixture data stayed in the production bundle while being
+  // unreachable. The imports are gone now; the files themselves are still on
+  // disk (WorkspacePreview.jsx, sampleResult.js, MosaicPreview.jsx) and only
+  // need importing again to bring either harness back.
+  //
+  // MosaicLoader is NOT part of this — the product renders it for real, in
+  // ClipView and Workspace.
   {
     path: '/workspace-invite/:token',
     element: <WorkspaceInvitationAcceptPage />,

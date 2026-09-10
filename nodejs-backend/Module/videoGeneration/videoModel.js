@@ -149,7 +149,11 @@ const videoSchema = new mongoose.Schema(
     inputs: {
       type: {
         type: String,
-        enum: ["ugc", "broll", "avatar", "clone", "ai_ads"],
+        // `storyboard` — a clip rendered from an onboarding storyboard concept.
+        // It arrives already finished from the storyboard service rather than
+        // being produced by this backend's own pipeline, so its record carries a
+        // result and nothing else: no scenes, no segments, no audio.
+        enum: ["ugc", "broll", "avatar", "clone", "ai_ads", "storyboard"],
         required: true,
       },
       model: {

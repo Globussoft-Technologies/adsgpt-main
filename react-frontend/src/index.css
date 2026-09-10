@@ -478,6 +478,25 @@ html.theme-changing *::after {
   animation: lpa-shim 1.5s linear infinite;
 }
 
+@keyframes storyboard-arrow-flow {
+  0%, 100% {
+    transform: translateX(-2px);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+}
+
+.storyboard-transition-arrow svg {
+  animation: storyboard-arrow-flow 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .storyboard-transition-arrow svg {
+    animation: none;
+  }
+}
+
 .glow-box {
   border-radius: 16px;
   padding: 2rem;
@@ -529,4 +548,18 @@ input[type='range']::-webkit-slider-thumb {
 
 .leaflet-control-attribution.leaflet-control {
   display: none !important;
+}
+
+/* A row that scrolls sideways under a fixed-height band. The native bar is a
+   15px chrome-heavy stripe under a row of three cards, and it is the only thing
+   in that band that is not content — so it is hidden and replaced by an
+   explicit control (the back-to-start arrow in TemplateRail). Scrolling itself
+   is untouched: wheel, trackpad, drag and keyboard all still work. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

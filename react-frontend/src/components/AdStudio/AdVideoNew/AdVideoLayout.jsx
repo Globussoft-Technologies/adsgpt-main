@@ -73,7 +73,21 @@ const pageConfig = {
   },
 };
 
+// Stands in for "no type filter" inside the Select; '' is reserved by Radix.
+const ALL_VIDEO_TYPES = 'all';
+
 const selectVideoType = [
+  {
+    // ALL_VIDEO_TYPES rather than '' because Radix reserves the empty string for
+    // "no selection" and throws if a SelectItem carries it. The backend still
+    // wants '' for "no type filter" (`if (type) filter[...]`), so the sentinel
+    // is translated back at the dropdown's edge. It is first and it is the
+    // default: the page opened with `videoType: ''` all along, which meant every
+    // video was listed while the control showed no selection at all — a filter
+    // that looked broken rather than one that was off.
+    value: ALL_VIDEO_TYPES,
+    label: 'All',
+  },
   {
     value: 'ai_ads',
     label: 'AI Ads',
@@ -94,6 +108,13 @@ const selectVideoType = [
   {
     value: 'clone',
     label: 'Clone Yourself',
+  },
+  {
+    // Clips rendered from an onboarding storyboard concept. They are produced by
+    // the storyboard service rather than this app's own pipeline, and filed into
+    // the library when they finish — see services/onboarding/mySpaceClip.js.
+    value: 'storyboard',
+    label: 'Storyboard',
   },
 ];
 
@@ -467,8 +488,12 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                 <CreativeFilterDropdown
                   options={selectVideoType}
                   label="Filter"
-                  value={selectVideoType.find((p) => p.value === videoType)}
-                  onChange={(value) => setVideoType(value)}
+                  value={selectVideoType.find(
+                    (p) => p.value === (videoType || ALL_VIDEO_TYPES),
+                  )}
+                  onChange={(value) =>
+                    setVideoType(value === ALL_VIDEO_TYPES ? '' : value)
+                  }
                   onClear={() => setVideoType('')}
                   triggerClassName="adstudio-media-toolbar-control"
                 />

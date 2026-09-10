@@ -26,6 +26,9 @@ import competitorSearchReducer from '@/store/reducers/feature/competitorSearchSl
 import imageReducer from '@/store/reducers/image/imageSlice';
 import aiAssistantReducer from '@/store/reducers/aiAssistant/aiAssistantSlice';
 import { onboardingReducer } from '@/onboarding';
+// Brand setup (onboarding module 1). Separate from `onboarding` above,
+// which is the product tour — same word, different feature.
+import brandSetupReducer from '@/store/reducers/brandSetup/brandSetupSlice';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
@@ -81,6 +84,7 @@ const store = configureStore({
     image: imageReducer,
     aiAssistant: aiAssistantReducer,
     onboarding: onboardingReducer,
+    brandSetup: brandSetupReducer,
   },
   preloadedState: {
     prompt: loadState() || undefined,

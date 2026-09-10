@@ -31,6 +31,55 @@ const userProfileSchema = new mongoose.Schema(
     topup_credits_purchased: { type: Number, default: 0 },
     topup_credits_used: { type: Number, default: 0 },
 
+    // === Onboarding (entry / exit / free render) ===
+    //
+    // ── The enrolment gate ──────────────────────────────────────────────
+    //
+    // Presence of this field is what says "this account is allowed to be
+    // offered onboarding at all". It exists to separate accounts created
+    // AFTER the feature shipped from the ones that predate it, without a
+    // backfill.
+    //
+    // `default: Date.now` means every profile created from here on gets it
+    // automatically — profiles are only ever made with `UserProfile.create()`
+    // (authController, mobileController), and Mongoose applies defaults there.
+    // Documents written before this field existed simply do not have it, and
+    // that ABSENCE is the signal: no offer bar, no first-run redirect, no free
+    // render. They were never promised any of it.
+    //
+    // Read with `$exists` / a falsy check on a `.lean()` result, never through
+    // a hydrated document — Mongoose fills defaults in on hydration, which
+    // would make every old profile look enrolled.
+    //
+    // NOTE: if a profile ever starts being created by an upsert instead, that
+    // upsert MUST pass `setDefaultsOnInsert: true`, or the new user silently
+    // never sees onboarding.
+    onboarding_offer_enrolled_at: { type: Date, default: Date.now },
+
+    //
+    // These live here rather than on OnboardingSession because they are facts
+    // about the USER, not about any one run: "has this person already had their
+    // free render", "have they finished onboarding at all". A user can hold
+    // several sessions, and asking "is the free render spent" must not mean
+    // scanning them.
+    //
+    // `onboarding_free_render_used_at` is the claim flag AND the lock: the
+    // claim is a findOneAndUpdate matching it against null, so exactly one
+    // caller can ever win it, however many tabs press Generate at once. It is
+    // set back to null when the render it paid for never happened (upstream
+    // rejected the job, or the job failed) — a user whose free render died to
+    // someone else's 500 has received nothing.
+    onboarding_free_render_used_at: { type: Date, default: null },
+    // Which session spent it. Diagnostics, and it lets the un-claim verify it
+    // is releasing the claim it thinks it is.
+    onboarding_free_render_session_id: { type: String, default: "" },
+    // Reached the end of onboarding at least once. Retires the banner for good.
+    onboarding_completed_at: { type: Date, default: null },
+    // Left early. Deliberately NOT the same as completed: a skipper who never
+    // spent the free render still sees the banner, and it takes them back into
+    // the session they left rather than a new one.
+    onboarding_skipped_at: { type: Date, default: null },
+
     // === Billing Cycle ===
     billing_cycle_start: { type: Date, default: null },
     last_credit_reset_date: { type: Date, default: null },

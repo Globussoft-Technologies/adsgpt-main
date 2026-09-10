@@ -15,6 +15,16 @@ const GeneratedMediaSchema = new Schema({
     // 'adVideo'    = saved from socket for video generation
     source: { type: String, default: "" },
     credit_deduction: { type: Number, default: 0 },
+    // Explicitly given away, rather than merely costing nothing.
+    //
+    // The two are not the same and the admin panel has to tell them apart: a
+    // row with no deduction might be a freebie, or might be a generation whose
+    // price has not been worked out yet. Inferring "free" from a zero would
+    // label both, and the second label would be a lie.
+    //
+    // Set today by onboarding, which gives every user their first render on the
+    // house and charges for the rest.
+    free: { type: Boolean, default: false },
     cost: { type: Number, default: 0 },
     duration: { type: Number, default: 0 },
     aspect_ratio: { type: String, default: "" },

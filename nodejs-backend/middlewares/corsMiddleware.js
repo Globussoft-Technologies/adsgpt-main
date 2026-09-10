@@ -35,9 +35,14 @@ module.exports = (req, res, next) => {
     "Access-Control-Allow-Methods",
     "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   );
+  // `Idempotency-Key` is sent by onboarding init (and will be by every other
+  // mutating AI-job route). A custom request header makes the request
+  // non-simple, so the browser preflights it — and a header missing from this
+  // list fails that preflight as a CORS error, with no sign of the real request
+  // ever reaching the server.
   res.header(
     "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Facebook-Id, Cache-Control, Pragma, X-Custom-Header",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Facebook-Id, Cache-Control, Pragma, X-Custom-Header, Idempotency-Key",
   );
   res.header("Access-Control-Max-Age", "86400");
 

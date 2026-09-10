@@ -84,6 +84,19 @@ const humanize = (value) =>
 
 const currentAsOption = (value) => (value ? [{ value, label: humanize(value) }] : []);
 
+// Quick setup ships still images — the brief has no video anywhere in it. Some
+// objectives (Awareness, Engagement) expose a video-only conversion location
+// whose cell is marked `ad.mediaKind === 'video'`; picking one would demand a
+// videoId the brief can never supply and fail at launch, so those cells are
+// dropped from the picker rather than shown and rejected later.
+const sellableLocations = (schema, objective) => {
+  const locs = schema?.objectives?.[objective]?.conversionLocations;
+  if (!locs) return [];
+  return Object.entries(locs)
+    .filter(([, l]) => l?.ad?.mediaKind !== 'video')
+    .map(([value, l]) => ({ value, label: l.label || humanize(value) }));
+};
+
 // Limits mirror v1 where they still make sense: max 5 logos, max 5 key visuals.
 const MAX_LOGOS = 5;
 const MAX_KEY_VISUALS = 5;
@@ -175,11 +188,10 @@ export default function AdjustPanel({
     }));
   }, [schema]);
 
-  const locationOptions = useMemo(() => {
-    const locs = schema?.objectives?.[offer.primaryObjective]?.conversionLocations;
-    if (!locs) return [];
-    return Object.entries(locs).map(([value, l]) => ({ value, label: l.label || humanize(value) }));
-  }, [schema, offer.primaryObjective]);
+  const locationOptions = useMemo(
+    () => sellableLocations(schema, offer.primaryObjective),
+    [schema, offer.primaryObjective]
+  );
 
   // CTAs come from the SELECTED cell, so changing objective immediately narrows
   // the button list to what Meta accepts for it.
@@ -201,10 +213,12 @@ export default function AdjustPanel({
   // clears the button, and losing any of the three leaves an illegal Meta
   // combination the user cannot see.
   const changeObjective = (nextObjective) => {
-    const locs = schema?.objectives?.[nextObjective]?.conversionLocations || {};
-    const nextLocation = locs[offer.conversionLocation]
+    // Same filtered list the picker shows, so the auto-picked default can
+    // never land on a video cell the user is not allowed to choose.
+    const locs = sellableLocations(schema, nextObjective);
+    const nextLocation = locs.some((l) => l.value === offer.conversionLocation)
       ? offer.conversionLocation
-      : Object.keys(locs)[0] || '';
+      : locs[0]?.value || '';
     onEditFields?.('offer', {
       primaryObjective: nextObjective,
       conversionLocation: nextLocation,

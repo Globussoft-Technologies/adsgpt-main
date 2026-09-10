@@ -6,7 +6,9 @@ import useImage from 'use-image';
 import AdPrompt from '@/components/common/AdPrompt/AdPromptComponent';
 import AppSidebar from '@/components/layout/sidebar/AppSidebar';
 import TopHeader from '@/components/layout/header/TopHeader';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import FreeAdBanner from '@/components/BrandSetup/FreeAdBanner';
+import useOnboardingEligibility from '@/hooks/useOnboardingEligibility';
 import { SidebarProvider } from '@/components/ui/sidebar';
 // import TourGuide from '@/components/layout/TourGuide';
 import AdBlockerModal from '@/components/layout/AdBlockerModal';
@@ -22,11 +24,54 @@ const HOST = import.meta.env.VITE_SOCKET_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 const ENABLE_NEW_LAYOUT = import.meta.env.VITE_ENABLE_NEW_EDITOR_LAYOUT === 'true';
 
+// Per-tab marker for the first-run redirect. See the effect that uses it.
+const ONBOARDING_OFFERED_KEY = 'adsgpt.onboarding.offered';
+
 const Layout = () => {
+  // Whether the free render is still owed, and which session the offer bar owes
+  // it in. One call per app load, shared with OnBoardHome's resume.
+  const { freeRenderAvailable, resumeSessionId, shouldStartOnboarding } =
+    useOnboardingEligibility();
   const { baseImage, isEditorOpen, adIndex, isOldEditorOpen } = useSelector(
     (state) => state.editor
   );
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // ── First run: show onboarding once, then never unasked again ────────────
+  //
+  // A brand-new user lands here, not on the brand-setup screen, because every
+  // authenticated route renders inside this Layout. Without this they would
+  // only ever find onboarding by noticing the offer bar.
+  //
+  // "Once" needs two guards, not one. The server side is
+  // `shouldStartOnboarding`, which goes false the moment the user finishes,
+  // skips, or spends the free render. The tab side is the marker below, and it
+  // covers the gap in between: a user who is redirected and then presses BACK
+  // has not skipped anything yet, so the server still says yes. A component ref
+  // cannot hold that — `/onboarding` renders OUTSIDE this Layout, so coming
+  // back remounts it and resets any ref — which would bounce them forward
+  // again, a trap with no way out but the URL bar. `sessionStorage` survives
+  // the remount and is scoped to this tab, so a genuinely new session on
+  // another day still gets the offer.
+  useEffect(() => {
+    if (!shouldStartOnboarding) return;
+    if (location.pathname.startsWith('/onboarding')) return;
+
+    try {
+      if (sessionStorage.getItem(ONBOARDING_OFFERED_KEY) === '1') return;
+      sessionStorage.setItem(ONBOARDING_OFFERED_KEY, '1');
+    } catch {
+      // Storage blocked. Redirecting once per mount is still better than never
+      // offering onboarding at all, and the server guard stops it repeating
+      // the moment the user skips or finishes.
+    }
+
+    // `replace`, so Back returns to wherever they actually came from rather
+    // than to the route we bounced them off.
+    navigate('/onboarding', { replace: true });
+  }, [shouldStartOnboarding, location.pathname, navigate]);
+
   const { userData } = useSelector((state) => state.socket);
   const dispatch = useDispatch();
   const activeAdStudioTabId = useSelector((state) => state.adStudioTabs.activeAdStudioTabId);
@@ -158,6 +203,26 @@ const Layout = () => {
           <>
             <AppSidebar />
             <main className="relative flex h-svh min-w-0 flex-1 flex-col overflow-hidden bg-transparent dark:bg-inherit">
+              {/* Above the header, full width: it is an offer about the product,
+                  not a control belonging to whatever page is open.
+                  `available` is the server's answer now, not a hardcoded true —
+                  it goes false the moment the free render is claimed, on every
+                  device at once. */}
+              {/* `/onboarding`, not `/` — the root redirects to /adstudio, which
+                  is where the user already is. The storyboard workspace lives
+                  on its own full-screen route outside this Layout.
+                  `?session=` when the user skipped a run with the render still
+                  unspent: the bar owes them THAT session, not a fresh start. */}
+              <FreeAdBanner
+                available={freeRenderAvailable}
+                onCreate={() =>
+                  navigate(
+                    resumeSessionId
+                      ? `/onboarding?session=${encodeURIComponent(resumeSessionId)}`
+                      : '/onboarding'
+                  )
+                }
+              />
               <TopHeader />
               <div
                 className={`flex min-h-0 flex-1 flex-col ${

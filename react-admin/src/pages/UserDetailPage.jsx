@@ -682,9 +682,19 @@ function MediaCard({ item }) {
         <div className="flex items-center justify-between text-slate-500">
           <span className="truncate">{item.source || "—"}</span>
           <span className="tabular-nums">
-            {item.effective_credit_deduction || item.credit_deduction
-              ? `${item.effective_credit_deduction || item.credit_deduction} cr`
-              : "—"}
+            {/* "Free" comes off the row's own flag, never from a zero.
+                Onboarding gives a user their FIRST render on the house and
+                charges for the rest, so within the same source some rows are
+                giveaways and some are not — and a chargeable one can also read
+                zero today, simply because its price has not been set. Inferring
+                free from that would put the wrong label on money. */}
+            {item.free ? (
+              <span className="font-semibold text-emerald-600">Free</span>
+            ) : item.effective_credit_deduction || item.credit_deduction ? (
+              `${item.effective_credit_deduction || item.credit_deduction} cr`
+            ) : (
+              "—"
+            )}
             {item.duration ? ` · ${item.duration}s` : ""}
           </span>
         </div>

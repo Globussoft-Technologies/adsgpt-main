@@ -14,7 +14,12 @@ import {
 } from 'lucide-react';
 import { handleDownload } from '@/utils/download';
 
-const CustomVideoPlayer = ({ src, aspect }) => {
+/**
+ * @param autoPlay  Start playing as soon as the clip is mounted and its source
+ *   is ready. Opt-in, because most places this player appears are lists where
+ *   several tiles would all start talking at once.
+ */
+const CustomVideoPlayer = ({ src, aspect, autoPlay = false }) => {
   const videoRef = useRef(null);
   const dropdownRef = useRef(null);
 
@@ -155,6 +160,48 @@ const CustomVideoPlayer = ({ src, aspect }) => {
     };
   }, [isPlaying]);
 
+  // ── Autoplay, when the caller asked for it ───────────────────────────────
+  //
+  // `play()` rather than the `autoplay` attribute: the attribute fires before
+  // React has attached the handlers that drive this player's own UI, so the
+  // clip would run with the button still showing Play.
+  //
+  // Mounted by a click ("Watch"), so the browser's autoplay policy is normally
+  // satisfied and the sound is allowed. Normally — a user who has never
+  // interacted with the site, or has media blocked by policy, gets a rejected
+  // promise instead of an exception. Falling back to a MUTED play is what turns
+  // that into a clip that runs silently rather than a black frame that does
+  // nothing, and the user can unmute from the controls.
+  useEffect(() => {
+    if (!autoPlay || !src) return undefined;
+    const video = videoRef.current;
+    if (!video) return undefined;
+
+    let cancelled = false;
+    const start = () => {
+      const attempt = video.play();
+      if (!attempt?.catch) return;
+      attempt.catch(() => {
+        if (cancelled) return;
+        video.muted = true;
+        video.play().catch(() => {
+          // Blocked outright. The controls still work; the user presses Play.
+        });
+      });
+    };
+
+    // `readyState` 0 means no metadata yet, and calling play() then is what
+    // produces a "play() request was interrupted" console error on a slow
+    // network. Waiting for the source to be usable avoids it.
+    if (video.readyState >= 2) start();
+    else video.addEventListener('loadeddata', start, { once: true });
+
+    return () => {
+      cancelled = true;
+      video.removeEventListener('loadeddata', start);
+    };
+  }, [autoPlay, src]);
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -176,6 +223,24 @@ const CustomVideoPlayer = ({ src, aspect }) => {
         'group relative w-full h-full max-h-[350px] max-w-[540px] bg-black rounded-2xl overflow-hidden',
       videoClass:
         'max-w-full w-full h-full max-h-[80vh] lg:max-h-screen 2xl:max-h-[80vh] object-contain',
+    },
+    // Fills whatever box it is given, at whatever ratio. For a portrait clip in
+    // a landscape slot: the video letterboxes and stays centred, but the CONTROL
+    // BAR gets the full width. Constraining the player to the video's own 9:16
+    // instead left the controls about 180px wide, where the timestamp wrapped
+    // onto three lines and the buttons collided — legible controls matter more
+    // here than an absence of black.
+    ASPECT_FILL: {
+      container: 'group relative h-full w-full bg-black rounded-lg overflow-hidden',
+      videoClass: 'h-full w-full object-contain',
+    },
+    // Full-height portrait, for a screen whose whole job is one clip. The chat's
+    // ASPECT_9_16 is capped at 350px because it sits in a message list; here
+    // that cap is the difference between a video and a thumbnail.
+    ASPECT_9_16_FULL: {
+      container:
+        'group relative h-full max-h-full w-auto aspect-[9/16] bg-black rounded-2xl overflow-hidden',
+      videoClass: 'h-full w-full object-contain',
     },
     default: {
       container: 'group relative w-full max-w-[800px] bg-black rounded-2xl overflow-hidden',
