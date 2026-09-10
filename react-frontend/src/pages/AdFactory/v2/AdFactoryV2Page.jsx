@@ -26,7 +26,11 @@ import RunTimeline from '@/components/AdFactory/v2/RunTimeline';
 import SchedulePanel from '@/components/AdFactory/v2/SchedulePanel';
 import KeepTheseComing from '@/components/AdFactory/v2/KeepTheseComing';
 import ShipTheseAds from '@/components/AdFactory/v2/ShipTheseAds';
-import { emptyConnection, isConnectionComplete } from '@/components/AdFactory/v2/LaunchConnection';
+import {
+  emptyConnection,
+  isConnectionComplete,
+  isScheduleConnectionComplete,
+} from '@/components/AdFactory/v2/LaunchConnection';
 import {
   buildGoogleTarget,
   emptyGoogleConnection,
@@ -975,7 +979,9 @@ export default function AdFactoryV2Page() {
 
   const handleActivate = useCallback(async () => {
     if (!briefId) return;
-    const metaReady = isConnectionComplete(connection);
+    // The schedule's bar is higher than the manual post's: it also needs the
+    // saved template, because Quick setup no longer offers "build one for me".
+    const metaReady = isScheduleConnectionComplete(connection);
     // One ready destination is enough. Meta stays optional here for the same
     // reason Google does — the job only carries the targets that are actually
     // configured, and demanding both would make a Google-only schedule
@@ -1147,8 +1153,11 @@ export default function AdFactoryV2Page() {
   // owned by AdFactoryPage, so both modes share exactly one of each.
   return (
     <div className="adfactory-v2-surface relative isolate flex h-full w-full flex-col gap-3 overflow-y-auto bg-[var(--ws-bg)] pt-0 pb-8 text-[var(--ws-text-primary)] dark:bg-[#0f0f0f] dark:text-[#F4F4F5]">
+      {/* Sticky, not just first-in-flow: the delete that raises this lives in
+          the brief list far down the page, and a notice pinned to the top of
+          the scroll container would be off-screen exactly when it is raised. */}
       {error && !(hasCreatives && scheduleOn) && (
-        <div className="mx-auto w-full max-w-375 px-4 2xl:px-8">
+        <div className="sticky top-0 z-40 mx-auto w-full max-w-375 bg-[var(--ws-bg)] px-4 pt-2 pb-1 dark:bg-[#0f0f0f] 2xl:px-8">
           <Notice tone="warn" icon={AlertCircle}>
             <span className="flex flex-col items-start gap-1">
               <span>{error}</span>
@@ -1358,7 +1367,7 @@ export default function AdFactoryV2Page() {
                     onCadenceChange={handleCadenceChange}
                     onActivate={handleActivate}
                     activating={activating}
-                    isMetaConnected={isConnectionComplete(connection)}
+                    isMetaConnected={isScheduleConnectionComplete(connection)}
                     connection={connection}
                     onConnectionChange={setConnection}
                     platforms={briefPlatforms}
@@ -1493,7 +1502,7 @@ export default function AdFactoryV2Page() {
                     onCadenceChange={handleCadenceChange}
                     onActivate={handleActivate}
                     activating={activating}
-                    isMetaConnected={isConnectionComplete(connection)}
+                    isMetaConnected={isScheduleConnectionComplete(connection)}
                     connection={connection}
                     onConnectionChange={setConnection}
                     platforms={briefPlatforms}

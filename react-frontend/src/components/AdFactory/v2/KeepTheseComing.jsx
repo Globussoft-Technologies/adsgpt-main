@@ -213,6 +213,7 @@ export default function KeepTheseComing({
                     platforms={platforms}
                     googleValue={googleConnection}
                     onGoogleChange={onGoogleConnectionChange}
+                    requireTemplate
                   />
 
                   {/* Where these ads actually land, stated under the tabs that

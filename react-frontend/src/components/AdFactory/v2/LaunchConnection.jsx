@@ -60,12 +60,22 @@ export const emptyConnection = () => ({
   ...emptyAutoSetup(),
 });
 
-// Activation needs all four ids. Template is optional — if absent the backend
-// synthesizes one from the brief's objective + budget.
+// Posting needs all four ids. Template stays optional HERE on purpose: the
+// manual "Ship these ads" panel posts into a campaign and ad set the user picks
+// by hand, so a template has nothing to contribute to it.
 export const isConnectionComplete = (conn) =>
   Boolean(conn?.facebookId && conn?.connectionId) && isAutoSetupComplete(conn);
 
-function MetaLaunchConnection({ value, onChange, disabled = false }) {
+// A SCHEDULE additionally needs a template. The backend can still synthesize
+// one, and did until now — but "Build one for me automatically" is no longer
+// offered in Quick setup, so leaving the field optional would mean starting a
+// recurring job against a template the user never saw and cannot inspect. A
+// schedule runs unattended and spends on every cycle, which is exactly the case
+// where an implicit choice is worth refusing.
+export const isScheduleConnectionComplete = (conn) =>
+  isConnectionComplete(conn) && Boolean(conn?.template?.id);
+
+function MetaLaunchConnection({ value, onChange, disabled = false, requireTemplate = false }) {
   const dispatch = useDispatch();
   const conn = value || emptyConnection();
   const { userData } = useSelector((state) => state.socket) || {};
@@ -218,7 +228,10 @@ function MetaLaunchConnection({ value, onChange, disabled = false }) {
 
       {conn.facebookId && (
         <div className="flex flex-col gap-2">
-          <span className={LABEL}>Campaign template</span>
+          <span className={LABEL}>
+            Campaign template
+            {requireTemplate && <span className="ml-0.5 text-[#B45309] dark:text-[#E8A33D]">*</span>}
+          </span>
 
           {templatesLoading ? (
             <div className={`flex h-9 items-center gap-2 rounded-xl px-3 text-sm ${CONTROL} ${MUTED}`}>
@@ -253,10 +266,16 @@ function MetaLaunchConnection({ value, onChange, disabled = false }) {
                 </SelectValue>
               </SelectTrigger>
               <SelectContent className={`z-9999 max-h-72 ${MENU}`}>
-                {/* Allow clearing selection */}
-                <SelectItem value="auto" className={MENU_ITEM}>
+                {/* HIDE-MARK — "Build one for me automatically" option hidden.
+                    Unhide: uncomment the SelectItem below. The 'auto' value is
+                    still the state default and handleTemplateSelect still
+                    accepts it, so nothing downstream changes; the trigger just
+                    falls back to its placeholder text. One edit covers both
+                    screens — the schedule card and the manual "Ship these ads"
+                    panel render this same component. */}
+                {/* <SelectItem value="auto" className={MENU_ITEM}>
                   Build one for me automatically
-                </SelectItem>
+                </SelectItem> */}
                 {templateOptions.map((t) => (
                   <SelectItem key={t.id} value={t.id} className={MENU_ITEM}>
                     {t.label}
@@ -268,6 +287,17 @@ function MetaLaunchConnection({ value, onChange, disabled = false }) {
 
           {templatesError && (
             <span className="text-xs text-[#B45309] dark:text-[#E8A33D]">{templatesError}</span>
+          )}
+
+          {/* Said once, where the choice is, rather than only as a disabled
+              button at the bottom of a card the user has to scroll back up
+              from to act on. */}
+          {requireTemplate && !conn.template?.id && !templatesError && (
+            <span className={MUTED}>
+              {noTemplates
+                ? 'Save a campaign template in Ads Manager first — a schedule needs one.'
+                : 'Pick a template to start the schedule.'}
+            </span>
           )}
         </div>
       )}
@@ -340,6 +370,8 @@ export default function LaunchConnection({
   onGoogleChange,
   activeTab,
   onTabChange,
+  // The schedule demands a saved template; the manual post panel does not.
+  requireTemplate = false,
 }) {
   const googleChosen =
     IS_GOOGLE_AUTOMATION_ENABLED &&
@@ -360,7 +392,14 @@ export default function LaunchConnection({
   const googleDone = isGoogleConnectionComplete(googleValue, isGoogleAccountConnected(googleUser));
 
   if (!googleChosen) {
-    return <MetaLaunchConnection value={value} onChange={onChange} disabled={disabled} />;
+    return (
+      <MetaLaunchConnection
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        requireTemplate={requireTemplate}
+      />
+    );
   }
 
   return (
@@ -383,7 +422,12 @@ export default function LaunchConnection({
       </div>
 
       {tab === 'meta' ? (
-        <MetaLaunchConnection value={value} onChange={onChange} disabled={disabled} />
+        <MetaLaunchConnection
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          requireTemplate={requireTemplate}
+        />
       ) : (
         <GoogleLaunchConnection
           value={googleValue || emptyGoogleConnection()}
