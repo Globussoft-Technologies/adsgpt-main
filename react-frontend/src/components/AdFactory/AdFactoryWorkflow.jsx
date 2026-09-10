@@ -305,6 +305,7 @@ const FlowCardArray = [
 export default function AdFactoryWorkflowDarkReal() {
   const [rfInstance, setRfInstance] = useState(null);
   const [showGeneratingLoader, setShowGeneratingLoader] = useState(false);
+  const [canvasRevision, setCanvasRevision] = useState(0);
   // Expand/collapse state for the two pipeline group containers. Both can be
   // open simultaneously (decided in the design forks). Chunk 4 wires
   // autoExpanded the same way.
@@ -975,6 +976,22 @@ export default function AdFactoryWorkflowDarkReal() {
     setNodes(generateNodes());
   }, [generateNodes, setNodes]);
 
+  // Every successful form submission updates several pieces of Redux state
+  // before NodeModal closes. Rebuild once that close transition finishes and
+  // remount React Flow with the populated graph. This keeps its internal node
+  // lookup in sync with the controlled nodes after the burst of save/refresh
+  // updates, instead of leaving only the background and controls rendered.
+  const previousCanvasFormRef = useRef(activeForm);
+  useEffect(() => {
+    const formClosed = Boolean(previousCanvasFormRef.current) && !activeForm;
+    previousCanvasFormRef.current = activeForm;
+
+    if (!formClosed) return;
+
+    setNodes(generateNodes());
+    setCanvasRevision((revision) => revision + 1);
+  }, [activeForm, generateNodes, setNodes]);
+
   // No measurement-based fitting when the automation feature is OFF —
   // the flat-layout viewport is pre-computed via `computeFlatViewport()`
   // and passed as `defaultViewport` to ReactFlow below, so the very
@@ -1211,6 +1228,7 @@ export default function AdFactoryWorkflowDarkReal() {
           </div>
         )}
         <ReactFlow
+          key={canvasRevision}
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
