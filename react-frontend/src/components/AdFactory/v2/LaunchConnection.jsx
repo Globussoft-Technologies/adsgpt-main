@@ -371,6 +371,8 @@ export default function LaunchConnection({
   activeTab,
   onTabChange,
   // The schedule demands a saved template; the manual post panel does not.
+  // Meta only marks the field required; Google swaps its whole body for the
+  // template picker, because that is the only thing Full control asks it.
   requireTemplate = false,
 }) {
   const googleChosen =
@@ -433,6 +435,7 @@ export default function LaunchConnection({
           value={googleValue || emptyGoogleConnection()}
           onChange={onGoogleChange}
           disabled={disabled}
+          templateMode={requireTemplate}
         />
       )}
     </div>

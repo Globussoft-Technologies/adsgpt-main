@@ -1,10 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 import { toast } from 'react-toastify';
 
 import DestinationFields from './destinationFields';
+import {
+  fetchGoogleAdsTemplates,
+  fetchGoogleAdsTemplateById,
+} from '@/store/actions/adFactoryAutomation/adFactoryAutomationActions';
+import {
+  selectGoogleAdsTemplates,
+  selectGoogleAdsTemplatesLoading,
+  selectGoogleAdsTemplatesError,
+  selectGoogleAdsTemplateById,
+} from '@/store/reducers/adFactoryAutomation/adFactoryAutomationSlice';
+import { INPUT, LABEL as LBL, MUTED } from './_tokens';
 import { CONTROL, CONTROL_H, FAINT, LABEL, VALUE } from './_tokens';
 import {
   Select,
@@ -22,6 +33,11 @@ import {
 } from '@/store/actions/adFactoryNew/adFactoryActions';
 
 const BACKEND_HOST = import.meta.env.VITE_SOCKET_URL;
+
+// Only newlines are stripped, not every run of whitespace: collapsing spaces
+// on each keystroke rewrites what the user is still typing.
+const stripNewlines = (v) => String(v).replace(/[\r\n]+/g, ' ');
+
 
 const channelHumanName = (t) => {
   switch (t) {
@@ -55,6 +71,17 @@ export const emptyGoogleConnection = () => ({
   // destinationFields.jsx for why.
   ctaButton: '',
   ctaUrl: '',
+  // ── Schedule-only, and the whole reason `templateMode` exists ────────────
+  // A saved Google Ads template, plus the one field Full control lets you
+  // override on it. Only the schedule collects these; the manual post panel
+  // keeps using the account/campaign/ad-group ids below, because posting into
+  // an EXISTING ad group is what that flow does and a template cannot express
+  // it.
+  template: null,          // { id, name, objective, conversionLocation, payload }
+  // NOT `campaignName` — that key already holds the NAME OF THE PICKED GOOGLE
+  // CAMPAIGN in id mode, and reusing it would make one field mean two things
+  // in a single object.
+  templateCampaignName: '',
 });
 
 export const isGoogleAccountConnected = (googleUser) =>
@@ -66,7 +93,72 @@ export const isGoogleConnectionComplete = (g, connected) => {
   return Boolean(g?.adAccountId && g?.campaignId && g?.adGroupId);
 };
 
+// A SCHEDULE is ready on a different signal: the template, not the three ids.
+// Deliberately a separate function rather than an `||` inside the one above —
+// both panels share ONE googleConnection object, so a template picked for the
+// schedule must not make the manual post panel believe it has an ad group to
+// post into. It would sail past its own check and fail at the server, which
+// requires all three ids.
+export const isGoogleScheduleComplete = (g, connected) => {
+  if (!connected) return false;
+  return Boolean(g?.template?.id && g?.template?.payload);
+};
+
+// What `targets.google` on the job should be.
+//
+// TWO shapes, because there are two ways to describe a Google destination and
+// the backend already accepts both:
+//
+//   template  →  passed through verbatim (briefToJobPayload takes the
+//                `opts.google.template` branch). This is byte-for-byte what
+//                Full control's own automation sends — see
+//                buildGoogleTemplateForJob in adFactoryAutomationActions.js —
+//                so the scheduled run behaves identically in both modes.
+//   three ids →  the older shape, which the backend turns into a synthetic
+//                template. Still what the manual post panel produces.
+//
+// No backend change is needed for either; the template branch has been sitting
+// in briefToJobPayload unused by Quick setup until now.
 export const buildGoogleTarget = (g, { dailyBudget, ctaUrl } = {}) => {
+  // ── Template mode (the schedule) ─────────────────────────────────────────
+  const basePayload = g?.template?.payload;
+  if (g?.template?.id && basePayload) {
+    const overlay = {};
+    const name = (g.templateCampaignName || '').trim();
+    if (name) {
+      // The Google wizard writes the campaign label under BOTH keys, and the
+      // backend reads `name || campaignName`. Set both so neither goes stale.
+      overlay.name = name;
+      overlay.campaignName = name;
+    }
+    if (g.ctaButton) overlay.callToAction = g.ctaButton;
+    const url = g.ctaUrl || ctaUrl;
+    if (url) {
+      // `finalUrl` is the wizard's field; some saved payloads carry `linkUrl`
+      // as an alias. Write both.
+      overlay.finalUrl = url;
+      overlay.linkUrl = url;
+    }
+    // The schedule's own daily budget is the number the card prices the run
+    // with, so it is the one that should run. Whole currency → micros.
+    if (Number.isFinite(Number(dailyBudget)) && Number(dailyBudget) > 0) {
+      overlay.dailyBudgetMicros = Math.round(Number(dailyBudget) * 1_000_000);
+    }
+
+    return {
+      template: {
+        name: g.template.name,
+        objective: g.template.objective,
+        conversionLocation: g.template.conversionLocation,
+        customerId: basePayload.customerId || basePayload.adAccountId || null,
+        // The id rides inside the payload so a later edit can re-select the
+        // saved template in the dropdown. The backend echoes payload as-is.
+        payload: { ...basePayload, templateId: g.template.id, ...overlay },
+      },
+    };
+  }
+
+  // ── Id mode (manual posting) ─────────────────────────────────────────────
   if (!g?.adAccountId || !g?.campaignId || !g?.adGroupId) return null;
 
   return {
@@ -168,7 +260,15 @@ function CampaignDropdown({ value, onChange, options, placeholder, disabled }) {
   );
 }
 
-export default function GoogleLaunchConnection({ value, onChange, disabled = false }) {
+export default function GoogleLaunchConnection({
+  value,
+  onChange,
+  disabled = false,
+  // The schedule collects a saved template instead of the three ids — the same
+  // thing Full control's automation asks for. Off everywhere else, so manual
+  // posting keeps the picker that matches what IT does.
+  templateMode = false,
+}) {
   const dispatch = useDispatch();
   const g = value || emptyGoogleConnection();
 
@@ -180,6 +280,74 @@ export default function GoogleLaunchConnection({ value, onChange, disabled = fal
     googleAdGroups = [],
   } = useSelector((state) => state.adFactoryNew || {});
   const connected = isGoogleAccountConnected(googleUser);
+
+  // ── Saved Google templates (schedule only) ───────────────────────────────
+  const templates = useSelector(selectGoogleAdsTemplates);
+  const templatesLoading = useSelector(selectGoogleAdsTemplatesLoading);
+  const templatesError = useSelector(selectGoogleAdsTemplatesError);
+  const pickedBucket = useSelector((state) =>
+    selectGoogleAdsTemplateById(state, g.template?.id),
+  );
+  const pickedTemplate = pickedBucket?.template;
+
+  useEffect(() => {
+    if (!templateMode || !connected) return;
+    dispatch(fetchGoogleAdsTemplates());
+  }, [dispatch, templateMode, connected]);
+
+  // The list carries names; the PAYLOAD only arrives with the full record, and
+  // the payload is the entire point — it is what the job runs on.
+  useEffect(() => {
+    if (!templateMode || !g.template?.id || pickedTemplate) return;
+    dispatch(fetchGoogleAdsTemplateById(g.template.id));
+  }, [dispatch, templateMode, g.template?.id, pickedTemplate]);
+
+  // Mirror the resolved payload back into state once it lands.
+  useEffect(() => {
+    if (!templateMode || !pickedTemplate || !g.template?.id) return;
+    if (g.template.payload) return; // already mirrored — guards a render loop
+    onChange?.({
+      ...g,
+      template: {
+        ...g.template,
+        name: pickedTemplate.name,
+        objective: pickedTemplate.objective,
+        conversionLocation: pickedTemplate.conversionLocation,
+        payload: pickedTemplate.payload,
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedTemplate, templateMode]);
+
+  const templateOptions = useMemo(
+    () =>
+      (templates || []).map((t) => ({
+        value: t._id || t.id,
+        label: t.name || t._id || 'Template',
+      })),
+    [templates],
+  );
+
+  const pickTemplate = useCallback(
+    (templateId) => {
+      if (!templateId) {
+        onChange?.({ ...g, template: null });
+        return;
+      }
+      const item = (templates || []).find((t) => (t._id || t.id) === templateId);
+      onChange?.({
+        ...g,
+        template: {
+          id: templateId,
+          name: item?.name || '',
+          objective: item?.objective || null,
+          conversionLocation: item?.conversionLocation || null,
+          payload: null, // filled once fetchGoogleAdsTemplateById resolves
+        },
+      });
+    },
+    [g, onChange, templates],
+  );
 
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
@@ -386,6 +554,66 @@ export default function GoogleLaunchConnection({ value, onChange, disabled = fal
         </div>
       </div>
 
+      {/* ── Schedule: a saved template IS the destination ────────────────
+          Full control's Google automation asks for exactly this and nothing
+          else — the template already carries the customer, campaign, ad group
+          and budget, so re-asking for them here would be three ways to say the
+          same thing and two of them could disagree. The manual post panel
+          keeps the id pickers below, because posting into an ad group the user
+          picks by hand is a different job. */}
+      {templateMode ? (
+        <>
+          <div className="flex flex-col gap-2">
+            <span className={LABEL}>Ad template *</span>
+            {templatesLoading ? (
+              <div className={`flex h-9 items-center gap-2 rounded-xl px-3 text-sm ${CONTROL} ${MUTED}`}>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading templates…
+              </div>
+            ) : (
+              <PlainDropdown
+                value={g.template?.id || ''}
+                options={templateOptions}
+                onChange={pickTemplate}
+                placeholder={
+                  !connected
+                    ? 'Connect Google first'
+                    : templateOptions.length === 0
+                      ? 'No saved Google templates'
+                      : 'Select a Google template'
+                }
+                disabled={disabled || !connected || templateOptions.length === 0}
+              />
+            )}
+            {templatesError && (
+              <span className="text-[11px] text-[#B45309] dark:text-[#E8A33D]">{templatesError}</span>
+            )}
+            {!templatesLoading && !templatesError && templateOptions.length === 0 && connected && (
+              <span className={FAINT}>
+                Build one in Google Ads Manager, then come back to schedule it.
+              </span>
+            )}
+            {g.template?.id && !g.template?.payload && !templatesError && (
+              <span className={FAINT}>Loading template details…</span>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <span className={LABEL}>Campaign name</span>
+            <input
+              type="text"
+              className={INPUT}
+              value={g.templateCampaignName || ''}
+              placeholder={g.template?.payload?.campaignName || g.template?.payload?.name || 'Template default'}
+              disabled={disabled || !g.template?.id}
+              maxLength={120}
+              onChange={(e) => onChange?.({ ...g, templateCampaignName: stripNewlines(e.target.value) })}
+            />
+            <span className={FAINT}>Leave empty to keep the template&apos;s own name.</span>
+          </div>
+        </>
+      ) : (
+        <>
       <div className="flex flex-col gap-2">
         <span className={LABEL}>Select Ad Account *</span>
         <PlainDropdown
@@ -464,8 +692,13 @@ export default function GoogleLaunchConnection({ value, onChange, disabled = fal
         </div>
       )}
 
+        </>
+      )}
+
       {/* Google's own button + landing page. Same two fields the Meta tab
-          asks for, answered separately per platform. */}
+          asks for, answered separately per platform. Shown in BOTH modes —
+          a template carries a destination, but this is the one the user just
+          typed for this brief, so it overlays the template's. */}
       <DestinationFields
         ctaButton={g.ctaButton}
         ctaUrl={g.ctaUrl}

@@ -35,7 +35,7 @@ import {
   buildGoogleTarget,
   emptyGoogleConnection,
   isGoogleAccountConnected,
-  isGoogleConnectionComplete,
+  isGoogleScheduleComplete,
 } from '@/components/AdFactory/v2/GoogleLaunchConnection';
 import { IS_GOOGLE_AUTOMATION_ENABLED } from '@/utils/featureFlags';
 import { Notice, PrimaryBtn } from '@/components/AdFactory/v2/Panel';
@@ -973,9 +973,11 @@ export default function AdFactoryV2Page() {
   const googleOffered =
     IS_GOOGLE_AUTOMATION_ENABLED && briefPlatforms.includes('google');
   const { googleUser } = useSelector((state) => state.adFactoryNew) || {};
+  // The schedule runs on a saved Google template — the same thing Full
+  // control's automation sends — not on the three ids the manual panel picks.
   const googleReady =
     googleOffered &&
-    isGoogleConnectionComplete(googleConnection, isGoogleAccountConnected(googleUser));
+    isGoogleScheduleComplete(googleConnection, isGoogleAccountConnected(googleUser));
 
   const handleActivate = useCallback(async () => {
     if (!briefId) return;
