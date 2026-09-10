@@ -3,6 +3,7 @@ const { deleteOldChatSessionsFromPlans } = require('../controllers/Chats');
 const { dispatchDripEmails } = require('../controllers/newsletter.controller');
 const { features } = require('./features');
 const cron = require('node-cron');
+const { exclusive } = require('./cronLock');
 const IMAGE = require("../Module/adCreative/adCreativeImages");
 const { s3Client } = require('../storage/s3');
 const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
@@ -81,7 +82,7 @@ const registerCreditReservationSweepCron = () => {
         );
         return;
     }
-    cron.schedule(schedule, async () => {
+    cron.schedule(schedule, exclusive('credit-sweep', 5 * 60, async () => {
         try {
             const { swept, refunded } = await UnifiedCreditController.sweepStaleReservations({
                 maxAgeMs: maxAgeMin * 60 * 1000,
@@ -94,7 +95,7 @@ const registerCreditReservationSweepCron = () => {
         } catch (err) {
             console.error('[credit-sweep] cron tick failed:', err.message);
         }
-    });
+    }));
     console.log(
         `[credit-sweep] scheduler registered: cron="${schedule}" maxAge=${maxAgeMin}min`,
     );
@@ -135,7 +136,7 @@ const registerOAuthSigningKeyRotationCron = () => {
         console.error('[oauth-keyrot] boot warm-up failed:', err.message),
     );
 
-    cron.schedule(schedule, async () => {
+    cron.schedule(schedule, exclusive('oauth-keyrot', 30 * 60, async () => {
         try {
             const active = await oauthSigningKeyService.getActiveSigningKey();
             const ageMs = Date.now() - new Date(active.activated_at).getTime();
@@ -150,7 +151,7 @@ const registerOAuthSigningKeyRotationCron = () => {
         } catch (err) {
             console.error('[oauth-keyrot] cron tick failed:', err.message);
         }
-    });
+    }));
     console.log('[oauth-keyrot] scheduler registered');
 };
 
@@ -184,19 +185,58 @@ const registerBillingReconciliationCron = () => {
         return;
     }
 
-    cron.schedule(schedule, async () => {
+    cron.schedule(schedule, exclusive('billing-reconcile', 30 * 60, async () => {
         try {
             await reconcileBillingCycles({ dryRun });
         } catch (err) {
             console.error('[billing-reconcile] run failed:', err.message);
         }
-    });
+    }));
     console.log(
         `[billing-reconcile] scheduler registered: cron="${schedule}" dryRun=${dryRun}`,
     );
 };
 
+// -----------------------------------------------------------------------------
+// Which process runs the scheduled work
+//
+// C1 in docs/AUTOPILOT_SCALING_PLAN.md moves Autopilot out of the API process.
+// The reason is not throughput: the gateway has been restarting often enough
+// that runs were being killed mid-write, and each kill left `autopilot:lock`
+// held for its 55-minute TTL, costing the NEXT hour too. Parsing six insights
+// payloads and normalising thousands of entities is also synchronous CPU on
+// the event loop that serves HTTP.
+//
+//   all     every job (DEFAULT — today's behaviour, unchanged)
+//   worker  every job. Same set as `all`; a separate name so the intent is
+//           legible in `pm2 env` and so an API-owned job could be added later
+//           without re-reading this comment.
+//   api     no scheduled work at all
+//
+// THE DEFAULT IS `all` ON PURPOSE. A missing env var must not silently stop
+// billing reconciliation or Autopilot; the safe direction for a
+// half-configured deploy is "runs somewhere", not "runs nowhere". Double-runs
+// are handled structurally instead — every job here is either behind its own
+// Redis lock (Autopilot) or wrapped in `exclusive()` from utils/cronLock.js —
+// so registering the same job in two processes is wasteful, never wrong.
+// -----------------------------------------------------------------------------
+// Read at CALL time, not module load. worker.js sets its own role after
+// requiring this module — as any entrypoint reasonably would — and a
+// module-level constant captured `all` before that assignment ever happened,
+// silently ignoring it. Behaviour was accidentally correct (the worker runs
+// everything either way) but the log lied about why, and the moment `worker`
+// and `all` diverge it would have been wrong as well as misleading.
+const cronRole = () => String(process.env.CRON_ROLE || 'all').toLowerCase();
+
 const runCronJobs = () => {
+    const role = cronRole();
+    if (role === 'api') {
+        console.log(
+            '[cron] CRON_ROLE=api — no scheduled work registered in this process',
+        );
+        return;
+    }
+    console.log(`[cron] registering scheduled work (CRON_ROLE=${role})`);
     // Phase 3 — hourly Autopilot orchestrator
     registerAutopilotCron();
 
@@ -210,15 +250,15 @@ const runCronJobs = () => {
     registerOAuthSigningKeyRotationCron();
 
     // Daily newsletter drip — runs at 09:00 UTC every day
-    cron.schedule('0 9 * * *', async () => {
+    cron.schedule('0 9 * * *', exclusive('newsletter-drip', 30 * 60, async () => {
         try {
             await dispatchDripEmails();
         } catch (error) {
             console.error('[newsletter] cron error:', error);
         }
-    });
+    }));
 
-    cron.schedule('0 0 * * *', async () => {
+    cron.schedule('0 0 * * *', exclusive('chat-session-cleanup', 30 * 60, async () => {
         //console.log('Running cron job to delete old chat sessions...');
         try {
             const chatHistoryFeature = "Chat history";
@@ -250,7 +290,7 @@ const runCronJobs = () => {
         } catch (error) {
             console.error('Error running cron job:', error);
         }
-    });
+    }));
     // cron.schedule('0 0 * * *', deleteOldImages); // runs every midnight
 };
 
@@ -299,4 +339,4 @@ const deleteOldImages = async () => {
   };
   
 
-module.exports = { runCronJobs, deleteImageFromS3 };
+module.exports = { runCronJobs, deleteImageFromS3, cronRole };

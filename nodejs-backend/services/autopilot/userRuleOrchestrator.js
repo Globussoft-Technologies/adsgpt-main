@@ -124,6 +124,8 @@ const {
 // One retry on a transient blip; never on a deliberate throttle. Safe because
 // every Meta write below is idempotent (absolute status / absolute budget).
 const { withRetry } = require("./metaRetry");
+const { withDeadline } = require("./withDeadline");
+const runRecorder = require("./runRecorder");
 
 let _bizSdk;
 function bizSdk() {
@@ -145,6 +147,18 @@ function getLogger() {
 const LOCK_KEY = "autopilot:lock";
 const LOCK_TTL_SECONDS = 55 * 60; // matches v3, prevents double-fire
 
+// Wall-clock ceiling on ONE (user, account). Nothing in the audit path sets an
+// HTTP timeout: the Meta SDK builds its own axios config and leaves `timeout`
+// unset, so a dead socket hangs until the OS TCP timeout. Unbounded, one such
+// account held the run lock for its full LOCK_TTL_SECONDS while every
+// remaining user waited behind it — and the next tick could not start either.
+//
+// Must stay comfortably under LOCK_TTL_SECONDS or it bounds nothing. 120s is
+// generous: a healthy account audits in single-digit seconds even on the slow
+// path, so this only fires on a genuine hang.
+const ACCOUNT_TIMEOUT_MS =
+  parseInt(process.env.AUTOPILOT_ACCOUNT_TIMEOUT_MS || "120000", 10) || 120000;
+
 // Terminal state for the resume retrial loop: the entity ran out of trials
 // and Autopilot has stopped retrying it. Written once per pause — see
 // resumeAtAccount. The UI keys off this string to surface the entity.
@@ -154,6 +168,65 @@ async function acquireLock(runId) {
   const r = await redisClient.set(LOCK_KEY, runId, "EX", LOCK_TTL_SECONDS, "NX");
   return r === "OK";
 }
+/**
+ * The cycle currently running in THIS process, or null.
+ *
+ * Exists so a shutdown handler can clean up after a cycle it is about to
+ * abandon. Without it, SIGTERM -- which is what PM2 sends on every restart and
+ * every deploy -- kills the process mid-cycle, the orchestrator's `finally`
+ * never runs, and `autopilot:lock` stays held for its full 55-minute TTL. The
+ * next tick is refused, and so is the one after it.
+ *
+ * That failure predates the worker split but gets worse with it: the whole
+ * point of C1 is that the worker restarts independently of the API, and a
+ * restart that costs an hour of Autopilot is not an improvement.
+ *
+ * Single-valued rather than a set because the Redis lock already guarantees
+ * one cycle per process at a time.
+ */
+let activeRun = null;
+
+/** The in-flight cycle, or null when idle. */
+function getActiveRun() {
+  return activeRun;
+}
+
+/**
+ * Give up the in-flight cycle cleanly: release the lock so the next tick can
+ * start, and close the run record so it does not sit in `running` forever.
+ *
+ * Best-effort and never throws -- it runs while the process is on its way out,
+ * and a shutdown that hangs on cleanup is worse than one that skips a step.
+ *
+ * The abandoned work itself is not waited for. Every Meta write is idempotent,
+ * so a half-finished cycle is re-done on the next tick rather than left in a
+ * partial state -- the same reasoning withDeadline relies on.
+ */
+async function abandonActiveRun(reason) {
+  const run = activeRun;
+  if (!run) return false;
+  activeRun = null;
+  try {
+    await releaseLock(run.runId);
+  } catch {
+    /* releaseLock swallows its own errors; belt and braces on the way out */
+  }
+  try {
+    await runRecorder.finishRun({
+      runId: run.runId,
+      status: "failed",
+      durationMs: Date.now() - run.startedAt,
+      // Shared by reference, so accounts finished before the signal still land.
+      summaries: run.summaries || [],
+      error: reason,
+    });
+  } catch {
+    /* telemetry must never delay a shutdown */
+  }
+  return true;
+}
+
+
 async function releaseLock(runId) {
   try {
     const cur = await redisClient.get(LOCK_KEY);
@@ -396,6 +469,10 @@ async function writeActionLogRow({
   error,
   dryRun,
   metaLatencyMs,
+  // Structured detail for skip/failure rows the UI explains back to the user
+  // (currently only the pause ceiling). Omitted on ordinary action rows, where
+  // the metrics snapshot already says everything there is to say.
+  actionPayload,
 }) {
   try {
     // Pull parent identity off the entity. The normalizers in
@@ -427,6 +504,7 @@ async function writeActionLogRow({
       ruleMessage: rule.name,
       metricsSnapshot: pickMetricsSnapshot(entity),
       action: rule.action.type === "pause" ? "pause" : "alert_only",
+      actionPayload: actionPayload || undefined,
       dryRun,
       outcome,
       skipReason: skipReason || undefined,
@@ -453,6 +531,16 @@ async function evaluateRuleAtAccount({
   runId,
   userId,
   acctSummary,
+  // Per-account, per-cycle action budget, shared with resume and scale so a
+  // ceiling bounds the ACCOUNT's activity for the tick rather than each rule
+  // independently — three rules each allowed 25 pauses is still 75 pauses.
+  //
+  // Pause is UNCAPPED by default (see actionBudget.js), so in normal operation
+  // this never refuses anything; it is here so an operator can impose a limit
+  // from the environment without a deploy, and so `used` is counted for the
+  // run summary either way. Optional: absent means uncapped, which is also
+  // what existing unit tests calling this directly rely on.
+  actionBudget = null,
   // Account-scoped scaling state: ceilings, the per-cycle budget deltas, the
   // shared action budget, and the memoised 7d-history lookup. Shared across
   // every rule at this account so the account cap caps the ACCOUNT rather
@@ -558,6 +646,42 @@ async function evaluateRuleAtAccount({
       if (isPause && (target.status || "").toUpperCase() === "PAUSED") {
         continue;
       }
+
+      // Per-cycle pause ceiling. Uncapped by default, so this normally does
+      // nothing — but when an operator has set one, it is checked HERE for the
+      // same reason resume checks it where it does: after every cheap skip
+      // above, so a long run of already-paused entities cannot exhaust it, and
+      // before the Meta write below, so an exhausted budget costs no API call.
+      //
+      // One row per exhaustion, not per skipped entity. The user needs to know
+      // Autopilot stopped early and why; forty identical rows saying so is the
+      // noise the already-PAUSED guard above exists to avoid. The remainder is
+      // re-evaluated next tick against a fresh budget.
+      if (isPause && actionBudget && !actionBudget.canSpend("pause")) {
+        if (!actionBudget.claimExhaustionLog("pause")) {
+          getLogger().info(
+            `[autopilot v4] pause: per-cycle ceiling of ${actionBudget.limits.pause} reached for ${acctKey} — remaining matches roll to the next tick`,
+          );
+          await writeActionLogRow({
+            runId,
+            userId,
+            acctKey,
+            acctName,
+            rule,
+            entity: target,
+            level: rule.evaluateOn,
+            outcome: "skipped",
+            skipReason: "action-budget-exhausted",
+            dryRun: finalDryRun,
+            actionPayload: {
+              limit: actionBudget.limits.pause,
+              detail: `Autopilot already paused ${actionBudget.limits.pause} entities on this account this cycle and stopped for the hour. The rest are re-checked next tick.`,
+            },
+          });
+        }
+        continue;
+      }
+      if (isPause && actionBudget) actionBudget.spend("pause");
 
       let outcome = "success";
       let error = null;
@@ -1454,6 +1578,296 @@ async function writeResumeLogRow({
 }
 
 // ─── public entry ──────────────────────────────────────────────────────────
+/**
+ * One (user, account) unit of work: audit, evaluate every rule, act, resume.
+ *
+ * Extracted from the account loop so it can be bounded by a deadline — a
+ * hung Meta call otherwise held `autopilot:lock` for its whole TTL while
+ * every remaining user waited. It is also precisely the unit C3 needs: the
+ * concurrency change runs these through `p-limit` instead of a bare `for`,
+ * which is only possible because the body is callable.
+ *
+ * Mutates `acctSummary` rather than returning it. The caller owns that
+ * object so it can still record an error when this rejects or times out —
+ * a returned summary would be lost on exactly the paths that matter most.
+ */
+async function processAccount({
+  acctKey,
+  rulesAtAccount,
+  accountAccessToken,
+  acctSummary,
+  userId,
+  userSettings,
+  managedCampaignIds,
+  runId,
+  dryRun,
+  logger,
+}) {
+  // One action budget per account per cycle, shared by scale and
+  // resume. See actionBudget.js — resume in particular needs this to
+  // survive its first tick against an account with weeks of pauses.
+  const actionBudget = createActionBudget();
+  // Attached on first sight of a scale rule at this account.
+  let scaleContext = null;
+  // Quick aliases the per-rule loop writes into.
+  const counters = acctSummary.pause;
+  const proxyCounters = {
+    get findings_count() {
+      return counters.findings_count;
+    },
+    set findings_count(v) {
+      counters.findings_count = v;
+    },
+    get actionable_count() {
+      return counters.actionable_count;
+    },
+    set actionable_count(v) {
+      counters.actionable_count = v;
+    },
+    get paused() {
+      return counters.paused;
+    },
+    set paused(v) {
+      counters.paused = v;
+    },
+    get would_pause() {
+      return counters.would_pause;
+    },
+    set would_pause(v) {
+      counters.would_pause = v;
+    },
+    get failed() {
+      return counters.failed;
+    },
+    set failed(v) {
+      counters.failed = v;
+    },
+  };
+
+  if (!accountAccessToken) {
+    throw new Error(
+      `No connected Facebook account can access ${acctKey}`,
+    );
+  }
+
+  // Pre-flight check against what we learned on previous ticks.
+  // Buckets live process-wide with a 1h TTL, so after the first cycle
+  // this knows whether the account is already blocked — and skipping
+  // then costs nothing, whereas running is a guaranteed failure that
+  // still spends the calls.
+  const rlContext = {
+    tokenHash: hashToken(accountAccessToken),
+    accountId: acctKey.replace(/^act_/, ""),
+  };
+  const preflight = sharedRateLimiter.worstFor(rlContext);
+  if (preflight && preflight.blockedMs > 0) {
+    const mins = Math.ceil(preflight.blockedMs / 60000);
+    acctSummary.ok = false;
+    acctSummary.error = `Skipped — Meta rate limit, ${mins} min remaining`;
+    acctSummary.rateLimit = preflight;
+    logger.warn(
+      `[autopilot v4] ${acctKey} deferred: ${formatWorst(preflight)}`,
+    );
+    return;
+  }
+
+  // Group this account's rules by lookbackDays. Rules sharing the
+  // same window share a single Meta fetch — keeps insights API
+  // cost bounded by the number of *distinct* windows in play, not
+  // the number of rules. Most users will have all rules at the
+  // default (14d), so this is usually one fetch per account.
+  // Resolve each rule's effective lookback. A rule with
+  // `lookbackPreset: 'this_month'` resolves to "days since the 1st
+  // of the current month" (1 on the 1st, growing through the
+  // month) — computed fresh every cron tick so the window walks
+  // calendar-correctly. Numeric `lookbackDays` rules use that
+  // number directly. Group by the resolved value so two rules
+  // landing on the same effective window still share one Meta
+  // fetch.
+  const byLookback = new Map();
+  for (const r of rulesAtAccount) {
+    const lb = resolveEffectiveLookback(r);
+    if (!byLookback.has(lb)) byLookback.set(lb, []);
+    byLookback.get(lb).push(r);
+  }
+  // One audit per DISTINCT window, which is the real unit of Meta cost here —
+  // six rules sharing a lookback cost one fetch, two rules on different
+  // lookbacks cost two. Recorded on the run row because "how many audits did
+  // this account cost" is the number the capacity work needs, and rule count
+  // is a misleading proxy for it.
+  acctSummary.auditCount = byLookback.size;
+
+  // Safety gate, three layers of override (most-conservative wins):
+  //   1. Caller-supplied `dryRun` (from cron env or HTTP request).
+  //   2. User's saved `settings.dryRunGlobal` — if true, force dry-run
+  //      even when the cron asks for live writes.
+  //   3. Global `effectiveDryRun()` — env-level kill switch from
+  //      AUTOPILOT_LIVE_ACTIONS_ALLOWED + autopilotConfig pin map.
+  const userPrefersDryRun =
+    !!(userSettings && userSettings.dryRunGlobal);
+  const gated = effectiveDryRun({
+    adAccountId: acctKey,
+    requestedDryRun: dryRun || userPrefersDryRun,
+  });
+  const finalDryRun = gated.dryRun;
+
+  for (const [
+    effectiveLookback,
+    rulesAtLookback,
+  ] of byLookback.entries()) {
+    // Scope the Meta fetch to ONLY the campaigns these rules are
+    // attached to (for this account). Without this, runAuditForAccount
+    // pulls the whole account's insights — which trips Meta's
+    // "Please reduce the amount of data" ceiling on large accounts,
+    // even though we only ever evaluate the attached campaigns.
+    const campaignIds = Array.from(
+      new Set(
+        rulesAtLookback.flatMap((r) =>
+          (r.attachments || [])
+            .filter(
+              (a) => normalizeAdAccountId(a.adAccountId) === acctKey,
+            )
+            .map((a) => String(a.campaignId))
+            .filter(Boolean),
+        ),
+      ),
+    );
+
+    // Re-use the existing fetch+normalize pipeline per lookback
+    // window. Guards off so user rules see ALL ads (v4 lets users
+    // encode their own spend floors via conditions, no service-
+    // level guard needed). prevLookbackDays mirrors the current
+    // window so prev_* fields compare apples-to-apples.
+    // Under `metaCall` so a bare network blip does not cost this
+    // account its whole cycle. The retry re-issues all 6-9 of the
+    // audit's requests, which is real cost — but a failed audit
+    // returns nothing, so the alternative is skipping every rule at
+    // this account until the next tick. `withRetry` refuses to retry
+    // a rate-limit inline, so this cannot walk into a throttle.
+    const audit = await metaCall(
+      () =>
+        runAuditForAccount({
+          userId,
+          adAccountId: acctKey,
+          accessToken: accountAccessToken,
+          options: {
+            enforceAgeGuard: false,
+            enforceSpendFloor: false,
+            ...(effectiveLookback === "maximum"
+              ? { lookbackPreset: "maximum" }
+              : {
+                  lookbackDays: effectiveLookback,
+                  prevLookbackDays: effectiveLookback,
+                }),
+            campaignIds,
+            // Ask for the 16 fields the normalisers read, not the ~37
+            // the shared list carries. The omitted ones (video
+            // breakdowns, action values, outbound clicks, uniques)
+            // were fetched and discarded, and they are where the
+            // server-side cost lives.
+            slimInsights: true,
+            // Skip the three previous-period queries unless a rule
+            // here actually reads a `prev_*` field.
+            needsPrevious: batchNeedsPreviousPeriod(rulesAtLookback),
+          },
+        }),
+      {
+        acctKey,
+        accessToken: accountAccessToken,
+        label: `audit ${acctKey} (${effectiveLookback}d)`,
+      },
+    );
+    // Account name is a constant for the (user, account) — first
+    // window's response is fine.
+    if (!acctSummary.name) acctSummary.name = audit.account_name;
+    // Log the real meters every tick. Which bucket is binding is the
+    // thing that was previously invisible: an insights-heavy workload
+    // usually exhausts `x-fb-ads-insights-throttle` or BUC cputime
+    // long before the call-count bucket the App Dashboard graphs.
+    if (audit.rateLimitAll) {
+      acctSummary.rateLimit = audit.rateLimit;
+      logger.info(
+        `[autopilot v4] ${acctKey} rate-limit ${formatAll(audit.rateLimitAll)}`,
+      );
+    }
+
+    // Build the scale context lazily, and only once per account even
+    // across lookback groups — the per-cycle deltas and the action
+    // budget must span the whole account's cycle, not reset per
+    // window. `accountDailyBudget` is pre-aggregated by the audit
+    // (minor units), so the account cap costs no extra fetch.
+    if (
+      !scaleContext &&
+      rulesAtLookback.some((r) => r.action && r.action.type === "scale")
+    ) {
+      const policy = resolveScalePolicy();
+      acctSummary.scale = {
+        findings_count: 0,
+        scaled: 0,
+        would_scale: 0,
+        skipped: 0,
+        failed: 0,
+      };
+      scaleContext = {
+        policy,
+        // Needed so a throttle reported in an error BODY can be fed
+        // back into the rate limiter, which is keyed by token.
+        accessToken: accountAccessToken,
+        counters: acctSummary.scale,
+        budget: actionBudget,
+        accountCap: accountCapAbsolute(
+          audit.accountDailyBudget,
+          policy.capAccountPct,
+        ),
+        // Boxed so applyScale can mutate them by reference.
+        deltaUp: { value: 0 },
+        deltaDown: { value: 0 },
+        priorByEntity: new Map(),
+        budgetExhaustedLogged: false,
+      };
+    }
+
+    for (const rule of rulesAtLookback) {
+      await evaluateRuleAtAccount({
+        rule,
+        acctKey,
+        acctName: audit.account_name,
+        accessToken: accountAccessToken,
+        entities: audit.entities,
+        finalDryRun,
+        runId,
+        userId,
+        acctSummary: proxyCounters,
+        actionBudget,
+        scaleContext,
+        managedCampaignIds,
+      });
+    }
+
+    // Reverse Autopilot's own pauses whose rule no longer matches.
+    // Runs inside the lookback loop so every rule is re-evaluated
+    // against the same window it was paused on. Honours the user's
+    // `autoResumeEnabled` toggle (default true); a user who wants
+    // pause-only turns it off in Settings.
+    if (!userSettings || userSettings.autoResumeEnabled !== false) {
+      await resumeAtAccount({
+        rules: rulesAtLookback,
+        effectiveLookback,
+        actionBudget,
+        accessToken: accountAccessToken,
+        acctKey,
+        acctName: audit.account_name,
+        entities: audit.entities,
+        finalDryRun,
+        runId,
+        userId,
+        resumeCounters: acctSummary.resume,
+        managedCampaignIds,
+      });
+    }
+  }
+}
+
 async function runUserRuleCycle({
   dryRun = false,
   force = false,
@@ -1466,6 +1880,9 @@ async function runUserRuleCycle({
     const got = await acquireLock(runId);
     if (!got) {
       logger.info(`[autopilot v4] skipped — lock held`);
+      // Recorded, not dropped: a steady drip of these is how a second
+      // scheduler racing the first becomes visible.
+      await runRecorder.recordSkippedRun({ runId, reason: "lock-held", dryRun });
       return {
         runId,
         skipped: true,
@@ -1478,6 +1895,14 @@ async function runUserRuleCycle({
 
   const startedAt = Date.now();
   const summaries = [];
+  await runRecorder.startRun({ runId, dryRun, startedAt });
+  // Registered so a SIGTERM mid-cycle can release the lock and close the row.
+  // `summaries` is shared by reference, so whatever finished before the signal
+  // still reaches the run record.
+  activeRun = { runId, startedAt, summaries };
+  // Set when the cycle itself throws, as opposed to an account failing inside
+  // it — the two are different failures and the run row distinguishes them.
+  let cycleError = null;
 
   try {
     // 1. Find enabled rules (optionally scoped to userIds).
@@ -1497,6 +1922,18 @@ async function runUserRuleCycle({
 
     // 2. Group by user → account.
     const grouped = groupRulesByUserAndAccount(allRules);
+
+    // Record the plan before doing any of it, so the live view can show
+    // progress as a fraction rather than a count that only means something
+    // once the run is over.
+    let plannedAccounts = 0;
+    for (const byAccount of grouped.values()) plannedAccounts += byAccount.size;
+    await runRecorder.recordPlan({
+      runId,
+      totalUsers: grouped.size,
+      totalAccounts: plannedAccounts,
+      totalRules: allRules.length,
+    });
 
     // 3. Iterate.
     for (const [userId, byAccount] of grouped.entries()) {
@@ -1525,6 +1962,16 @@ async function runUserRuleCycle({
         logger.info(
           `[autopilot v4] userId=${userId} disabled in settings — skipped`,
         );
+        // Recorded, not just logged. Every `continue` here skips ALL of this
+        // user's accounts, which `totalAccounts` has already counted -- so
+        // without a row the run reports itself complete with an unexplained
+        // gap between accountsDone and totalAccounts.
+        await runRecorder.recordSkippedUser({
+          runId,
+          userId,
+          reason: "disabled-in-settings",
+          accounts: byAccount.size,
+        });
         continue;
       }
 
@@ -1567,6 +2014,16 @@ async function runUserRuleCycle({
         logger.warn(
           `[autopilot v4] userId=${userId} has no FacebookUsers row or empty token — skipped`,
         );
+        // Recorded, not just logged. Every `continue` here skips ALL of this
+        // user's accounts, which `totalAccounts` has already counted -- so
+        // without a row the run reports itself complete with an unexplained
+        // gap between accountsDone and totalAccounts.
+        await runRecorder.recordSkippedUser({
+          runId,
+          userId,
+          reason: "no-facebook-connection",
+          accounts: byAccount.size,
+        });
         continue;
       }
       // Pick the newest connection that is both unexpired and decryptable.
@@ -1594,6 +2051,16 @@ async function runUserRuleCycle({
         logger.warn(
           `[autopilot v4] userId=${userId} has no unexpired, decryptable Facebook token — skipped`,
         );
+        // Recorded, not just logged. Every `continue` here skips ALL of this
+        // user's accounts, which `totalAccounts` has already counted -- so
+        // without a row the run reports itself complete with an unexplained
+        // gap between accountsDone and totalAccounts.
+        await runRecorder.recordSkippedUser({
+          runId,
+          userId,
+          reason: "no-usable-token",
+          accounts: byAccount.size,
+        });
         continue;
       }
 
@@ -1654,264 +2121,27 @@ async function runUserRuleCycle({
           resume: { resumed: 0, would_resume: 0, skipped: 0, failed: 0 },
         };
 
-        // One action budget per account per cycle, shared by scale and
-        // resume. See actionBudget.js — resume in particular needs this to
-        // survive its first tick against an account with weeks of pauses.
-        const actionBudget = createActionBudget();
-        // Attached on first sight of a scale rule at this account.
-        let scaleContext = null;
-        // Quick aliases the per-rule loop writes into.
-        const counters = acctSummary.pause;
-        const proxyCounters = {
-          get findings_count() {
-            return counters.findings_count;
-          },
-          set findings_count(v) {
-            counters.findings_count = v;
-          },
-          get actionable_count() {
-            return counters.actionable_count;
-          },
-          set actionable_count(v) {
-            counters.actionable_count = v;
-          },
-          get paused() {
-            return counters.paused;
-          },
-          set paused(v) {
-            counters.paused = v;
-          },
-          get would_pause() {
-            return counters.would_pause;
-          },
-          set would_pause(v) {
-            counters.would_pause = v;
-          },
-          get failed() {
-            return counters.failed;
-          },
-          set failed(v) {
-            counters.failed = v;
-          },
-        };
-
+        // Bounded: see ACCOUNT_TIMEOUT_MS. On a breach the catch below
+        // records it on the summary like any other account failure, so it
+        // shows up in the digest rather than vanishing.
+        const acctStartedAt = Date.now();
         try {
-          if (!accountAccessToken) {
-            throw new Error(
-              `No connected Facebook account can access ${acctKey}`,
-            );
-          }
-
-          // Pre-flight check against what we learned on previous ticks.
-          // Buckets live process-wide with a 1h TTL, so after the first cycle
-          // this knows whether the account is already blocked — and skipping
-          // then costs nothing, whereas running is a guaranteed failure that
-          // still spends the calls.
-          const rlContext = {
-            tokenHash: hashToken(accountAccessToken),
-            accountId: acctKey.replace(/^act_/, ""),
-          };
-          const preflight = sharedRateLimiter.worstFor(rlContext);
-          if (preflight && preflight.blockedMs > 0) {
-            const mins = Math.ceil(preflight.blockedMs / 60000);
-            acctSummary.ok = false;
-            acctSummary.error = `Skipped — Meta rate limit, ${mins} min remaining`;
-            acctSummary.rateLimit = preflight;
-            logger.warn(
-              `[autopilot v4] ${acctKey} deferred: ${formatWorst(preflight)}`,
-            );
-            summaries.push(acctSummary);
-            continue;
-          }
-
-          // Group this account's rules by lookbackDays. Rules sharing the
-          // same window share a single Meta fetch — keeps insights API
-          // cost bounded by the number of *distinct* windows in play, not
-          // the number of rules. Most users will have all rules at the
-          // default (14d), so this is usually one fetch per account.
-          // Resolve each rule's effective lookback. A rule with
-          // `lookbackPreset: 'this_month'` resolves to "days since the 1st
-          // of the current month" (1 on the 1st, growing through the
-          // month) — computed fresh every cron tick so the window walks
-          // calendar-correctly. Numeric `lookbackDays` rules use that
-          // number directly. Group by the resolved value so two rules
-          // landing on the same effective window still share one Meta
-          // fetch.
-          const byLookback = new Map();
-          for (const r of rulesAtAccount) {
-            const lb = resolveEffectiveLookback(r);
-            if (!byLookback.has(lb)) byLookback.set(lb, []);
-            byLookback.get(lb).push(r);
-          }
-         
-          // Safety gate, three layers of override (most-conservative wins):
-          //   1. Caller-supplied `dryRun` (from cron env or HTTP request).
-          //   2. User's saved `settings.dryRunGlobal` — if true, force dry-run
-          //      even when the cron asks for live writes.
-          //   3. Global `effectiveDryRun()` — env-level kill switch from
-          //      AUTOPILOT_LIVE_ACTIONS_ALLOWED + autopilotConfig pin map.
-          const userPrefersDryRun =
-            !!(userSettings && userSettings.dryRunGlobal);
-          const gated = effectiveDryRun({
-            adAccountId: acctKey,
-            requestedDryRun: dryRun || userPrefersDryRun,
-          });
-          const finalDryRun = gated.dryRun;
-
-          for (const [
-            effectiveLookback,
-            rulesAtLookback,
-          ] of byLookback.entries()) {
-            // Scope the Meta fetch to ONLY the campaigns these rules are
-            // attached to (for this account). Without this, runAuditForAccount
-            // pulls the whole account's insights — which trips Meta's
-            // "Please reduce the amount of data" ceiling on large accounts,
-            // even though we only ever evaluate the attached campaigns.
-            const campaignIds = Array.from(
-              new Set(
-                rulesAtLookback.flatMap((r) =>
-                  (r.attachments || [])
-                    .filter(
-                      (a) => normalizeAdAccountId(a.adAccountId) === acctKey,
-                    )
-                    .map((a) => String(a.campaignId))
-                    .filter(Boolean),
-                ),
-              ),
-            );
-
-            // Re-use the existing fetch+normalize pipeline per lookback
-            // window. Guards off so user rules see ALL ads (v4 lets users
-            // encode their own spend floors via conditions, no service-
-            // level guard needed). prevLookbackDays mirrors the current
-            // window so prev_* fields compare apples-to-apples.
-            // Under `metaCall` so a bare network blip does not cost this
-            // account its whole cycle. The retry re-issues all 6-9 of the
-            // audit's requests, which is real cost — but a failed audit
-            // returns nothing, so the alternative is skipping every rule at
-            // this account until the next tick. `withRetry` refuses to retry
-            // a rate-limit inline, so this cannot walk into a throttle.
-            const audit = await metaCall(
-              () =>
-                runAuditForAccount({
-                  userId,
-                  adAccountId: acctKey,
-                  accessToken: accountAccessToken,
-                  options: {
-                    enforceAgeGuard: false,
-                    enforceSpendFloor: false,
-                    ...(effectiveLookback === "maximum"
-                      ? { lookbackPreset: "maximum" }
-                      : {
-                          lookbackDays: effectiveLookback,
-                          prevLookbackDays: effectiveLookback,
-                        }),
-                    campaignIds,
-                    // Ask for the 16 fields the normalisers read, not the ~37
-                    // the shared list carries. The omitted ones (video
-                    // breakdowns, action values, outbound clicks, uniques)
-                    // were fetched and discarded, and they are where the
-                    // server-side cost lives.
-                    slimInsights: true,
-                    // Skip the three previous-period queries unless a rule
-                    // here actually reads a `prev_*` field.
-                    needsPrevious: batchNeedsPreviousPeriod(rulesAtLookback),
-                  },
-                }),
-              {
-                acctKey,
-                accessToken: accountAccessToken,
-                label: `audit ${acctKey} (${effectiveLookback}d)`,
-              },
-            );
-            // Account name is a constant for the (user, account) — first
-            // window's response is fine.
-            if (!acctSummary.name) acctSummary.name = audit.account_name;
-            // Log the real meters every tick. Which bucket is binding is the
-            // thing that was previously invisible: an insights-heavy workload
-            // usually exhausts `x-fb-ads-insights-throttle` or BUC cputime
-            // long before the call-count bucket the App Dashboard graphs.
-            if (audit.rateLimitAll) {
-              acctSummary.rateLimit = audit.rateLimit;
-              logger.info(
-                `[autopilot v4] ${acctKey} rate-limit ${formatAll(audit.rateLimitAll)}`,
-              );
-            }
-
-            // Build the scale context lazily, and only once per account even
-            // across lookback groups — the per-cycle deltas and the action
-            // budget must span the whole account's cycle, not reset per
-            // window. `accountDailyBudget` is pre-aggregated by the audit
-            // (minor units), so the account cap costs no extra fetch.
-            if (
-              !scaleContext &&
-              rulesAtLookback.some((r) => r.action && r.action.type === "scale")
-            ) {
-              const policy = resolveScalePolicy();
-              acctSummary.scale = {
-                findings_count: 0,
-                scaled: 0,
-                would_scale: 0,
-                skipped: 0,
-                failed: 0,
-              };
-              scaleContext = {
-                policy,
-                // Needed so a throttle reported in an error BODY can be fed
-                // back into the rate limiter, which is keyed by token.
-                accessToken: accountAccessToken,
-                counters: acctSummary.scale,
-                budget: actionBudget,
-                accountCap: accountCapAbsolute(
-                  audit.accountDailyBudget,
-                  policy.capAccountPct,
-                ),
-                // Boxed so applyScale can mutate them by reference.
-                deltaUp: { value: 0 },
-                deltaDown: { value: 0 },
-                priorByEntity: new Map(),
-                budgetExhaustedLogged: false,
-              };
-            }
-
-            for (const rule of rulesAtLookback) {
-              await evaluateRuleAtAccount({
-                rule,
-                acctKey,
-                acctName: audit.account_name,
-                accessToken: accountAccessToken,
-                entities: audit.entities,
-                finalDryRun,
-                runId,
-                userId,
-                acctSummary: proxyCounters,
-                scaleContext,
-                managedCampaignIds,
-              });
-            }
-
-            // Reverse Autopilot's own pauses whose rule no longer matches.
-            // Runs inside the lookback loop so every rule is re-evaluated
-            // against the same window it was paused on. Honours the user's
-            // `autoResumeEnabled` toggle (default true); a user who wants
-            // pause-only turns it off in Settings.
-            if (!userSettings || userSettings.autoResumeEnabled !== false) {
-              await resumeAtAccount({
-                rules: rulesAtLookback,
-                effectiveLookback,
-                actionBudget,
-                accessToken: accountAccessToken,
-                acctKey,
-                acctName: audit.account_name,
-                entities: audit.entities,
-                finalDryRun,
-                runId,
-                userId,
-                resumeCounters: acctSummary.resume,
-                managedCampaignIds,
-              });
-            }
-          }
+          await withDeadline(
+            processAccount({
+              acctKey,
+              rulesAtAccount,
+              accountAccessToken,
+              acctSummary,
+              userId,
+              userSettings,
+              managedCampaignIds,
+              runId,
+              dryRun,
+              logger,
+            }),
+            ACCOUNT_TIMEOUT_MS,
+            `account ${acctKey}`,
+          );
         } catch (err) {
           logger.error(
             `[autopilot v4] account ${acctKey} (user ${userId}) failed: ${err.message}`,
@@ -1920,10 +2150,31 @@ async function runUserRuleCycle({
           acctSummary.error = err.message;
         }
         summaries.push(acctSummary);
+        // Written per account, not batched at the end, so a cycle that dies
+        // mid-flight still leaves a record of how far it got.
+        await runRecorder.recordAccount({
+          runId,
+          acctSummary,
+          durationMs: Date.now() - acctStartedAt,
+        });
       }
     }
+  } catch (err) {
+    // The cycle itself broke, not one account inside it. Recorded distinctly:
+    // a run can be `complete` with every account failed, and that is a very
+    // different situation from the orchestrator throwing.
+    cycleError = err;
+    throw err;
   } finally {
+    activeRun = null;
     if (!force) await releaseLock(runId);
+    await runRecorder.finishRun({
+      runId,
+      status: cycleError ? "failed" : "complete",
+      durationMs: Date.now() - startedAt,
+      summaries,
+      error: cycleError ? cycleError.message : undefined,
+    });
   }
 
   const durationMs = Date.now() - startedAt;
@@ -1954,6 +2205,9 @@ async function runUserRuleCycle({
 
 module.exports = {
   runUserRuleCycle,
+  // Called by worker.js on SIGTERM/SIGINT so a restart does not leave the
+  // Redis lock held for its full TTL. See the note above `activeRun`.
+  abandonActiveRun,
   // exported for tests
   _internals: {
     groupRulesByUserAndAccount,
@@ -1970,6 +2224,9 @@ module.exports = {
     resolveScaleTarget,
     writeScaleLogRow,
     resolveEffectiveLookback,
+    processAccount,
+    getActiveRun,
+    ACCOUNT_TIMEOUT_MS,
     LOCK_KEY,
     LOCK_TTL_SECONDS,
     RETIRED_SKIP_REASON,

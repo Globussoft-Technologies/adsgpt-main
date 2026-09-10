@@ -6,6 +6,7 @@ const adminDashboard = require("../controllers/admin/adminDashboard.controller")
 const partnerApiKeys = require("../controllers/admin/partnerApiKey.controller");
 const tokenUsageDashboard = require("../controllers/admin/tokenUsageDashboard.controller");
 const metaUsageDashboard = require("../controllers/admin/metaUsageDashboard.controller");
+const autopilotRunDashboard = require("../controllers/admin/autopilotRunDashboard.controller");
 const planLimits = require("../controllers/admin/planLimits.controller");
 const modelConfiguration = require("../controllers/admin/modelConfiguration.controller");
 const dbMonitor = require("../controllers/admin/dbMonitor.controller");
@@ -151,6 +152,35 @@ router.get("/meta-usage/users/:userId", requireAdmin, (req, res, next) => {
     #swagger.summary = 'Get Meta API usage detail for a specific user'
   */
   metaUsageDashboard.userDetail(req, res, next);
+});
+
+// Autopilot runs — what the hourly cron is doing right now and what it did on
+// every previous tick. Distinct from the action log, which records per-entity
+// ACTIONS and is therefore blind to a quiet run and to account-level failures.
+// `/live` is the small payload the page polls; it is deliberately first so the
+// static segment cannot be captured by `/:runId` below.
+router.get("/autopilot-runs/live", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get the in-flight Autopilot run and lock state'
+  */
+  autopilotRunDashboard.live(req, res, next);
+});
+
+router.get("/autopilot-runs", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'List recent Autopilot runs with cost statistics'
+  */
+  autopilotRunDashboard.list(req, res, next);
+});
+
+router.get("/autopilot-runs/:runId", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Get one Autopilot run with every account it touched'
+  */
+  autopilotRunDashboard.detail(req, res, next);
 });
 
 // Per-plan caps on managed ad accounts / campaigns (Meta Ads). See

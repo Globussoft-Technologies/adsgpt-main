@@ -1,5 +1,5 @@
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Activity, Calculator, Cpu, Database, KeyRound, LayoutDashboard, Layers, LogOut, Network, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Activity, Calculator, Cpu, Database, KeyRound, LayoutDashboard, Layers, LogOut, Network, Radar, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { clearAdminToken } from "@/lib/auth";
 import { resetStoredDateRange } from "@/lib/dateRangeStore";
 import { cn } from "@/lib/utils";
@@ -7,16 +7,33 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/users", label: "Users", icon: Users },
-  { to: "/ip-manager", label: "IP Manager", icon: Network },
-  { to: "/database", label: "Database Monitor", icon: Database },
-  { to: "/calculator", label: "Calculator", icon: Calculator },
+  // Hidden from the sidebar 2026-09-10, NOT removed. The routes in App.jsx are
+  // untouched, so /ip-manager, /database and /calculator still work if you type
+  // or bookmark them -- this only takes them out of the daily navigation.
+  // Uncomment to bring any of them back.
+  // { to: "/ip-manager", label: "IP Manager", icon: Network },
+  // { to: "/database", label: "Database Monitor", icon: Database },
+  // { to: "/calculator", label: "Calculator", icon: Calculator },
   { to: "/partner-api-keys", label: "Partner API Keys", icon: KeyRound },
   { to: "/plans", label: "Plans & Limits", icon: Layers },
   { to: "/models", label: "AI Models", icon: Cpu },
-  { to: "/meta-usage", label: "Meta API Usage", icon: Activity },
+  // One sidebar entry, two tabs (see components/MetaOpsTabs.jsx). They answer
+  // adjacent halves of one question — what the cycle did, and what it cost
+  // against Meta's quota — and were previously unrelated-looking siblings.
+  //
+  // `alsoActiveFor` exists because NavLink only knows about its own `to`:
+  // without it the sidebar highlight vanishes the moment you switch to the
+  // API Usage tab, which reads as "you have navigated away from this section".
+  {
+    to: "/autopilot-runs",
+    label: "Autopilot & Meta",
+    icon: Radar,
+    alsoActiveFor: ["/meta-usage"],
+  },
 ];
 
 export default function AdminLayout() {
+  const location = useLocation();
   const navigate = useNavigate();
 
   function handleLogout() {
@@ -39,31 +56,36 @@ export default function AdminLayout() {
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                cn(
+          {NAV.map(({ to, label, icon: Icon, end, alsoActiveFor }) => {
+            // Computed here rather than via NavLink's render-prop `isActive`,
+            // because that only knows about this link's own `to` — and one
+            // entry now covers two routes. Doing it once avoids repeating the
+            // same expression in the className and the children.
+            const active =
+              (end
+                ? location.pathname === to
+                : location.pathname.startsWith(to)) ||
+              (alsoActiveFor || []).some((p) => location.pathname.startsWith(p));
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                className={cn(
                   "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  isActive
+                  active
                     ? "bg-linear-to-r from-indigo-50 to-violet-50 text-indigo-700 shadow-sm"
                     : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive ? (
-                    <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r bg-linear-to-b from-indigo-500 to-violet-600" />
-                  ) : null}
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </>
-              )}
-            </NavLink>
-          ))}
+                )}
+              >
+                {active ? (
+                  <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r bg-linear-to-b from-indigo-500 to-violet-600" />
+                ) : null}
+                <Icon className="h-4 w-4" />
+                {label}
+              </NavLink>
+            );
+          })}
         </nav>
 
         <div className="border-t border-slate-100 p-3">

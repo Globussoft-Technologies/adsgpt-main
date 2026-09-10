@@ -5,8 +5,10 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "start:worker": "node worker.js",
     "swagger": "node swagger.js",
     "dev": "nodemon index.js",
+    "dev:worker": "nodemon worker.js",
     "test": "node scripts/run-tests.js",
     "test:autopilot": "node test/autopilot/auditRules.test.js && node test/autopilot/autoPause.test.js && node test/autopilot/phase3-8.test.js && node test/autopilot/phase4-settings.test.js && node test/autopilot/phase9-rotation.test.js && node test/autopilot/summary.test.js && node test/autopilot/targetDiscovery.test.js && node test/autopilot/alertService.test.js",
     "test:metaAds": "node test/metaAds/metaConnectionStatus.test.js && node test/metaAds/wizardSchema.test.js && node test/metaAds/v2.test.js && node test/metaAds/leadsCsv.test.js",

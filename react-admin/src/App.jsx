@@ -11,6 +11,7 @@ import PlansPage from "./pages/PlansPage.jsx";
 import ModelsPage from "./pages/ModelsPage.jsx";
 import MetaUsagePage from "./pages/MetaUsagePage.jsx";
 import MetaUsageUserPage from "./pages/MetaUsageUserPage.jsx";
+import AutopilotRunsPage from "./pages/AutopilotRunsPage.jsx";
 import IpManagerPage from "./pages/IpManagerPage.jsx";
 import DatabaseMonitorPage from "./pages/DatabaseMonitorPage.jsx";
 
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/meta-usage" element={<MetaUsagePage />} />
         <Route path="/meta-usage/users/:userId" element={<MetaUsageUserPage />} />
+        <Route path="/autopilot-runs" element={<AutopilotRunsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

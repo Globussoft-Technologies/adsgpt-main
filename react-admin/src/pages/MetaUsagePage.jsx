@@ -49,6 +49,7 @@ import UsageFilterBar, {
   hasActiveFilters,
   sourceLabel,
 } from "@/components/UsageFilterBar.jsx";
+import MetaOpsTabs from "@/components/MetaOpsTabs.jsx";
 import { adminApi } from "@/lib/api";
 import { formatNumber } from "@/lib/utils";
 import { getStoredDateRange, setStoredDateRange } from "@/lib/dateRangeStore";
@@ -164,6 +165,7 @@ export default function MetaUsagePage() {
 
   return (
     <div className="space-y-6">
+      <MetaOpsTabs />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Meta API usage</h1>

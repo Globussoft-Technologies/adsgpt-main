@@ -57,6 +57,13 @@ export const adminApi = {
   metaUsageFilterOptions: (params) => api.get("/meta-usage/filter-options", { params }),
   metaUsageUserDetail: (userId, params) =>
     api.get(`/meta-usage/users/${encodeURIComponent(userId)}`, { params }),
+  // Autopilot runs. `live` is the small payload polled on an interval the
+  // server dictates (fast while a cycle is in flight, slow when idle); the
+  // other two are on-demand.
+  autopilotRunLive: () => api.get("/autopilot-runs/live"),
+  autopilotRuns: (params) => api.get("/autopilot-runs", { params }),
+  autopilotRunDetail: (runId) =>
+    api.get(`/autopilot-runs/${encodeURIComponent(runId)}`),
   plans: () => api.get("/plans"),
   updatePlanLimit: (planId, patch) => api.patch(`/plans/${encodeURIComponent(planId)}`, patch),
   models: (params) => api.get("/models", { params }),

@@ -116,6 +116,8 @@ function resetStubs() {
   stubs.campaignLimit = null;
   stubs.managedCampaignIds = [];
   stubs.managedCampaignCalls = [];
+  stubs.runRecords = [];
+  stubs.runUpdates = [];
   delete process.env.AUTOPILOT_MAX_SCALE_ACTIONS_PER_RUN;
   delete process.env.AUTOPILOT_MAX_RESUME_ACTIONS_PER_RUN;
   // Default to live-actions ON so tests don't accidentally hit the
@@ -147,6 +149,25 @@ const AutopilotActionLogStub = {
   // Resume path: "have we already written the retirement row for this
   // pause?" — the idempotency check on the terminal state.
   exists: async (_q) => stubs.retiredRowExists,
+};
+
+/**
+ * C6's run record. Captures the create + the incremental updates so tests can
+ * assert on what the cycle reported about itself.
+ *
+ * Must be stubbed even for tests that ignore it: `runRecorder` requires the
+ * real Mongoose model at load, and an unstubbed model in this suite means a
+ * process that waits on a database that isn't there.
+ */
+const AutopilotRunStub = {
+  create: async (doc) => {
+    stubs.runRecords.push({ ...doc });
+    return doc;
+  },
+  updateOne: async (q, update) => {
+    stubs.runUpdates.push({ q, update });
+    return { acknowledged: true, modifiedCount: 1 };
+  },
 };
 
 const originalLoad = Module._load;
@@ -196,6 +217,9 @@ Module._load = function patched(request, parent, isMain) {
   }
   if (request.endsWith("Module/autopilot/autopilotActionLog")) {
     return AutopilotActionLogStub;
+  }
+  if (request.endsWith("Module/autopilot/autopilotRun")) {
+    return AutopilotRunStub;
   }
   if (request.endsWith("db/redis")) {
     return {
