@@ -4,7 +4,19 @@ const surfaceConfigurationSchema = new mongoose.Schema(
   {
     enabled: { type: Boolean, default: false },
     aspectRatios: { type: [String], default: undefined },
+    // Most surfaces offer a fixed set of lengths (durations). Clone Your Ad
+    // instead accepts any whole number of seconds between two bounds, so it
+    // sets durationRange and leaves durations empty. A surface uses one or the
+    // other - storing a range as [4, 30] would read as "4s or 30s" to every
+    // consumer that renders a picker from durations.
     durations: { type: [Number], default: undefined },
+    durationRange: {
+      type: new mongoose.Schema(
+        { min: { type: Number, min: 1 }, max: { type: Number, min: 1 } },
+        { _id: false },
+      ),
+      default: undefined,
+    },
     qualities: { type: [String], default: undefined },
     capabilities: { type: mongoose.Schema.Types.Mixed, default: undefined },
   },

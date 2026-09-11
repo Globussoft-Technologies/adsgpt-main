@@ -268,6 +268,13 @@ function surfaceRowFor(entry, caps, media) {
     aspectRatios: caps.aspectRatios || [],
   };
 
+  // Range-based surfaces (Clone Your Ad) send bounds instead of a fixed list,
+  // so the client renders a slider rather than a dropdown. Only present when
+  // the surface actually declares one - durations[] stays the default.
+  if (caps.durationRange?.min && caps.durationRange?.max) {
+    row.durationRange = { min: caps.durationRange.min, max: caps.durationRange.max };
+  }
+
   if (entry.icon) row.icon = entry.icon;
 
   if (media === "ai_ads" && isVideo) {

@@ -29,6 +29,19 @@ function validateSurfaceMap(surfaces) {
     if (config.durations !== undefined && (!Array.isArray(config.durations) || config.durations.some((value) => !Number.isFinite(value) || value <= 0))) {
       return `surfaces.${surface}.durations must contain positive numbers`;
     }
+    if (config.durationRange !== undefined) {
+      const range = config.durationRange;
+      if (!range || typeof range !== "object" || Array.isArray(range)) {
+        return `surfaces.${surface}.durationRange must be an object`;
+      }
+      if (!Number.isFinite(range.min) || !Number.isFinite(range.max) || range.min <= 0 || range.max <= 0) {
+        return `surfaces.${surface}.durationRange needs positive min and max`;
+      }
+      if (range.min > range.max) return `surfaces.${surface}.durationRange min cannot exceed max`;
+      if (config.durations?.length) {
+        return `surfaces.${surface} cannot set both durations and durationRange`;
+      }
+    }
     if (config.qualities?.some((quality) => !QUALITY_NAMES.has(quality))) return `surfaces.${surface}.qualities contains an unknown quality`;
   }
   return null;

@@ -70,15 +70,18 @@ const SURFACE_CATALOG = {
   },
   // Clone Your Ad - distinct from `clone` above, which is Clone Yourself. Served
   // by python-backend/advideo/models/{omni_model,seedance_v2_5}/src/routers/
-  // clone_your_ad at /api/v1/clone-your-ad/*. Like ad_factory, the runtime model
-  // selection is DB-controlled per model document, so this empty map only
-  // registers the surface slug for validation and API discovery.
+  // clone_your_ad at /api/v1/clone-your-ad/*.
   //
-  // If this surface ever needs a static catalog here, note two mismatches with
-  // the shape above: the Python schemas accept a duration RANGE (4-25s on
-  // Seedance 2.5, 4-40s on Google Omni) rather than a discrete list, and neither
-  // of those two models has a canonicalKey in modelRegistry.js yet.
-  clone_video: {},
+  // Two things make this surface unlike every other one here:
+  //   1. These two models are exclusive to it - they appear on no other surface.
+  //   2. Length is a RANGE of whole seconds, not a fixed set, so these entries
+  //      carry durationRange instead of durations[]. Never express a range as
+  //      durations: [4, 30] - every picker built from that array would offer
+  //      exactly two choices.
+  clone_video: {
+    "seedance-2.5": { durationRange: { min: 4, max: 30 }, aspectRatios: ["16:9", "9:16"] },
+    "google-omni": { durationRange: { min: 4, max: 10 }, aspectRatios: ["16:9", "9:16"] },
+  },
 };
 
 /** Valid media slugs, e.g. for validation / error messages. */
