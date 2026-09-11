@@ -55,6 +55,31 @@ function isActiveUser(row, profile, activeUserIds) {
   return Array.from(candidates).some((candidate) => activeUserIds.has(candidate));
 }
 
+// "all" always applies. The two filtered views share one guard: a failed source
+// drops its users out of the active set, which merely hides rows in the active
+// view but would present genuinely active users as dormant once inverted - so
+// neither runs unless every source reported.
+function resolveActivityView(activityView, failedSources = []) {
+  const view = ["active", "inactive"].includes(activityView) ? activityView : "all";
+  const available = failedSources.length === 0;
+  return {
+    view,
+    available,
+    applied: view === "all" ? true : available,
+    failedSources,
+  };
+}
+
+// "active" and "inactive" partition the same population: every row lands in
+// exactly one, so the two views can never both show - or both omit - a user.
+function filterRowsByActivityView({ rows, profileMap, activeUserIds, view }) {
+  if (view !== "active" && view !== "inactive") return rows;
+  const wantActive = view === "active";
+  return rows.filter(
+    (row) => isActiveUser(row, profileMap?.get(row.userId), activeUserIds) === wantActive,
+  );
+}
+
 function numberInRange(value, min, max) {
   const number = Number(value || 0);
   if (min !== undefined && min !== "" && number < Number(min)) return false;
@@ -136,8 +161,10 @@ async function findActiveUserIds({ from, to, models = defaultModels, logger = co
 }
 
 module.exports = {
+  filterRowsByActivityView,
   findActiveUserIds,
   isActiveUser,
+  resolveActivityView,
   matchesActivityFilters,
   _internals: {
     PRODUCT_PAGE_PATTERN,

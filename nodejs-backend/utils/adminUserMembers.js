@@ -76,6 +76,23 @@ function applyMemberData({
   };
 }
 
+// Ties need a deterministic tiebreaker: most users sit at 0 cost/generations, and
+// without one their relative order falls back to the unsorted Mongo natural order
+// of the profile query. That order can shift between the separate requests that
+// fetch page 1 and page 2, which silently duplicates some users and hides others.
+function compareUserRows(sortField) {
+  return (a, b) => {
+    const av = a[sortField] ?? 0;
+    const bv = b[sortField] ?? 0;
+    const delta =
+      sortField === "lastActivity"
+        ? new Date(bv).getTime() - new Date(av).getTime()
+        : bv - av;
+    if (delta) return delta;
+    return String(a.userId).localeCompare(String(b.userId));
+  };
+}
+
 function paginateRows(rows, page, limit) {
   const skip = (page - 1) * limit;
   const data = rows.slice(skip, skip + limit);
@@ -89,6 +106,7 @@ function paginateRows(rows, page, limit) {
 module.exports = {
   applyMemberData,
   buildMemberIndexes,
+  compareUserRows,
   enrichRows,
   filterBySignupRange,
   findMember,

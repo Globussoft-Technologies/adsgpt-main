@@ -5,11 +5,12 @@ const { buildEffectiveCostStages } = require("../../config/modelAggregation");
 const modelConfigurationService = require("../../services/modelConfigurationService");
 const MetaLaunchTrace = require("../../Module/adPosting/metaLaunchTrace");
 const { fetchAllMembers } = require("../../services/amemberUserDirectory");
-const { applyMemberData, paginateRows } = require("../../utils/adminUserMembers");
+const { applyMemberData, compareUserRows, paginateRows } = require("../../utils/adminUserMembers");
 const {
+  filterRowsByActivityView,
   findActiveUserIds,
-  isActiveUser,
   matchesActivityFilters,
+  resolveActivityView,
 } = require("../../services/adminUserActivity");
 const axios = require("axios");
 
@@ -407,8 +408,10 @@ exports.usersList = async (req, res) => {
       limit = 20,
     } = req.query;
 
-    const pageNumber = Math.max(1, parseInt(page));
-    const limitNumber = Math.min(100, Math.max(1, parseInt(limit)));
+    // parseInt("abc") is NaN, and NaN survives Math.max/Math.min - it would reach
+    // paginateRows and slice out an empty page while still reporting the full total.
+    const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
+    const limitNumber = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
 
     const match = buildDateMatch(from, to);
     if (["image", "video"].includes(type)) match.type = type;
@@ -547,22 +550,17 @@ exports.usersList = async (req, res) => {
       );
     }
 
-    const normalizedActivityView = activityView === "active" ? "active" : "all";
-    let activityData = {
-      view: normalizedActivityView,
-      available: true,
-      applied: normalizedActivityView === "all",
-      failedSources: [],
-    };
-    if (normalizedActivityView === "active") {
+    let activityData = resolveActivityView(activityView);
+    if (activityData.view !== "all") {
       const activeResult = await findActiveUserIds({ from, to });
-      activityData.failedSources = activeResult.failedSources;
-      activityData.available = activeResult.failedSources.length === 0;
-      activityData.applied = activityData.available;
+      activityData = resolveActivityView(activityView, activeResult.failedSources);
       if (activityData.applied) {
-        merged = merged.filter((row) =>
-          isActiveUser(row, profileMap.get(row.userId), activeResult.activeUserIds),
-        );
+        merged = filterRowsByActivityView({
+          rows: merged,
+          profileMap,
+          activeUserIds: activeResult.activeUserIds,
+          view: activityData.view,
+        });
       }
     }
 
@@ -591,14 +589,7 @@ exports.usersList = async (req, res) => {
     });
     merged = memberResult.rows;
 
-    merged.sort((a, b) => {
-      const av = a[sortField] ?? 0;
-      const bv = b[sortField] ?? 0;
-      if (sortField === "lastActivity") {
-        return new Date(bv).getTime() - new Date(av).getTime();
-      }
-      return bv - av;
-    });
+    merged.sort(compareUserRows(sortField));
 
     const paginated = paginateRows(merged, pageNumber, limitNumber);
 
@@ -633,8 +624,10 @@ exports.userDetail = async (req, res) => {
       return res.status(400).json({ success: false, message: "userId is required" });
     }
 
-    const pageNumber = Math.max(1, parseInt(page));
-    const limitNumber = Math.min(100, Math.max(1, parseInt(limit)));
+    // parseInt("abc") is NaN, and NaN survives Math.max/Math.min - it would reach
+    // paginateRows and slice out an empty page while still reporting the full total.
+    const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
+    const limitNumber = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
     const skip = (pageNumber - 1) * limitNumber;
 
     const filter = { userId };

@@ -3,6 +3,7 @@ const { fetchAllMembers, _internals } = require("../../services/amemberUserDirec
 const {
   applyMemberData,
   buildMemberIndexes,
+  compareUserRows,
   enrichRows,
   filterBySignupRange,
   findMember,
@@ -25,7 +26,8 @@ async function run() {
           0: {
             user_id: 101,
             email: "Member@Example.com",
-            phone: "+91 98765 43210",
+            mobile_area_code: "IN+91",
+            mobile_number: "9876543210",
             added: "2026-09-07 20:00:32",
           },
           _total: 1,
@@ -39,7 +41,7 @@ async function run() {
     members: [{
       memberId: "101",
       email: "Member@Example.com",
-      contactNo: "+91 98765 43210",
+      contactNo: "+91 9876543210",
       signUpDate: "2026-09-07",
     }],
     stale: false,
@@ -47,6 +49,35 @@ async function run() {
   assert.strictEqual(calls.length, 1, "bulk endpoint should be called once for a short page");
   assert.strictEqual(calls[0].url, "https://members.example.test/api/users");
   assert.strictEqual(calls[0].config.params._count, _internals.PAGE_SIZE);
+
+  // Contact numbers arrive as mobile_number + a "US+1"/"IN+91" area code; the
+  // legacy `phone` column only fills in for the oldest members.
+  const { normalizeContactNo } = _internals;
+  assert.strictEqual(
+    normalizeContactNo({ mobile_area_code: "US+1", mobile_number: "4155550123" }),
+    "+1 4155550123",
+  );
+  assert.strictEqual(
+    normalizeContactNo({ mobile_area_code: "US+1", mobile_number: "14155550123" }),
+    "+1 4155550123",
+    "a leading 1 on an 11-digit NANP number is the dial code, not the number",
+  );
+  assert.strictEqual(
+    normalizeContactNo({ mobile_area_code: "IN+91", mobile_number: "9123456789" }),
+    "+91 9123456789",
+    "an Indian mobile starting 91 must not be mistaken for a repeated dial code",
+  );
+  assert.strictEqual(
+    normalizeContactNo({ mobile_area_code: "", mobile_number: "555 0123]" }),
+    "5550123",
+    "stray punctuation is stripped and a missing area code is tolerated",
+  );
+  assert.strictEqual(
+    normalizeContactNo({ phone: "9876543210", mobile_number: "" }),
+    "9876543210",
+    "legacy phone column is the fallback",
+  );
+  assert.strictEqual(normalizeContactNo({}), null);
 
   const members = [
     { memberId: "101", email: "wrong@example.com", contactNo: "ID", signUpDate: "2026-09-01" },
@@ -123,6 +154,34 @@ async function run() {
   assert.strictEqual(secondPage.total, 2);
   assert.strictEqual(secondPage.data[0].userId, "two");
   assert.strictEqual(secondPage.hasMore, false);
+
+  // Paging happens across separate requests, so tied rows must keep a stable
+  // order or page 2 can repeat or drop users that page 1 already showed.
+  const tied = [
+    { userId: "zeta", cost: 0, lastActivity: null },
+    { userId: "alpha", cost: 0, lastActivity: null },
+    { userId: "mid", cost: 5, lastActivity: "2026-09-02T00:00:00Z" },
+  ];
+  const byCost = [...tied].sort(compareUserRows("cost")).map((row) => row.userId);
+  assert.deepStrictEqual(byCost, ["mid", "alpha", "zeta"], "ties must fall back to userId order");
+  assert.deepStrictEqual(
+    [...tied].reverse().sort(compareUserRows("cost")).map((row) => row.userId),
+    byCost,
+    "input order must not change the result",
+  );
+  assert.deepStrictEqual(
+    [...tied].sort(compareUserRows("lastActivity")).map((row) => row.userId),
+    ["mid", "alpha", "zeta"],
+    "missing lastActivity sorts last, then by userId",
+  );
+
+  const pageOne = paginateRows([...tied].sort(compareUserRows("cost")), 1, 2);
+  const pageTwo = paginateRows([...tied].reverse().sort(compareUserRows("cost")), 2, 2);
+  assert.deepStrictEqual(
+    [...pageOne.data, ...pageTwo.data].map((row) => row.userId),
+    ["mid", "alpha", "zeta"],
+    "pages built from differently-ordered inputs must not overlap",
+  );
 
   const unavailable = applyMemberData({
     rows,

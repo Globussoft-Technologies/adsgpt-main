@@ -34,7 +34,12 @@ const TYPE_OPTIONS = [
 const ACTIVITY_VIEW_OPTIONS = [
   { value: "all", label: "All Users" },
   { value: "active", label: "Active Users" },
+  { value: "inactive", label: "Inactive Users" },
 ];
+
+function activityViewLabel(view) {
+  return ACTIVITY_VIEW_OPTIONS.find((option) => option.value === view)?.label || "All Users";
+}
 
 const ALL_MODEL_OPTION = { value: "all", label: "All models" };
 const ALL_PLAN_OPTION = { value: "all", label: "All plans" };
@@ -297,6 +302,7 @@ export default function UsersPage() {
   const initialState = useMemo(() => readUsersStateFromSearch(location.search), [location.search]);
   const [range, setRange] = useState(initialState.range);
   const [search, setSearch] = useState(initialState.search);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialState.search);
   const [sort, setSort] = useState(initialState.sort);
   const [filters, setFilters] = useState(initialState.filters);
   const [page, setPage] = useState(initialState.page);
@@ -324,10 +330,20 @@ export default function UsersPage() {
 
   const resetFilters = () => {
     setSearch("");
+    // Clear the debounced copy too, so Reset does not refetch with the old query.
+    setDebouncedSearch("");
     setSort("cost");
     setFilters(EMPTY_FILTERS);
     setPage(1);
   };
+
+  // Every search request re-aggregates all media and loads every user profile,
+  // so fire it once the admin stops typing rather than on each keystroke.
+  useEffect(() => {
+    if (search === debouncedSearch) return undefined;
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search, debouncedSearch]);
 
   useEffect(() => {
     const nextParams = buildUsersSearchParams({ range, search, sort, page, filters }).toString();
@@ -509,7 +525,7 @@ export default function UsersPage() {
       .users(pruneEmptyParams({
         from: range.from || undefined,
         to: range.to || undefined,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         type: filters.type === "all" ? undefined : filters.type,
         model: filters.model === "all" ? undefined : filters.model,
         plan: filters.plan === "all" ? undefined : filters.plan,
@@ -539,7 +555,7 @@ export default function UsersPage() {
   }, [
     range.from,
     range.to,
-    search,
+    debouncedSearch,
     sort,
     page,
     filters.type,
@@ -717,14 +733,23 @@ export default function UsersPage() {
       {error ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
       ) : null}
-      {data?.memberData?.signupFilterRequested && !data.memberData.signupFilterApplied ? (
+      {data?.memberData && !data.memberData.available ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          The member directory is unavailable, so contact numbers and sign-up dates are blank for every
+          user until it recovers.
+        </div>
+      ) : null}
+      {data?.memberData?.available
+      && data.memberData.signupFilterRequested
+      && !data.memberData.signupFilterApplied ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           Sign-up dates are temporarily unavailable, so the sign-up date filter could not be applied.
         </div>
       ) : null}
-      {data?.activityData?.view === "active" && !data.activityData.applied ? (
+      {data?.activityData?.view && data.activityData.view !== "all" && !data.activityData.applied ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Activity data is temporarily incomplete, so the Active Users filter could not be applied safely.
+          Activity data is temporarily incomplete, so the {activityViewLabel(data.activityData.view)}{" "}
+          filter could not be applied safely.
         </div>
       ) : null}
 
@@ -732,11 +757,11 @@ export default function UsersPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
           <div>
             <div className="text-sm font-semibold text-slate-900">
-              {filters.activityView === "active" ? "Active Users" : "All Users"}
+              {activityViewLabel(filters.activityView)}
             </div>
             <div className="mt-0.5 text-xs text-slate-500">
               Showing {formatNumber(rows.length)} of {formatNumber(total)} matching
-              {filters.activityView === "active" ? " active" : ""} users
+              {filters.activityView === "all" ? "" : ` ${filters.activityView}`} users
             </div>
           </div>
           <div className="flex flex-wrap gap-4">

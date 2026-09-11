@@ -1,7 +1,9 @@
 const assert = require("node:assert");
 const {
+  filterRowsByActivityView,
   findActiveUserIds,
   isActiveUser,
+  resolveActivityView,
   matchesActivityFilters,
   _internals,
 } = require("../../services/adminUserActivity");
@@ -93,6 +95,51 @@ async function run() {
   assert.strictEqual(
     matchesActivityFilters({ ...activityRow, lastActivity: null }, { lastActivityFrom: "2026-09-01" }),
     false,
+  );
+
+  // The three views the admin filter offers: used the app, used nothing, everyone.
+  const viewRows = [
+    { userId: "local-user" },
+    { userId: "GPT-7" },
+    { userId: "dormant-a" },
+    { userId: "dormant-b" },
+  ];
+  const viewProfiles = new Map([["local-user", { user_id: "local-user", amember_user_id: "4" }]]);
+  const byView = (view) =>
+    filterRowsByActivityView({
+      rows: viewRows,
+      profileMap: viewProfiles,
+      activeUserIds: result.activeUserIds,
+      view,
+    }).map((row) => row.userId);
+
+  assert.deepStrictEqual(byView("active"), ["local-user", "GPT-7"]);
+  assert.deepStrictEqual(byView("inactive"), ["dormant-a", "dormant-b"]);
+  assert.deepStrictEqual(byView("all"), viewRows.map((row) => row.userId));
+  assert.deepStrictEqual(
+    [...byView("active"), ...byView("inactive")].sort(),
+    byView("all").slice().sort(),
+    "active and inactive must partition the full set - no user in both, none lost",
+  );
+
+  assert.deepStrictEqual(resolveActivityView("all"), {
+    view: "all",
+    available: true,
+    applied: true,
+    failedSources: [],
+  });
+  assert.strictEqual(resolveActivityView("bogus").view, "all", "unknown views fall back to all");
+  assert.strictEqual(resolveActivityView("active", []).applied, true);
+  assert.strictEqual(resolveActivityView("inactive", []).applied, true);
+  // An incomplete active set inverts into a list of users who look dormant but
+  // are not, so the inactive view must refuse to run rather than mislead.
+  assert.strictEqual(resolveActivityView("inactive", ["token_usage"]).applied, false);
+  assert.strictEqual(resolveActivityView("inactive", ["token_usage"]).available, false);
+  assert.strictEqual(resolveActivityView("active", ["token_usage"]).applied, false);
+  assert.strictEqual(
+    resolveActivityView("all", ["token_usage"]).applied,
+    true,
+    "the unfiltered view does not depend on activity sources",
   );
 
   const failedModels = { ...models };

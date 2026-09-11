@@ -30,13 +30,34 @@ function normalizeDateOnly(value) {
   return `${year}-${month}-${day}`;
 }
 
+// aMember stores the signup number in `mobile_number`, with the dial code kept
+// separately in `mobile_area_code` as "US+1" / "IN+91" (ISO country + dial).
+// The built-in `phone` column is legacy - only the oldest members ever filled
+// it, and no member has both.
+function normalizeContactNo(raw) {
+  const mobile = String(raw?.mobile_number || "").replace(/\D/g, "");
+  if (!mobile) return String(raw?.phone || "").trim() || null;
+
+  const dial = /\+(\d{1,4})\s*$/.exec(String(raw?.mobile_area_code || ""))?.[1];
+  if (!dial) return mobile;
+
+  // Some members typed the dial code into the number as well. NANP is the only
+  // case we can strip safely: a US national number never starts with 1, so a
+  // leading 1 on an 11-digit value is the country code. Elsewhere the dial code
+  // collides with real national prefixes (an Indian mobile starting 91... is
+  // not +91 repeated), so leave those untouched rather than mangle them.
+  const national =
+    dial === "1" && mobile.length === 11 && mobile.startsWith("1") ? mobile.slice(1) : mobile;
+  return `+${dial} ${national}`;
+}
+
 function normalizeMember(raw) {
   const memberId = String(raw?.user_id ?? "").trim();
   if (!memberId) return null;
   return {
     memberId,
     email: String(raw?.email || "").trim(),
-    contactNo: String(raw?.phone || "").trim() || null,
+    contactNo: normalizeContactNo(raw),
     signUpDate: normalizeDateOnly(raw?.added),
   };
 }
@@ -112,6 +133,7 @@ module.exports = {
     PAGE_SIZE,
     extractUsers,
     normalizeDateOnly,
+    normalizeContactNo,
     normalizeMember,
     resetCache,
   },
