@@ -22,29 +22,39 @@ const CommonDropdown = ({
   const triggerLabel = value?.label?.replace(/\s*\(.*?\)\s*$/, '') || label;
   const isVoiceChip = triggerVariant === 'voice-chip';
   const isField = triggerVariant === 'field';
+  const isFormPill = triggerVariant === 'form-pill';
+  const isUgcField = triggerVariant === 'ugc-field';
   // const selectedOption = options?.find((opt) => opt.value === value?.value);
   // const SelectedIcon = selectedOption?.Icon;
   return (
     <Select value={value?.value ?? ''} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
-        hideIcon={!showChevron}
+        hideIcon={!showChevron && !isFormPill && !isUgcField}
         disabled={disabled}
         className={
           isVoiceChip
             ? `group relative flex items-center gap-1.5 rounded-full border border-emerald-400/50 bg-emerald-400/10 px-3 py-1 text-[12px] font-medium text-gray-900 opacity-100 shadow-[0_0_8px_rgba(52,211,153,0.2)] transition hover:bg-emerald-400/10 focus-visible:border-emerald-400/50 focus-visible:ring-0 sm:text-[13px] dark:bg-emerald-400/10 dark:text-white dark:hover:bg-emerald-400/10 ${className}`
             : isField
               ? `group relative flex !h-11 w-full items-center rounded-lg border border-black/10 bg-black/[0.03] px-3 text-sm text-gray-700 opacity-100 shadow-none transition hover:bg-black/[0.045] focus-visible:border-emerald-400/50 focus-visible:ring-1 focus-visible:ring-emerald-400/20 dark:border-white/10 dark:bg-white/[0.035] dark:text-white/75 dark:hover:bg-white/[0.05] [&>svg]:block ${className}`
+            : isFormPill
+              ? `group relative flex !h-11 w-full items-center justify-between rounded-full border border-black/10 bg-zinc-50 px-4 text-sm text-zinc-800 opacity-100 shadow-none transition hover:bg-zinc-100 focus-visible:outline-none dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:hover:bg-[#909294]/20 [&>svg]:block [&>svg]:text-zinc-500 dark:[&>svg]:text-[#AFAFAF] ${className}`
+            : isUgcField
+              ? `group relative flex !h-11 w-full items-center justify-between rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-3 text-xs text-gray-900 dark:text-white opacity-100 shadow-none transition hover:bg-black/10 dark:hover:bg-white/10 focus-visible:outline-none [&>svg]:block [&>svg]:text-gray-500 dark:[&>svg]:text-white/40 ${className}`
             : `prompt_selection_button_no_gradient group 2xl:text-13 relative flex md:text-[11px] 2xl:py-[18px] ${showChevron || label === 'AI Model' || type === 'b-roll' || type === 'ugc' ? '[&>svg]:block' : '[&>svg]:hidden'} items-center gap-0 rounded-[50px] text-[9px] shadow-none transition-all duration-200 ease-in hover:bg-slate-100 dark:border-none [&_img]:opacity-80 [&_img]:brightness-0 dark:[&_img]:opacity-100 dark:[&_img]:brightness-100 [&_svg]:text-current! opacity-80 hover:opacity-100 ${type === 'b-roll' ? 'dark:bg-[#909294]/10 dark:text-[#f0f0f0]' : 'dark:bg-[#202020]/50 dark:text-[#AFAFAF]'} ${className}`
         }
       >
-        <div className="flex items-center gap-1 pr-1 capitalize 2xl:gap-1.5">
-          {Icon ? Icon : (typeof icon === 'string' ? <img src={icon} alt="icon" className="h-3 w-3 brightness-0 opacity-50 2xl:h-4 2xl:w-4 dark:brightness-100 group-hover:opacity-100" /> : icon)}
+        <div className="flex items-center gap-2 pr-1 capitalize 2xl:gap-2">
+          {Icon ? Icon : (typeof icon === 'string' ? <img src={icon} alt="icon" className={`brightness-0 opacity-60 dark:brightness-100 group-hover:opacity-100 ${isFormPill || isUgcField ? 'h-4 w-4 shrink-0' : 'h-3 w-3 2xl:h-4 2xl:w-4'}`} /> : icon)}
           <span
             className={
               isVoiceChip
                 ? 'font-medium text-gray-900 dark:text-white'
                 : isField
                   ? 'font-normal text-gray-700 dark:text-white/75'
+                : isFormPill
+                  ? 'font-normal text-sm text-zinc-800 dark:text-white truncate'
+                : isUgcField
+                  ? 'font-normal text-xs text-gray-900 dark:text-white truncate'
                 : 'font-light text-zinc-800 dark:text-[#afafaf] dark:group-data-[state=open]:text-white'
             }
           >

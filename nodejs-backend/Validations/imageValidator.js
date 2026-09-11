@@ -42,10 +42,29 @@ const lifestyleUserInputsSchema = Joi.object({
         ethnicity: Joi.string().allow("", null),
         mood: Joi.string().allow("", null),
         wardrobe: Joi.string().allow("", null),
-        modelReferenceImages: Joi.array().items(Joi.string()),
+        modelReferenceImages: Joi.array().items(Joi.string()).unique().max(5),
     }),
-    keyVisuals: Joi.array().items(Joi.string()),
-});
+    keyVisuals: Joi.array().items(Joi.string()).unique().max(5),
+}).custom((value, helpers) => {
+    const modelReferences = Array.isArray(value.modelDescription?.modelReferenceImages)
+        ? value.modelDescription.modelReferenceImages
+        : [];
+    const keyVisuals = Array.isArray(value.keyVisuals) ? value.keyVisuals : [];
+    const combinedReferences = [...modelReferences, ...keyVisuals];
+
+    if (new Set(combinedReferences).size < combinedReferences.length) {
+        return helpers.message({
+            custom: "modelReferenceImages and keyVisuals must not contain duplicate images",
+        });
+    }
+    if (combinedReferences.length > 5) {
+        return helpers.message({
+            custom: "modelReferenceImages and keyVisuals can contain up to 5 images combined",
+        });
+    }
+
+    return value;
+}, "Lifestyle combined reference image limit");
 
 const lifestyleSchema = Joi.object({
     type: Joi.valid("lifestyle").required(),
@@ -164,9 +183,24 @@ const aiAdsBrandInfoSchema = Joi.object({
 
 const aiAdsUserInputsSchema = Joi.object({
     ...baseUserInputs,
-    ReferenceImages: Joi.array().items(Joi.string()),
+    ReferenceImages: Joi.array().items(Joi.string()).unique().max(5),
     competitorReferenceImage: Joi.string().allow("", null),
-});
+}).custom((value, helpers) => {
+    const referenceCount = Array.isArray(value.ReferenceImages)
+        ? value.ReferenceImages.length
+        : 0;
+    const hasCompetitorReference =
+        typeof value.competitorReferenceImage === "string"
+        && value.competitorReferenceImage.trim().length > 0;
+
+    if (referenceCount + (hasCompetitorReference ? 1 : 0) > 5) {
+        return helpers.message({
+            custom: "ReferenceImages and competitorReferenceImage can contain up to 5 images combined",
+        });
+    }
+
+    return value;
+}, "AI Ads combined reference image limit");
 
 const aiAdsSchema = Joi.object({
     type: Joi.valid("ai_ads").required(),

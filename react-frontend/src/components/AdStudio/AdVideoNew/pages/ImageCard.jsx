@@ -140,7 +140,7 @@ export default function ImageCard({
   // cache keys and download the image twice.
   const handleOpenLogoEditor = (e) => {
     e.stopPropagation();
-    const rawUrl = item?.results?.[0]?.url;
+    const rawUrl = activeImageUrl || item?.results?.[0]?.url;
     if (!rawUrl) return;
     if (isThisFullscreen) closeFullscreen();
     try {
@@ -211,21 +211,6 @@ export default function ImageCard({
     setActiveImageUrl(item?.results?.[0]?.url ?? '');
   };
 
-  useEffect(() => {
-    if (!isThisFullscreen) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') closeFullscreen();
-    };
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      document.removeEventListener('keydown', onKey);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isThisFullscreen]);
-
   const handleFullscreen = (e) => {
     e.stopPropagation();
     if (isThisFullscreen) {
@@ -237,11 +222,16 @@ export default function ImageCard({
     setIsFullscreen(true);
   };
 
+  const getCardImageUrl = (img) =>
+    img?.results?.[0]?.url || (typeof img?.url === 'string' ? img.url : '');
+
   const findCompletedIndex = (from, direction) => {
     let i = from + direction;
     while (i >= 0 && i < totalImages) {
       const v = getImageAt?.(i);
-      if (v?.status === 'completed' && v?.results?.[0]?.url) return i;
+      const isCompleted =
+        v?.status === 'completed' || v?.status === 'success' || (!v?.status && Boolean(getCardImageUrl(v)));
+      if (isCompleted && getCardImageUrl(v)) return i;
       i += direction;
     }
     return -1;
@@ -250,7 +240,8 @@ export default function ImageCard({
   const navigateTo = (targetIndex, imageOverride) => {
     const targetImage = imageOverride ?? getImageAt?.(targetIndex);
     if (!targetImage) return;
-    const newUrl = targetImage.results[0].url;
+    const newUrl = getCardImageUrl(targetImage);
+    if (!newUrl) return;
     setActiveNavIndex(targetIndex);
     setActiveImageUrl(newUrl);
     onFullscreenChange?.(targetIndex);
@@ -258,14 +249,14 @@ export default function ImageCard({
   };
 
   const handleNavPrev = (e) => {
-    e.stopPropagation();
+    e?.stopPropagation?.();
     const target = findCompletedIndex(activeNavIndex, -1);
     if (target === -1) return;
     navigateTo(target);
   };
 
   const handleNavNext = async (e) => {
-    e.stopPropagation();
+    e?.stopPropagation?.();
     let target = findCompletedIndex(activeNavIndex, 1);
     let imageOverride = null;
     if (target === -1 && hasMore) {
@@ -273,7 +264,9 @@ export default function ImageCard({
       if (fetched?.length) {
         for (let i = 0; i < fetched.length; i++) {
           const v = fetched[i];
-          if (v?.status === 'completed' && v?.results?.[0]?.url) {
+          const isCompleted =
+            v?.status === 'completed' || v?.status === 'success' || (!v?.status && Boolean(getCardImageUrl(v)));
+          if (isCompleted && getCardImageUrl(v)) {
             target = totalImages + i;
             imageOverride = v;
             break;
@@ -287,6 +280,27 @@ export default function ImageCard({
 
   const hasPrev = isThisFullscreen && findCompletedIndex(activeNavIndex, -1) !== -1;
   const hasNext = isThisFullscreen && (findCompletedIndex(activeNavIndex, 1) !== -1 || hasMore);
+
+  useEffect(() => {
+    if (!isThisFullscreen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        closeFullscreen();
+      } else if (e.key === 'ArrowLeft') {
+        handleNavPrev(e);
+      } else if (e.key === 'ArrowRight') {
+        handleNavNext(e);
+      }
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isThisFullscreen, activeNavIndex, totalImages, hasMore]);
 
   // Shared recreate flow — used by both the success-state hover bar and the
   // failed-state hover bar. Tailors inputs to one image at the card's
@@ -459,7 +473,7 @@ export default function ImageCard({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                dispatch(downloadMediaFromUrl(`${item?.results?.[0]?.url}`, 'image'));
+                dispatch(downloadMediaFromUrl(`${activeImageUrl || item?.results?.[0]?.url}`, 'image'));
               }}
               title="Download image"
               className="flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-white/85 transition-all hover:bg-white/12 hover:text-white"
@@ -468,6 +482,26 @@ export default function ImageCard({
               Download
             </button>
           </div>
+
+          {/* Prev / Next navigation arrows — matching video section */}
+          {hasPrev && (
+            <button
+              onClick={handleNavPrev}
+              title="Previous image"
+              className="absolute top-1/2 left-4 z-30 -translate-y-1/2 rounded-2xl border-2 border-white/30 bg-white/10 p-3 text-white shadow-[0_0_18px_rgba(255,255,255,0.15)] backdrop-blur-md transition-all duration-200 hover:scale-110 hover:border-white/70 hover:bg-white/25 hover:shadow-[0_0_28px_rgba(255,255,255,0.35)] active:scale-95"
+            >
+              <ChevronLeft size={28} strokeWidth={2.5} />
+            </button>
+          )}
+          {hasNext && (
+            <button
+              onClick={handleNavNext}
+              title="Next image"
+              className="absolute top-1/2 right-4 z-30 -translate-y-1/2 rounded-2xl border-2 border-white/30 bg-white/10 p-3 text-white shadow-[0_0_18px_rgba(255,255,255,0.15)] backdrop-blur-md transition-all duration-200 hover:scale-110 hover:border-white/70 hover:bg-white/25 hover:shadow-[0_0_28px_rgba(255,255,255,0.35)] active:scale-95"
+            >
+              <ChevronRight size={28} strokeWidth={2.5} />
+            </button>
+          )}
 
           {/* Centered image — stop propagation so clicking the image
               doesn't bubble up to the backdrop's close handler. */}

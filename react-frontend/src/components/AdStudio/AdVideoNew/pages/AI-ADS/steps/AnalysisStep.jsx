@@ -218,8 +218,10 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
                     onChange={handleAddImages}
                   />
                 </div>
-                <div className={`border-black/10 dark:border-white/10 px-2 py-0.5 mb-2 w-50 [&_input]:h-7! [&_input]:text-xs! [&_input]:px-2! **:min-h-0! [&_svg]:h-3.5! [&_svg]:w-3.5! ${loading ? 'pointer-events-none opacity-50' : ''}`}>
-                  <BrandSearch isAvatarAdsSearch={true} className="" placeholder="Select a brand" portal={true} />
+                <div className={`px-3 pb-3 pt-1 ${loading ? 'pointer-events-none opacity-50' : ''}`}>
+                  <div className="w-52 sm:w-56 [&_[data-slot=command]]:!rounded-full [&_[data-slot=command]]:!bg-white dark:[&_[data-slot=command]]:!bg-[#222225] [&_[data-slot=command]]:!border-zinc-300 dark:[&_[data-slot=command]]:!border-white/20 [&_[data-slot=command]]:!shadow-xs [&_.min-h-11]:!min-h-0 [&_.min-h-11]:!h-8.5 [&_input]:!h-8.5 [&_input]:!text-xs [&_input]:!pl-3.5 [&_input]:!pr-8 [&_input]:!text-zinc-900 dark:[&_input]:!text-white [&_input]:!placeholder-zinc-600 dark:[&_input]:!placeholder-zinc-400 [&_input]:!font-medium [&_button]:!h-6 [&_button]:!w-6 [&_button]:!right-1.5 [&_svg]:!size-3.5 [&_svg]:!text-zinc-700 dark:[&_svg]:!text-zinc-300">
+                    <BrandSearch placeholder="Select a brand" portal={true} />
+                  </div>
                 </div>
               </div>
               {scriptError && <p className="mt-2 text-xs text-red-400">{scriptError}</p>}

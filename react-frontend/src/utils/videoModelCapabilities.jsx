@@ -42,7 +42,7 @@ export const getModelDurationOptions = (models, canonicalModel) => {
 export const getSelectedModelDuration = (durationOptions, duration) =>
   durationOptions.find((option) => option.value === toVideoDurationValue(duration))?.value || '';
 
-export const AspectRatioPreview = ({ ratio, className = '' }) => {
+export const AspectRatioPreview = ({ ratio, className = '', filled = false }) => {
   const [width, height] = String(ratio).split(':').map(Number);
   if (!Number.isFinite(width) || !Number.isFinite(height) || !width || !height) return null;
 
@@ -50,7 +50,7 @@ export const AspectRatioPreview = ({ ratio, className = '' }) => {
   return (
     <span className={`flex h-4 w-4 shrink-0 items-center justify-center ${className}`} aria-hidden="true">
       <span
-        className="rounded-[2px] border border-current"
+        className={`rounded-[2px] border border-current ${filled ? 'bg-current/25' : ''}`}
         style={{
           aspectRatio: `${width} / ${height}`,
           width: isWide ? '100%' : 'auto',

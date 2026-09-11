@@ -776,15 +776,19 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
                     key={ratio.value}
                     disabled={isUploading || isLoading || isCloneModelsLoading}
                     onClick={() => { if (!isUploading && !isLoading && !isCloneModelsLoading) setAspectRatio(ratio.value); }}
-                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs transition-all ${
+                    className={`flex items-center gap-2 rounded-full border px-4 py-2 text-xs transition-all ${
                       isSelected
-                        ? 'border border-blue-500 bg-blue-500/10 text-gray-900 dark:text-white'
-                        : errors.aspectRatio ? 'border border-red-500/50 bg-gray-100 text-gray-500 dark:bg-[#38383880] dark:text-white/40'
-                          : 'border border-transparent bg-gray-100 text-gray-500 hover:border-black/20 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-white/20'
+                        ? 'border-[#3ad0c8] bg-[#3ad0c8]/15 text-gray-900 shadow-[0_0_12px_rgba(58,208,200,0.15)] dark:bg-[#3ad0c8]/20 dark:text-white'
+                        : errors.aspectRatio ? 'border border-red-500/50 bg-gray-100 text-gray-500 hover:border-[#3ad0c8]/60 dark:bg-[#38383880] dark:text-white/40'
+                          : 'border-black/10 bg-gray-100 text-gray-600 hover:border-[#3ad0c8]/60 hover:bg-gray-200 hover:text-gray-900 dark:border-white/10 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-[#3ad0c8]/60 dark:hover:bg-[#383838] dark:hover:text-white'
                     }`}
                   >
-                    <AspectRatioPreview ratio={ratio.value} className="h-4 w-4" />
-                    {ratio.label}
+                    <AspectRatioPreview
+                      ratio={ratio.value}
+                      filled={isSelected}
+                      className={`h-4 w-4 ${isSelected ? 'text-[#3ad0c8]' : 'text-gray-500 dark:text-white/40'}`}
+                    />
+                    <span className={isSelected ? 'font-semibold' : 'font-medium'}>{ratio.label}</span>
                   </button>
                 );
               })}

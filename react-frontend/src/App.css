@@ -4248,4 +4248,21 @@ html:not(.dark) .adfactory-preview-canvas .adfactory-preview-save-button--muted 
   opacity: 1 !important;
 }
 
+/* Product B-Rolls form hints need to read as available guidance rather than
+   disabled copy. Keep this local to the modal so shared form surfaces retain
+   their existing hierarchy. */
+html:not(.dark) .product-broll-form input::placeholder,
+html:not(.dark) .product-broll-form .product-broll-placeholder-dropdown span {
+  color: color-mix(in srgb, var(--ws-text-primary) 42%, var(--ws-text-secondary)) !important;
+  font-weight: 450 !important;
+  opacity: 1 !important;
+}
+
+.dark .product-broll-form input::placeholder,
+.dark .product-broll-form .product-broll-placeholder-dropdown span {
+  color: rgba(255, 255, 255, 0.72) !important;
+  font-weight: 450 !important;
+  opacity: 1 !important;
+}
+
 

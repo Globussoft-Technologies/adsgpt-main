@@ -417,16 +417,20 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
           </h2>
         </div>
 
-        <div className="mt-10 flex h-full flex-col gap-6 pb-10">
-          <div className="h-full max-h-[500px] overflow-y-auto px-6">
+        <div className="mt-6 flex h-full flex-col gap-4 pb-8">
+          <div className="h-full max-h-[500px] overflow-y-auto px-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            {/* Language support chip */}
+            <div className="mb-4">
+              <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-gray-900 text-white dark:bg-white px-2.5 py-0.5 text-[10px] font-medium dark:text-black 2xl:text-xs">
+                🌐 All regional languages supported
+              </span>
+            </div>
+
             <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
-              {/* Left Column - Scrollable if content overflows */}
-              <div className="flex flex-col gap-6 pr-4 sm:gap-[29px] 2xl:gap-6">
-                {/* Language support chip */}
-                <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-gray-900 text-white dark:bg-white px-2.5 py-0.5 text-10 font-medium dark:text-black 2xl:text-xs">
-                  🌐 All regional languages supported
-                </span>
-                <div className="flex flex-col gap-2">
+              {/* Left Column */}
+              <div className="flex flex-col gap-4">
+                {/* 1. Brand/product Name* */}
+                <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                     Brand/product Name*
                   </label>
@@ -434,7 +438,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                     placeholder="Enter your Brand/product name"
                     value={productName}
                     onChange={(e) => setProductName(e.target.value)}
-                    className={`w-full rounded-xl border bg-black/5 dark:bg-white/5 px-4 py-2 text-[11px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:py-3 2xl:text-sm ${
+                    className={`h-11 w-full rounded-xl border bg-black/5 dark:bg-white/5 px-4 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm ${
                       errors.productName ? 'border-red-500/50' : 'border-black/10 dark:border-white/10'
                     }`}
                   />
@@ -443,14 +447,14 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                   )}
                 </div>
 
-                {/* URL / Upload */}
+                {/* 2. URL / Upload */}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-gray-500 dark:text-white/80">
+                  <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                     Brand/product URL or upload image*
                   </label>
 
                   <div
-                    className={`flex items-center gap-2 rounded-full border bg-black/5 dark:bg-white/5 px-1 py-0.5 ${
+                    className={`flex h-11 w-full items-center gap-2 rounded-xl border bg-black/5 dark:bg-white/5 px-3 py-1 ${
                       errors.productUrl ? 'border-red-500/50' : 'border-black/10 dark:border-white/10'
                     }`}
                   >
@@ -460,18 +464,18 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                         value={productUrl}
                         onChange={(e) => setProductUrl(e.target.value)}
                         onPaste={handlePaste}
-                        className="w-full bg-transparent px-2 py-1 text-[11px] text-gray-900 dark:text-white focus:outline-none 2xl:text-xs"
+                        className="w-full bg-transparent px-1 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 focus:outline-none 2xl:text-sm"
                       />
 
-                      <LinkIcon className="h-3 w-3 text-gray-500 dark:text-white/40" />
+                      <LinkIcon className="h-3.5 w-3.5 text-gray-500 dark:text-white/40" />
                     </div>
 
                     <label
                       htmlFor="ugc-image-upload"
-                      className="flex cursor-pointer items-center gap-1 rounded-full bg-zinc-200 px-3 py-1 transition hover:bg-zinc-300 dark:bg-white/20 dark:hover:bg-white/30"
+                      className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-zinc-200 px-3 py-1.5 transition hover:bg-zinc-300 dark:bg-white/20 dark:hover:bg-white/30"
                     >
-                      <CloudUpload className="h-3 w-3 text-zinc-800 2xl:h-3.5 2xl:w-3.5 dark:text-white" />
-                      <span className="!text-[8px] font-bold tracking-wider text-zinc-800 uppercase 2xl:text-[11px] dark:text-white">
+                      <CloudUpload className="h-3.5 w-3.5 text-zinc-800 dark:text-white" />
+                      <span className="text-[10px] font-semibold tracking-wider text-zinc-800 uppercase 2xl:text-xs dark:text-white">
                         Upload
                       </span>
                     </label>
@@ -490,14 +494,15 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                   )}
                 </div>
 
-                {/* Model & Duration */}
-                <div className="flex gap-4">
-                  <div className="flex flex-1 flex-col gap-2">
+                {/* 3. Model & Duration */}
+                <div className="flex gap-3 sm:gap-4">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">Model *</label>
                     <CommonDropdown
                       options={videoChatModels}
                       label="Model"
                       icon={SparkleDark}
+                      triggerVariant="ugc-field"
                       value={videoChatModels.find((o) => o.value === videoModel)}
                       onChange={(val) => {
                         if (isVideoModelBlocked(videoChatModels.find((model) => model.value === val), userData)) {
@@ -513,7 +518,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                       <span className="mt-1 text-[12px] text-red-400">{errors.videoModel}</span>
                     )}
                   </div>
-                  <div className="flex flex-1 flex-col gap-2">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                       Duration *
                     </label>
@@ -521,6 +526,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                       options={configuredDurationOptions}
                       label="Duration"
                       icon={TimerDarkLogo}
+                      triggerVariant="ugc-field"
                       value={configuredDurationOptions.find((o) => o.value === selectedVideoDuration)}
                       onChange={(value) => {
                         setVideoDuration(value);
@@ -533,21 +539,20 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                     )}
                   </div>
                 </div>
-                <div>
-                  {['sora', 'veo-3.1-fast'].includes(videoModel) && (
-                    <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400">
-                      <span>⚠</span>
-                      <span>Lower quality model selected. Video output quality may be reduced.</span>
-                    </div>
-                  )}
-                </div>
 
-                {/* Aspect Ratio */}
-                <div className="flex flex-col gap-3">
+                {['sora', 'veo-3.1-fast'].includes(videoModel) && (
+                  <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400">
+                    <span>⚠</span>
+                    <span>Lower quality model selected. Video output quality may be reduced.</span>
+                  </div>
+                )}
+
+                {/* 4. Aspect Ratio */}
+                <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                     Aspect Ratio * {isAspectRatioLoading && <Loader2 className="ml-1 inline h-3.5 w-3.5 animate-spin" />}
                   </label>
-                  <div className="flex gap-4">
+                  <div className="flex gap-3">
                     {aspectRatioOptions
                       .map((ratio) => {
                         const isSelected = aspectRatio === ratio.value;
@@ -559,16 +564,20 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                               if (isAspectRatioLoading) return;
                               setAspectRatio(ratio.value);
                             }}
-                            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${
+                            className={`flex h-11 items-center gap-2 rounded-xl border px-4 text-xs transition 2xl:text-sm ${
                               isSelected
-                                ? 'border-black/10 dark:border-white/30 bg-black/5 dark:bg-white/10 text-gray-900 dark:text-white shadow-inner'
+                                ? 'border-[#3ad0c8] bg-[#3ad0c8]/15 text-gray-900 shadow-[0_0_12px_rgba(58,208,200,0.15)] dark:bg-[#3ad0c8]/20 dark:text-white'
                                 : errors.aspectRatio
-                                    ? 'border-red-500/50 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5'
-                                    : 'border-black/10 dark:border-white/5 bg-transparent text-gray-500 dark:text-white/40 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white/60'
+                                    ? 'border-red-500/50 bg-transparent text-gray-500 hover:border-[#3ad0c8]/60 hover:bg-black/5 dark:text-white/40 dark:hover:bg-white/5'
+                                    : 'border-black/10 bg-black/5 text-gray-600 hover:border-[#3ad0c8]/60 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white/60 dark:hover:border-[#3ad0c8]/60 dark:hover:text-white'
                             }`}
                           >
-                            <AspectRatioPreview ratio={ratio.value} className={`h-4 w-4 ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/40'}`} />
-                            {ratio.label}
+                            <AspectRatioPreview
+                              ratio={ratio.value}
+                              filled={isSelected}
+                              className={`h-4 w-4 ${isSelected ? 'text-[#3ad0c8]' : 'text-gray-500 dark:text-white/40'}`}
+                            />
+                            <span className={isSelected ? 'font-semibold' : 'font-medium'}>{ratio.label}</span>
                           </button>
                         );
                       })}
@@ -576,43 +585,21 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                   {errors.aspectRatio && (
                     <span className="mt-1 text-[12px] text-red-400">{errors.aspectRatio}</span>
                   )}
-                  {/* {videoModel === 'kling_3.0' && aspectRatio === '9:16' && (
-                    <div className="mt-1 flex w-fit items-center gap-1 rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-400 2xl:text-xs">
-                      <span>ℹ</span>
-                      <span>Product image also should be in 9:16 ratio</span>
-                    </div>
-                  )} */}
                 </div>
-
-                {/* Promotional Info */}
-                {(
-                  <div className="mt-0.5 flex flex-col gap-2 2xl:mt-0">
-                    <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
-                      Promotional Info
-                    </label>
-                    <input
-                      placeholder="Enter any promotional info/offers"
-                      value={promotion}
-                      onChange={(e) => setPromotion(e.target.value)}
-                      className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-4 py-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm"
-                    />
-                  </div>
-                )}
               </div>
 
               {/* Right Column */}
-              <div className="flex flex-col gap-6 overflow-hidden">
-                {/* Description */}
-                <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-4">
+                {/* 1. Brand description* */}
+                <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                     Brand description*
                   </label>
-                  <textarea
+                  <input
                     placeholder="Enter your Brand Description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    rows={2}
-                    className={`w-full resize-none rounded-xl border bg-black/5 dark:bg-white/5 px-4 py-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm ${
+                    className={`h-11 w-full rounded-xl border bg-black/5 dark:bg-white/5 px-4 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm ${
                       errors.description ? 'border-red-500/50' : 'border-black/10 dark:border-white/10'
                     }`}
                   />
@@ -621,9 +608,35 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                   )}
                 </div>
 
-                {/* Thumbnails */}
+                {/* 2. Promotional Info */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
+                    Promotional Info
+                  </label>
+                  <input
+                    placeholder="Enter any promotional info/offers"
+                    value={promotion}
+                    onChange={(e) => setPromotion(e.target.value)}
+                    className="h-11 w-full rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-4 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm"
+                  />
+                </div>
+
+                {/* 3. Prompt */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
+                    Prompt
+                  </label>
+                  <input
+                    placeholder="e.g., white background, aerial drone shot, etc"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="h-11 w-full rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-4 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/40 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm"
+                  />
+                </div>
+
+                {/* 4. Thumbnails (only when images uploaded) */}
                 {uploadedImages.length > 0 && (
-                  <div className="flex min-h-0 flex-1 flex-col gap-3">
+                  <div className="flex min-h-0 flex-col gap-2">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
                         Product Images *
@@ -634,8 +647,8 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                     </div>
 
                     <div
-                      className="scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-[#4F46E5]/40 grid grid-cols-3 gap-4 overflow-y-auto rounded-3xl border border-black/10 dark:border-white/5 bg-gray-50 dark:bg-[#1C1C1F] p-4"
-                      style={{ height: '180px', alignContent: 'start' }}
+                      className="scrollbar-thin scrollbar-track-white/5 scrollbar-thumb-[#4F46E5]/40 grid grid-cols-3 gap-3 overflow-y-auto rounded-2xl border border-black/10 dark:border-white/5 bg-gray-50 dark:bg-[#1C1C1F] p-3"
+                      style={{ maxHeight: '130px', alignContent: 'start' }}
                     >
                       {uploadedImages.map((img, idx) => {
                         const isSelected = selectedImageIndex === idx;
@@ -685,18 +698,6 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                     </div>
                   </div>
                 )}
-
-                <div className="mt-4.5 flex flex-col gap-2">
-                  <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
-                    Prompt
-                  </label>
-                  <input
-                    placeholder="e.g., white background, aerial drone shot, etc"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-4 py-3 text-xs text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-white/30 focus:ring-1 focus:ring-white/20 focus:outline-none 2xl:text-sm"
-                  />
-                </div>
               </div>
             </div>
           </div>

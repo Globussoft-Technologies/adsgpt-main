@@ -145,7 +145,7 @@ const AdStudioPage = () => {
 
   return (
     <>
-      <div className="flex">
+      <div className="flex h-full w-full">
         {effectiveTabId === 'adCopy' && (
           <div className="adcopy_container max-h-[calc(100svh-240px)] w-full overflow-y-auto 2xl:max-h-[calc(100svh-260px)]">
             <AdCopyHome />
@@ -170,9 +170,8 @@ const AdStudioPage = () => {
         )}
 
         {effectiveTabId === 'adVideoNew' && (
-          <div className="adcopy_container max-h-[calc(100svh-200px)] w-full">
+          <div className="adcopy_container h-full w-full">
             <AdVideoLayout />
-            {/* {Array.isArray(conversations) && conversations?.length === 0 && <AdPromptComponent />} */}
           </div>
         )}
 

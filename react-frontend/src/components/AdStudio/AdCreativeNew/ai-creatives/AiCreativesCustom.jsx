@@ -109,6 +109,7 @@ const COMPETITOR_PLACEHOLDERS = [
 ];
 
 const NAS_BASE_URL = import.meta.env.VITE_NAS_BASE_URL || '';
+const MAX_REFS_TOTAL = 5;
 
 export function AiCreativesCustom({ onClose, onComplete }) {
   const [prompt, setPrompt] = useState('');
@@ -271,7 +272,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     const refs = Array.isArray(inp.referenceImages) ? inp.referenceImages : [];
     const refList = refs.filter(Boolean);
     setBrandImagePool(refList.map((u) => ({ file: null, preview: u })));
-    setBrandImagesPicked(refList);
+    setBrandImagesPicked(Array.from(new Set(refList)).slice(0, MAX_REFS_TOTAL));
 
     if (inp.brandLogo) {
       setBrandLogoFile(null);
@@ -477,7 +478,6 @@ export function AiCreativesCustom({ onClose, onComplete }) {
 
   // Total images shown in the prompt box are capped at 5. The competitor
   // visual + every picked brand-pool chip count toward the same five slots.
-  const MAX_REFS_TOTAL = 5;
   const competitorSelected =
     Boolean(competitorAdRef) && !competitorAdRef.startsWith('competitor-ref-');
   const remainingRefSlots = () =>
@@ -521,9 +521,18 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     }
   };
 
-  const handleRefImageUrlAdd = () => {
-    const trimmed = referenceImageUrl.trim();
+  const addRefImageUrl = (rawUrl) => {
+    const trimmed = rawUrl.trim();
     if (!trimmed) return;
+    const isDuplicate =
+      referenceImages.some((item) => item.preview?.trim() === trimmed)
+      || brandImagesPicked.includes(trimmed)
+      || (competitorSelected && competitorAdRef.trim() === trimmed);
+    if (isDuplicate) {
+      setReferenceImageUrl('');
+      setImagesError('This image is already attached.');
+      return;
+    }
     if (remainingRefSlots() <= 0) {
       setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
       return;
@@ -532,6 +541,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     setReferenceImageUrl('');
     setImagesError('');
   };
+
+  const handleRefImageUrlAdd = () => addRefImageUrl(referenceImageUrl);
 
   // Clipboard paste: any file goes through the strict-type filter, URL text
   // gets added as-is (no type check — URLs may not carry an extension).
@@ -545,8 +556,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     const text = e.clipboardData?.getData('text');
     if (text && /^https?:\/\//i.test(text.trim())) {
       e.preventDefault();
-      setReferenceImages((prev) => [...prev, { file: null, preview: text.trim() }]);
-      setReferenceImageUrl('');
+      addRefImageUrl(text);
     }
   };
 
@@ -570,13 +580,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     const url = dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
     const trimmed = url.trim();
     if (trimmed && /^https?:\/\//i.test(trimmed)) {
-      if (remainingRefSlots() <= 0) {
-        setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
-        return;
-      }
-      setReferenceImages((prev) => [...prev, { file: null, preview: trimmed }]);
-      setReferenceImageUrl('');
-      setImagesError('');
+      addRefImageUrl(trimmed);
     }
   };
 
@@ -887,7 +891,8 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     // so the same URL never lands in the payload twice.
     const referenceSet = new Set(referenceUrls.filter(Boolean));
     for (const u of brandImagesPicked) if (u) referenceSet.add(u);
-    const referenceImagesPayload = Array.from(referenceSet);
+    const referencePayloadLimit = MAX_REFS_TOTAL - (realCompetitorRef ? 1 : 0);
+    const referenceImagesPayload = Array.from(referenceSet).slice(0, referencePayloadLimit);
 
     const body = buildImageInputs('ai_ads', {
       ...brand,
@@ -1043,9 +1048,10 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                   // is also enforced where items are added so we should
                   // never have to truncate here.
                   const promptThumbs = [
-                    ...referenceImages.map((it) => ({
+                    ...referenceImages.map((it, refIndex) => ({
                       kind: 'ref',
                       preview: it.preview,
+                      refIndex,
                     })),
                     ...brandImagesPicked.map((u) => ({
                       kind: 'brand-pool',
@@ -1090,7 +1096,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                 );
                               } else {
                                 setReferenceImages((prev) =>
-                                  prev.filter((r) => r.preview !== t.preview),
+                                  prev.filter((_, index) => index !== t.refIndex),
                                 );
                               }
                               // Removing any contributor frees a slot — clear

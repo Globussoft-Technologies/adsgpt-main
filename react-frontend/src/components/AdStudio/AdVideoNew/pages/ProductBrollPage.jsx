@@ -298,22 +298,22 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
       </div>
 
       {/* Form */}
-      <div className="relative flex max-h-[85vh] flex-col gap-5 overflow-y-auto py-8 pr-3 pl-4 text-zinc-900 2xl:px-5 dark:text-white">
+      <div className="product-broll-form relative flex max-h-[85vh] flex-col gap-3 overflow-y-auto py-5 pr-3 pl-4 text-zinc-900 2xl:gap-4 2xl:py-6 2xl:px-5 dark:text-white [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-[50] rounded-full p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
+          className="absolute top-3 right-3 z-[50] rounded-full p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
         >
           <X className="h-4 w-4 2xl:h-6 2xl:w-6" />
         </button>
         {/* URL */}
-        <div className="flex flex-col gap-2">
-          <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-zinc-100 px-2.5 py-0.5 text-10 font-medium text-zinc-800 2xl:text-xs dark:bg-white dark:text-black">
-                  🌐 All regional languages supported
-                </span> <br />
-          <label className="text-sm 2xl:text-base">Brand/product URL or upload image*</label>
+        <div className="flex flex-col gap-1.5">
+          <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-zinc-100 px-2.5 py-0.5 text-[10px] font-medium text-zinc-800 2xl:text-xs dark:bg-white dark:text-black">
+            🌐 All regional languages supported
+          </span>
+          <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Brand/product URL or upload image*</label>
           <div
             onPaste={handlePaste}
-            className="flex items-center gap-3 rounded-4xl border border-black/10 bg-zinc-50 px-1 py-1 text-[10px] text-zinc-600 transition 2xl:py-2 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-[#afafaf]"
+            className="flex h-11 w-full items-center gap-2 rounded-full border border-black/10 bg-zinc-50 px-3 text-sm text-zinc-600 transition dark:border-transparent dark:bg-[#909294]/10 dark:text-[#afafaf]"
           >
             <div className="flex flex-1 items-center justify-between">
               <input
@@ -323,18 +323,18 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
                   setProductUrl(e.target.value);
                   if (e.target.value) setErrors((prev) => ({ ...prev, productImage: '' }));
                 }}
-                className="w-full rounded-lg bg-transparent px-3 text-xs text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:text-[#afafaf] dark:placeholder:text-[#afafaf]"
+                className="w-full bg-transparent px-2 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none dark:text-white dark:placeholder:text-[#afafaf]"
                 placeholder="Paste your product Image"
               />
-              <LinkIcon className="h-3 w-3 text-zinc-500 2xl:h-4 2xl:w-4 dark:text-[#909294]" />
+              <LinkIcon className="h-3.5 w-3.5 text-zinc-500 dark:text-[#909294]" />
             </div>
 
             <label
               htmlFor="brand-logo"
-              className="flex cursor-pointer items-center gap-1 rounded-4xl bg-zinc-200 px-2.5 py-1.5 text-[10px] text-zinc-800 hover:bg-zinc-300 2xl:gap-2 dark:bg-[#606060] dark:text-white dark:hover:opacity-70"
+              className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-zinc-200 px-3 py-1.5 text-xs text-zinc-800 hover:bg-zinc-300 dark:bg-white/20 dark:text-white dark:hover:bg-white/30"
             >
-              <CloudUpload className="h-3 w-3 text-current 2xl:h-4 2xl:w-4" />
-              <span className="!text-[10px] whitespace-nowrap 2xl:!text-xs">Upload Image</span>
+              <CloudUpload className="h-3.5 w-3.5 text-current" />
+              <span className="text-[11px] font-medium whitespace-nowrap 2xl:text-xs">Upload Image</span>
             </label>
 
             <input
@@ -350,12 +350,12 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
             <span className="text-[12px] text-red-500">{errors.productImage}</span>
           )}
           {uploadedImages.length > 0 && (
-            <div className="mt-2">
+            <div className="mt-1">
               <div className="flex flex-wrap gap-2 2xl:gap-3">
                 {uploadedImages.map((img, index) => (
                   <div
                     key={index}
-                    className="group relative h-12 w-12 border border-black/10 2xl:h-16 2xl:w-16 dark:border-white/10"
+                    className="group relative h-11 w-11 border border-black/10 2xl:h-14 2xl:w-14 dark:border-white/10"
                   >
                     <img
                       src={img.preview}
@@ -383,15 +383,16 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
         </div>
 
         {/* Model + Duration */}
-        <div className="flex gap-4">
-          <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Model *</label>
+        <div className="flex gap-3 sm:gap-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Model *</label>
             <CommonDropdown
               options={videoChatModels}
               label="AI Model"
               icon={SparkleDark}
               type="b-roll"
-              className="w-full min-w-0 justify-between [&>div]:min-w-0 [&>div>span]:truncate"
+              triggerVariant="form-pill"
+              className={`w-full min-w-0 justify-between opacity-100 [&>div]:min-w-0 [&>div>span]:truncate ${!videoModel ? 'product-broll-placeholder-dropdown' : ''}`}
               value={videoChatModels.find((o) => o.value === videoModel)}
               onChange={(val) => {
                 if (isVideoModelBlocked(videoChatModels.find((model) => model.value === val), userData)) {
@@ -408,14 +409,15 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
             )}
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Duration *</label>
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Duration *</label>
             <CommonDropdown
               options={configuredDurationOptions}
               label="Durations"
               icon={TimerDarkLogo}
               type="b-roll"
-              className="w-full min-w-0 justify-between [&>div]:min-w-0 [&>div>span]:truncate"
+              triggerVariant="form-pill"
+              className={`w-full min-w-0 justify-between opacity-100 [&>div]:min-w-0 [&>div>span]:truncate ${!selectedVideoDuration ? 'product-broll-placeholder-dropdown' : ''}`}
               value={configuredDurationOptions.find((o) => o.value === selectedVideoDuration)}
               onChange={(value) => {
                 setVideoDuration(value);
@@ -428,20 +430,20 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
           </div>
         </div>
 
-        <div>
-          {['sora', 'veo-3.1-fast'].includes(videoModel) && (
-            <div className="flex items-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
-              <span>⚠</span>
-              <span>Lower quality model selected. Video output quality may be reduced.</span>
-            </div>
-          )}
-        </div>
+        {['sora', 'veo-3.1-fast'].includes(videoModel) && (
+          <div className="flex items-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
+            <span>⚠</span>
+            <span>Lower quality model selected. Video output quality may be reduced.</span>
+          </div>
+        )}
 
         {/* Aspect Ratio */}
-        <div>
-          <label className="flex items-center gap-2 text-sm text-zinc-900 2xl:text-base dark:text-white">Aspect Ratio * {isAspectRatioLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-center gap-2 text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">
+            Aspect Ratio * {isAspectRatioLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          </label>
 
-          <div className="mt-2 flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-2.5">
             {aspectRatioOptions
               .map(({ value, label }) => {
                 const isSelected = value === aspectRatio;
@@ -454,10 +456,18 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
                       setAspectRatio(value);
                       setErrors((prev) => ({ ...prev, aspectRatio: '' }));
                     }}
-                    className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${isSelected ? 'border-black/10 bg-black/5 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-white' : 'border-black/10 bg-transparent text-gray-500 dark:border-white/5 dark:text-white/40'}`}
+                    className={`flex h-11 items-center gap-2 rounded-full border px-4 text-xs transition 2xl:text-sm ${
+                      isSelected
+                        ? 'border-[#3ad0c8] bg-[#3ad0c8]/15 text-gray-900 shadow-[0_0_12px_rgba(58,208,200,0.15)] dark:bg-[#3ad0c8]/20 dark:text-white'
+                        : 'border-black/10 bg-black/5 text-gray-600 hover:border-[#3ad0c8]/60 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white/60 dark:hover:border-[#3ad0c8]/60 dark:hover:text-white'
+                    }`}
                   >
-                    <AspectRatioPreview ratio={value} className={`h-4 w-4 ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/40'}`} />
-                    {label}
+                    <AspectRatioPreview
+                      ratio={value}
+                      filled={isSelected}
+                      className={`h-4 w-4 ${isSelected ? 'text-[#3ad0c8]' : 'text-gray-500 dark:text-white/40'}`}
+                    />
+                    <span className={isSelected ? 'font-semibold' : 'font-medium'}>{label}</span>
                   </button>
                 );
               })}
@@ -465,46 +475,40 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
           {errors.aspectRatio && (
             <span className="text-[12px] text-red-500">{errors.aspectRatio}</span>
           )}
-          {/* {videoModel === 'kling_3.0' && aspectRatio === '9:16' && (
-            <div className="mt-3 flex w-fit items-center gap-1 rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-400 2xl:text-xs">
-              <span>ℹ</span>
-              <span>Product image also should be in 9:16 ratio</span>
-            </div>
-          )} */}
         </div>
 
         {/* Brand Name */}
-        <div className="flex flex-col gap-2">
-          <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Brand/Product Name*</label>
-          <BrandSearch placeholder="Enter your brand/product name" />
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Brand/Product Name*</label>
+          <BrandSearch placeholder="Enter your brand/product name" surfaceVariant="broll" />
           {errors.productName && (
             <span className="text-[12px] text-red-500">{errors.productName}</span>
           )}
         </div>
 
         {/* Promotional Info */}
-        <div>
-            <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Promotional Info</label>
-            <input
-              className="mt-2 w-full rounded-4xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
-              placeholder="Enter promotional info/offers"
-              value={promotion}
-              onChange={(e) => setPromotion(e.target.value)}
-            />
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Promotional Info</label>
+          <input
+            className="h-11 w-full rounded-full border border-black/10 bg-zinc-50 px-4 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
+            placeholder="Enter promotional info/offers"
+            value={promotion}
+            onChange={(e) => setPromotion(e.target.value)}
+          />
         </div>
 
         {/* Prompt */}
-        <div>
-          <label className="text-sm text-zinc-900 2xl:text-base dark:text-white">Prompt</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Prompt</label>
           <input
-            className="mt-2 w-full rounded-4xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
+            className="h-11 w-full rounded-full border border-black/10 bg-zinc-50 px-4 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
             placeholder="e.g. white background, aerial drone shot"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
 
-        <div className="mt-4 flex flex-col items-end gap-2">
+        <div className="mt-2 flex flex-col items-end gap-2">
           {(() => {
             const selectedModel = videoChatModels.find((model) => model.value === videoModel);
             const hasEstimateInputs = Boolean(videoModel && selectedVideoDuration && selectedModel);

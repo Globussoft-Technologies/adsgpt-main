@@ -1,5 +1,5 @@
 import Masonry from 'react-masonry-css';
-import { Download, Info, Megaphone, Pencil, X } from 'lucide-react';
+import { Download, Info, Megaphone, Pencil, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -332,12 +332,44 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
   const limit = 20;
   const containerRef = useRef(null);
 
-  // ESC + body-scroll lock while the lightbox is open. Mirrors the
-  // ImageCard lightbox in MySpace so the two flows feel identical.
+  const completedAdFactoryItems = useMemo(
+    () => displayedItems.filter((i) => i?.status != null && i?.status !== 'generating' && i?.status !== 'failed' && Boolean(i?.url)),
+    [displayedItems]
+  );
+  const activeAdFactoryIndex = useMemo(() => {
+    if (!fullscreenUrl) return -1;
+    return completedAdFactoryItems.findIndex((i) => i.url === fullscreenUrl);
+  }, [completedAdFactoryItems, fullscreenUrl]);
+
+  const hasAdFactoryPrev = activeAdFactoryIndex > 0;
+  const hasAdFactoryNext =
+    activeAdFactoryIndex !== -1 && activeAdFactoryIndex < completedAdFactoryItems.length - 1;
+
+  const handleAdFactoryPrev = (e) => {
+    e?.stopPropagation?.();
+    if (!hasAdFactoryPrev) return;
+    const prevItem = completedAdFactoryItems[activeAdFactoryIndex - 1];
+    if (prevItem) setFullscreen({ url: prevItem.url, item: prevItem });
+  };
+
+  const handleAdFactoryNext = (e) => {
+    e?.stopPropagation?.();
+    if (!hasAdFactoryNext) return;
+    const nextItem = completedAdFactoryItems[activeAdFactoryIndex + 1];
+    if (nextItem) setFullscreen({ url: nextItem.url, item: nextItem });
+  };
+
+  // ESC + arrow keys + body-scroll lock while the lightbox is open.
   useEffect(() => {
     if (!fullscreenUrl) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape') closeFullscreen();
+      if (e.key === 'Escape') {
+        closeFullscreen();
+      } else if (e.key === 'ArrowLeft') {
+        handleAdFactoryPrev(e);
+      } else if (e.key === 'ArrowRight') {
+        handleAdFactoryNext(e);
+      }
     };
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -346,7 +378,7 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
       document.body.style.overflow = prevOverflow;
       document.removeEventListener('keydown', onKey);
     };
-  }, [fullscreenUrl]);
+  }, [fullscreenUrl, activeAdFactoryIndex, completedAdFactoryItems]);
 
   // MySpace → Meta Post Ad modal. Opened from each card's Megaphone button;
   // the payload carries the chosen image URL. `autoAdvance` is set only when
@@ -605,6 +637,26 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
               Download
             </button>
           </div>
+
+          {/* Prev / Next navigation arrows — matching video section */}
+          {hasAdFactoryPrev && (
+            <button
+              onClick={handleAdFactoryPrev}
+              title="Previous image"
+              className="absolute top-1/2 left-4 z-30 -translate-y-1/2 rounded-2xl border-2 border-white/30 bg-white/10 p-3 text-white shadow-[0_0_18px_rgba(255,255,255,0.15)] backdrop-blur-md transition-all duration-200 hover:scale-110 hover:border-white/70 hover:bg-white/25 hover:shadow-[0_0_28px_rgba(255,255,255,0.35)] active:scale-95"
+            >
+              <ChevronLeft size={28} strokeWidth={2.5} />
+            </button>
+          )}
+          {hasAdFactoryNext && (
+            <button
+              onClick={handleAdFactoryNext}
+              title="Next image"
+              className="absolute top-1/2 right-4 z-30 -translate-y-1/2 rounded-2xl border-2 border-white/30 bg-white/10 p-3 text-white shadow-[0_0_18px_rgba(255,255,255,0.15)] backdrop-blur-md transition-all duration-200 hover:scale-110 hover:border-white/70 hover:bg-white/25 hover:shadow-[0_0_28px_rgba(255,255,255,0.35)] active:scale-95"
+            >
+              <ChevronRight size={28} strokeWidth={2.5} />
+            </button>
+          )}
 
           <img
             src={resolveImageUrl(fullscreenUrl)}

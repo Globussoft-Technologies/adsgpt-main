@@ -47,6 +47,27 @@ import {
 import { silentSaveBrandFromAutofill } from '../../ai-creatives/silentBrandSave';
 
 const PROMPT_API = import.meta.env.VITE_PROMPT_API;
+const MAX_PROMPT_THUMBS = 5;
+const IMAGE_ALREADY_ATTACHED_ERROR = 'This image is already attached.';
+
+const imageItemKey = (item) => {
+  if (item?.file) {
+    const { name, size, type, lastModified } = item.file;
+    return `file:${name}:${size}:${type}:${lastModified}`;
+  }
+  const preview = String(item?.preview || '').trim();
+  return preview ? `url:${preview}` : '';
+};
+
+const uniqueImageItems = (items) => {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = imageItemKey(item);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
 
 // Model list, labels, apiIds, aspect ratios, qualities and per-quality credits
 // come from the backend `ad_creative` surface via useAdCreativeConfig — no
@@ -472,9 +493,9 @@ export function AdSetupStep({
     );
     if (variant === 'lifestyle') {
       const visuals = Array.isArray(inp.keyVisualImages) ? inp.keyVisualImages : [];
-      setImages(visuals.filter((u) => u && !brandSet.has(u)).map(toItem));
+      setImages(uniqueImageItems(visuals.filter((u) => u && !brandSet.has(u)).map(toItem)));
       const refs = Array.isArray(inp.modelReferenceImages) ? inp.modelReferenceImages : [];
-      setModelRefImages(refs.filter(Boolean).map(toItem));
+      setModelRefImages(uniqueImageItems(refs.filter(Boolean).map(toItem)));
     } else if (variant === 'apps-saas') {
       // apps_saas may store either productScreenshots or productImages.
       const screenshots = Array.isArray(inp.productScreenshots) ? inp.productScreenshots : [];
@@ -698,7 +719,6 @@ export function AdSetupStep({
   // variant. Lifestyle counts (key visuals + model references) toward the
   // same 5 total; the other variants only count `images`. Brand logo is
   // intentionally excluded from the prompt-box preview.
-  const MAX_PROMPT_THUMBS = 5;
   // Dedupe by preview URL — a brand-pool URL that's already represented in
   // `images`/`modelRefImages` (common on recreate, where keyVisualImages
   // overlap brandImages) would otherwise render twice.
@@ -712,8 +732,10 @@ export function AdSetupStep({
     };
     if (isLifestyle) {
       modelRefImages.forEach((it) => push('modelRef', it.preview));
+      push('modelRefUrl', modelRefUrl.trim());
     }
     images.forEach((it) => push('image', it.preview));
+    push('imageUrl', imageUrl.trim());
     brandImagesPicked.forEach((u) => push('brand-pool', u));
     return out;
   })();
@@ -721,29 +743,57 @@ export function AdSetupStep({
 
   // Wrappers around setImages / setModelRefImages that respect the cap and
   // surface a toast-style error when the user tries to overshoot.
-  const addImages = (items) => {
+  const addUniqueImages = (items, setItems) => {
+    const existingKeys = new Set(
+      [
+        ...modelRefImages,
+        ...images,
+        ...brandImagesPicked.map((preview) => ({ file: null, preview })),
+        ...(modelRefUrl.trim() ? [{ file: null, preview: modelRefUrl.trim() }] : []),
+        ...(imageUrl.trim() ? [{ file: null, preview: imageUrl.trim() }] : []),
+      ]
+        .map(imageItemKey)
+        .filter(Boolean),
+    );
+    let foundDuplicate = false;
+    const uniqueIncoming = [];
+
+    for (const item of items) {
+      const key = imageItemKey(item);
+      if (!key || existingKeys.has(key)) {
+        foundDuplicate = true;
+        continue;
+      }
+      existingKeys.add(key);
+      uniqueIncoming.push(item);
+    }
+
     if (remainingPromptSlots <= 0) {
+      setErrors((p) => ({
+        ...p,
+        images: foundDuplicate
+          ? IMAGE_ALREADY_ATTACHED_ERROR
+          : `You can attach up to ${MAX_PROMPT_THUMBS} images.`,
+      }));
+      return;
+    }
+
+    const accepted = uniqueIncoming.slice(0, remainingPromptSlots);
+    if (accepted.length > 0) setItems((previous) => [...previous, ...accepted]);
+
+    if (foundDuplicate) {
+      setErrors((p) => ({ ...p, images: IMAGE_ALREADY_ATTACHED_ERROR }));
+    } else if (uniqueIncoming.length > remainingPromptSlots) {
       setErrors((p) => ({
         ...p,
         images: `You can attach up to ${MAX_PROMPT_THUMBS} images.`,
       }));
-      return;
+    } else if (accepted.length > 0) {
+      clearError('images');
     }
-    const accepted = items.slice(0, remainingPromptSlots);
-    setImages((p) => [...p, ...accepted]);
-    if (accepted.length > 0) clearError('images');
   };
-  const addModelRefImages = (items) => {
-    if (remainingPromptSlots <= 0) {
-      setErrors((p) => ({
-        ...p,
-        images: `You can attach up to ${MAX_PROMPT_THUMBS} images.`,
-      }));
-      return;
-    }
-    const accepted = items.slice(0, remainingPromptSlots);
-    setModelRefImages((p) => [...p, ...accepted]);
-  };
+  const addImages = (items) => addUniqueImages(items, setImages);
+  const addModelRefImages = (items) => addUniqueImages(items, setModelRefImages);
 
   // Generate is disabled until every required (*) field is non-empty AND
   // at least one image is requested via the aspect-ratio picker. Only the
@@ -767,6 +817,21 @@ export function AdSetupStep({
     if (isLifestyle && !productDescription.trim()) {
       e.productDescription = 'Product description is required';
     }
+
+    const pendingReferenceItems = [
+      ...modelRefImages,
+      ...images,
+      ...brandImagesPicked.map((preview) => ({ file: null, preview })),
+      ...(modelRefUrl.trim() ? [{ file: null, preview: modelRefUrl.trim() }] : []),
+      ...(imageUrl.trim() ? [{ file: null, preview: imageUrl.trim() }] : []),
+    ];
+    const pendingReferenceKeys = pendingReferenceItems.map(imageItemKey).filter(Boolean);
+    if (new Set(pendingReferenceKeys).size < pendingReferenceKeys.length) {
+      e.images = IMAGE_ALREADY_ATTACHED_ERROR;
+    } else if (pendingReferenceKeys.length > MAX_PROMPT_THUMBS) {
+      e.images = `You can attach up to ${MAX_PROMPT_THUMBS} images.`;
+    }
+
     if (Object.keys(e).length > 0 || total === 0) {
       setErrors(e);
       return;
@@ -776,7 +841,7 @@ export function AdSetupStep({
     // Items are { file?, preview }. The pasted URL field gets folded in as
     // a final unaffiliated entry so the parent treats it like any other
     // already-hosted item at submit time.
-    const allImages = [...images];
+    let allImages = [...images];
     if (imageUrl.trim()) allImages.push({ file: null, preview: imageUrl.trim() });
     // Fold chip-picked brand images into the payload too. They live in their
     // own state so they don't appear as thumbnails in the upload field, but
@@ -787,8 +852,17 @@ export function AdSetupStep({
       }
     }
 
-    const refImages = [...modelRefImages];
+    let refImages = [...modelRefImages];
     if (modelRefUrl.trim()) refImages.push({ file: null, preview: modelRefUrl.trim() });
+
+    // Final defensive normalization: no duplicate references and never more
+    // than five combined Lifestyle references, even if stale recreated state
+    // predates the UI guards above.
+    refImages = uniqueImageItems(refImages).slice(0, MAX_PROMPT_THUMBS);
+    const refKeys = new Set(refImages.map(imageItemKey));
+    allImages = uniqueImageItems(allImages)
+      .filter((item) => !refKeys.has(imageItemKey(item)))
+      .slice(0, isLifestyle ? MAX_PROMPT_THUMBS - refImages.length : MAX_PROMPT_THUMBS);
 
     // Brand logo precedence: uploaded file > typed URL > chip-picked URL
     // > legacy brandInfo prop. Returns a single { file?, preview } object.
@@ -919,6 +993,10 @@ export function AdSetupStep({
                             setModelRefImages((prev) =>
                               prev.filter((it) => it.preview !== t.preview),
                             );
+                          } else if (t.kind === 'modelRefUrl') {
+                            setModelRefUrl('');
+                          } else if (t.kind === 'imageUrl') {
+                            setImageUrl('');
                           } else if (t.kind === 'brand-pool') {
                             // Mirrors deselection of the chip below.
                             setBrandImagesPicked((prev) =>
@@ -929,6 +1007,7 @@ export function AdSetupStep({
                               prev.filter((it) => it.preview !== t.preview),
                             );
                           }
+                          clearError('images');
                         }}
                         className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-transform hover:scale-105"
                       >
@@ -1201,9 +1280,10 @@ export function AdSetupStep({
                         onUrlChange={setModelRefUrl}
                         files={modelRefImages}
                         onAddFiles={(items) => addModelRefImages(items)}
-                        onRemoveFile={(i) =>
-                          setModelRefImages((p) => p.filter((_, idx) => idx !== i))
-                        }
+                        onRemoveFile={(i) => {
+                          setModelRefImages((p) => p.filter((_, idx) => idx !== i));
+                          clearError('images');
+                        }}
                         onPreview={(i) => openPreview(modelRefImages, i)}
                         onInvalidType={() =>
                           setErrors((p) => ({ ...p, images: IMAGE_TYPE_ERROR }))
@@ -1225,13 +1305,16 @@ export function AdSetupStep({
                   }}
                   files={images}
                   onAddFiles={(items) => addImages(items)}
-                  onRemoveFile={(i) => setImages((p) => p.filter((_, idx) => idx !== i))}
+                  onRemoveFile={(i) => {
+                    setImages((p) => p.filter((_, idx) => idx !== i));
+                    clearError('images');
+                  }}
                   onPreview={(i) => openPreview(images, i)}
                   onInvalidType={() =>
                     setErrors((p) => ({ ...p, images: IMAGE_TYPE_ERROR }))
                   }
                 />
-                <FieldError message={errors.images} />
+                <FieldError message={errors.images} prominent />
                 {/* Brand-image chips. Surface scraped/BrandIQ images
                     directly below the field they feed (Key Visuals /
                     Reference Images / Product Images). Single click
@@ -1242,10 +1325,20 @@ export function AdSetupStep({
                     isSelected={(u) => brandImagesPicked.includes(u)}
                     onPick={(u) => {
                       setBrandImagesPicked((prev) => {
-                        if (prev.includes(u)) return prev.filter((x) => x !== u);
-                        // 5-thumb cap counts both user uploads and chip picks.
-                        const totalThumbs = images.length + prev.length;
-                        if (totalThumbs >= MAX_PROMPT_THUMBS) {
+                        if (prev.includes(u)) {
+                          clearError('images');
+                          return prev.filter((x) => x !== u);
+                        }
+                        const key = imageItemKey({ file: null, preview: u });
+                        const isDuplicate = [...modelRefImages, ...images]
+                          .some((item) => imageItemKey(item) === key)
+                          || imageItemKey({ file: null, preview: modelRefUrl.trim() }) === key
+                          || imageItemKey({ file: null, preview: imageUrl.trim() }) === key;
+                        if (isDuplicate) {
+                          setErrors((e) => ({ ...e, images: IMAGE_ALREADY_ATTACHED_ERROR }));
+                          return prev;
+                        }
+                        if (remainingPromptSlots <= 0) {
                           setErrors((e) => ({
                             ...e,
                             images: `You can attach up to ${MAX_PROMPT_THUMBS} images.`,
@@ -1354,8 +1447,20 @@ function FieldLabel({ children, required }) {
   );
 }
 
-function FieldError({ message }) {
+function FieldError({ message, prominent = false }) {
   if (!message) return null;
+  if (prominent) {
+    return (
+      <div
+        className="mt-3 flex items-start gap-2.5 rounded-xl border border-red-500/35 bg-red-500/10 px-3.5 py-3 text-[13px] font-medium leading-5 text-red-700 shadow-sm dark:border-red-400/35 dark:bg-red-500/15 dark:text-red-200"
+        role="alert"
+        aria-live="assertive"
+      >
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden="true" />
+        <span>{message}</span>
+      </div>
+    );
+  }
   return (
     <p className="mt-1.5 text-[12px] text-red-400" role="alert">
       {message}

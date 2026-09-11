@@ -393,11 +393,12 @@ export function usePromptTemplates({
 
   const previewTemplate = (t) => setPreviewedTemplate(t);
 
-  // "Use this prompt" — commit the previewed template to the textarea.
-  // Panel stays open so the user can keep browsing.
+  // "Use this prompt" — commit the previewed template to the textarea
+  // and collapse the panel so only the prompt box is visible.
   const useTemplate = () => {
     if (!previewedTemplate) return;
     setActiveTemplate(previewedTemplate);
+    setOpen(false);
   };
 
   // Token input handler — called from TokenInput in the panel as the user

@@ -6,13 +6,7 @@ import adProductImg from '@/assets/layouts/adVideoNew/adProduct.png';
 const SelectionStep = ({ onNext, onBack, onClose }) => {
   const [selected, setSelected] = useState(''); // 'brand' or 'product'
 
-  const handleNext = () => {
-    if (selected) {
-      onNext(selected, { baseType: selected });
-    }
-  };
-
-  const handleDoubleClick = (type) => {
+  const handleSelect = (type) => {
     setSelected(type);
     onNext(type, { baseType: type });
   };
@@ -33,11 +27,10 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
       </button>
 
       {/* Cards */}
-      <div className="mx-auto mb-10 flex w-full justify-center gap-3 sm:gap-4">
+      <div className="mx-auto mb-6 flex w-full justify-center gap-3 sm:gap-4">
         {/* Brand Card */}
         <div
-          onClick={() => setSelected('brand')}
-          onDoubleClick={() => handleDoubleClick('brand')}
+          onClick={() => handleSelect('brand')}
           className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[22px] border-2 transition-all duration-300 ease-out hover:-translate-y-1 active:scale-[0.99] ${
             selected === 'brand'
               ? 'border-indigo-500 dark:border-white ring-2 ring-indigo-500/30 dark:ring-white/30 shadow-[0_12px_30px_rgba(99,102,241,0.35)] dark:shadow-[0_12px_30px_rgba(255,255,255,0.15)] -translate-y-1'
@@ -60,8 +53,7 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
 
         {/* Product Card */}
         <div
-          onClick={() => setSelected('product')}
-          onDoubleClick={() => handleDoubleClick('product')}
+          onClick={() => handleSelect('product')}
           className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[22px] border-2 transition-all duration-300 ease-out hover:-translate-y-1 active:scale-[0.99] ${
             selected === 'product'
               ? 'border-indigo-500 dark:border-white ring-2 ring-indigo-500/30 dark:ring-white/30 shadow-[0_12px_30px_rgba(99,102,241,0.35)] dark:shadow-[0_12px_30px_rgba(255,255,255,0.15)] -translate-y-1'
@@ -81,25 +73,6 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
             </h3>
           </div>
         </div>
-      </div>
-
-      {/* Footer Buttons */}
-      <div className="flex w-full justify-end gap-3">
-        {/* <button
-          onClick={onBack}
-          className="min-w-35 rounded-md border border-[#efefef] px-8 py-2 text-sm font-semibold text-white transition hover:bg-white/5"
-        >
-          Back
-        </button> */}
-        {/* <button
-          onClick={handleNext}
-          disabled={!selected}
-          className={`min-w-35 rounded-md bg-white px-8 py-2 text-sm font-semibold text-black transition ${
-            !selected ? 'cursor-not-allowed opacity-50' : 'hover:opacity-90'
-          }`}
-        >
-          Next
-        </button> */}
       </div>
     </div>
   );
