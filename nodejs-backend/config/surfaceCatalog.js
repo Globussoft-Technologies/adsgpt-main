@@ -68,6 +68,17 @@ const SURFACE_CATALOG = {
     veo_4k: { durations: [8, 15], aspectRatios: ["9:16", "16:9"] },
     "kling_3.0": { durations: [8, 15], aspectRatios: ["9:16", "16:9", "1:1"] },
   },
+  // Clone Your Ad - distinct from `clone` above, which is Clone Yourself. Served
+  // by python-backend/advideo/models/{omni_model,seedance_v2_5}/src/routers/
+  // clone_your_ad at /api/v1/clone-your-ad/*. Like ad_factory, the runtime model
+  // selection is DB-controlled per model document, so this empty map only
+  // registers the surface slug for validation and API discovery.
+  //
+  // If this surface ever needs a static catalog here, note two mismatches with
+  // the shape above: the Python schemas accept a duration RANGE (4-25s on
+  // Seedance 2.5, 4-40s on Google Omni) rather than a discrete list, and neither
+  // of those two models has a canonicalKey in modelRegistry.js yet.
+  clone_video: {},
 };
 
 /** Valid media slugs, e.g. for validation / error messages. */

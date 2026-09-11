@@ -299,7 +299,8 @@ const sortByCredits = (a, b) => a.credits - b.credits;
  * GET /usage/model-credit-value?type=&media=
  *
  *  type   "all" (default) | "image" | "video" — which model groups to populate.
- *  media  optional surface slug (ad_creative | ai_ads | ugc | broll | avatar | clone).
+ *  media  optional surface slug (ad_creative | ad_factory | ai_ads | ugc | broll |
+ *         avatar | clone | clone_video).
  *         When present, only that surface's models are returned. Video surfaces
  *         enrich each row with durations[] + aspectRatios[]; the ad_creative
  *         image surface enriches with aspectRatios[], icon, qualities[] and
@@ -314,7 +315,7 @@ const getModelCreditDeduction = async (req, res) => {
      #swagger.method = 'get'
      #swagger.description = 'Returns the per-unit credit cost of each enabled generation model. <br/><br/>**No params** → full catalog, back-compatible shape: `{ imageModels:[{label,value}], videoModels:[{label,value}] }` (value is a string like "7 CREDITS/IMAGE" / "4 CREDITS/SECOND"), sorted cheapest-first. <br/><br/>**`media` set** → only the models offered on that AdStudio video surface, each row enriched with `canonical`, numeric `creditsPerSecond`, and the surface-specific `durations[]` + `aspectRatios[]` so the frontend can build its pickers. Per-unit credits read from env (creditEnvVar) with a registry fallback. <br/><br/>**`type`** narrows which group is populated. Use `media=ad_creative&type=image` for the Ad Creative image models (rows include aspectRatios, icon, and per-quality qualityTiers).'
      #swagger.parameters['type'] = { in: 'query', required: false, type: 'string', enum: ['all','image','video'], description: 'Which model groups to populate. Defaults to all.' }
-     #swagger.parameters['media'] = { in: 'query', required: false, type: 'string', enum: ['ad_creative','ai_ads','ugc','broll','avatar','clone'], description: 'Optional AdStudio surface. Video surfaces (ai_ads/ugc/broll/avatar/clone) enrich rows with durations + aspectRatios; the image surface (ad_creative) enriches with aspectRatios, icon, qualities, and per-quality qualityTiers.' }
+     #swagger.parameters['media'] = { in: 'query', required: false, type: 'string', enum: ['ad_creative','ad_factory','ai_ads','ugc','broll','avatar','clone','clone_video'], description: 'Optional AdStudio surface. Video surfaces (ai_ads/ugc/broll/avatar/clone/clone_video) enrich rows with durations + aspectRatios; the image surface (ad_creative) enriches with aspectRatios, icon, qualities, and per-quality qualityTiers.' }
      #swagger.responses[200] = {
        description: 'Per-surface model credit config. Video surfaces return rows with creditsPerSecond + durations[] + aspectRatios[]; the ad_creative image surface returns rows with creditsPerImage, icon, aspectRatios[], qualities[] and per-quality qualityTiers[]. The no-media response instead returns flat { label, value } rows under imageModels/videoModels.',
        content: { "application/json": { examples: {
@@ -346,7 +347,7 @@ const getModelCreditDeduction = async (req, res) => {
      }
      #swagger.responses[400] = {
        description: 'Unknown media slug.',
-       content: { "application/json": { example: { success: false, message: 'Unknown media surface "foo". Valid surfaces: ad_creative, ai_ads, ugc, broll, avatar, clone' } } }
+       content: { "application/json": { example: { success: false, message: 'Unknown media surface "foo". Valid surfaces: ad_creative, ad_factory, ai_ads, ugc, broll, avatar, clone, clone_video' } } }
      }
      #swagger.responses[401] = { description: 'Missing token' }
      #swagger.responses[403] = { description: 'Invalid or expired token' }
