@@ -514,7 +514,31 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
   const handleGenerate = async () => {
     if (isSubmitting) return;
     const trimmedPrompt = prompt.trim();
-    if (!trimmedPrompt || total === 0) return;
+    if (!trimmedPrompt) {
+      toast.error('Please enter a prompt describing the changes you want');
+      return;
+    }
+    if (total === 0) {
+      toast.error('Please select at least 1 image to generate');
+      return;
+    }
+
+    // Logo validation
+    const hasLogo = Boolean(
+      brandLogoFile ||
+      (brandLogoUrl && brandLogoUrl.trim()) ||
+      brandLogoPicked
+    );
+    if (!hasLogo) {
+      setLogoError('Brand logo is required to recreate this ad');
+      toast.error('Please upload or select a brand logo');
+      return;
+    }
+    if (brandLogoUrl && brandLogoUrl.trim() && !/^(https?:\/\/|data:image\/|\/\/)/i.test(brandLogoUrl.trim())) {
+      setLogoError('Please enter a valid image URL for the brand logo');
+      toast.error('Invalid brand logo URL');
+      return;
+    }
 
     setIsSubmitting(true);
     completeFiredRef.current = false;
@@ -616,7 +640,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
       />
       <DialogContent
         ref={modalRef}
-        className="max-w-[960px] gap-0 rounded-[30px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#303030]/30 p-0 text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md sm:!max-w-[960px] sm:scale-100"
+        className="max-w-[960px] gap-0 overflow-hidden rounded-[30px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#303030]/30 p-0 text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md sm:!max-w-[960px] sm:scale-100"
         showCloseButton
         // The X and Escape both close the modal. Clicking outside (or
         // dragging an upload over the page) does NOT — that protects
@@ -640,7 +664,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
             two columns visually match. Image side is aspect-square (the
             wrapper itself, not the img) so its height equals its width;
             the form side caps its scroll area to the same value. */}
-        <div className="flex flex-col gap-6 p-6 pt-2 md:h-[min(85svh,520px)] md:flex-row">
+        <div className="flex flex-col gap-6 p-6 pt-2 md:h-[min(90svh,570px)] md:flex-row">
           <div className="flex shrink-0 justify-center md:h-full md:basis-[42%]">
             {/* aspect-square on the wrapper itself + h-full keeps the
                 source ad visually square AND the wrapper at the same
@@ -662,7 +686,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
               scroll area lets it clip cleanly instead of stretching the
               modal. */}
           <div className="flex w-full min-w-0 flex-1 flex-col md:h-full">
-            <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pr-1 [scrollbar-color:rgba(255,255,255,0.2)_transparent] [scrollbar-width:thin]">
+            <div
+              className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto pr-1 scrollbar-none [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
             <Section title="Attach your Brand Voice">
               <div className="flex items-center gap-2">
                 <div ref={brandIqPickerWrapperRef} className="relative shrink-0">
@@ -794,14 +821,16 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                 placeholder="Paste your image URL or upload"
                 url={referenceImageUrl}
                 onUrlChange={(v) => {
-                  // Auto-add when a full http(s) URL is pasted/typed and
-                  // Enter happens via onKeyDown elsewhere. Here we just
-                  // track the in-progress text.
                   setReferenceImageUrl(v);
+                  if (imagesError) setImagesError('');
                 }}
                 onUrlCommit={(u) => {
                   const trimmed = u.trim();
                   if (!trimmed) return;
+                  if (!/^(https?:\/\/|data:image\/|\/\/)/i.test(trimmed)) {
+                    setImagesError('Please enter a valid image URL (e.g. https://...)');
+                    return;
+                  }
                   if (remainingRefSlots() <= 0) {
                     setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
                     return;
@@ -890,14 +919,26 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   setBrandLogoUrl(v);
                   if (logoError) setLogoError('');
                 }}
+                onUrlCommit={(u) => {
+                  const trimmed = u.trim();
+                  if (!trimmed) return;
+                  if (!/^(https?:\/\/|data:image\/|\/\/)/i.test(trimmed)) {
+                    setLogoError('Please enter a valid image URL (e.g. https://...)');
+                    return;
+                  }
+                  setBrandLogoFile(null);
+                  setBrandLogoUrl(trimmed);
+                  setLogoError('');
+                }}
                 onFile={(f) => {
                   setBrandLogoFile(f);
+                  setBrandLogoUrl('');
                   setLogoError('');
                 }}
                 onInvalidType={() => setLogoError(IMAGE_TYPE_ERROR)}
                 inputRef={logoInputRef}
               />
-              {(brandLogoFile || brandLogoUrl.trim()) && (
+              {(brandLogoFile || (brandLogoUrl.trim() && /^(https?:\/\/|data:image\/|\/\/)/i.test(brandLogoUrl.trim()))) && (
                 <UploadedChip
                   src={
                     brandLogoFile
@@ -925,7 +966,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   options={brandLogoOptions}
                   isSelected={(u) => u === brandLogoPicked}
                   rounded
-                  onPick={(u) => setBrandLogoPicked((cur) => (cur === u ? '' : u))}
+                  onPick={(u) => {
+                    setBrandLogoPicked((cur) => (cur === u ? '' : u));
+                    if (logoError) setLogoError('');
+                  }}
                   onDoubleClick={(u) => setLightboxUrl(u)}
                 />
               )}
@@ -1251,7 +1295,7 @@ const UploadRow = ({
   multipleFiles = false,
 }) => {
   const commitUrl = (text) => {
-    const trimmed = text.trim();
+    const trimmed = (text || '').trim();
     if (!trimmed) return;
     if (onUrlCommit) onUrlCommit(trimmed);
     else onUrlChange(trimmed);
@@ -1281,10 +1325,9 @@ const UploadRow = ({
           return;
         }
         const text = e.clipboardData?.getData('text');
-        if (text && /^https?:\/\//i.test(text.trim())) {
+        if (text && /^(https?:\/\/|data:image\/|\/\/)/i.test(text.trim())) {
           e.preventDefault();
-          if (onUrlCommit) onUrlCommit(text.trim());
-          else onUrlChange(text.trim());
+          commitUrl(text.trim());
         }
       }}
       // preventDefault on dragover is required to allow drop. Without
@@ -1304,12 +1347,11 @@ const UploadRow = ({
           onUrlChange('');
           return;
         }
-        const url =
+        const dropped =
           dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
-        const trimmed = url.trim();
-        if (trimmed && /^https?:\/\//i.test(trimmed)) {
-          if (onUrlCommit) onUrlCommit(trimmed);
-          else onUrlChange(trimmed);
+        const trimmed = dropped.trim();
+        if (trimmed && /^(https?:\/\/|data:image\/|\/\/)/i.test(trimmed)) {
+          commitUrl(trimmed);
         }
       }}
       className="flex items-center gap-2"
@@ -1319,10 +1361,29 @@ const UploadRow = ({
           type="text"
           value={url}
           onChange={(e) => onUrlChange(e.target.value)}
+          onBlur={() => {
+            if (url && url.trim()) {
+              commitUrl(url);
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
               commitUrl(url);
+            }
+          }}
+          onPaste={(e) => {
+            const files = e.clipboardData?.files;
+            if (files && files.length > 0) {
+              e.preventDefault();
+              forwardFiles(files);
+              onUrlChange('');
+              return;
+            }
+            const text = e.clipboardData?.getData('text');
+            if (text && /^(https?:\/\/|data:image\/|\/\/)/i.test(text.trim())) {
+              e.preventDefault();
+              commitUrl(text.trim());
             }
           }}
           // The input itself must cancel the drop default — without these
@@ -1346,15 +1407,24 @@ const UploadRow = ({
             const dragged =
               dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
             const trimmed = dragged.trim();
-            if (trimmed && /^https?:\/\//i.test(trimmed)) {
-              if (onUrlCommit) onUrlCommit(trimmed);
-              else onUrlChange(trimmed);
+            if (trimmed && /^(https?:\/\/|data:image\/|\/\/)/i.test(trimmed)) {
+              commitUrl(trimmed);
             }
           }}
           placeholder={placeholder}
           className="w-full bg-transparent text-[13px] font-light text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none"
         />
-        <Link2 className="h-4 w-4 text-gray-400 dark:text-white/50" />
+        {url && url.trim() ? (
+          <button
+            type="button"
+            onClick={() => commitUrl(url)}
+            className="shrink-0 rounded-full bg-gray-900 dark:bg-white/20 px-2.5 py-1 text-[11px] font-medium text-white dark:text-white transition-opacity hover:opacity-90"
+          >
+            Add
+          </button>
+        ) : (
+          <Link2 className="h-4 w-4 shrink-0 text-gray-400 dark:text-white/50" />
+        )}
       </div>
       <input
         ref={inputRef}
@@ -1382,8 +1452,9 @@ const UploadRow = ({
 
 // Row of user-supplied chips (multi-upload). Single click on a chip
 // toggles whether it's included in the payload; the small red × at the
-// top-right corner removes the chip entirely. Double click opens the
-// lightbox preview. 220 ms delay disambiguates single from double click.
+// top-right corner removes the chip entirely in 1 click (no deselect needed).
+// Double click opens the lightbox preview. 220 ms delay disambiguates single
+// from double click.
 const UploadedChipList = ({ items, onToggle, onRemove, onPreview }) => {
   const clickTimers = useRef({});
   return (
@@ -1407,7 +1478,7 @@ const UploadedChipList = ({ items, onToggle, onRemove, onPreview }) => {
           onPreview?.(it.preview);
         };
         return (
-          <div key={key} className="relative h-10 w-10 shrink-0">
+          <div key={key} className="group relative h-10 w-10 shrink-0">
             <button
               type="button"
               onClick={handleSingle}
@@ -1425,33 +1496,32 @@ const UploadedChipList = ({ items, onToggle, onRemove, onPreview }) => {
             >
               <img src={it.preview} alt="" className="h-full w-full rounded-md object-cover" />
             </button>
-            {/* Top-right corner badge — flips by selection state:
-                  selected   → cyan check (decorative, non-interactive)
-                  unselected → red × (clickable to remove the chip)
-                A selected chip is therefore removed in two steps:
-                single-click to deselect, then click the × that appears. */}
-            {isSelected ? (
-              <span
-                aria-hidden
-                className="pointer-events-none absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow"
-              >
-                <Check className="h-2.5 w-2.5" strokeWidth={3} />
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  cancelPendingClick();
-                  onRemove?.(i);
-                }}
-                aria-label="Remove image"
-                title="Remove"
-                className="absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white shadow transition-colors hover:bg-red-600"
-              >
+            {/* Direct 1-click removal: shows check badge by default when selected,
+                switches to red × on group hover; always red × when unselected. */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                cancelPendingClick();
+                onRemove?.(i);
+              }}
+              aria-label="Remove image"
+              title="Remove"
+              className={`absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full text-white shadow transition-all ${
+                isSelected
+                  ? 'bg-[#02C8C4] group-hover:bg-red-500'
+                  : 'bg-red-500 hover:bg-red-600'
+              }`}
+            >
+              {isSelected ? (
+                <>
+                  <Check className="h-2.5 w-2.5 group-hover:hidden" strokeWidth={3} />
+                  <X className="hidden h-2.5 w-2.5 group-hover:block" strokeWidth={3} />
+                </>
+              ) : (
                 <X className="h-2.5 w-2.5" strokeWidth={3} />
-              </button>
-            )}
+              )}
+            </button>
           </div>
         );
       })}
@@ -1461,7 +1531,7 @@ const UploadedChipList = ({ items, onToggle, onRemove, onPreview }) => {
 
 // A single user-supplied chip (uploaded file or pasted URL). Single click
 // toggles selection (clears the source); double-click opens the preview.
-// 220ms delay disambiguates single from the first half of a double-click.
+// Hovering reveals a red × for immediate 1-click removal.
 const UploadedChip = ({ src, onClear, onPreview, rounded }) => {
   const shape = rounded ? 'rounded-full' : 'rounded-md';
   const clickTimerRef = useRef(null);
@@ -1479,18 +1549,30 @@ const UploadedChip = ({ src, onClear, onPreview, rounded }) => {
   };
   return (
     <div className="mt-3 flex flex-wrap gap-2">
-      <button
-        type="button"
-        onClick={handleSingle}
-        onDoubleClick={handleDouble}
-        title="Click to remove · double-click to preview"
-        className={`relative h-10 w-10 shrink-0 cursor-pointer ${shape} border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40 transition`}
-      >
-        <img src={src} alt="" className={`h-full w-full ${shape} object-cover`} />
-        <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow">
-          <Check className="h-3 w-3" strokeWidth={3} />
-        </span>
-      </button>
+      <div className="group relative h-10 w-10 shrink-0">
+        <button
+          type="button"
+          onClick={handleSingle}
+          onDoubleClick={handleDouble}
+          title="Click to remove · double-click to preview"
+          className={`relative h-full w-full cursor-pointer overflow-hidden ${shape} border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40 transition`}
+        >
+          <img src={src} alt="" className={`h-full w-full ${shape} object-cover`} />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClear?.();
+          }}
+          aria-label="Remove"
+          title="Remove"
+          className="absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow transition-all group-hover:bg-red-500"
+        >
+          <Check className="h-2.5 w-2.5 group-hover:hidden" strokeWidth={3} />
+          <X className="hidden h-2.5 w-2.5 group-hover:block" strokeWidth={3} />
+        </button>
+      </div>
     </div>
   );
 };

@@ -12,6 +12,8 @@ import {
   submitFailed,
   pollUpdated,
   updateImage,
+  replaceTempHistoryItem,
+  removeHistoryItem,
   historyLoadStarted,
   historyLoadSucceeded,
   historyLoadFailed,
@@ -180,13 +182,44 @@ export const pollImageAction = (sessionId, imageType) => async (dispatch, getSta
 export const saveEditedImageAction =
   ({ url, sourceImageId, inputs }) =>
   async (dispatch) => {
+    const cleanSourceId =
+      typeof sourceImageId === 'string' && /^[0-9a-fA-F]{24}/.test(sourceImageId)
+        ? sourceImageId.match(/^[0-9a-fA-F]{24}/)[0]
+        : sourceImageId;
+
+    const tempId = `temp-logo-edit-${Date.now()}`;
+    const optimisticRecord = {
+      _id: tempId,
+      status: 'completed',
+      url,
+      creativeType: 'logo_edited',
+      inputs: inputs || {},
+      results: [
+        {
+          generatedImageUrl: url,
+          url,
+          status: 'completed',
+          aspectRatio: inputs?.aspectRatio || '',
+        },
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    // Immediately put it at index 0 in Redux history
+    dispatch(updateImage(optimisticRecord));
+
     try {
-      const data = await saveEditedImage({ url, sourceImageId, inputs });
+      const data = await saveEditedImage({ url, sourceImageId: cleanSourceId, inputs });
       const record = data?.data;
-      if (record) dispatch(updateImage(record));
+      if (record) {
+        dispatch(replaceTempHistoryItem({ tempId, record }));
+      } else {
+        dispatch(removeHistoryItem(tempId));
+      }
       return record;
     } catch (err) {
       console.error('saveEditedImage failed:', err.response?.data?.error || err.message);
+      dispatch(removeHistoryItem(tempId));
       return null;
     }
   };

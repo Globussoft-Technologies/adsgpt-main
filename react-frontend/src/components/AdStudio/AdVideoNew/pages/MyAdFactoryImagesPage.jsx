@@ -290,7 +290,11 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
     // Backend = `saveEditedAdImage` in nodejs-backend/controllers/adFactory.js.
     // Pushes the new image to the campaign's results AND to the saved
     // gallery so it shows up everywhere this campaign surfaces.
-    if (!logoEditorItem?.campaignId || !userId) return;
+    const campaignId =
+      logoEditorItem?.campaignId ||
+      logoEditorItem?.sourceMetadata?.campaignId ||
+      logoEditorItem?.metadata?.campaignId;
+    if (!campaignId || !userId) return;
 
     // Optimistic insert — prepend the new image to `items` so the
     // user sees it instantly. Same shape that mergeCampaignImageResults
@@ -298,14 +302,14 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
     // backend save fails we roll back below.
     const optimisticItem = {
       url: newUrl,
-      prompt: 'Edited image',
-      model: logoEditorItem.model || null,
-      modelLabel: logoEditorItem.modelLabel || logoEditorItem.model || null,
+      prompt: logoEditorItem?.prompt || logoEditorItem?.campaignName || 'Edited image',
+      model: logoEditorItem?.model || null,
+      modelLabel: logoEditorItem?.modelLabel || logoEditorItem?.model || null,
       status: 'success',
       error: null,
-      aspectRatio: logoEditorItem.aspectRatio || null,
-      campaignId: logoEditorItem.campaignId,
-      campaignName: logoEditorItem.campaignName || null,
+      aspectRatio: logoEditorItem?.aspectRatio || null,
+      campaignId,
+      campaignName: logoEditorItem?.campaignName || null,
       jobId: null,
       origin: 'live',
       timestamp: new Date().toISOString(),
@@ -315,12 +319,9 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
     try {
       await saveEditedAdFactoryImage({
         userId,
-        campaignId: logoEditorItem.campaignId,
+        campaignId,
         imageUrl: newUrl,
-        prompt: logoEditorItem.campaignName || 'Edited image',
-        // historyId / contextType:'history' would attach to a history
-        // record instead of the current campaign — not modelled on
-        // these MySpace items yet, so default to current.
+        prompt: logoEditorItem?.campaignName || 'Edited image',
       });
     } catch (e) {
       console.error('saveEditedAdFactoryImage failed:', e);
@@ -331,6 +332,16 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
 
   const limit = 20;
   const containerRef = useRef(null);
+
+  const displayedItems = useMemo(
+    () => items.map((item) => deriveDisplayItem(item, now)),
+    [items, now]
+  );
+
+  const completedUrls = useMemo(
+    () => items.map((item) => deriveDisplayItem(item, now)).filter((i) => i.status === 'success' && i.url).map((i) => i.url),
+    [items, now]
+  );
 
   const completedAdFactoryItems = useMemo(
     () => displayedItems.filter((i) => i?.status != null && i?.status !== 'generating' && i?.status !== 'failed' && Boolean(i?.url)),
@@ -480,16 +491,6 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
       prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]
     );
   };
-
-  const completedUrls = useMemo(
-    () => items.map((item) => deriveDisplayItem(item, now)).filter((i) => i.status === 'success' && i.url).map((i) => i.url),
-    [items, now]
-  );
-
-  const displayedItems = useMemo(
-    () => items.map((item) => deriveDisplayItem(item, now)),
-    [items, now]
-  );
 
   const selectAll = () => {
     if (selectedImages.length === completedUrls.length) setSelectedImages([]);

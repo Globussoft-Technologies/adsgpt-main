@@ -38,14 +38,19 @@ const ChipDropdown = ({
   useLayoutEffect(() => {
     if (!open || !anchorRef?.current) return;
 
+    const getBoundaryElement = () => {
+      if (!constrainToScrollContainer) return null;
+      return anchorRef.current?.closest(
+        '[data-voice-dropdown-boundary], [role="dialog"], [data-slot="dialog-content"]'
+      );
+    };
+
     const updatePositioning = () => {
       const rect = anchorRef.current?.getBoundingClientRect();
       if (!rect) return;
 
       const dropdownWidth = 256;
-      const containerEl = anchorRef.current?.closest(
-        '[role="dialog"], [data-slot="dialog-content"], .workspace-card, .rounded-3xl, .rounded-2xl, form, main'
-      );
+      const containerEl = getBoundaryElement();
       const containerRect = containerEl?.getBoundingClientRect();
       const rightBoundary = containerEl
         ? containerRect.right - 12
@@ -72,16 +77,21 @@ const ChipDropdown = ({
 
       const menuChromeHeight = field === 'voice' ? 54 : 14;
       const gap = 8;
-      const availableListHeight = bottomBoundary - rect.bottom - gap - menuChromeHeight;
+      const availableBelow = bottomBoundary - rect.bottom - gap - menuChromeHeight;
       setListHeight(
-        Math.max(60, Math.min(maxListHeight, availableListHeight > 60 ? availableListHeight : maxListHeight))
+        Math.max(60, Math.min(maxListHeight, availableBelow))
       );
     };
 
     updatePositioning();
+    const boundaryElement = getBoundaryElement();
     window.addEventListener('resize', updatePositioning);
-    return () => window.removeEventListener('resize', updatePositioning);
-  }, [open, anchorRef, field, maxListHeight]);
+    boundaryElement?.addEventListener('scroll', updatePositioning, { passive: true });
+    return () => {
+      window.removeEventListener('resize', updatePositioning);
+      boundaryElement?.removeEventListener('scroll', updatePositioning);
+    };
+  }, [open, anchorRef, field, maxListHeight, constrainToScrollContainer]);
 
   useEffect(() => {
     if (!open) return;

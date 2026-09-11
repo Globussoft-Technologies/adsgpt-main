@@ -2,7 +2,7 @@ import Masonry from 'react-masonry-css';
 import { Download } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchImageHistoryAction } from '@/store/actions/image/imageActions';
+import { fetchImageHistoryAction, saveEditedImageAction } from '@/store/actions/image/imageActions';
 import { downloadMediaZipAction } from '@/store/actions/adVideoNew/Advideoactions';
 import RecreateAdModal from '@/components/AdLibrary/RecreateAdModal';
 import ImageCard from './ImageCard';
@@ -205,6 +205,23 @@ export default function MyImagesPage({ imageType = '', startDate = '', endDate =
     return fetched || [];
   };
 
+  const handleLogoSaved = (newUrl, item) => {
+    if (!newUrl) return;
+    const sourceRecordId =
+      item?._recordId ||
+      (item?._id && typeof item._id === 'string' && /^[0-9a-fA-F]{24}/.test(item._id)
+        ? item._id.match(/^[0-9a-fA-F]{24}/)[0]
+        : item?._id);
+
+    dispatch(
+      saveEditedImageAction({
+        url: newUrl,
+        sourceImageId: sourceRecordId,
+        inputs: item?.inputs,
+      })
+    );
+  };
+
   return (
     <div
       className="relative h-full w-full overflow-y-auto px-2 py-8 sm:px-6 2xl:py-10"
@@ -294,6 +311,7 @@ export default function MyImagesPage({ imageType = '', startDate = '', endDate =
             getImageAt={(i) => displayedImages[i]}
             hasMore={hasMore}
             onFetchMore={fetchMoreForNav}
+            onLogoSaved={(newUrl) => handleLogoSaved(newUrl, imageItem)}
             onOpenRecreateAdsModal={(tailored) => {
               // Backend persists the source ad URL as `competitorAd`;
               // older / alt records may use `competitorReferenceImage`.

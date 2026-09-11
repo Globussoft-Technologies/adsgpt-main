@@ -560,7 +560,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
 
 
   return (
-    <div className="scrollbar-hide relative flex h-full max-h-[100vh] w-full min-w-0 flex-col items-center overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-white dark:bg-[#303030]/30 pt-1 pb-6 sm:pt-1 sm:pb-8 2xl:max-h-[90vh]">
+    <div data-voice-dropdown-boundary className="scrollbar-hide relative flex h-full max-h-[100vh] w-full min-w-0 flex-col items-center overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-white dark:bg-[#303030]/30 pt-1 pb-6 sm:pt-1 sm:pb-8 2xl:max-h-[90vh]">
       {/* Close button */}
       <button
         onClick={onClose}

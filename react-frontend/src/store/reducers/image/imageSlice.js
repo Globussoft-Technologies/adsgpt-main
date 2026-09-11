@@ -141,6 +141,35 @@ const imageSlice = createSlice({
       }
     },
 
+    // Replace an optimistic temporary logo-edit record with the saved record from the backend
+    replaceTempHistoryItem: (s, a) => {
+      const { tempId, record } = a.payload || {};
+      if (!tempId) return;
+      const inner = record?.image?._doc || record?.image || record || {};
+      const id = inner?._id || record?._id;
+      if (!id) return;
+      const baseRecord = { ...inner, url: record?.image?.url ?? inner?.url };
+      const normalized = withResolvedUrls(baseRecord);
+      const next = { ...normalized, status: inner?.status || 'completed' };
+      const idx = s.history.items.findIndex((it) => it?._id === tempId);
+      if (idx !== -1) {
+        s.history.items[idx] = next;
+      } else {
+        const existingIdx = s.history.items.findIndex((it) => it?._id === id);
+        if (existingIdx !== -1) {
+          s.history.items[existingIdx] = next;
+        } else {
+          s.history.items.unshift(next);
+        }
+      }
+    },
+
+    // Remove a temporary record if save failed
+    removeHistoryItem: (s, a) => {
+      const id = a.payload;
+      s.history.items = s.history.items.filter((it) => it?._id !== id);
+    },
+
     // ── history list ─────────────────────────────────────────────────
     historyLoadStarted: (s) => {
       s.history.status = 'loading';
@@ -178,6 +207,8 @@ export const {
   pollUpdated,
   resetCurrent,
   updateImage,
+  replaceTempHistoryItem,
+  removeHistoryItem,
   historyLoadStarted,
   historyLoadSucceeded,
   historyLoadFailed,

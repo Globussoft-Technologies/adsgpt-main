@@ -581,26 +581,48 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
   };
 
   const handleLogoSaved = async (newUrl, item) => {
-    if (item?._source === 'adFactory') {
-      const campaignId = item?.sourceMetadata?.campaignId;
-      if (!campaignId || !userId) return;
+    if (!newUrl) return;
 
-      const optimisticItem = {
-        ...item,
-        _id: `${item._id}-edited-${Date.now()}`,
-        status: 'completed',
-        url: newUrl,
-        updatedAt: new Date().toISOString(),
-        results: [{ ...item.results?.[0], url: newUrl, generatedImageUrl: newUrl }],
-      };
-      setItems((prev) => [optimisticItem, ...prev]);
+    const isAdFactory = item?._source === 'adFactory';
+    const campaignId =
+      item?.sourceMetadata?.campaignId || item?.metadata?.campaignId || item?.campaignId;
 
+    const sourceRecordId =
+      item?._recordId ||
+      (item?._id && typeof item._id === 'string' && /^[0-9a-fA-F]{24}/.test(item._id)
+        ? item._id.match(/^[0-9a-fA-F]{24}/)[0]
+        : item?._id);
+
+    const nowIso = new Date().toISOString();
+    const optimisticItem = {
+      ...item,
+      _id: `${item?._id || 'img'}-edited-${Date.now()}`,
+      _recordId: sourceRecordId,
+      status: 'completed',
+      url: newUrl,
+      updatedAt: nowIso,
+      createdAt: nowIso,
+      results: [
+        {
+          ...(item?.results?.[0] || {}),
+          url: newUrl,
+          generatedImageUrl: newUrl,
+          status: 'completed',
+          imageStatus: 200,
+        },
+      ],
+    };
+
+    // Prepend immediately so the edited image appears in the first place without needing a refresh
+    setItems((prev) => [optimisticItem, ...prev]);
+
+    if (isAdFactory && campaignId && userId) {
       try {
         await saveEditedAdFactoryImage({
           userId,
           campaignId,
           imageUrl: newUrl,
-          prompt: item?.sourceMetadata?.campaignName || 'Edited image',
+          prompt: item?.sourceMetadata?.campaignName || item?.campaignName || 'Edited image',
         });
       } catch (error) {
         console.error('saveEditedAdFactoryImage failed:', error);
@@ -609,13 +631,50 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
       return;
     }
 
-    dispatch(
-      saveEditedImageAction({
-        url: newUrl,
-        sourceImageId: item?._recordId,
-        inputs: item?.inputs,
-      }),
-    );
+    try {
+      const savedRecord = await dispatch(
+        saveEditedImageAction({
+          url: newUrl,
+          sourceImageId: sourceRecordId,
+          inputs: item?.inputs,
+        }),
+      );
+      if (!savedRecord) {
+        setItems((prev) => prev.filter((current) => current._id !== optimisticItem._id));
+      } else {
+        const normalizedSaved = normalizeToImageCardItem({
+          id: `${savedRecord._id}:0`,
+          source: item?._source || 'adCreative',
+          sourceLabel: item?._sourceLabel || 'AdCreative',
+          imageId: String(savedRecord._id),
+          resultIndex: 0,
+          url: newUrl,
+          status: 'completed',
+          prompt:
+            savedRecord.inputs?.userPrompt ||
+            savedRecord.inputs?.prompt ||
+            item?.inputs?.prompt ||
+            '',
+          model: savedRecord.inputs?.model || item?.inputs?.model,
+          modelLabel: savedRecord.inputs?.modelLabel || item?.inputs?.modelLabel,
+          type: savedRecord.inputs?.type || item?.inputs?.type,
+          aspectRatio: savedRecord.inputs?.aspectRatio || item?.inputs?.aspectRatio,
+          createdAt: savedRecord.createdAt || nowIso,
+          updatedAt: savedRecord.updatedAt || nowIso,
+          inputs: savedRecord.inputs || item?.inputs,
+          metadata: {
+            quality: savedRecord.inputs?.quality,
+            brandName: savedRecord.inputs?.brandName,
+          },
+        });
+        setItems((prev) =>
+          prev.map((current) => (current._id === optimisticItem._id ? normalizedSaved : current)),
+        );
+      }
+    } catch (error) {
+      console.error('saveEditedImageAction failed:', error);
+      setItems((prev) => prev.filter((current) => current._id !== optimisticItem._id));
+    }
   };
 
   return (

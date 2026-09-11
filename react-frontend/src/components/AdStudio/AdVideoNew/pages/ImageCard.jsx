@@ -165,13 +165,19 @@ export default function ImageCard({
   // handle display themselves.
   const handleLogoSaved = (newUrl) => {
     if (onLogoSaved) {
-      onLogoSaved(newUrl);
+      onLogoSaved(newUrl, item);
       return;
     }
+    const cleanSourceId =
+      item?._recordId ||
+      (item?._id && typeof item._id === 'string' && /^[0-9a-fA-F]{24}/.test(item._id)
+        ? item._id.match(/^[0-9a-fA-F]{24}/)[0]
+        : item?._id);
+
     dispatch(
       saveEditedImageAction({
         url: newUrl,
-        sourceImageId: item?._id,
+        sourceImageId: cleanSourceId,
         inputs: item?.inputs,
       })
     );

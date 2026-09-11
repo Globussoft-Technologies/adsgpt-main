@@ -547,17 +547,16 @@ exports.saveEditedImage = async (req, res) => {
         // Prefer the source record's inputs (authoritative); fall back to the
         // inputs the client carried over from the original generation.
         let inputs = null;
-        if (sourceImageId && mongoose.Types.ObjectId.isValid(sourceImageId)) {
-            const source = await ImageGeneration.findOne({ _id: sourceImageId, userId }).lean();
+        const cleanSourceId =
+            typeof sourceImageId === "string" ? sourceImageId.split(/[:\-]/)[0] : null;
+        if (cleanSourceId && mongoose.Types.ObjectId.isValid(cleanSourceId)) {
+            const source = await ImageGeneration.findOne({ _id: cleanSourceId, userId }).lean();
             if (source?.inputs) inputs = source.inputs;
         }
         if (!inputs) inputs = bodyInputs;
-        if (!inputs || !inputs.type || !inputs.model) {
-            return res.status(400).json({
-                success: false,
-                error: "Could not resolve source image inputs",
-            });
-        }
+        if (!inputs || typeof inputs !== "object") inputs = {};
+        if (!inputs.type) inputs.type = bodyInputs?.type || "ai_ads";
+        if (!inputs.model) inputs.model = bodyInputs?.model || "imagen";
 
         const record = await ImageGeneration.create({
             userId,
