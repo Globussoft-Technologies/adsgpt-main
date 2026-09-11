@@ -126,7 +126,7 @@ function buildMatch(query = {}, extra = {}) {
   return { match, from, to };
 }
 
-const SORTABLE = new Set([
+const SORTABLE = Object.freeze([
   "calls",
   "failures",
   "throttles",
@@ -145,7 +145,11 @@ const SORTABLE = new Set([
  * document — cheap to guard, awkward to notice if left open.
  */
 function buildSort(query = {}) {
-  const field = SORTABLE.has(String(query.sort)) ? String(query.sort) : "calls";
+  // `find` rather than a membership test: the name that reaches `$sort` is then
+  // the constant out of SORTABLE, not the request string that matched it. Same
+  // field, same fallback — the request value just never becomes a property name.
+  const requested = String(query.sort);
+  const field = SORTABLE.find((f) => f === requested) || "calls";
   const dir = String(query.order).toLowerCase() === "asc" ? 1 : -1;
   return { [field]: dir };
 }

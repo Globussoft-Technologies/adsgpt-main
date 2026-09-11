@@ -174,7 +174,9 @@ const registerBillingReconciliationCron = () => {
         return;
     }
 
-    const schedule = process.env.BILLING_RECONCILE_CRON || '0 2 * * *'; // 02:00 UTC daily
+    const DEFAULT_CRON = '0 2 * * *'; // 02:00 UTC daily
+    const customCron = process.env.BILLING_RECONCILE_CRON;
+    const schedule = customCron || DEFAULT_CRON;
     const dryRun =
         String(process.env.BILLING_RECONCILE_DRY_RUN || 'true').toLowerCase() !== 'false';
 
@@ -192,8 +194,14 @@ const registerBillingReconciliationCron = () => {
             console.error('[billing-reconcile] run failed:', err.message);
         }
     }));
+    // Reports which schedule is live without echoing the raw environment value
+    // into the log: the default is printed outright, a custom one is named by
+    // the variable that set it. The invalid-value branch above still prints the
+    // value itself, because a rejected cron string is the whole message there.
     console.log(
-        `[billing-reconcile] scheduler registered: cron="${schedule}" dryRun=${dryRun}`,
+        `[billing-reconcile] scheduler registered: cron=${
+            customCron ? 'custom (BILLING_RECONCILE_CRON)' : `default "${DEFAULT_CRON}"`
+        } dryRun=${dryRun}`,
     );
 };
 

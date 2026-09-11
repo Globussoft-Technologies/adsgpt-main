@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const IpAccessRule = require("../../Module/admin/ipAccessRule");
-const { validateRulePayload } = require("../../utils/ipAccessRule");
+const { ACTIONS, STATUSES, validateRulePayload } = require("../../utils/ipAccessRule");
 
 function isDuplicateKey(error) {
   return error?.code === 11000;
@@ -9,8 +9,14 @@ function isDuplicateKey(error) {
 exports.listRules = async (req, res) => {
   try {
     const query = {};
-    if (["allow", "block"].includes(req.query.action)) query.action = req.query.action;
-    if (["active", "inactive"].includes(req.query.status)) query.status = req.query.status;
+    // `find` against the shared constants rather than an inline `includes`
+    // test: what lands in the query is the entry out of ACTIONS/STATUSES, not
+    // the request string that matched it. Same filter, and the accepted values
+    // now come from the one place that defines them.
+    const action = ACTIONS.find((a) => a === req.query.action);
+    if (action) query.action = action;
+    const status = STATUSES.find((s) => s === req.query.status);
+    if (status) query.status = status;
 
     const search = String(req.query.search || "").trim();
     if (search) {

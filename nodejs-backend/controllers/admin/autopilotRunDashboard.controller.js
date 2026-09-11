@@ -24,6 +24,7 @@ const { redisClient } = require("../../db/redis");
 const {
   _internals: { LOCK_KEY },
 } = require("../../services/autopilot/userRuleOrchestrator");
+const { RUN_STATUSES, buildRunMatch } = require("../../utils/autopilotRunFilter");
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 200;
@@ -157,26 +158,7 @@ exports.list = async (req, res, next) => {
   try {
     const now = Date.now();
     const limit = clampLimit(req.query.limit);
-    const match = {};
-    // Date range, same shape the Meta usage dashboard uses. `to` arrives as a
-    // date-only string from the picker; without the end-of-day push, "today"
-    // would exclude every run that happened today -- the bug already fixed
-    // once on the Meta usage endpoint, not worth repeating here.
-    const { from, to } = req.query;
-    if (from || to) {
-      match.startedAt = {};
-      if (from) match.startedAt.$gte = new Date(from);
-      if (to) {
-        const end = new Date(to);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(String(to))) {
-          end.setUTCHours(23, 59, 59, 999);
-        }
-        match.startedAt.$lte = end;
-      }
-    }
-    if (req.query.status) match.status = req.query.status;
-    if (req.query.dryRun === "true") match.dryRun = true;
-    if (req.query.dryRun === "false") match.dryRun = false;
+    const match = buildRunMatch(req.query);
 
     const runs = await AutopilotRun.find(match)
       .sort({ startedAt: -1 })
@@ -255,6 +237,8 @@ exports.detail = async (req, res, next) => {
 exports._internals = {
   decorateRun,
   clampLimit,
+  buildRunMatch,
+  RUN_STATUSES,
   readLock,
   STALE_HEARTBEAT_MS,
 };
