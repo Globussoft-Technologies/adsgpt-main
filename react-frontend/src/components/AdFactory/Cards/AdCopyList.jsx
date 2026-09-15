@@ -675,16 +675,20 @@ export const AdCopyList = () => {
                     e.stopPropagation();
                     copyHistoryText(platformData, platformKey, historyItem._id, index);
                   }}
-                  className="flex items-center gap-1 rounded-full bg-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-300 dark:bg-[#363636] dark:text-[#D5D5D5] dark:hover:bg-[#444444]"
+                  className={`group/copy flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-200 shadow-xs active:scale-95 ${
+                    copiedHistoryItems[copyKey]
+                      ? 'border-emerald-500/50 bg-emerald-50 text-emerald-600 dark:border-emerald-500/50 dark:bg-emerald-950/40 dark:text-emerald-400'
+                      : 'border-black/10 bg-white text-gray-700 hover:border-[#02C8C4] hover:bg-[#02C8C4]/10 hover:text-[#087f8c] hover:shadow-sm dark:border-white/10 dark:bg-[#363636] dark:text-[#D5D5D5] dark:hover:border-[#02C8C4] dark:hover:bg-[#02C8C4]/20 dark:hover:text-white'
+                  }`}
                 >
                   {copiedHistoryItems[copyKey] ? (
                     <>
-                      <FaCheck className="h-3 w-3 text-green-400" />
-                      <span className="text-green-400">Copied!</span>
+                      <FaCheck className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />
+                      <span className="text-emerald-600 dark:text-emerald-400">Copied!</span>
                     </>
                   ) : (
                     <>
-                      <FaCopy className="h-3 w-3" />
+                      <FaCopy className="h-3 w-3 transition-transform duration-200 group-hover/copy:scale-110" />
                       <span>Copy</span>
                     </>
                   )}
@@ -846,17 +850,35 @@ export const AdCopyList = () => {
                                   textToCopy = platform.data?.message || '';
                                 }
 
+                                const copyKey = `${item?.id}-${platform.platformKey}`;
                                 navigator.clipboard.writeText(textToCopy).then(() => {
+                                  setCopiedItems((prev) => ({ ...prev, [copyKey]: true }));
+                                  setTimeout(() => {
+                                    setCopiedItems((prev) => ({ ...prev, [copyKey]: false }));
+                                  }, 2000);
                                   toast.success(`${platform.platformName} copy copied!`, {
                                     position: 'bottom-right',
                                     duration: 2000,
                                   });
                                 });
                               }}
-                              className="mt-3 flex items-center gap-1 rounded-full bg-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-300 dark:bg-[#363636] dark:text-[#D5D5D5] dark:hover:bg-[#444444]"
+                              className={`mt-3 group/copy flex cursor-pointer items-center gap-1.5 rounded-full border px-3.5 py-1 text-xs font-medium transition-all duration-200 shadow-xs active:scale-95 ${
+                                copiedItems[`${item?.id}-${platform.platformKey}`]
+                                  ? 'border-emerald-500/50 bg-emerald-50 text-emerald-600 dark:border-emerald-500/50 dark:bg-emerald-950/40 dark:text-emerald-400'
+                                  : 'border-black/10 bg-white text-gray-700 hover:border-[#02C8C4] hover:bg-[#02C8C4]/10 hover:text-[#087f8c] hover:shadow-sm dark:border-white/10 dark:bg-[#333333] dark:text-[#D5D5D5] dark:hover:border-[#02C8C4] dark:hover:bg-[#02C8C4]/20 dark:hover:text-white'
+                              }`}
                             >
-                              <FaCopy className="h-3 w-3" />
-                              <span>Copy {platform.platformName} Text</span>
+                              {copiedItems[`${item?.id}-${platform.platformKey}`] ? (
+                                <>
+                                  <FaCheck className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />
+                                  <span className="text-emerald-600 dark:text-emerald-400">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FaCopy className="h-3 w-3 transition-transform duration-200 group-hover/copy:scale-110" />
+                                  <span>Copy {platform.platformName} Text</span>
+                                </>
+                              )}
                             </button>
                           </div>
                         ))}
@@ -875,16 +897,20 @@ export const AdCopyList = () => {
                                   copyAdCopyText(item, index);
                                 }
                               }}
-                              className="mt-3 flex items-center gap-1 rounded-full bg-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-300 dark:bg-[#363636] dark:text-[#D5D5D5] dark:hover:bg-[#444444]"
+                              className={`mt-3 group/copy flex cursor-pointer items-center gap-1.5 rounded-full border px-3.5 py-1 text-xs font-medium transition-all duration-200 shadow-xs active:scale-95 ${
+                                copiedItems[index]
+                                  ? 'border-emerald-500/50 bg-emerald-50 text-emerald-600 dark:border-emerald-500/50 dark:bg-emerald-950/40 dark:text-emerald-400'
+                                  : 'border-black/10 bg-white text-gray-700 hover:border-[#02C8C4] hover:bg-[#02C8C4]/10 hover:text-[#087f8c] hover:shadow-sm dark:border-white/10 dark:bg-[#333333] dark:text-[#D5D5D5] dark:hover:border-[#02C8C4] dark:hover:bg-[#02C8C4]/20 dark:hover:text-white'
+                              }`}
                             >
                               {copiedItems[index] ? (
                                 <>
-                                  <FaCheck className="h-4 w-4" />
-                                  <span>Copied!</span>
+                                  <FaCheck className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+                                  <span className="text-emerald-600 dark:text-emerald-400">Copied!</span>
                                 </>
                               ) : (
                                 <>
-                                  <FaCopy className="h-4 w-4" />
+                                  <FaCopy className="h-3.5 w-3.5 transition-transform duration-200 group-hover/copy:scale-110" />
                                   <span>Copy Text</span>
                                 </>
                               )}

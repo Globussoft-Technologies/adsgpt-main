@@ -1005,9 +1005,22 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           <Info className="h-3.5 w-3.5 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className={`${UPLOAD_FIELD_WRAPPER} pl-1.5 pr-4`} onPaste={handleBrandLogoPaste} tabIndex={0}>
-        <label className={`${UPLOAD_BUTTON} cursor-pointer`}>
+      <div
+        className={`${UPLOAD_FIELD_WRAPPER} justify-between pl-5 pr-1.5 cursor-pointer`}
+        onClick={() => document.getElementById('brand-logo-file-input')?.click()}
+        onPaste={handleBrandLogoPaste}
+        tabIndex={0}
+      >
+        <span className="truncate text-[13px] font-medium text-gray-600 dark:text-white/70">
+          {brandLogos?.length === 0 ? 'No files selected' : `${brandLogos?.length} files selected`}
+        </span>
+        <label
+          htmlFor="brand-logo-file-input"
+          className={`${UPLOAD_BUTTON} cursor-pointer`}
+          onClick={(e) => e.stopPropagation()}
+        >
           <input
+            id="brand-logo-file-input"
             type="file"
             accept=".png,.ico,image/png,image/x-icon,image/vnd.microsoft.icon"
             multiple={true}
@@ -1015,12 +1028,9 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
             onChange={handleBrandLogoChange}
             onBlur={formik.handleBlur}
           />
-          <CloudUpload className="h-3.5 w-3.5" />
+          <CloudUpload className="h-3.5 w-3.5 text-current" />
           Upload
         </label>
-        <span className="truncate text-[12px] font-light text-gray-500 dark:text-white/60">
-          {brandLogos?.length === 0 ? 'No files selected' : `${brandLogos?.length} files selected`}
-        </span>
       </div>
 
       {isFileLoading ? (
@@ -1031,8 +1041,8 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
       ) : (
         <>
           {brandLogos?.length > 0 && (
-            <div className="mt-1 mb-1">
-              <div className="grid grid-cols-4 gap-2">
+            <div className="mt-1 mb-1 p-0.5">
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                 {brandLogos?.map((file, index) => (
                   <div
                     key={index}
@@ -1076,9 +1086,24 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           <Info className="h-3.5 w-3.5 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className={`${UPLOAD_FIELD_WRAPPER} pl-1.5 pr-4`} onPaste={handleProductImagePaste} tabIndex={0}>
-        <label className={`${UPLOAD_BUTTON} cursor-pointer`}>
+      <div
+        className={`${UPLOAD_FIELD_WRAPPER} justify-between pl-5 pr-1.5 cursor-pointer`}
+        onClick={() => document.getElementById('product-image-file-input')?.click()}
+        onPaste={handleProductImagePaste}
+        tabIndex={0}
+      >
+        <span className="truncate text-[13px] font-medium text-gray-600 dark:text-white/70">
+          {productImages?.length === 0
+            ? 'No files selected'
+            : `${productImages?.length} files selected`}
+        </span>
+        <label
+          htmlFor="product-image-file-input"
+          className={`${UPLOAD_BUTTON} cursor-pointer`}
+          onClick={(e) => e.stopPropagation()}
+        >
           <input
+            id="product-image-file-input"
             type="file"
             accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
             multiple={true}
@@ -1086,14 +1111,9 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
             onChange={handleProductImageChange}
             onBlur={formik.handleBlur}
           />
-          <CloudUpload className="h-3.5 w-3.5" />
+          <CloudUpload className="h-3.5 w-3.5 text-current" />
           Upload
         </label>
-        <span className="truncate text-[12px] font-light text-gray-500 dark:text-white/60">
-          {productImages?.length === 0
-            ? 'No files selected'
-            : `${productImages?.length} files selected`}
-        </span>
       </div>
 
       {isFileLoading ? (
@@ -1104,8 +1124,8 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
       ) : (
         <>
           {productImages?.length > 0 && (
-            <div className="mt-1 mb-1">
-              <div className="grid grid-cols-4 gap-2">
+            <div className="mt-1 mb-1 p-0.5">
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                 {productImages.map((file, index) => (
                   <div
                     key={index}
@@ -1325,8 +1345,8 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                 onClick={() => formik.setFieldValue('region', chip)}
                 className={`rounded-full px-3.5 py-1 text-xs transition-all ${
                   formik.values.region === chip
-                    ? 'border-2 border-[#02C8C4] bg-[#02C8C4]/15 text-[#02C8C4] font-medium'
-                    : 'border border-black/10 dark:border-white/15 bg-black/5 dark:bg-white/5 text-gray-500 dark:text-white/70 hover:border-black/20 dark:hover:border-white/30'
+                    ? 'border-2 border-[#02C8C4] bg-[#02C8C4]/15 text-[#0a828e] dark:text-[#02C8C4] font-medium'
+                    : 'border border-[var(--ws-border)] dark:border-white/15 bg-black/5 dark:bg-white/5 text-[#7A7369] dark:text-white/70 hover:border-[#C8C1B4] dark:hover:border-white/30'
                 }`}
               >
                 {chip}
@@ -1353,7 +1373,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                 }
               }}
               placeholder="Type an audience and press Enter"
-              className="min-w-0 flex-1 bg-transparent text-[13px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-400 dark:placeholder:text-[#afafaf]/70"
+              className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#24211D] dark:text-white outline-none placeholder:text-[#948C80] dark:placeholder:text-[#afafaf]/70"
             />
             <button
               type="button"
@@ -1365,7 +1385,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                 setCustomAudienceInput('');
               }}
               disabled={!customAudienceInput.trim()}
-              className={UPLOAD_BUTTON}
+              className={`${UPLOAD_BUTTON} cursor-pointer disabled:cursor-not-allowed disabled:opacity-40`}
             >
               Add
             </button>
@@ -1386,8 +1406,8 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
                     }}
                     className={`rounded-full border px-3 py-1 text-xs transition-all ${
                       isSelected
-                        ? 'border-[#02C8C4]/60 bg-[#02C8C4]/20 text-[#02C8C4] font-medium'
-                        : 'border-black/10 dark:border-white/15 bg-black/5 dark:bg-white/5 text-gray-500 dark:text-white/70 hover:border-black/20 dark:hover:border-white/30'
+                        ? 'border-[#02C8C4] bg-[#02C8C4]/15 dark:bg-[#02C8C4]/20 text-[#0a828e] dark:text-[#02C8C4] font-medium'
+                        : 'border border-[var(--ws-border)] dark:border-white/15 bg-black/5 dark:bg-white/5 text-[#7A7369] dark:text-white/70 hover:border-[#C8C1B4] dark:hover:border-white/30'
                     }`}
                   >
                     {audience}
@@ -1398,17 +1418,17 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
           )}
 
           {selectedAudiences.length > 0 && (
-            <div className="scrollbar-thin flex max-h-[100px] flex-wrap gap-2 overflow-y-auto rounded-[16px] ring-1 ring-black/8 dark:ring-white/10 bg-gray-50 dark:bg-[#202121] p-3">
+            <div className="scrollbar-thin flex max-h-[100px] flex-wrap gap-2 overflow-y-auto rounded-2xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] p-3 dark:border-white/10 dark:bg-[#202121]">
               {selectedAudiences.map((audience) => (
                 <span
                   key={audience}
-                  className="flex items-center gap-1.5 rounded-full border border-[#02C8C4]/40 bg-[#02C8C4]/10 px-3 py-1 text-xs text-[#02C8C4] font-medium"
+                  className="flex items-center gap-1.5 rounded-full border border-[#02C8C4]/40 bg-[#02C8C4]/10 dark:bg-[#02C8C4]/15 px-3 py-1 text-xs text-[#0a828e] dark:text-[#02C8C4] font-medium"
                 >
                   {audience}
                   <button
                     type="button"
                     onClick={() => setSelectedAudiences((prev) => prev.filter((a) => a !== audience))}
-                    className="ml-0.5 text-[#02C8C4]/70 hover:text-red-400 transition-colors"
+                    className="ml-0.5 text-[#0a828e]/70 hover:text-red-500 dark:text-[#02C8C4]/70 dark:hover:text-red-400 transition-colors"
                   >
                     <X className="h-3 w-3" />
                   </button>

@@ -1427,3 +1427,244 @@ html:not(.dark) .FIE_carousel-next-button svg path {
   fill: #fff !important;
 }
 
+/* ─── Filerobot "Save as" modal ──────────────────────────────────────────
+   The editor portals this dialog outside `.FIE_root`, so its fields and
+   actions need their own theme-scoped treatment. Keep these selectors tied
+   to `.FIE_save-modal` to avoid changing color pickers and other Sfx modals. */
+.SfxModal-Overlay:has(.FIE_save-modal) {
+  backdrop-filter: blur(14px) !important;
+}
+
+.FIE_save-modal.SfxModal-Container {
+  border-radius: 20px !important;
+}
+
+.FIE_save-modal .SfxModalTitle-root {
+  margin-bottom: 20px !important;
+}
+
+.FIE_save-modal .SfxModalTitle-Icon {
+  border-radius: 12px !important;
+}
+
+.FIE_save-modal .SfxLabel-root {
+  font-weight: 600 !important;
+}
+
+.FIE_save-modal .SfxInput-root {
+  min-height: 40px !important;
+  border-radius: 10px !important;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease !important;
+}
+
+.FIE_save-modal .SfxInput-root:focus-within {
+  border-color: #5867eb !important;
+  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.14) !important;
+}
+
+.FIE_save-modal .FIE_save-resize-wrapper button {
+  min-width: 40px !important;
+  min-height: 40px !important;
+  border-radius: 10px !important;
+}
+
+.FIE_save-modal .SfxModalActions-root {
+  gap: 12px !important;
+  margin-top: 24px !important;
+}
+
+.FIE_save-modal .SfxModalActions-root button {
+  height: 40px !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease !important;
+}
+
+.FIE_save-modal .SfxModalActions-root button:hover {
+  transform: translateY(-1px);
+}
+
+/* Light Mode — warm workspace surfaces. */
+html:not(.dark) .SfxModal-Overlay:has(.FIE_save-modal) {
+  background: rgba(36, 33, 29, 0.28) !important;
+}
+
+html:not(.dark) .FIE_save-modal.SfxModal-Container {
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
+  box-shadow: 0 24px 64px rgba(80, 70, 58, 0.2) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxModalTitle-root,
+html:not(.dark) .FIE_save-modal .SfxModalTitle-root * {
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxModalTitle-Icon {
+  background: rgba(88, 103, 235, 0.1) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxModalTitle-Icon svg,
+html:not(.dark) .FIE_save-modal .SfxModalTitle-Icon svg path {
+  color: #5867eb !important;
+  fill: #5867eb !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxCrossButton-root {
+  background: transparent !important;
+  color: var(--ws-text-secondary) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxCrossButton-root:hover {
+  background: var(--ws-surface-hover) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxLabel-root,
+html:not(.dark) .FIE_save-modal .SfxSelect-Label,
+html:not(.dark) .FIE_save-modal .FIE_save-resize-wrapper span {
+  color: var(--ws-text-secondary) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxInput-root {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxInput-Base,
+html:not(.dark) .FIE_save-modal input {
+  background: transparent !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) .FIE_save-modal .FIE_save-resize-wrapper button {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: #5867eb !important;
+}
+
+html:not(.dark) .FIE_save-modal .FIE_save-resize-wrapper button:hover {
+  background: var(--ws-surface-hover) !important;
+  border-color: var(--ws-border-strong) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxModalActions-root button:first-of-type {
+  background: var(--ws-surface) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: var(--ws-text-secondary) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxModalActions-root button:first-of-type:hover {
+  background: var(--ws-surface-hover) !important;
+  color: var(--ws-text-primary) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxModalActions-root button:nth-of-type(2) {
+  background: linear-gradient(90deg, #02c8c4, #5867eb) !important;
+  border: 1px solid transparent !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 20px rgba(88, 103, 235, 0.2) !important;
+}
+
+html:not(.dark) .FIE_save-modal .SfxModalActions-root button:nth-of-type(2) *,
+html:not(.dark) .FIE_save-modal .SfxModalActions-root button:nth-of-type(2):hover * {
+  color: #ffffff !important;
+}
+
+/* Dark Mode — match the surrounding Filerobot editor. */
+.dark .SfxModal-Overlay:has(.FIE_save-modal) {
+  background: rgba(13, 13, 13, 0.62) !important;
+}
+
+.dark .FIE_save-modal.SfxModal-Container {
+  background: rgba(20, 20, 24, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5) !important;
+  color: #ffffff !important;
+}
+
+.dark .FIE_save-modal .SfxModalTitle-root,
+.dark .FIE_save-modal .SfxModalTitle-root * {
+  color: #ffffff !important;
+}
+
+.dark .FIE_save-modal .SfxModalTitle-Icon {
+  background: rgba(88, 103, 235, 0.18) !important;
+}
+
+.dark .FIE_save-modal .SfxModalTitle-Icon svg,
+.dark .FIE_save-modal .SfxModalTitle-Icon svg path {
+  color: #8f98ff !important;
+  fill: #8f98ff !important;
+}
+
+.dark .FIE_save-modal .SfxCrossButton-root {
+  background: transparent !important;
+  color: #afafaf !important;
+}
+
+.dark .FIE_save-modal .SfxCrossButton-root:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #ffffff !important;
+}
+
+.dark .FIE_save-modal .SfxLabel-root,
+.dark .FIE_save-modal .SfxSelect-Label,
+.dark .FIE_save-modal .FIE_save-resize-wrapper span {
+  color: #afafaf !important;
+}
+
+.dark .FIE_save-modal .SfxInput-root {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.dark .FIE_save-modal .SfxInput-Base,
+.dark .FIE_save-modal input {
+  background: transparent !important;
+  color: #ffffff !important;
+}
+
+.dark .FIE_save-modal .FIE_save-resize-wrapper button {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #8f98ff !important;
+}
+
+.dark .FIE_save-modal .FIE_save-resize-wrapper button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.dark .FIE_save-modal .SfxModalActions-root button:first-of-type {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #d4d4d8 !important;
+}
+
+.dark .FIE_save-modal .SfxModalActions-root button:first-of-type:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #ffffff !important;
+}
+
+.dark .FIE_save-modal .SfxModalActions-root button:nth-of-type(2) {
+  background: linear-gradient(90deg, #15dcff, #6b72f8) !important;
+  border: 1px solid transparent !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 22px rgba(21, 220, 255, 0.16) !important;
+}
+
+.dark .FIE_save-modal .SfxModalActions-root button:nth-of-type(2) *,
+.dark .FIE_save-modal .SfxModalActions-root button:nth-of-type(2):hover * {
+  color: #ffffff !important;
+}
+

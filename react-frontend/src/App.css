@@ -4212,6 +4212,43 @@ html:not(.dark) .adsgpt-cal-pop .rdrDayEndPreview {
   color: #15DCFF !important;
 }
 
+/* BrandIQ Competitors date filter — warm Light Mode surfaces only. */
+html:not(.dark) .brandiq-date-filter {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border) !important;
+}
+
+html:not(.dark) .brandiq-date-filter button[data-active='false'] {
+  background: var(--ws-surface-header) !important;
+  color: #24211D !important;
+  box-shadow: inset 0 0 0 1px var(--ws-border) !important;
+}
+
+html:not(.dark) .brandiq-date-filter button[data-active='false']:hover {
+  background: #EAE5DC !important;
+  box-shadow: inset 0 0 0 1px var(--ws-border-strong) !important;
+}
+
+html:not(.dark) .brandiq-date-filter .rdrCalendarWrapper,
+html:not(.dark) .brandiq-date-filter .rdrMonths,
+html:not(.dark) .brandiq-date-filter .rdrMonth {
+  background: transparent !important;
+}
+
+html:not(.dark) .brandiq-date-filter .rdrMonthAndYearPickers select,
+html:not(.dark) .brandiq-date-filter .rdrNextPrevButton {
+  background: var(--ws-surface-header) !important;
+  border: 1px solid var(--ws-border) !important;
+  color: #24211D !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) .brandiq-date-filter .rdrMonthAndYearPickers select:hover,
+html:not(.dark) .brandiq-date-filter .rdrNextPrevButton:hover {
+  background: #EAE5DC !important;
+  border-color: var(--ws-border-strong) !important;
+}
+
 /* Full Control creative preview — Light Mode field/action contrast.
    Kept component-scoped because the global transparent-input and rounded
    progress-track rules intentionally serve unrelated embedded controls. */

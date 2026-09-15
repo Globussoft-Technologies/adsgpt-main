@@ -22,16 +22,16 @@ const CreativeFilterDropdown = ({
   return (
     <Select value={value?.value} onValueChange={onChange}>
       <SelectTrigger
-        className={`${triggerSurfaceClass} !h-auto items-center gap-2 rounded-full border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-4 py-1.5 text-xs font-medium text-[#24211D] shadow-xs transition-colors 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white [&>svg]:hidden ${triggerClassName}`}
+        className={`${triggerSurfaceClass} !h-auto items-center gap-2 rounded-full border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-4 py-1.5 text-xs font-medium text-[#24211D] shadow-xs transition-colors hover:bg-zinc-100/80 hover:text-zinc-950 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white [&>svg]:hidden ${triggerClassName}`}
       >
-        <span className="flex items-center gap-1.5 capitalize 2xl:gap-2">
+        <span className="flex items-center gap-1.5 capitalize text-inherit 2xl:gap-2">
           {/* Show selected icon (as React element), else ListFilter */}
           {selectedOption?.Icon ? (
             selectedOption.Icon
           ) : (
-            <ListFilter className="text-zinc-700 dark:text-[#afafaf]" />
+            <ListFilter className="text-zinc-700 transition-colors group-hover:text-zinc-950 dark:text-[#afafaf] dark:group-hover:text-white" />
           )}
-          <span className="hidden text-xs font-medium text-[#24211D] md:block 2xl:text-sm dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
+          <span className="hidden text-xs font-medium text-inherit md:block 2xl:text-sm dark:group-data-[state=open]:text-white">
             {selectedLabel}
           </span>
         </span>

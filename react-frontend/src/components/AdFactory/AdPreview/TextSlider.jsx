@@ -68,7 +68,7 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies, onAddCopy }
       {/* Scroller — copies only. flex-1 + min-w-0 so it fills the space left of
           the add card and scrolls horizontally without pushing it off-screen. */}
       <div
-        className={`${isDarkMode ? 'scrollbar-white' : ''} flex min-w-0 flex-1 gap-2 overflow-x-auto pb-4`}
+        className={`${isDarkMode ? 'scrollbar-white' : ''} flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1.5`}
       >
       {localCopies.map((adCopy, index) => {
         const isSelected =
@@ -87,14 +87,14 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies, onAddCopy }
         return (
           <div
             key={adCopy?.id}
-            className={`relative flex h-64 w-55 flex-shrink-0 flex-col overflow-hidden rounded-xl p-4 text-xs 2xl:h-78 2xl:w-[240px] ${
+            className={`relative flex h-48 sm:h-52 w-55 flex-shrink-0 flex-col overflow-hidden rounded-xl p-3 text-xs 2xl:h-64 2xl:w-[240px] 2xl:p-4 ${
               isSelected
                 ? 'bg-gradient-to-br from-[#424CFF] to-[#22C5FD] text-white'
                 : 'bg-black/5 dark:bg-white/10 text-gray-500 dark:text-white/70'
             }`}
             onClick={() => handleSelect(adCopy)}
           >
-            <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+            <div className="mb-1.5 flex shrink-0 items-center justify-between gap-2">
               <p className={`text-base font-bold ${isSelected ? 'text-white' : 'text-gray-900 dark:text-white'} 2xl:text-lg`}>
                 Ad Copy {index + 1}
               </p>
@@ -123,7 +123,7 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies, onAddCopy }
             ) : (
               // Two independent sections so a long headline never pushes the
               // primary text — each gets its own bounded, scrollable box.
-              <div className="flex min-h-0 flex-1 flex-col gap-3">
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
                 <div className="flex min-h-0 flex-[3] flex-col">
                   <span className={labelClass}>Primary text</span>
                   <div className={bodyScroll}>{adCopy?.primaryText || '—'}</div>
@@ -144,7 +144,7 @@ const TextSlider = ({ adCopies, onSelect, selectedText, setAdCopies, onAddCopy }
         <button
           type="button"
           onClick={onAddCopy}
-          className="group flex h-64 w-55 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-black/15 bg-gray-100 text-gray-500 transition-colors hover:border-[#2364B8] hover:text-[#2364B8] 2xl:h-78 2xl:w-[240px] dark:border-white/15 dark:bg-white/5 dark:text-white/60 dark:hover:border-[#2364B8] dark:hover:text-white"
+          className="group flex h-48 sm:h-52 w-55 flex-shrink-0 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-black/15 bg-gray-100 text-gray-500 transition-colors hover:border-[#2364B8] hover:text-[#2364B8] 2xl:h-64 2xl:w-[240px] dark:border-white/15 dark:bg-white/5 dark:text-white/60 dark:hover:border-[#2364B8] dark:hover:text-white"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5 transition-colors group-hover:bg-[#2364B8]/10 dark:bg-white/10 2xl:h-11 2xl:w-11">
             <Plus className="h-5 w-5 2xl:h-6 2xl:w-6" />

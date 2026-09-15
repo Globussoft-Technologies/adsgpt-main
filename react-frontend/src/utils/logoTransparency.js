@@ -26,16 +26,34 @@ const MIN_TRANSPARENT_RATIO = 0.005;
 export const LOGO_BACKGROUND_ERROR =
   'This logo has a background. Please upload a logo with a transparent background (PNG or SVG).';
 
-const loadImage = (file) =>
+const loadImage = (source) =>
   new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
+    const isBlob = typeof Blob !== 'undefined' && source instanceof Blob;
+    const isString = typeof source === 'string';
+    if (!isBlob && !isString) {
+      reject(new Error('Invalid image source'));
+      return;
+    }
+
+    const url = isBlob ? URL.createObjectURL(source) : source;
     const img = new Image();
+    if (isString && !source.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => {
-      URL.revokeObjectURL(url);
+      if (isBlob) URL.revokeObjectURL(url);
       resolve(img);
     };
     img.onerror = () => {
-      URL.revokeObjectURL(url);
+      if (isBlob) URL.revokeObjectURL(url);
+      if (isString && img.crossOrigin) {
+        // Fallback retry without crossOrigin in case CORS header is omitted by host
+        const retryImg = new Image();
+        retryImg.onload = () => resolve(retryImg);
+        retryImg.onerror = () => reject(new Error('decode failed'));
+        retryImg.src = url;
+        return;
+      }
       reject(new Error('decode failed'));
     };
     img.src = url;

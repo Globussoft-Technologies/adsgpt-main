@@ -602,9 +602,22 @@ const OnBoardBrandDialog = () => {
           <Info className="h-3.5 w-3.5 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className={`${UPLOAD_FIELD_WRAPPER} pl-1.5 pr-4`} onPaste={handleBrandLogoPaste} tabIndex={0}>
-        <label className={`${UPLOAD_BUTTON} cursor-pointer`}>
+      <div
+        className={`${UPLOAD_FIELD_WRAPPER} justify-between pl-5 pr-1.5 cursor-pointer`}
+        onClick={() => document.getElementById('onboard-brand-logo-file-input')?.click()}
+        onPaste={handleBrandLogoPaste}
+        tabIndex={0}
+      >
+        <span className="truncate text-[13px] font-medium text-gray-600 dark:text-white/70">
+          {brandLogos?.length === 0 ? 'No files selected' : `${brandLogos?.length} files selected`}
+        </span>
+        <label
+          htmlFor="onboard-brand-logo-file-input"
+          className={`${UPLOAD_BUTTON} cursor-pointer`}
+          onClick={(e) => e.stopPropagation()}
+        >
           <input
+            id="onboard-brand-logo-file-input"
             type="file"
             accept="image/png,image/jpeg"
             multiple={true}
@@ -612,17 +625,14 @@ const OnBoardBrandDialog = () => {
             onChange={handleBrandLogoChange}
             onBlur={formik.handleBlur}
           />
-          <CloudUpload className="h-3.5 w-3.5" />
+          <CloudUpload className="h-3.5 w-3.5 text-current" />
           Upload
         </label>
-        <span className="truncate text-[12px] font-light text-gray-500 dark:text-white/60">
-          {brandLogos?.length === 0 ? 'No files selected' : `${brandLogos?.length} files selected`}
-        </span>
       </div>
 
       {brandLogos?.length > 0 && (
         <div className="mt-1 mb-1">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
             {brandLogos?.map((file, index) => (
               <div
                 key={index}
@@ -664,9 +674,24 @@ const OnBoardBrandDialog = () => {
           <Info className="h-3.5 w-3.5 cursor-pointer text-gray-400 hover:text-black dark:hover:text-white" />
         </ShadcnTooltip>
       </label>
-      <div className={`${UPLOAD_FIELD_WRAPPER} pl-1.5 pr-4`} onPaste={handleProductImagePaste} tabIndex={0}>
-        <label className={`${UPLOAD_BUTTON} cursor-pointer`}>
+      <div
+        className={`${UPLOAD_FIELD_WRAPPER} justify-between pl-5 pr-1.5 cursor-pointer`}
+        onClick={() => document.getElementById('onboard-product-image-file-input')?.click()}
+        onPaste={handleProductImagePaste}
+        tabIndex={0}
+      >
+        <span className="truncate text-[13px] font-medium text-gray-600 dark:text-white/70">
+          {productImages?.length === 0
+            ? 'No files selected'
+            : `${productImages?.length} files selected`}
+        </span>
+        <label
+          htmlFor="onboard-product-image-file-input"
+          className={`${UPLOAD_BUTTON} cursor-pointer`}
+          onClick={(e) => e.stopPropagation()}
+        >
           <input
+            id="onboard-product-image-file-input"
             type="file"
             accept="image/*"
             multiple={true}
@@ -674,19 +699,14 @@ const OnBoardBrandDialog = () => {
             onChange={handleProductImageChange}
             onBlur={formik.handleBlur}
           />
-          <CloudUpload className="h-3.5 w-3.5" />
+          <CloudUpload className="h-3.5 w-3.5 text-current" />
           Upload
         </label>
-        <span className="truncate text-[12px] font-light text-gray-500 dark:text-white/60">
-          {productImages?.length === 0
-            ? 'No files selected'
-            : `${productImages?.length} files selected`}
-        </span>
       </div>
 
       {productImages?.length > 0 && (
         <div className="mt-1 mb-1">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
             {productImages.map((file, index) => (
               <div
                 key={index}

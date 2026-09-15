@@ -350,7 +350,7 @@ const AdsPreviewDialog = ({ open, onOpenChange, onProgressUpdate }) => {
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-screen max-h-screen! w-screen max-w-screen! scale-100! rounded-none! border-none bg-white dark:bg-[#0F0F0F] p-0">
+      <DialogContent className="flex flex-col gap-0 overflow-hidden overflow-y-hidden! h-screen max-h-screen! w-screen max-w-screen! scale-100! rounded-none! border-none bg-white dark:bg-[#0F0F0F] p-0">
         <div className="flex h-full w-full max-w-screen overflow-hidden pb-10 md:pb-0">
           {/* Mobile menu button */}
           {!isSidebarOpen && (

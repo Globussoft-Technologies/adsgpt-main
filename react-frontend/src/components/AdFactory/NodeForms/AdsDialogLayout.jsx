@@ -77,6 +77,7 @@ const AdsDialogLayout = ({ type, open, onOpenChange, handleDownloadWithFormat })
           lightboxImage={lightboxImage}
           closeLightbox={handleCloseLightbox}
           images={images}
+          variant="manual-posting"
         />
       )}
     </>

@@ -310,32 +310,46 @@ const AdCreativesCard = ({
                   loading="lazy"
                   onLoad={() => setImageLoaded(true)}
                 />
-                <div className="absolute bottom-0 max-h-[30%] w-full overflow-y-auto bg-gradient-to-b from-black/0 to-black p-3 leading-[1px] opacity-100 transition-opacity duration-300 group-hover:opacity-100 lg:opacity-0">
-                  <span className="text-xs font-extrabold break-words text-white">
-                    {isTitleExpanded
-                      ? getTitleForActiveIndex()
-                      : truncateText(getTitleForActiveIndex(), 50)}
-                    {getTitleForActiveIndex()?.length > 50 && (
-                      <button
-                        className="ml-2 cursor-pointer text-blue-400 underline"
-                        onClick={() => setIsTitleExpanded(!isTitleExpanded)}
-                      >
-                        {isTitleExpanded ? 'Read Less' : 'Read More'}
-                      </button>
+                {(getTitleForActiveIndex() || description) && (
+                  <div className="absolute bottom-0 left-0 right-0 z-10 max-h-[48%] w-full overflow-y-auto bg-gradient-to-t from-black/95 via-black/90 to-black/80 backdrop-blur-md p-3.5 leading-normal opacity-100 transition-opacity duration-300 group-hover:opacity-100 lg:opacity-0 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+                    {getTitleForActiveIndex() && (
+                      <span className="block text-xs font-bold leading-snug break-words text-white drop-shadow-xs">
+                        {isTitleExpanded
+                          ? getTitleForActiveIndex()
+                          : truncateText(getTitleForActiveIndex(), 60)}
+                        {getTitleForActiveIndex()?.length > 60 && (
+                          <button
+                            type="button"
+                            className="ml-2 inline-block cursor-pointer text-sky-400 hover:text-sky-300 underline font-medium"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsTitleExpanded(!isTitleExpanded);
+                            }}
+                          >
+                            {isTitleExpanded ? 'Read Less' : 'Read More'}
+                          </button>
+                        )}
+                      </span>
                     )}
-                  </span>
-                  <p className="mt-1 text-xs break-words text-white">
-                    {isDescriptionExpanded ? description : truncateText(description, 100)}
-                    {description?.length > 100 && (
-                      <button
-                        className="ml-1 cursor-pointer text-blue-400"
-                        onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-                      >
-                        {isDescriptionExpanded ? 'Read Less' : 'Read More'}
-                      </button>
+                    {description && (
+                      <p className="mt-1.5 text-xs leading-relaxed break-words text-zinc-200">
+                        {isDescriptionExpanded ? description : truncateText(description, 120)}
+                        {description?.length > 120 && (
+                          <button
+                            type="button"
+                            className="ml-1.5 inline-block cursor-pointer text-sky-400 hover:text-sky-300 underline font-medium"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsDescriptionExpanded(!isDescriptionExpanded);
+                            }}
+                          >
+                            {isDescriptionExpanded ? 'Read Less' : 'Read More'}
+                          </button>
+                        )}
+                      </p>
                     )}
-                  </p>
-                </div>
+                  </div>
+                )}
               </div>
             </SwiperSlide>
           ))}

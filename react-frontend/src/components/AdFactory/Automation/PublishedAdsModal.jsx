@@ -424,7 +424,7 @@ export default function PublishedAdsModal() {
             value={statusFilter}
             onChange={setStatusFilter}
           />
-          <span className="hidden h-5 w-px bg-white/10 sm:block" />
+          <span className="hidden h-5 w-px bg-black/10 sm:block dark:bg-white/10" />
           <FilterRow
             label="Time"
             options={TIME_FILTERS}
@@ -532,8 +532,10 @@ export default function PublishedAdsModal() {
 function FilterRow({ label, options, value, onChange }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-10 tracking-wider text-[#AFAFAF] uppercase">{label}</span>
-      <div className="flex items-center gap-0.5 rounded-full border border-white/10 bg-white/3 p-0.5">
+      <span className="text-10 tracking-wider text-gray-500 uppercase dark:text-[#AFAFAF]">
+        {label}
+      </span>
+      <div className="flex items-center gap-0.5 rounded-full border border-black/10 bg-black/3 p-0.5 dark:border-white/10 dark:bg-white/3">
         {options.map((o) => (
           <button
             key={o.id}
@@ -541,8 +543,8 @@ function FilterRow({ label, options, value, onChange }) {
             onClick={() => onChange(o.id)}
             className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
               value === o.id
-                ? 'bg-[#15DCFF]/20 text-[#15DCFF] ring-1 ring-inset ring-[#15DCFF]/30'
-                : 'text-[#AFAFAF] hover:text-white'
+                ? 'bg-[#02C8C4]/15 text-[#087C80] ring-1 ring-inset ring-[#02C8C4]/30 dark:bg-[#15DCFF]/20 dark:text-[#15DCFF] dark:ring-[#15DCFF]/30'
+                : 'text-gray-500 hover:bg-black/5 hover:text-gray-900 dark:text-[#AFAFAF] dark:hover:bg-white/5 dark:hover:text-white'
             }`}
           >
             {o.label}

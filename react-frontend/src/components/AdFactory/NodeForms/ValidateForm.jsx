@@ -146,8 +146,8 @@ export default function ValidateForm({ onComplete }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 25, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
       className="text-gray-900 dark:text-white"
     >
@@ -224,16 +224,16 @@ export default function ValidateForm({ onComplete }) {
                         return (
                           <div
                             key={id}
-                            className={`group rounded-lg transition-all ${
+                            className={`group rounded-lg transition-colors duration-150 ${
                               isSelected
                                 ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-[1.5px] shadow-[0_0_12px_rgba(2,200,196,0.30)]'
-                                : 'bg-black/10 p-[1px] dark:bg-white/10'
+                                : 'bg-black/10 p-[1.5px] dark:bg-white/10'
                             } w-fit`}
                           >
                             <button
                               type="button"
                               onClick={() => handlePlatformToggle(name)}
-                              className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg transition-all 2xl:h-[52px] 2xl:w-[52px] ${
+                              className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg transition-colors duration-150 2xl:h-[52px] 2xl:w-[52px] ${
                                 isSelected
                                   ? 'bg-[#02C8C4]/15 text-[#02C8C4] dark:bg-[#02C8C4]/25 dark:text-[#02C8C4]'
                                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200/80 hover:text-black dark:bg-[#2d2d2d] dark:text-[#AFAFAF] dark:hover:bg-[#383838] dark:hover:text-white'
@@ -330,16 +330,16 @@ export default function ValidateForm({ onComplete }) {
                                     return (
                                       <div
                                         key={value}
-                                        className={`group cursor-pointer select-none rounded-full transition-all ${
+                                        className={`group cursor-pointer select-none rounded-full transition-colors duration-150 ${
                                           isSelected
                                             ? 'bg-gradient-to-r from-[#02C8C4] to-[#5867EB] p-[1.5px] shadow-[0_0_12px_rgba(2,200,196,0.20)] dark:from-[#02C8C4]/60 dark:to-[#5867EB]/60 dark:shadow-none'
-                                            : 'bg-black/10 p-[1px] dark:bg-white/10'
+                                            : 'bg-black/10 p-[1.5px] dark:bg-white/10'
                                         } w-fit`}
                                       >
                                         <button
                                           type="button"
                                           onClick={() => handleRatioToggle(pIdx, value)}
-                                          className={`flex cursor-pointer select-none items-center justify-center gap-1.5 rounded-full px-5 py-1.5 text-xs transition-all ${
+                                          className={`flex cursor-pointer select-none items-center justify-center gap-1.5 rounded-full px-5 py-1.5 text-xs transition-colors duration-150 ${
                                             isSelected
                                               ? 'bg-[#02C8C4]/15 text-gray-900 dark:bg-[#02C8C4]/25 dark:text-white'
                                               : 'bg-gray-100 text-gray-600 hover:bg-gray-200/80 hover:text-black dark:bg-[#2d2d2d] dark:text-[#AFAFAF] dark:hover:bg-[#383838] dark:hover:text-white'
@@ -347,7 +347,7 @@ export default function ValidateForm({ onComplete }) {
                                           disabled={submitting}
                                         >
                                           <Icon className={`h-4 w-4 transition-colors ${isSelected ? 'text-[#02C8C4]' : 'text-gray-500 dark:text-[#AFAFAF]'}`} />
-                                          <span className={`text-xs 2xl:text-sm ${isSelected ? 'font-bold' : 'font-medium'}`}>{label}</span>
+                                          <span className="text-xs font-medium 2xl:text-sm">{label}</span>
                                         </button>
                                       </div>
                                     );

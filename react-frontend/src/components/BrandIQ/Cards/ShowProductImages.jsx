@@ -57,7 +57,7 @@ const ShowProductImages = ({
 
   const ImagesGrid = useMemo(
     () => (
-      <div className="grid grid-cols-3 gap-2 pr-3">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
         {Images.map((image, index) => (
           <ImageItem
             key={`${image}-${index}`}
@@ -79,7 +79,7 @@ const ShowProductImages = ({
         <div className="mb-2 rounded p-2 text-xs text-red-400">{selectionError}</div>
       )}
 
-      <div className="overflow-y-auto" style={{ maxHeight: '180px' }}>
+      <div className="overflow-x-hidden overflow-y-auto p-1.5 scrollbar-thin" style={{ maxHeight: '190px' }}>
         {ImagesGrid}
       </div>
     </div>
@@ -93,7 +93,7 @@ const ImageItem = ({ image, index, isSelected, onSelect }) => {
   const handleError = () => setImageError(true);
 
   const containerClasses = `
-    relative cursor-pointer rounded-[14px] p-2 transition-all duration-200
+    relative min-w-0 cursor-pointer rounded-[14px] p-2 transition-all duration-200
     hover:shadow-md
     ${
       isSelected
@@ -104,7 +104,7 @@ const ImageItem = ({ image, index, isSelected, onSelect }) => {
 
   return (
     <div onClick={handleClick} className={containerClasses} style={{ height: '80px' }}>
-      <div className="flex h-full w-full items-center justify-center">
+      <div className="flex h-full w-full min-w-0 items-center justify-center overflow-hidden">
         {!imageError ? (
           <img
             src={image}
@@ -126,7 +126,7 @@ const ImageItem = ({ image, index, isSelected, onSelect }) => {
 };
 
 const SelectionIndicator = () => (
-  <div className="absolute top-1 right-1">
+  <div className="absolute top-1.5 right-1.5">
     <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow-sm">
       <CheckIcon />
     </div>

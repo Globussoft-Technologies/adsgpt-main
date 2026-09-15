@@ -165,53 +165,65 @@ const adPlatformOptions = [
 const selectPlateformsOptions = [
   {
     value: 'meta',
-    Icon: <FaMeta className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    Icon: (
+      <FaMeta className="!h-3 !w-3 text-zinc-700 transition-colors group-hover:text-zinc-950 2xl:!h-4 2xl:!w-4 dark:text-[#AFAFAF] dark:group-hover:text-white" />
+    ),
     label: 'Meta Ads',
   },
   {
     value: 'youtube',
-    Icon: <FaYoutube className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    Icon: (
+      <FaYoutube className="!h-3 !w-3 text-zinc-700 transition-colors group-hover:text-zinc-950 2xl:!h-4 2xl:!w-4 dark:text-[#AFAFAF] dark:group-hover:text-white" />
+    ),
     label: 'Youtube Ads',
   },
   // {
   //   value: 'google',
-  //   Icon: <Search className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+  //   Icon: <Search className="!h-3 !w-3 text-zinc-700 transition-colors group-hover:text-zinc-950 2xl:!h-4 2xl:!w-4 dark:text-[#AFAFAF] dark:group-hover:text-white" />,
   //   label: 'Google Search Ads',
   // },
   // {
   //   value: 'google_performance_max_ads',
-  //   Icon: <FaGoogle className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+  //   Icon: <FaGoogle className="!h-3 !w-3 text-zinc-700 transition-colors group-hover:text-zinc-950 2xl:!h-4 2xl:!w-4 dark:text-[#AFAFAF] dark:group-hover:text-white" />,
   //   label: 'Google Performance Max Ads',
   // },
   {
     value: 'google_display_ads',
-    Icon: <SiGoogleads className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    Icon: (
+      <SiGoogleads className="!h-3 !w-3 text-zinc-700 transition-colors group-hover:text-zinc-950 2xl:!h-4 2xl:!w-4 dark:text-[#AFAFAF] dark:group-hover:text-white" />
+    ),
     label: 'Google Display Ads',
   },
 
   {
     value: 'linkedin',
-    Icon: <AiFillLinkedin className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    Icon: (
+      <AiFillLinkedin className="!h-3 !w-3 text-zinc-700 transition-colors group-hover:text-zinc-950 2xl:!h-4 2xl:!w-4 dark:text-[#AFAFAF] dark:group-hover:text-white" />
+    ),
     label: 'LinkedIn Ads',
   },
   // {
   //   value: 'twitter',
-  //   Icon: <RiTwitterXLine className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+  //   Icon: <RiTwitterXLine className="!h-3 !w-3 text-zinc-700 transition-colors group-hover:text-zinc-950 2xl:!h-4 2xl:!w-4 dark:text-[#AFAFAF] dark:group-hover:text-white" />,
   //   label: 'Twitter Ads',
   // },
   {
     value: 'pinterest',
-    Icon: <FaPinterest className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    Icon: (
+      <FaPinterest className="!h-3 !w-3 text-zinc-700 transition-colors group-hover:text-zinc-950 2xl:!h-4 2xl:!w-4 dark:text-[#AFAFAF] dark:group-hover:text-white" />
+    ),
     label: 'Pinterest Ads',
   },
   {
     value: 'reddit',
-    Icon: <FaReddit className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+    Icon: (
+      <FaReddit className="!h-3 !w-3 text-zinc-700 transition-colors group-hover:text-zinc-950 2xl:!h-4 2xl:!w-4 dark:text-[#AFAFAF] dark:group-hover:text-white" />
+    ),
     label: 'Reddit Ads',
   },
   // {
   //   value: 'google_video_ads',
-  //   Icon: <Video className="!h-3 !w-3 group-hover:text-white 2xl:!h-4 2xl:!w-4" />,
+  //   Icon: <Video className="!h-3 !w-3 text-zinc-700 transition-colors group-hover:text-zinc-950 2xl:!h-4 2xl:!w-4 dark:text-[#AFAFAF] dark:group-hover:text-white" />,
   //   label: 'Google Video Ads',
   // },
 ];

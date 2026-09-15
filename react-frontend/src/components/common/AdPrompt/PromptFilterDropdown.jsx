@@ -36,7 +36,7 @@ const PromptFilterDropdown = ({ options = [], label = '', icon = null, defaultVa
             >
               {Icon}
               <div className="flex w-full items-center justify-between">
-                <span className="text-[9px] group-hover:text-white 2xl:text-xs dark:text-inherit">
+                <span className="text-[9px] group-hover:text-zinc-950 2xl:text-xs dark:text-inherit dark:group-hover:text-white">
                   {label}
                 </span>
                 <span

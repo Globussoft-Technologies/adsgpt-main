@@ -684,27 +684,29 @@ export default function WorkspaceMembersPage() {
                 </form>
               ) : (
                 <div className="relative">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10">
-                      <Trash2 className="h-5 w-5 text-red-500" />
+                  <div className="flex items-start gap-3.5">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 text-red-500 shadow-xs dark:border-red-500/30 dark:bg-red-500/15">
+                      <Trash2 className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <h3 id="workspace-dialog-title" className="text-base font-bold text-[#24211D] sm:text-lg dark:text-white">
+                        {dialog.type === 'remove' ? 'Remove workspace member?' : 'Revoke invitation?'}
+                      </h3>
+                      <p className="mt-1 text-xs leading-5 text-[#7A7369] sm:text-sm dark:text-zinc-400">
+                        {dialog.type === 'remove'
+                          ? `${dialog.member.name || dialog.member.email} will immediately lose access to this workspace.`
+                          : `The invitation sent to ${dialog.invitation.email} will no longer work.`}
+                      </p>
                     </div>
                     <button
                       type="button"
                       onClick={closeDialog}
                       aria-label="Close"
-                      className="rounded-lg p-2 text-[#7A7369] transition-colors hover:bg-[#DDD7CD] hover:text-[#24211D] dark:hover:bg-white/5 dark:hover:text-white"
+                      className="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#7A7369] transition-colors hover:bg-[#DDD7CD] hover:text-[#24211D] dark:hover:bg-white/10 dark:hover:text-white"
                     >
-                      <X className="h-5 w-5" />
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <h3 id="workspace-dialog-title" className="mt-5 text-xl font-semibold text-[#24211D] dark:text-white">
-                    {dialog.type === 'remove' ? 'Remove workspace member?' : 'Revoke invitation?'}
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-[#7A7369] dark:text-zinc-500">
-                    {dialog.type === 'remove'
-                      ? `${dialog.member.name || dialog.member.email} will immediately lose access to this workspace.`
-                      : `The invitation sent to ${dialog.invitation.email} will no longer work.`}
-                  </p>
                   <div className="mt-7 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
                     <button
                       type="button"

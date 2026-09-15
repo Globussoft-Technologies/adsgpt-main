@@ -14,6 +14,9 @@ import {
   Check,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { DateRange } from 'react-date-range';
+import 'react-date-range/dist/styles.css';
+import 'react-date-range/dist/theme/default.css';
 import { getCompetitorAds, refreshCompetitorAds } from '@/apis/brandIQ/competitorAdsApi';
 import CompetitorAdCard from './CompetitorAdCard';
 import CompetitorAdCardLoader from './CompetitorAdCardLoader';
@@ -62,14 +65,6 @@ const ADSGPT_TEXT = 'text-[#02C8C4]';
 const ADSGPT_BORDER = 'border-[#02C8C4]/50';
 const ADSGPT_BG_SOFT = 'bg-[#02C8C4]/10';
 
-// Helper: format YYYY-MM-DD for display label (e.g. "May 5")
-const fmtDisplay = (iso) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-};
-
 // Helper: YYYY-MM-DD → DD/MM/YYYY for input display
 const toDisplayDate = (iso) => {
   if (!iso) return '';
@@ -77,47 +72,18 @@ const toDisplayDate = (iso) => {
   return `${d}/${m}/${y}`;
 };
 
-// Helper: DD/MM/YYYY → YYYY-MM-DD for internal state
-const toISODate = (display) => {
-  const [d, m, y] = display.split('/');
-  if (!d || !m || !y) return '';
-  return `${y}-${m}-${d}`;
+const parseLocalISODate = (iso) => {
+  if (!iso) return null;
+  const [year, month, day] = iso.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
 };
 
-// Helper: validate DD/MM/YYYY
-const isValidDisplayDate = (str) => {
-  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(str)) return false;
-  const [d, m, y] = str.split('/').map(Number);
-  const date = new Date(y, m - 1, d);
-  return date.getDate() === d && date.getMonth() === m - 1 && date.getFullYear() === y;
-};
-
-// Helper: check if date is not in future (returns true if valid and <= today)
-const isNotFutureDate = (displayStr) => {
-  if (!isValidDisplayDate(displayStr)) return false;
-  const [d, m, y] = displayStr.split('/').map(Number);
-  const inputDate = new Date(y, m - 1, d, 23, 59, 59);
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  return inputDate <= today;
-};
-
-// Today's date as DD/MM/YYYY
-const getTodayDisplay = () => {
-  const now = new Date();
-  const d = String(now.getDate()).padStart(2, '0');
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const y = now.getFullYear();
-  return `${d}/${m}/${y}`;
-};
-
-// Today's date as YYYY-MM-DD — used as native <input type="date"> max to block future dates
-const getTodayISO = () => {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+const formatLocalISODate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const CompetitorsHome = () => {
@@ -125,7 +91,6 @@ const CompetitorsHome = () => {
   const [width] = useWindowSize();
   const userData = useSelector((state) => state.socket.userData);
   const selectedBrand = useSelector((state) => state.brandIQTabs.selectedCompetitorBrand);
-  const isDarkMode = useSelector((state) => state.theme.isDarkMode);
 
   const [ads, setAds] = useState([]);
   const [status, setStatus] = useState(null); // null | PENDING | READY | EMPTY | FAILED
@@ -179,10 +144,6 @@ const CompetitorsHome = () => {
   const hasMoreRef = useRef(hasMore);
   const loadingRef = useRef(loading);
   const adsLengthRef = useRef(ads.length);
-
-  // Date input refs for programmatic picker open
-  const fromDateRef = useRef(null);
-  const toDateRef = useRef(null);
 
   // Request deduplication: ignore stale responses
   const latestRequestRef = useRef(0);
@@ -604,13 +565,14 @@ const CompetitorsHome = () => {
             <motion.div
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="absolute top-full left-0 z-30 mt-2 w-80 rounded-xl border border-black/10 bg-white p-4 shadow-2xl dark:border-white/10 dark:bg-[#1a1a1a]"
+              className="brandiq-date-filter absolute top-full left-0 z-30 mt-2 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl border border-[#DDD7CD] bg-[var(--ws-surface-control)] p-3 shadow-2xl dark:border-white/10 dark:bg-[#1a1a1a]"
             >
               {/* Presets */}
               <div className="mb-3 grid grid-cols-2 gap-2">
                 {datePresets.map((preset) => (
                   <button
                     key={preset.key}
+                    data-active={datePreset === preset.key}
                     onClick={() => {
                       applyDatePreset(preset.key);
                       setShowDatePicker(false);
@@ -629,84 +591,53 @@ const CompetitorsHome = () => {
               {/* Divider */}
               <div className="mb-3 border-t border-black/10 dark:border-white/10"></div>
 
-              {/* Custom Date Inputs — Native picker with DD/MM/YYYY display */}
-              <div className="mb-1 flex items-center gap-2">
-                <div className="flex-1">
-                  <label className="mb-1 block text-[10px] font-medium tracking-wide text-gray-500 uppercase dark:text-white/40">
-                    From
-                  </label>
-                  <div
-                    className="relative cursor-pointer"
-                    onClick={() => {
-                      if (fromDateRef.current?.showPicker) {
-                        fromDateRef.current.showPicker();
-                      } else {
-                        fromDateRef.current?.click();
-                      }
-                    }}
-                  >
-                    <input
-                      ref={fromDateRef}
-                      type="date"
-                      className="sr-only"
-                      style={{ colorScheme: isDarkMode ? 'dark' : 'light', accentColor: '#02C8C4' }}
-                      max={draftTo || getTodayISO()}
-                      value={draftFrom}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setDraftFrom(v);
-                        setDatePreset('custom');
-                        // Commit (→ fetch) only once both ends are set and valid (From ≤ To)
-                        if (v && draftTo && v <= draftTo) {
-                          setDateFrom(v);
-                          setDateTo(draftTo);
-                        }
-                      }}
-                    />
-                    <div className="w-full rounded-lg border border-black/10 bg-gray-50 px-3 py-2 text-sm text-gray-800 dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white">
-                      {toDisplayDate(draftFrom) || 'DD/MM/YYYY'}
-                    </div>
-                  </div>
-                </div>
-                <span className="mt-5 text-gray-400 dark:text-white/30">-</span>
-                <div className="flex-1">
-                  <label className="mb-1 block text-[10px] font-medium tracking-wide text-gray-500 uppercase dark:text-white/40">
-                    To
-                  </label>
-                  <div
-                    className="relative cursor-pointer"
-                    onClick={() => {
-                      if (toDateRef.current?.showPicker) {
-                        toDateRef.current.showPicker();
-                      } else {
-                        toDateRef.current?.click();
-                      }
-                    }}
-                  >
-                    <input
-                      ref={toDateRef}
-                      type="date"
-                      className="sr-only"
-                      style={{ colorScheme: isDarkMode ? 'dark' : 'light', accentColor: '#02C8C4' }}
-                      min={draftFrom || undefined}
-                      max={getTodayISO()}
-                      value={draftTo}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setDraftTo(v);
-                        setDatePreset('custom');
-                        // Commit (→ fetch) only once both ends are set and valid (From ≤ To)
-                        if (v && draftFrom && draftFrom <= v) {
-                          setDateFrom(draftFrom);
-                          setDateTo(v);
-                        }
-                      }}
-                    />
-                    <div className="w-full rounded-lg border border-black/10 bg-gray-50 px-3 py-2 text-sm text-gray-800 dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white">
-                      {toDisplayDate(draftTo) || 'DD/MM/YYYY'}
-                    </div>
-                  </div>
-                </div>
+              {/* Branded custom date range calendar */}
+              <div className="adsgpt-cal-pop overflow-hidden rounded-xl">
+                <DateRange
+                  editableDateInputs
+                  onChange={({ selection }) => {
+                    setDraftFrom(formatLocalISODate(selection.startDate));
+                    setDraftTo(formatLocalISODate(selection.endDate));
+                    setDatePreset('custom');
+                  }}
+                  moveRangeOnFirstSelection={false}
+                  ranges={[
+                    {
+                      startDate: parseLocalISODate(draftFrom) || new Date(),
+                      endDate:
+                        parseLocalISODate(draftTo) || parseLocalISODate(draftFrom) || new Date(),
+                      key: 'selection',
+                    },
+                  ]}
+                  months={1}
+                  direction="horizontal"
+                  rangeColors={['#5867EB']}
+                  color="#5867EB"
+                  maxDate={new Date()}
+                  showDateDisplay={false}
+                  className="w-full bg-transparent text-gray-900 [&_.rdrCalendarWrapper]:w-full [&_.rdrMonth]:w-full dark:text-white"
+                />
+              </div>
+
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-[11px] text-gray-500 dark:text-white/45">
+                  {draftFrom && draftTo
+                    ? `${toDisplayDate(draftFrom)} - ${toDisplayDate(draftTo)}`
+                    : 'Select a start and end date'}
+                </span>
+                <button
+                  type="button"
+                  disabled={!draftFrom || !draftTo || draftFrom > draftTo}
+                  onClick={() => {
+                    setDateFrom(draftFrom);
+                    setDateTo(draftTo);
+                    setDatePreset('custom');
+                    setShowDatePicker(false);
+                  }}
+                  className="shrink-0 rounded-lg bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Apply
+                </button>
               </div>
             </motion.div>
           )}

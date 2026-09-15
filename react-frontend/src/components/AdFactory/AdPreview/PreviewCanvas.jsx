@@ -520,7 +520,7 @@ const PreviewCanvas = ({
   };
 
   return (
-    <main className="adfactory-preview-canvas relative mt-8 flex h-full flex-1 flex-col justify-center gap-4 overflow-auto p-4 pt-10 md:mt-0 lg:flex-row lg:p-6 2xl:pt-12">
+    <main className="adfactory-preview-canvas relative mt-8 flex h-full flex-1 flex-col justify-center items-center gap-3 overflow-y-auto p-3 pt-3 md:mt-0 lg:flex-row lg:p-4 2xl:gap-4 2xl:p-6">
       {/* Mobile Preview Button */}
       <div className="ml-2 flex md:ml-5 lg:hidden">
         <button
@@ -554,9 +554,9 @@ const PreviewCanvas = ({
       </div>
 
       {/* Creative Controls */}
-      <div className="flex flex-col overflow-hidden pt-2 md:pt-5 2xl:pt-0">
+      <div className="flex flex-col overflow-hidden pt-0">
         <div className="flex max-h-[1200px] max-w-[1600px] flex-1 overflow-x-hidden">
-          <div className="mx-auto flex w-[95%] flex-col gap-4 sm:pr-2 2xl:pr-8">
+          <div className="mx-auto flex w-[95%] flex-col gap-2.5 2xl:gap-4 sm:pr-2 2xl:pr-8">
             <CreativeSection title="Ad Image">
               <ImageSlider
                 mockImages={displayImages}
@@ -622,7 +622,7 @@ const PreviewCanvas = ({
               );
             })()}
 
-            <div className="grid flex-1 gap-4 sm:max-h-[250px] md:grid-cols-2">
+            <div className="grid flex-1 gap-2.5 2xl:gap-4 sm:max-h-[250px] md:grid-cols-2">
               <CreativeSection title="Call to action Button (CTA)">
                 <div className="flex flex-wrap gap-2">
                   {CTA_OPTIONS?.map((cta) => (
@@ -661,7 +661,7 @@ const PreviewCanvas = ({
               </CreativeSection>
             </div>
 
-            <div className="mt-auto flex flex-wrap justify-end gap-2 py-2">
+            <div className="mt-auto flex flex-wrap justify-end gap-2 py-1 2xl:py-2">
               <button
                 type="button"
                 onClick={handleSave}

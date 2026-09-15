@@ -6,7 +6,7 @@ import { useSelector } from 'react-redux';
 // fixed sibling pinned to the right (OUTSIDE the scroller) so it's always
 // visible and the tiles can never slide underneath it. Same tile dimensions
 // for images and the add card so the row reads as one strip.
-const TILE = 'h-38 w-44 2xl:h-45 2xl:w-52';
+const TILE = 'h-30 w-36 2xl:h-38 2xl:w-44';
 
 const ImageSlider = ({ mockImages, onSelect, selectedImage, onRemoveImage, onAddImage }) => {
   const scrollRef = useRef(null);
@@ -90,7 +90,7 @@ const ImageSlider = ({ mockImages, onSelect, selectedImage, onRemoveImage, onAdd
         <div
           ref={scrollRef}
           onScroll={updateArrows}
-          className={`${isDarkMode ? 'scrollbar-white' : ''} flex gap-3 overflow-x-auto pb-2`}
+          className={`${isDarkMode ? 'scrollbar-white' : ''} flex gap-3 overflow-x-auto pb-1`}
         >
           {mockImages.map(({ src, id, isUser, source }, index) => (
             <div

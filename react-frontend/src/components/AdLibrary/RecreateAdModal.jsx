@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { useDispatch, useSelector } from 'react-redux';
-import { Check, ChevronDown, LayoutGrid, Link2, Loader2, Proportions, Upload, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Eye, LayoutGrid, Link2, Loader2, Proportions, Upload, X } from 'lucide-react';
 import AspectRatioTiles, {
   AnimatedPanel,
   totalImages,
@@ -35,6 +35,7 @@ import {
   IMAGE_TYPE_ERROR,
   isAllowedImageFile,
 } from '@/utils/imageValidation';
+import { analyzeLogoTransparency, LOGO_BACKGROUND_ERROR } from '@/utils/logoTransparency';
 import { useGenieToMySpace } from '@/utils/ui/useGenieToMySpace';
 import { useAdCreativeConfig } from '@/utils/hooks/useAdCreativeConfig';
 
@@ -524,12 +525,11 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
     }
 
     // Logo validation
-    const hasLogo = Boolean(
+    const effectiveLogo =
       brandLogoFile ||
       (brandLogoUrl && brandLogoUrl.trim()) ||
-      brandLogoPicked
-    );
-    if (!hasLogo) {
+      brandLogoPicked;
+    if (!effectiveLogo) {
       setLogoError('Brand logo is required to recreate this ad');
       toast.error('Please upload or select a brand logo');
       return;
@@ -537,6 +537,13 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
     if (brandLogoUrl && brandLogoUrl.trim() && !/^(https?:\/\/|data:image\/|\/\/)/i.test(brandLogoUrl.trim())) {
       setLogoError('Please enter a valid image URL for the brand logo');
       toast.error('Invalid brand logo URL');
+      return;
+    }
+
+    const logoCheck = await analyzeLogoTransparency(effectiveLogo);
+    if (!logoCheck.transparent) {
+      setLogoError(LOGO_BACKGROUND_ERROR);
+      toast.error(LOGO_BACKGROUND_ERROR);
       return;
     }
 
@@ -640,7 +647,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
       />
       <DialogContent
         ref={modalRef}
-        className="max-w-[960px] gap-0 overflow-hidden rounded-[30px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#303030]/30 p-0 text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md sm:!max-w-[960px] sm:scale-100"
+        className="max-w-[1080px] w-[96vw] gap-0 rounded-[30px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#303030]/30 p-0 text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md sm:!max-w-[1080px] sm:scale-100"
         showCloseButton
         // The X and Escape both close the modal. Clicking outside (or
         // dragging an upload over the page) does NOT — that protects
@@ -660,16 +667,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
           Recreate this Ad with your own configurations
         </DialogTitle>
 
-        {/* Modal height is capped to the image's natural height so the
-            two columns visually match. Image side is aspect-square (the
-            wrapper itself, not the img) so its height equals its width;
-            the form side caps its scroll area to the same value. */}
-        <div className="flex flex-col gap-6 p-6 pt-2 md:h-[min(90svh,570px)] md:flex-row">
-          <div className="flex shrink-0 justify-center md:h-full md:basis-[42%]">
-            {/* aspect-square on the wrapper itself + h-full keeps the
-                source ad visually square AND the wrapper at the same
-                height as the right-column scroll area. */}
-            <div className="aspect-square h-full overflow-hidden rounded-2xl bg-gray-100 dark:bg-black/40">
+        {/* Modal container: larger height (740px) gives room for Brand Logo to be fully visible without scrolling */}
+        <div className="flex flex-col gap-6 p-6 pt-2 md:h-[min(94svh,740px)] md:flex-row">
+          <div className="flex shrink-0 justify-center md:w-[400px]">
+            <div className="aspect-square w-full max-w-[400px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-black/40">
               {image ? (
                 <img src={image} alt="Source ad" className="h-full w-full object-cover" />
               ) : (
@@ -726,8 +727,9 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                           </div>
                         )}
                         {brandListState === 'error' && (
-                          <div className="px-4 py-3 text-[12px] text-red-300">
-                            {brandListError || 'Failed to load.'}
+                          <div className="mx-3 my-2 flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] font-medium text-red-600 dark:text-red-400">
+                            <AlertCircle size={14} className="shrink-0 text-red-500" />
+                            <span>{brandListError || 'Failed to load.'}</span>
                           </div>
                         )}
                         {brandListState === 'loaded' && brandList.length === 0 && (
@@ -812,7 +814,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                 </p>
               )}
               {autofillState === 'error' && (
-                <p className="mt-1.5 text-[11px] text-red-300">{autofillError}</p>
+                <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] font-medium text-red-600 dark:text-red-400 shadow-sm">
+                  <AlertCircle size={14} className="shrink-0 text-red-500" />
+                  <span>{autofillError}</span>
+                </div>
               )}
             </Section>
 
@@ -865,13 +870,6 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
               {referenceImages.length > 0 && (
                 <UploadedChipList
                   items={referenceImages}
-                  onToggle={(idx) =>
-                    setReferenceImages((prev) =>
-                      prev.map((it, i) =>
-                        i === idx ? { ...it, selected: it.selected === false } : it,
-                      ),
-                    )
-                  }
                   onRemove={(idx) => {
                     setReferenceImages((prev) => prev.filter((_, i) => i !== idx));
                     setImagesError('');
@@ -907,7 +905,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                 />
               )}
               {imagesError && (
-                <p className="mt-2 text-[11px] text-red-300">{imagesError}</p>
+                <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] font-medium text-red-600 dark:text-red-400 shadow-sm">
+                  <AlertCircle size={14} className="shrink-0 text-red-500" />
+                  <span>{imagesError}</span>
+                </div>
               )}
             </Section>
 
@@ -919,20 +920,37 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   setBrandLogoUrl(v);
                   if (logoError) setLogoError('');
                 }}
-                onUrlCommit={(u) => {
-                  const trimmed = u.trim();
+                onUrlCommit={async (u) => {
+                  const trimmed = (u || '').trim();
                   if (!trimmed) return;
                   if (!/^(https?:\/\/|data:image\/|\/\/)/i.test(trimmed)) {
                     setLogoError('Please enter a valid image URL (e.g. https://...)');
                     return;
                   }
+                  setLogoError('');
+                  const check = await analyzeLogoTransparency(trimmed);
+                  if (!check.transparent) {
+                    setLogoError(LOGO_BACKGROUND_ERROR);
+                    toast.error(LOGO_BACKGROUND_ERROR);
+                    return;
+                  }
                   setBrandLogoFile(null);
                   setBrandLogoUrl(trimmed);
+                  setBrandLogoPicked('');
                   setLogoError('');
                 }}
-                onFile={(f) => {
+                onFile={async (f) => {
+                  setLogoError('');
+                  const check = await analyzeLogoTransparency(f);
+                  if (!check.transparent) {
+                    setBrandLogoFile(null);
+                    setLogoError(LOGO_BACKGROUND_ERROR);
+                    toast.error(LOGO_BACKGROUND_ERROR);
+                    return;
+                  }
                   setBrandLogoFile(f);
                   setBrandLogoUrl('');
+                  setBrandLogoPicked('');
                   setLogoError('');
                 }}
                 onInvalidType={() => setLogoError(IMAGE_TYPE_ERROR)}
@@ -966,15 +984,31 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   options={brandLogoOptions}
                   isSelected={(u) => u === brandLogoPicked}
                   rounded
-                  onPick={(u) => {
-                    setBrandLogoPicked((cur) => (cur === u ? '' : u));
-                    if (logoError) setLogoError('');
+                  onPick={async (u) => {
+                    if (brandLogoPicked === u) {
+                      setBrandLogoPicked('');
+                      return;
+                    }
+                    setLogoError('');
+                    const check = await analyzeLogoTransparency(u);
+                    if (!check.transparent) {
+                      setLogoError(LOGO_BACKGROUND_ERROR);
+                      toast.error(LOGO_BACKGROUND_ERROR);
+                      return;
+                    }
+                    setBrandLogoPicked(u);
+                    setBrandLogoFile(null);
+                    setBrandLogoUrl('');
+                    setLogoError('');
                   }}
                   onDoubleClick={(u) => setLightboxUrl(u)}
                 />
               )}
               {logoError && (
-                <p className="mt-2 text-[11px] text-red-300">{logoError}</p>
+                <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] font-medium text-red-600 dark:text-red-400 shadow-sm">
+                  <AlertCircle size={14} className="shrink-0 text-red-500" />
+                  <span>{logoError}</span>
+                </div>
               )}
             </Section>
             </div>
@@ -984,7 +1018,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                 how many brand images or logos populate the sections
                 above. shrink-0 keeps it from being squeezed by the
                 scroll container's flex-1. */}
-            <div className="mt-5 shrink-0">
+            <div className="mt-3 shrink-0">
             <Section title="Prompt">
               <div className="rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 p-3 ring-1 ring-black/10 dark:ring-white/10">
                 <textarea
@@ -995,13 +1029,13 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   className="w-full resize-none bg-transparent px-2 pt-1 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus:outline-none"
                 />
 
-                <div className="flex items-center justify-end gap-1.5 px-1 pt-2">
+                <div className="flex flex-wrap items-center justify-between gap-1.5 px-1 pt-2">
                   <button
                     type="button"
                     onClick={handleImprovePrompt}
                     disabled={!prompt.trim() || isSuggestingPrompt}
                     title="Improve with Gemini"
-                    className="flex h-8 w-8 items-center justify-center rounded-full transition-all hover:scale-110 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all hover:scale-110 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {isSuggestingPrompt ? (
                       <Loader2 size={20} className="animate-spin text-gray-900 dark:text-white" />
@@ -1014,122 +1048,124 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                     )}
                   </button>
 
-                  {/* HIDE-MARK — Quality picker hidden. Unhide: flip SHOW_QUALITY_PICKER to true. */}
-                  {SHOW_QUALITY_PICKER && (
-                  <div ref={qualityPickerWrapperRef} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowQualityPicker((v) => !v);
-                        setShowModelPicker(false);
-                        setShowAspectPicker(false);
-                        setShowBrandIqPicker(false);
-                      }}
-                      className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 text-[11px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
-                    >
-                      {qualityLabel(quality)}
-                      <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
-                    </button>
-                    {showQualityPicker && (
-                      <div className="absolute right-0 bottom-full z-40 mb-2 min-w-[120px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-                        {(selectedModel?.qualities || []).map((q) => {
-                          const selected = q === quality;
-                          return (
-                            <button
-                              key={q}
-                              type="button"
-                              onClick={() => {
-                                setQuality(q);
-                                setShowQualityPicker(false);
-                              }}
-                              className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
-                                selected
-                                  ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                                  : 'text-gray-600 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
-                              }`}
-                            >
-                              <span className="flex-1">{qualityLabel(q)}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    {/* HIDE-MARK — Quality picker hidden. Unhide: flip SHOW_QUALITY_PICKER to true. */}
+                    {SHOW_QUALITY_PICKER && (
+                    <div ref={qualityPickerWrapperRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowQualityPicker((v) => !v);
+                          setShowModelPicker(false);
+                          setShowAspectPicker(false);
+                          setShowBrandIqPicker(false);
+                        }}
+                        className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 text-[11px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+                      >
+                        {qualityLabel(quality)}
+                        <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
+                      </button>
+                      {showQualityPicker && (
+                        <div className="absolute right-0 bottom-full z-40 mb-2 min-w-[120px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+                          {(selectedModel?.qualities || []).map((q) => {
+                            const selected = q === quality;
+                            return (
+                              <button
+                                key={q}
+                                type="button"
+                                onClick={() => {
+                                  setQuality(q);
+                                  setShowQualityPicker(false);
+                                }}
+                                className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
+                                  selected
+                                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                                    : 'text-gray-600 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
+                                }`}
+                              >
+                                <span className="flex-1">{qualityLabel(q)}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                     )}
-                  </div>
-                  )}
-                  <div ref={modelPickerWrapperRef} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowModelPicker((v) => !v);
-                        setShowQualityPicker(false);
-                        setShowAspectPicker(false);
-                        setShowBrandIqPicker(false);
-                      }}
-                      className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 text-[11px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
-                    >
-                      <ModelIcon apiId={selectedModel?.apiId} icon={selectedModel?.icon} />
-                      {selectedModel?.label || model}
-                      <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
-                    </button>
-                    {showModelPicker && (
-                      <div className="absolute right-0 bottom-full z-40 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-                        {configModels.map((opt) => {
-                          const selected = opt.apiId === model;
-                          return (
-                            <button
-                              key={opt.apiId}
-                              type="button"
-                              onClick={() => {
-                                setModel(opt.apiId);
-                                setShowModelPicker(false);
-                              }}
-                              className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ${
-                                selected
-                                  ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                                  : 'text-gray-600 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
-                              }`}
-                            >
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                                <ModelIcon apiId={opt.apiId} icon={opt.icon} />
-                              </span>
-                              <span className="flex-1">{opt.label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                    <div ref={modelPickerWrapperRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowModelPicker((v) => !v);
+                          setShowQualityPicker(false);
+                          setShowAspectPicker(false);
+                          setShowBrandIqPicker(false);
+                        }}
+                        className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 text-[11px] font-light text-gray-600 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+                      >
+                        <ModelIcon apiId={selectedModel?.apiId} icon={selectedModel?.icon} />
+                        {selectedModel?.label || model}
+                        <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
+                      </button>
+                      {showModelPicker && (
+                        <div className="absolute right-0 bottom-full z-40 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+                          {configModels.map((opt) => {
+                            const selected = opt.apiId === model;
+                            return (
+                              <button
+                                key={opt.apiId}
+                                type="button"
+                                onClick={() => {
+                                  setModel(opt.apiId);
+                                  setShowModelPicker(false);
+                                }}
+                                className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ${
+                                  selected
+                                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
+                                    : 'text-gray-600 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
+                                }`}
+                              >
+                                <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                                  <ModelIcon apiId={opt.apiId} icon={opt.icon} />
+                                </span>
+                                <span className="flex-1">{opt.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
 
-                  <div ref={aspectPickerWrapperRef} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAspectPicker((v) => !v);
-                        setShowModelPicker(false);
-                        setShowBrandIqPicker(false);
-                      }}
-                      className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 font-light text-gray-600 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
-                    >
-                      <Proportions size={14} strokeWidth={1.8} className="text-gray-600 dark:text-white/70" />
-                      <span className="h-3 w-px bg-black/15 dark:bg-white/20" />
-                      <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-400 dark:text-white/50" />
-                      <span className="text-[11px]">
-                        {total} Image{total !== 1 ? 's' : ''}
-                      </span>
-                      <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
-                    </button>
+                    <div ref={aspectPickerWrapperRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAspectPicker((v) => !v);
+                          setShowModelPicker(false);
+                          setShowBrandIqPicker(false);
+                        }}
+                        className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-2.5 py-1.5 font-light text-gray-600 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+                      >
+                        <Proportions size={14} strokeWidth={1.8} className="text-gray-600 dark:text-white/70" />
+                        <span className="h-3 w-px bg-black/15 dark:bg-white/20" />
+                        <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-400 dark:text-white/50" />
+                        <span className="text-[11px]">
+                          {total} Image{total !== 1 ? 's' : ''}
+                        </span>
+                        <ChevronDown size={12} strokeWidth={2} className="text-gray-400 dark:text-white/40" />
+                      </button>
 
-                    <AnimatedPanel
-                      open={showAspectPicker}
-                      className="absolute right-0 bottom-full z-40 mb-2 w-[300px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-4 shadow-2xl ring-1 ring-black/10 dark:ring-white/10"
-                    >
-                      <AspectRatioTiles
-                        counts={aspectCounts}
-                        onChange={setAspectCounts}
-                        ratios={selectedModel?.aspectRatios || []}
-                        creditsPerImage={creditsPerImage}
-                      />
-                    </AnimatedPanel>
+                      <AnimatedPanel
+                        open={showAspectPicker}
+                        className="absolute right-0 bottom-full z-40 mb-2 w-[300px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-4 shadow-2xl ring-1 ring-black/10 dark:ring-white/10"
+                      >
+                        <AspectRatioTiles
+                          counts={aspectCounts}
+                          onChange={setAspectCounts}
+                          ratios={selectedModel?.aspectRatios || []}
+                          creditsPerImage={creditsPerImage}
+                        />
+                      </AnimatedPanel>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1137,7 +1173,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
             </div>
 
             {/* Pinned footer — stays visible while the form above scrolls. */}
-            <div className="mt-4 flex shrink-0 items-center justify-end gap-3">
+            <div className="mt-3 flex shrink-0 items-center justify-end gap-3">
               {/* Live credit estimate. Mirrors the pill from AiCreativesCustom
                   + AdSetupStep so the user sees the deduction before they
                   click Generate. Hidden when no images are queued. The
@@ -1214,56 +1250,69 @@ const Section = ({ title, children }) => (
   </div>
 );
 
-// Picker chips rendered below an upload field. Each chip is a 40×40 image;
-// single click → onPick(url) (caller decides single-vs-multi toggle),
-// double-click → onDoubleClick(url) (open preview). The two are
-// disambiguated with a 220ms delay so single-click handlers don't fire
-// for the first half of a double-click.
+// Picker chips rendered below an upload field.
+// - Click the chip to select / deselect
+// - Click the Eye preview button to view full-size lightbox
+// - If selected, clicking the top-right X button removes/deselects in 1 click
 const OptionChips = ({ label, options, isSelected, onPick, onDoubleClick, rounded }) => {
-  const clickTimers = useRef({});
   return (
     <div className="mt-1">
       <p className="mb-1.5 text-[11px] text-gray-500 dark:text-white/50">{label}</p>
       <div className="flex flex-wrap gap-2">
         {options.map((url, i) => {
           const selected = isSelected?.(url);
-          const shape = rounded ? 'rounded-full' : 'rounded-md';
-          const handleSingle = () => {
-            clearTimeout(clickTimers.current[url]);
-            clickTimers.current[url] = setTimeout(() => {
-              onPick?.(url);
-              delete clickTimers.current[url];
-            }, 220);
-          };
-          const handleDouble = () => {
-            clearTimeout(clickTimers.current[url]);
-            delete clickTimers.current[url];
-            onDoubleClick?.(url);
-          };
+          const shape = rounded ? 'rounded-full' : 'rounded-lg';
           return (
-            <button
-              type="button"
-              key={`${url}-${i}`}
-              onClick={handleSingle}
-              onDoubleClick={handleDouble}
-              title={selected ? 'Click to remove · double-click to preview' : 'Click to select · double-click to preview'}
-              className={`relative h-10 w-10 shrink-0 ${shape} transition ${
-                selected
-                  ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
-                  : 'border border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30'
-              }`}
-            >
-              <img
-                src={url}
-                alt=""
-                className={`h-full w-full ${shape} object-cover`}
-              />
+            <div key={`${url}-${i}`} className="group relative h-10 w-10 shrink-0">
+              <button
+                type="button"
+                onClick={() => onPick?.(url)}
+                onDoubleClick={() => onDoubleClick?.(url)}
+                title={selected ? 'Click to deselect' : 'Click to select'}
+                className={`relative h-full w-full cursor-pointer overflow-hidden ${shape} transition ${
+                  selected
+                    ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
+                    : 'border border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30 opacity-70 hover:opacity-100'
+                }`}
+              >
+                <img
+                  src={url}
+                  alt=""
+                  className={`h-full w-full ${shape} object-cover`}
+                />
+              </button>
+
+              {/* Eye icon preview button on hover */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDoubleClick?.(url);
+                }}
+                aria-label="Preview image"
+                title="Preview image"
+                className="absolute inset-0 m-auto flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow transition-all group-hover:opacity-100 hover:scale-110 hover:bg-black/90"
+              >
+                <Eye className="h-3 w-3" />
+              </button>
+
+              {/* Selected badge: displays checkmark, turns to red X on hover for 1-click removal/deselection */}
               {selected && (
-                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow">
-                  <Check className="h-3 w-3" strokeWidth={3} />
-                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPick?.(url);
+                  }}
+                  aria-label="Remove selection"
+                  title="Remove selection"
+                  className="absolute -top-1.5 -right-1.5 z-20 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow transition-all group-hover:bg-red-500 hover:scale-110"
+                >
+                  <Check className="h-2.5 w-2.5 group-hover:hidden" strokeWidth={3} />
+                  <X className="hidden h-2.5 w-2.5 group-hover:block" strokeWidth={3} />
+                </button>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
@@ -1451,76 +1500,42 @@ const UploadRow = ({
 };
 
 // Row of user-supplied chips (multi-upload). Single click on a chip
-// toggles whether it's included in the payload; the small red × at the
-// top-right corner removes the chip entirely in 1 click (no deselect needed).
-// Double click opens the lightbox preview. 220 ms delay disambiguates single
-// from double click.
-const UploadedChipList = ({ items, onToggle, onRemove, onPreview }) => {
-  const clickTimers = useRef({});
+// Row of user-supplied chips (multi-upload).
+// - Click thumbnail or Eye button to open full-size lightbox preview immediately
+// - Click red X button to remove image in 1 click (no deselecting required)
+const UploadedChipList = ({ items, onRemove, onPreview }) => {
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className="mt-2 flex flex-wrap gap-2">
       {items.map((it, i) => {
         const key = `${it.preview}-${i}`;
-        const isSelected = it.selected !== false;
-        const cancelPendingClick = () => {
-          clearTimeout(clickTimers.current[key]);
-          delete clickTimers.current[key];
-        };
-        const handleSingle = () => {
-          clearTimeout(clickTimers.current[key]);
-          clickTimers.current[key] = setTimeout(() => {
-            onToggle?.(i);
-            delete clickTimers.current[key];
-          }, 220);
-        };
-        const handleDouble = () => {
-          cancelPendingClick();
-          onPreview?.(it.preview);
-        };
         return (
           <div key={key} className="group relative h-10 w-10 shrink-0">
+            {/* Thumbnail button - single click opens preview */}
             <button
               type="button"
-              onClick={handleSingle}
-              onDoubleClick={handleDouble}
-              title={
-                isSelected
-                  ? 'Click to deselect · double-click to preview'
-                  : 'Click to select · double-click to preview'
-              }
-              className={`relative h-full w-full cursor-pointer overflow-hidden rounded-md transition ${
-                isSelected
-                  ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
-                  : 'border border-white/15 opacity-60 hover:border-white/30 hover:opacity-80'
-              }`}
+              onClick={() => onPreview?.(it.preview)}
+              title="Click to preview image"
+              className="relative h-full w-full cursor-pointer overflow-hidden rounded-lg border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40 transition"
             >
-              <img src={it.preview} alt="" className="h-full w-full rounded-md object-cover" />
+              <img src={it.preview} alt="" className="h-full w-full rounded-lg object-cover" />
+              {/* Eye preview icon on hover */}
+              <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                <Eye className="h-3.5 w-3.5 text-white" />
+              </span>
             </button>
-            {/* Direct 1-click removal: shows check badge by default when selected,
-                switches to red × on group hover; always red × when unselected. */}
+
+            {/* Direct 1-click remove button: always red X, immediately removes image */}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                cancelPendingClick();
                 onRemove?.(i);
               }}
               aria-label="Remove image"
-              title="Remove"
-              className={`absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full text-white shadow transition-all ${
-                isSelected
-                  ? 'bg-[#02C8C4] group-hover:bg-red-500'
-                  : 'bg-red-500 hover:bg-red-600'
-              }`}
+              title="Remove image"
+              className="absolute -top-1.5 -right-1.5 z-20 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white shadow transition-all hover:scale-110 hover:bg-red-600"
             >
-              {isSelected ? (
-                <>
-                  <Check className="h-2.5 w-2.5 group-hover:hidden" strokeWidth={3} />
-                  <X className="hidden h-2.5 w-2.5 group-hover:block" strokeWidth={3} />
-                </>
-              ) : (
-                <X className="h-2.5 w-2.5" strokeWidth={3} />
-              )}
+              <X className="h-2.5 w-2.5" strokeWidth={3} />
             </button>
           </div>
         );
@@ -1529,35 +1544,24 @@ const UploadedChipList = ({ items, onToggle, onRemove, onPreview }) => {
   );
 };
 
-// A single user-supplied chip (uploaded file or pasted URL). Single click
-// toggles selection (clears the source); double-click opens the preview.
-// Hovering reveals a red × for immediate 1-click removal.
+// A single user-supplied chip (uploaded file or pasted URL for Brand Logo).
+// - Click thumbnail or Eye button to open full-size lightbox preview immediately
+// - Click red X button to remove logo in 1 click
 const UploadedChip = ({ src, onClear, onPreview, rounded }) => {
-  const shape = rounded ? 'rounded-full' : 'rounded-md';
-  const clickTimerRef = useRef(null);
-  const handleSingle = () => {
-    clearTimeout(clickTimerRef.current);
-    clickTimerRef.current = setTimeout(() => {
-      onClear?.();
-      clickTimerRef.current = null;
-    }, 220);
-  };
-  const handleDouble = () => {
-    clearTimeout(clickTimerRef.current);
-    clickTimerRef.current = null;
-    onPreview?.();
-  };
+  const shape = rounded ? 'rounded-full' : 'rounded-lg';
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className="mt-2 flex flex-wrap gap-2">
       <div className="group relative h-10 w-10 shrink-0">
         <button
           type="button"
-          onClick={handleSingle}
-          onDoubleClick={handleDouble}
-          title="Click to remove · double-click to preview"
+          onClick={() => onPreview?.()}
+          title="Click to preview logo"
           className={`relative h-full w-full cursor-pointer overflow-hidden ${shape} border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40 transition`}
         >
           <img src={src} alt="" className={`h-full w-full ${shape} object-cover`} />
+          <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+            <Eye className="h-3.5 w-3.5 text-white" />
+          </span>
         </button>
         <button
           type="button"
@@ -1565,12 +1569,11 @@ const UploadedChip = ({ src, onClear, onPreview, rounded }) => {
             e.stopPropagation();
             onClear?.();
           }}
-          aria-label="Remove"
-          title="Remove"
-          className="absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow transition-all group-hover:bg-red-500"
+          aria-label="Remove logo"
+          title="Remove logo"
+          className="absolute -top-1.5 -right-1.5 z-20 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white shadow transition-all hover:scale-110 hover:bg-red-600"
         >
-          <Check className="h-2.5 w-2.5 group-hover:hidden" strokeWidth={3} />
-          <X className="hidden h-2.5 w-2.5 group-hover:block" strokeWidth={3} />
+          <X className="h-2.5 w-2.5" strokeWidth={3} />
         </button>
       </div>
     </div>

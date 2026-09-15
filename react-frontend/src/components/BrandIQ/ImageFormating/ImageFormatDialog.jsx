@@ -9,7 +9,6 @@ import {
   ZoomIn,
   ZoomOut,
   Settings,
-  Image as ImageIcon,
   Crop,
   Palette,
   Sliders,
@@ -270,7 +269,7 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const [activeTab, setActiveTab] = useState('crop');
+  const [activeTab, setActiveTab] = useState('export');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [presetHistory, setPresetHistory] = useState([]);
   const [estimatedSize, setEstimatedSize] = useState('Calculating...');
@@ -628,36 +627,26 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-gradient-to-br from-gray-900/80 via-gray-800/60 to-gray-900/80"
+            className="absolute inset-0 bg-black/20 dark:bg-transparent dark:bg-gradient-to-br dark:from-gray-900/80 dark:via-gray-800/60 dark:to-gray-900/80"
           />
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-3xl" />
+          <div className="absolute inset-0 bg-white/15 backdrop-blur-xl dark:bg-black/40 dark:backdrop-blur-3xl" />
 
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ type: 'spring', damping: 30, stiffness: 400 }}
-            className="max-w-8xl relative flex h-[95vh] w-full flex-col overflow-hidden rounded-3xl border border-gray-700 bg-gradient-to-br from-gray-900/80 via-gray-800/60 to-gray-900/80 shadow-2xl backdrop-blur-2xl"
+            className="max-w-8xl relative flex h-[95vh] w-full flex-col overflow-hidden rounded-3xl border border-[var(--ws-border)] bg-[var(--ws-surface)] text-[#24211D] shadow-2xl backdrop-blur-2xl dark:border-gray-700 dark:bg-transparent dark:bg-gradient-to-br dark:from-gray-900/80 dark:via-gray-800/60 dark:to-gray-900/80 dark:text-white"
           >
             {/* Glassmorphic Header - Updated to match AdGalleryCard */}
-            <div className="relative flex items-center justify-between border-b border-gray-600 bg-gradient-to-r from-gray-800/40 to-gray-900/40 p-6 backdrop-blur-xl">
+            <div className="relative flex items-center justify-between border-b border-[var(--ws-border)] bg-[var(--ws-surface-header)] p-6 backdrop-blur-xl dark:border-gray-600 dark:bg-transparent dark:bg-gradient-to-r dark:from-gray-800/40 dark:to-gray-900/40">
               <div className="absolute inset-0 rounded-t-3xl bg-gradient-to-r from-blue-500/5 to-purple-500/5" />
-              <div className="relative z-10 flex items-center gap-4">
-                <div className="relative">
-                  <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-blue-500/20 via-purple-600/20 to-cyan-500/20 p-3 shadow-2xl backdrop-blur-xl">
-                    <ImageIcon className="h-7 w-7 text-white" />
-                  </div>
-                  <motion.div
-                    className="absolute -top-1 -right-1 h-4 w-4 rounded-full border-2 border-gray-900 bg-green-400 shadow-lg"
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  />
-                </div>
+              <div className="relative z-10 flex items-center">
                 <div>
-                  <h1 className="bg-gradient-to-r from-white to-gray-300 bg-clip-text text-2xl font-bold text-transparent">
+                  <h1 className="bg-gradient-to-r from-[#24211D] to-[#7A7369] bg-clip-text text-2xl font-bold text-transparent dark:from-white dark:to-gray-300">
                     Customize Image
                   </h1>
-                  <p className="flex items-center gap-2 text-sm text-gray-300/80">
+                  <p className="flex items-center gap-2 text-sm text-[#7A7369] dark:text-gray-300/80">
                     <Shield className="h-3 w-3 text-green-400" />
                     AdsGpt Professional image Customizing suite
                   </p>
@@ -669,20 +658,20 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                   whileHover={{ scale: 1.1, rotate: 90 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={onClose}
-                  className="group rounded-2xl border border-gray-600 p-3 backdrop-blur-sm transition-all duration-200 hover:bg-red-500/20"
+                  className="group rounded-2xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] p-3 backdrop-blur-sm transition-all duration-200 hover:border-red-300 hover:bg-red-50 dark:border-gray-600 dark:bg-transparent dark:hover:bg-red-500/20"
                 >
-                  <X className="h-5 w-5 text-gray-300 group-hover:text-red-300" />
+                  <X className="h-5 w-5 text-[#7A7369] group-hover:text-red-500 dark:text-gray-300 dark:group-hover:text-red-300" />
                 </motion.button>
               </div>
             </div>
 
             <div className="flex flex-1 overflow-hidden">
               {/* Enhanced Preview Panel with Glass Effect */}
-              <div className="relative flex flex-1 items-center justify-center p-8">
+              <div className="relative flex flex-1 items-center justify-center bg-[var(--ws-surface)] p-8 dark:bg-transparent">
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5" />
-                <div className="bg-grid-white/[0.02] absolute inset-0 bg-[size:60px_60px]" />
+                <div className="bg-grid-white/[0.02] absolute inset-0 bg-[size:60px_60px] opacity-0 dark:opacity-100" />
 
-                <div className="relative w-full max-w-4xl rounded-3xl border border-gray-600 bg-gray-800/20 p-8 shadow-2xl backdrop-blur-xl">
+                <div className="relative w-full max-w-4xl rounded-3xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] p-8 shadow-[0_18px_45px_rgba(80,70,58,0.12)] backdrop-blur-xl dark:border-gray-600 dark:bg-gray-800/20 dark:shadow-2xl">
                   {!isImageLoaded && !imageError && (
                     <div className="flex h-96 w-full flex-col items-center justify-center">
                       <motion.div
@@ -692,9 +681,9 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                       >
                         <div className="absolute inset-0 animate-pulse rounded-full border-4 border-purple-400/30 border-b-purple-400" />
                       </motion.div>
-                      <p className="text-lg text-gray-300">Loading creative asset...</p>
+                      <p className="text-lg text-[#24211D] dark:text-gray-300">Loading creative asset...</p>
 
-                      <p className="flex items-center gap-1 text-sm text-gray-300/80">
+                      <p className="flex items-center gap-1 text-sm text-[#7A7369] dark:text-gray-300/80">
                         <Shield className="h-3 w-3 text-green-400" />
                         Preparing AdsGpt professional editing tools
                       </p>
@@ -703,11 +692,11 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
 
                   {imageError && (
                     <div className="flex h-96 w-full flex-col items-center justify-center text-center">
-                      <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-3xl border border-red-400/30 bg-red-500/20 backdrop-blur-sm">
-                        <X className="h-12 w-12 text-red-300" />
+                      <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-3xl border border-red-400/30 bg-red-500/15 backdrop-blur-sm dark:bg-red-500/20">
+                        <X className="h-12 w-12 text-red-500 dark:text-red-300" />
                       </div>
-                      <h3 className="mb-3 text-2xl font-semibold text-white">Asset Unavailable</h3>
-                      <p className="mb-6 max-w-md text-gray-300">
+                      <h3 className="mb-3 text-2xl font-semibold text-[#24211D] dark:text-white">Asset Unavailable</h3>
+                      <p className="mb-6 max-w-md text-[#7A7369] dark:text-gray-300">
                         Unable to load the creative content. Please check the URL or try again.
                       </p>
                       <div className="flex gap-4">
@@ -720,7 +709,7 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                         </button>
                         <button
                           onClick={onClose}
-                          className="rounded-2xl border border-gray-600 bg-white/5 px-8 py-3 text-white backdrop-blur-sm transition-all duration-200 hover:bg-white/10"
+                          className="rounded-2xl border border-[var(--ws-border)] bg-[var(--ws-surface-header)] px-8 py-3 text-[#24211D] backdrop-blur-sm transition-all duration-200 hover:bg-[var(--ws-surface-hover)] dark:border-gray-600 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
                         >
                           Cancel
                         </button>
@@ -746,7 +735,7 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                       initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.5 }}
-                      className="absolute bottom-6 left-1/2 flex -translate-x-1/2 transform gap-3 rounded-2xl border border-gray-600 bg-gray-800/40 p-4 shadow-2xl backdrop-blur-xl"
+                      className="absolute bottom-6 left-1/2 flex -translate-x-1/2 transform gap-3 rounded-2xl border border-[var(--ws-border-strong)] bg-white/80 p-4 shadow-2xl backdrop-blur-xl dark:border-gray-600 dark:bg-gray-800/40"
                     >
                       {[
                         {
@@ -780,11 +769,11 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                           whileHover={{ scale: 1.15, y: -2 }}
                           whileTap={{ scale: 0.85 }}
                           onClick={action}
-                          className="group relative rounded-xl border border-gray-600 bg-white/5 p-3 backdrop-blur-sm transition-all duration-200 hover:bg-white/10"
+                          className="group relative rounded-xl border border-[var(--ws-border)] bg-[var(--ws-surface-header)] p-3 backdrop-blur-sm transition-all duration-200 hover:bg-[var(--ws-surface-hover)] dark:border-gray-600 dark:bg-white/5 dark:hover:bg-white/10"
                           title={label}
                         >
                           <Icon
-                            className={`h-5 w-5 text-gray-300 group-hover:text-white ${transform || ''}`}
+                            className={`h-5 w-5 text-[#7A7369] group-hover:text-[#24211D] dark:text-gray-300 dark:group-hover:text-white ${transform || ''}`}
                           />
                           <div className="absolute -top-10 left-1/2 -translate-x-1/2 transform rounded-lg border border-gray-600 bg-gray-900/90 px-3 py-2 text-xs whitespace-nowrap text-white opacity-0 shadow-lg backdrop-blur-sm transition-opacity group-hover:opacity-100">
                             {label}
@@ -798,11 +787,11 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
               </div>
 
               {/* Enhanced Glassmorphic Controls Panel */}
-              <div className="relative flex w-96 flex-col border-l border-gray-600 bg-gradient-to-b from-gray-800/40 to-gray-900/40 backdrop-blur-xl">
+              <div className="relative flex w-96 flex-col border-l border-[var(--ws-border)] bg-[var(--ws-surface-control)] backdrop-blur-xl dark:border-gray-600 dark:bg-transparent dark:bg-gradient-to-b dark:from-gray-800/40 dark:to-gray-900/40">
                 <div className="absolute inset-0 bg-gradient-to-b from-blue-500/3 via-transparent to-purple-500/3" />
 
                 {/* Enhanced Tab Navigation */}
-                <div className="relative z-10 flex border-b border-gray-600 bg-gray-800/20 p-2">
+                <div className="relative z-10 flex border-b border-[var(--ws-border)] bg-[var(--ws-surface-header)] p-2 dark:border-gray-600 dark:bg-gray-800/20">
                   {tabs.map((tab) => {
                     const Icon = tab.icon;
                     return (
@@ -814,7 +803,7 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                         className={`mx-1 flex flex-1 flex-col items-center rounded-xl border p-3 backdrop-blur-sm transition-all duration-200 ${
                           activeTab === tab.id
                             ? `bg-gradient-to-r ${tab.color} border-transparent text-white shadow-lg`
-                            : 'border-gray-600 text-gray-300 hover:bg-white/5 hover:text-white'
+                            : 'border-[var(--ws-border)] text-[#7A7369] hover:bg-[var(--ws-surface-hover)] hover:text-[#24211D] dark:border-gray-600 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-white'
                         }`}
                       >
                         <Icon className="mb-1 h-5 w-5" />
@@ -984,16 +973,16 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                   {activeTab === 'export' && (
                     <div className="space-y-6">
                       <div>
-                        <h3 className="mb-4 flex items-center gap-3 text-lg font-semibold text-white">
-                          <div className="rounded-lg border border-gray-600 bg-gradient-to-r from-orange-500/20 to-amber-500/20 p-2 backdrop-blur-sm">
-                            <FileImage className="h-4 w-4 text-orange-300" />
+                        <h3 className="mb-4 flex items-center gap-3 text-lg font-semibold text-[#24211D] dark:text-white">
+                          <div className="rounded-lg border border-[var(--ws-border)] bg-gradient-to-r from-orange-500/15 to-amber-500/15 p-2 backdrop-blur-sm dark:border-gray-600 dark:from-orange-500/20 dark:to-amber-500/20">
+                            <FileImage className="h-4 w-4 text-orange-600 dark:text-orange-300" />
                           </div>
                           Export Configuration
                         </h3>
 
                         <div className="space-y-6">
                           <div>
-                            <label className="mb-3 block text-sm font-medium text-gray-300">
+                            <label className="mb-3 block text-sm font-medium text-[#7A7369] dark:text-gray-300">
                               File Format
                             </label>
                             <div className="grid gap-3">
@@ -1005,15 +994,15 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                                   onClick={() => setFormat(option.value)}
                                   className={`relative overflow-hidden rounded-2xl border p-4 text-left backdrop-blur-sm transition-all duration-200 ${
                                     format === option.value
-                                      ? 'border-blue-400 bg-blue-500/20 text-white shadow-lg'
-                                      : 'border-gray-600 bg-white/5 text-gray-300 hover:border-gray-500'
+                                      ? 'border-blue-400 bg-blue-500/10 text-[#24211D] shadow-lg dark:bg-blue-500/20 dark:text-white'
+                                      : 'border-[var(--ws-border)] bg-[var(--ws-surface-header)] text-[#24211D] hover:border-[var(--ws-border-strong)] hover:bg-[var(--ws-surface-hover)] dark:border-gray-600 dark:bg-white/5 dark:text-gray-300 dark:hover:border-gray-500'
                                   }`}
                                 >
                                   {option.premium && <PremiumBadge />}
                                   <div className="relative flex items-center justify-between">
                                     <div>
                                       <div className="font-medium">{option.label}</div>
-                                      <div className="mt-1 text-sm text-gray-400">
+                                      <div className="mt-1 text-sm text-[#7A7369] dark:text-gray-400">
                                         {option.description}
                                       </div>
                                     </div>
@@ -1028,7 +1017,7 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
 
                           {(format === 'jpeg' || format === 'webp' || format === 'avif') && (
                             <div>
-                              <label className="mb-3 block text-sm font-medium text-gray-300">
+                              <label className="mb-3 block text-sm font-medium text-[#7A7369] dark:text-gray-300">
                                 Quality Preset
                               </label>
                               <div className="space-y-2">
@@ -1040,20 +1029,20 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                                     onClick={() => setQuality(option.value)}
                                     className={`relative w-full rounded-2xl border p-4 text-left backdrop-blur-sm transition-all duration-200 ${
                                       quality === option.value
-                                        ? 'border-green-400 bg-green-500/20 text-white shadow-lg'
-                                        : 'border-gray-600 bg-white/5 text-gray-300 hover:border-gray-500'
+                                        ? 'border-green-500 bg-green-500/10 text-[#24211D] shadow-lg dark:border-green-400 dark:bg-green-500/20 dark:text-white'
+                                        : 'border-[var(--ws-border)] bg-[var(--ws-surface-header)] text-[#24211D] hover:border-[var(--ws-border-strong)] hover:bg-[var(--ws-surface-hover)] dark:border-gray-600 dark:bg-white/5 dark:text-gray-300 dark:hover:border-gray-500'
                                     }`}
                                   >
                                     {option.premium && <PremiumBadge />}
                                     <div className="flex items-center justify-between">
                                       <div>
                                         <div className="font-medium">{option.label}</div>
-                                        <div className="text-sm text-gray-400">
+                                        <div className="text-sm text-[#7A7369] dark:text-gray-400">
                                           {option.description}
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-3">
-                                        <span className="rounded border border-gray-600 bg-black/30 px-2 py-1 text-xs text-gray-400">
+                                        <span className="rounded border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-2 py-1 text-xs text-[#7A7369] dark:border-gray-600 dark:bg-black/30 dark:text-gray-400">
                                           {option.size}
                                         </span>
                                         <div
@@ -1068,35 +1057,35 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                           )}
 
                           {isImageLoaded && (
-                            <div className="rounded-2xl border border-gray-600 bg-white/5 p-4 backdrop-blur-sm">
-                              <h4 className="mb-3 flex items-center gap-2 font-medium text-white">
-                                <Ruler className="h-4 w-4 text-blue-300" />
+                            <div className="rounded-2xl border border-[var(--ws-border)] bg-[var(--ws-surface-header)] p-4 backdrop-blur-sm dark:border-gray-600 dark:bg-white/5">
+                              <h4 className="mb-3 flex items-center gap-2 font-medium text-[#24211D] dark:text-white">
+                                <Ruler className="h-4 w-4 text-blue-600 dark:text-blue-300" />
                                 Output Specifications
                               </h4>
-                              <div className="space-y-3 text-sm text-gray-300">
+                              <div className="space-y-3 text-sm text-[#7A7369] dark:text-gray-300">
                                 <div className="flex items-center justify-between">
                                   <span>Dimensions:</span>
-                                  <span className="rounded border border-gray-600 bg-black/30 px-3 py-1 font-mono font-semibold">
+                                  <span className="rounded border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-3 py-1 font-mono font-semibold text-[#24211D] dark:border-gray-600 dark:bg-black/30 dark:text-inherit">
                                     {getOutputDimensions().width} × {getOutputDimensions().height}px
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <span>Format:</span>
-                                  <span className="rounded border border-gray-600 bg-black/30 px-3 py-1 font-semibold">
+                                  <span className="rounded border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-3 py-1 font-semibold text-[#24211D] dark:border-gray-600 dark:bg-black/30 dark:text-inherit">
                                     {format.toUpperCase()}
                                   </span>
                                 </div>
                                 {(format === 'jpeg' || format === 'webp' || format === 'avif') && (
                                   <div className="flex items-center justify-between">
                                     <span>Quality:</span>
-                                    <span className="rounded border border-gray-600 bg-black/30 px-3 py-1 font-semibold">
+                                    <span className="rounded border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-3 py-1 font-semibold text-[#24211D] dark:border-gray-600 dark:bg-black/30 dark:text-inherit">
                                       {Math.round(quality * 100)}%
                                     </span>
                                   </div>
                                 )}
                                 <div className="flex items-center justify-between">
                                   <span>Estimated Size:</span>
-                                  <span className="flex items-center gap-1 rounded border border-gray-600 bg-black/30 px-3 py-1 font-semibold text-green-300">
+                                  <span className="flex items-center gap-1 rounded border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-3 py-1 font-semibold text-green-700 dark:border-gray-600 dark:bg-black/30 dark:text-green-300">
                                     <HardDrive className="h-3 w-3" />
                                     {estimatedSize}
                                   </span>
@@ -1165,14 +1154,14 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                 </div>
 
                 {/* Enhanced Glass Action Buttons */}
-                <div className="relative z-10 border-t border-gray-600 bg-gray-800/20 p-6 backdrop-blur-lg">
+                <div className="relative z-10 border-t border-[var(--ws-border)] bg-[var(--ws-surface-header)] p-6 backdrop-blur-lg dark:border-gray-600 dark:bg-gray-800/20">
                   <div className="flex gap-3">
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleReset}
                       disabled={!isImageLoaded}
-                      className="flex flex-1 items-center justify-center gap-3 rounded-2xl border border-gray-600 px-6 py-4 text-gray-300 backdrop-blur-sm transition-all duration-200 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex flex-1 items-center justify-center gap-3 rounded-2xl border border-[var(--ws-border)] bg-[var(--ws-surface-control)] px-6 py-4 text-[#7A7369] backdrop-blur-sm transition-all duration-200 hover:bg-[var(--ws-surface-hover)] hover:text-[#24211D] disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-transparent dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-white"
                     >
                       <RefreshCw className="h-4 w-4" />
                       Reset All
@@ -1182,7 +1171,7 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                       whileTap={{ scale: 0.95 }}
                       onClick={handleDownload}
                       disabled={isProcessing || !isImageLoaded || imageError}
-                      className="relative flex flex-1 items-center justify-center gap-3 overflow-hidden rounded-2xl border border-gray-600 bg-gradient-to-r from-blue-500/80 to-cyan-500/10 px-6 py-1 text-white shadow-2xl shadow-blue-500/25 backdrop-blur-sm transition-all duration-200 hover:from-cyan-500/10 hover:to-blue-500/80 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="relative flex flex-1 items-center justify-center gap-3 overflow-hidden rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-500/80 to-cyan-500/10 px-6 py-1 text-white shadow-2xl shadow-blue-500/25 backdrop-blur-sm transition-all duration-200 hover:from-cyan-500/10 hover:to-blue-500/80 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600"
                     >
                       <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent" />
                       {isProcessing ? (
@@ -1204,8 +1193,8 @@ const ImageFormatDialog = ({ isOpen, onClose, imageUrl, onDownload, defaultForma
                   </div>
 
                   {isImageLoaded && (
-                    <div className="mt-4 rounded-xl border border-green-400/20 bg-green-500/10 p-3 backdrop-blur-sm">
-                      <div className="flex items-center justify-between text-xs text-green-300">
+                    <div className="mt-4 rounded-xl border border-green-600/20 bg-green-500/10 p-3 backdrop-blur-sm dark:border-green-400/20">
+                      <div className="flex items-center justify-between text-xs text-green-700 dark:text-green-300">
                         <span>AdsGpt Image Customizer</span>
                         <span className="flex items-center gap-1">
                           <Check className="h-3 w-3" />
