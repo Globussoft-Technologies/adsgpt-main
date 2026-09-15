@@ -27,6 +27,7 @@ const modelConfigurationService = require("./services/modelConfigurationService"
 const {
   parseAllowedOrigins,
   isOriginAllowed,
+  isSameOriginRequest,
 } = require("./utils/corsOrigins");
 
 async function createServer() {
@@ -204,7 +205,15 @@ async function createServer() {
             process.env.FRONTEND_URL ||
             "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000",
         );
-        if (!isOriginAllowed(origin, allowedOrigins)) {
+        // Same-origin requests are exempt. CORS_ALLOWED_ORIGINS lists frontend
+        // origins only, so it never contains this API's own origin — which made
+        // every "Execute" in the Swagger UI we serve at /api-docs 403, since
+        // those fetches carry `Origin: https://<this-api-host>`. See
+        // isSameOriginRequest() for why this is not a CSRF hole.
+        if (
+          !isOriginAllowed(origin, allowedOrigins) &&
+          !isSameOriginRequest(req, origin)
+        ) {
           return res.status(403).json({ error: 'CSRF validation failed: untrusted origin' });
         }
       }
