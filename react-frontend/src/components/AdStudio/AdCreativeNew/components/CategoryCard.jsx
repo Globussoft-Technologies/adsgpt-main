@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react';
+import CreateCardButton from '@/components/AdStudio/CreateCardButton';
 
 export function CategoryCard({ category, onClick, className }) {
   return (
@@ -35,9 +35,7 @@ export function CategoryCard({ category, onClick, className }) {
           )}
         </div>
 
-        <div className="flex h-8 w-8 items-center justify-center rounded-full">
-          <ChevronRight className="h-6.5 w-6.5 2xl:h-8 2xl:w-8 text-white" />
-        </div>
+        <CreateCardButton />
       </div>
     </div>
   );
