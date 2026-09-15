@@ -30,7 +30,9 @@ const GeneratedMediaSchema = new Schema({
     aspect_ratio: { type: String, default: "" },
     quality: { type: String, default: "" },
     image: { type: mongoose.Schema.Types.Mixed, default: "" },
-    video: { type: mongoose.Schema.Types.Mixed, default: "" }
+    video: { type: mongoose.Schema.Types.Mixed, default: "" },
+    // Track if Admin saved/selected this media item as a template
+    isSavedAsTemplate: { type: Boolean, default: false, index: true }
 }, { timestamps: true });
 
 GeneratedMediaSchema.index({ userId: 1 });

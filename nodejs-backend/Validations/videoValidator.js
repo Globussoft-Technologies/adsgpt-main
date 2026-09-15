@@ -109,9 +109,9 @@ const updateResultSchema = Joi.object({
 
 const updatePromptPercentageSchema = Joi.object({
   sessionId: Joi.string().required(), // This is the _id passed as sessionId
-
   promptPercentage: Joi.number().min(0).max(100).required(),
-});
+  stage: Joi.string().allow(null, "").optional(),
+}).unknown(true);
 
 // ─── AI Ads Schemas ──────────────────────────────────────────────────────────────────────
 
@@ -256,6 +256,50 @@ const aiAdsProductSchema = Joi.object({
 }).or("script", "name");
 
 
+const validateVideoUrlsXor = (inputs, helpers) => {
+  const hasSource = Boolean(inputs.sourceVideoUrl && inputs.sourceVideoUrl.trim());
+  const hasGallery = Boolean(inputs.galleryVideoUrl && inputs.galleryVideoUrl.trim());
+
+  if ((hasSource && hasGallery) || (!hasSource && !hasGallery)) {
+    return helpers.message(
+      "Exactly one of sourceVideoUrl or galleryVideoUrl must be provided"
+    );
+  }
+  return inputs;
+};
+
+const baseCloneAdInputs = {
+  sourceVideoUrl: Joi.string().allow("", null).optional(),
+  galleryVideoUrl: Joi.string().allow("", null).optional(),
+  productImageUrls: Joi.array()
+    .items(Joi.string().trim().required())
+    .min(1)
+    .max(3)
+    .required(),
+  additionalInstructions: Joi.string().allow("", null).optional(),
+  model: Joi.string().trim().optional(),
+  targetDurationSeconds: Joi.number().integer().min(4).required(),
+  aspectRatio: Joi.string().trim().required(),
+};
+
+const cloneAdAnalyzeSchema = Joi.object({
+  inputs: Joi.object({
+    ...baseCloneAdInputs,
+    productBrandName: Joi.string().allow("", null).optional(),
+    visualDescription: Joi.string().allow("", null).optional(),
+    analysisSummary: Joi.string().allow("", null).optional(),
+  })
+    .unknown(true)
+    .custom(validateVideoUrlsXor)
+    .required(),
+}).unknown(true);
+
+const cloneAdGenerateSchema = Joi.object({
+  sessionId: Joi.string().trim().required(),
+  logoImageUrl: Joi.string().allow("", null).optional().default(null),
+}).unknown(true);
+
+
 module.exports = {
   generateVideoRequestSchema,
   updateResultSchema,
@@ -277,4 +321,6 @@ module.exports = {
   regenerateVoiceSchema,
   selectVersionSchema,
   finalMergeSchema,
+  cloneAdAnalyzeSchema,
+  cloneAdGenerateSchema,
 };

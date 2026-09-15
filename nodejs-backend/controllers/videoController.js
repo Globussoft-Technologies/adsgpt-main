@@ -10,6 +10,8 @@ const {
   regenerateVoiceSchema,
   selectVersionSchema,
   finalMergeSchema,
+  cloneAdAnalyzeSchema,
+  cloneAdGenerateSchema,
 } = require("../Validations/videoValidator");
 const VideoGeneration = require("../Module/videoGeneration/videoModel");
 const UnifiedCreditController = require("./UnifiedCreditController");
@@ -826,10 +828,16 @@ exports.updatePromptPercentage = async (req, res) => {
     }
 
     const { sessionId, promptPercentage } = value;
+    const stage = req.body?.stage || value?.stage || req.body?.message || req.body?.status || "";
+
+    const updateFields = { promptPercentage };
+    if (stage) {
+      updateFields.stage = stage;
+    }
 
     const video = await VideoGeneration.findOneAndUpdate(
       { _id: sessionId },
-      { $set: { promptPercentage } },
+      { $set: updateFields },
       { new: true, lean: true },
     );
 
@@ -840,11 +848,14 @@ exports.updatePromptPercentage = async (req, res) => {
       });
     }
 
+    const effectiveStage = stage || video?.stage || "";
+
     // emit to frontend (using userId room so it works across all tabs/reconnections)
     if (global.io) {
       global.io.to(video?.userId).emit("videoProgress", {
-        _id: video._id,
+        _id: video._id.toString(),
         promptPercentage: video.promptPercentage,
+        stage: effectiveStage,
         userId: video?.userId,
       });
     }
@@ -854,6 +865,7 @@ exports.updatePromptPercentage = async (req, res) => {
       data: {
         _id: video._id,
         promptPercentage: video.promptPercentage,
+        stage: stage || video?.stage || "",
       },
     });
   } catch (err) {
@@ -4430,3 +4442,617 @@ exports.regenerateFrameClone = async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
+
+exports.cloneAdAnalyze = async (req, res) => {
+  let newVideo = null;
+  try {
+    const { error, value } = cloneAdAnalyzeSchema.validate(req.body, {
+      abortEarly: false,
+    });
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: error.details.map((d) => d.message).join("; "),
+      });
+    }
+
+    const userId = req.user?.user_id || req.body?.userId || req.user?.id;
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: "userId is required",
+      });
+    }
+
+    const inputs = value.inputs || {};
+
+    const targetDurationNum = Number(inputs.targetDurationSeconds) || 4;
+    const durationStr = String(targetDurationNum);
+    const modelStr = inputs.model || "seedance-2.5";
+    const aspectRatioStr = inputs.aspectRatio || "16:9";
+    const imagesArr = inputs.productImageUrls || [];
+    const brandNameStr = inputs.productBrandName || "";
+    const instructionsStr = inputs.additionalInstructions || "";
+    const sourceVidUrl = inputs.sourceVideoUrl || "";
+    const galleryVidUrl = inputs.galleryVideoUrl || "";
+
+    const visualDescriptionStr = inputs.visualDescription || inputs.analysisSummary || "";
+
+    const creditPerSecond = UnifiedCreditController.getModelDeduction(modelStr);
+    const totalRequiredCredits = targetDurationNum * creditPerSecond;
+
+    const unifiedCheck = await UnifiedCreditController.checkCredits(
+      userId,
+      totalRequiredCredits
+    );
+
+    if (!unifiedCheck.isAllowed) {
+      if (!unifiedCheck.totalAllowed) {
+        return res.status(403).json({
+          success: false,
+          error: "An active subscription plan is required to analyze ad.",
+        });
+      }
+      return res.status(402).json({
+        success: false,
+        error: "Insufficient credits",
+        required: totalRequiredCredits,
+        remaining: unifiedCheck.remainingCredits,
+      });
+    }
+
+    const videoData = {
+      userId,
+      status: "copy",
+      promptPercentage: 0,
+      inputs: {
+        type: "clone_your_ad",
+        model: modelStr,
+        numberOfVideos: 1,
+        duration: durationStr,
+        aspectRatio: aspectRatioStr,
+        brandName: brandNameStr,
+        productBrandName: brandNameStr,
+        visualDescription: visualDescriptionStr,
+        userPrompt: instructionsStr,
+        images: imagesArr,
+        productImageUrls: imagesArr,
+        sourceVideoUrl: sourceVidUrl,
+        galleryVideoUrl: galleryVidUrl,
+        videoSample: sourceVidUrl || galleryVidUrl,
+      },
+    };
+
+    const existingSessionId = req.body.sessionId || req.body.inputs?.sessionId;
+    let sessionId;
+    if (existingSessionId && typeof existingSessionId === "string" && /^[0-9a-fA-F]{24}$/.test(existingSessionId)) {
+      const existingDoc = await VideoGeneration.findById(existingSessionId);
+      if (existingDoc) {
+        sessionId = existingSessionId;
+        await VideoGeneration.findByIdAndUpdate(sessionId, {
+          $set: {
+            status: "copy",
+            promptPercentage: 0,
+            inputs: videoData.inputs,
+            identification: null,
+          },
+        });
+      } else {
+        newVideo = await VideoGeneration.create(videoData);
+        sessionId = newVideo._id.toString();
+      }
+    } else {
+      newVideo = await VideoGeneration.create(videoData);
+      sessionId = newVideo._id.toString();
+    }
+
+    const pythonPayload = {
+      sessionId,
+      inputs: {
+        sourceVideoUrl: sourceVidUrl,
+        galleryVideoUrl: galleryVidUrl,
+        productImageUrls: imagesArr,
+        productBrandName: brandNameStr,
+        visualDescription: visualDescriptionStr,
+        additionalInstructions: instructionsStr,
+        model: modelStr,
+        targetDurationSeconds: targetDurationNum,
+        aspectRatio: aspectRatioStr,
+      },
+      subscription: req.body.subscription || req.user?.userSubscriptionType || {},
+      userId,
+    };
+
+    const pythonUrl = process.env.CLONE_YOUR_AD_ANALYZE_PYTHON_API;
+
+    let pythonRes;
+    try {
+      pythonRes = await axios.post(pythonUrl, pythonPayload, { timeout: 15000 });
+    } catch (pythonErr) {
+      logger.error(`cloneAdAnalyze Python API call failed: ${pythonErr.message}`);
+      await VideoGeneration.deleteOne({ _id: sessionId }).catch(() => {});
+
+      if (pythonErr.response) {
+        const errorMsg =
+          pythonErr.response.data?.error ||
+          pythonErr.response.data?.message ||
+          "Failed to start analysis with Python service";
+        return res.status(pythonErr.response.status || 400).json({
+          success: false,
+          error: errorMsg,
+          details: pythonErr.response.data,
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        error: `Python service connection error: ${pythonErr.message}`,
+      });
+    }
+
+    const { status: pyStatus, jobId: pyJobId, message: pyMessage } = pythonRes.data || {};
+
+    if (pythonRes.status !== 202 && pyStatus !== "processing") {
+      logger.error(`cloneAdAnalyze: Python service rejected job with status ${pythonRes.status}`);
+      await VideoGeneration.deleteOne({ _id: sessionId }).catch(() => {});
+      return res.status(pythonRes.status || 400).json({
+        success: false,
+        error: pyMessage || "Python service rejected analysis job",
+      });
+    }
+
+    const actualJobId = pyJobId || sessionId;
+
+    await VideoGeneration.findByIdAndUpdate(sessionId, {
+      $set: { jobId: actualJobId },
+    }).catch(() => {});
+
+    return res.status(202).json({
+      status: "processing",
+      sessionId: sessionId,
+      jobId: actualJobId,
+      message: pyMessage || "Analysis started. Result will be sent via callback.",
+    });
+  } catch (err) {
+    logger.error(`cloneAdAnalyze error: ${err.message}`);
+    if (newVideo && newVideo._id) {
+      await VideoGeneration.deleteOne({ _id: newVideo._id }).catch(() => {});
+    }
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+};
+
+exports.updateCloneAdAnalyzeResult = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { status, identification, error, userId, jobId } = req.body || {};
+
+    const record = await VideoGeneration.findById(sessionId);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        error: "SessionId not found",
+      });
+    }
+
+    const effectiveUserId = record.userId || userId;
+    const isSuccess = Number(status) === 200;
+
+    if (isSuccess) {
+      const rawIdentification = identification || req.body.identification || {};
+      const extractedBrand =
+        req.body.productBrandName ||
+        req.body.brandName ||
+        rawIdentification.productBrandName ||
+        rawIdentification.brandName ||
+        record.inputs?.brandName ||
+        record.inputs?.productBrandName ||
+        "";
+
+      const finalIdentification = {
+        ...rawIdentification,
+        ...(extractedBrand ? { productBrandName: extractedBrand, brandName: extractedBrand } : {}),
+      };
+
+      const updatedRecord = await VideoGeneration.findByIdAndUpdate(
+        sessionId,
+        {
+          $set: {
+            status: "copy",
+            promptPercentage: 100,
+            identification: finalIdentification,
+            ...(extractedBrand
+              ? {
+                  "inputs.brandName": extractedBrand,
+                  "inputs.productBrandName": extractedBrand,
+                }
+              : {}),
+            ...(jobId ? { jobId } : {}),
+          },
+        },
+        { new: true }
+      );
+
+      if (global.io && effectiveUserId) {
+        global.io.to(effectiveUserId).emit("cloneAdAnalyzeReady", {
+          sessionId,
+          status: 200,
+          promptPercentage: 100,
+          productBrandName: extractedBrand,
+          brandName: extractedBrand,
+          identification: updatedRecord.identification,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Analysis result processed successfully",
+        sessionId,
+      });
+    } else {
+      const pythonError =
+        error ||
+        req.body.message ||
+        `Analysis failed with status ${status}`;
+
+      logger.error(`updateCloneAdAnalyzeResult failed for sessionId=${sessionId}: ${pythonError}`);
+
+      if (global.io && effectiveUserId) {
+        global.io.to(effectiveUserId).emit("cloneAdAnalyzeFailed", {
+          sessionId,
+          status: Number(status) || 400,
+          error: pythonError,
+        });
+      }
+
+      await VideoGeneration.deleteOne({ _id: sessionId }).catch(() => {});
+
+      return res.status(200).json({
+        success: true,
+        message: "Failed analysis notification processed and temporary record cleaned up",
+        error: pythonError,
+        sessionId,
+      });
+    }
+  } catch (err) {
+    logger.error(`updateCloneAdAnalyzeResult error: ${err.message}`);
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+};
+
+exports.cloneAdGenerate = async (req, res) => {
+  try {
+    const { error, value } = cloneAdGenerateSchema.validate(req.body, {
+      abortEarly: false,
+    });
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: error.details.map((d) => d.message).join("; "),
+      });
+    }
+
+    const userId = req.user?.user_id || req.body?.userId || req.user?.id;
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: "userId is required",
+      });
+    }
+
+    // Step 1: Extract & validate sessionId
+    const sessionId = value.sessionId || value.inputs?.sessionId || req.body.sessionId;
+    if (!sessionId || typeof sessionId !== "string" || !/^[0-9a-fA-F]{24}$/.test(sessionId)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid or missing sessionId",
+      });
+    }
+
+    // Step 2 & 3: Fetch existing Analyse record from MongoDB. If not found, return 404 immediately.
+    const existingRecord = await VideoGeneration.findById(sessionId);
+    if (!existingRecord) {
+      return res.status(404).json({
+        success: false,
+        error: "Analyse record not found for the provided sessionId",
+      });
+    }
+
+    // Step 4: Read required Analyse data from MongoDB record
+    const sourceVidUrl = existingRecord.inputs?.sourceVideoUrl || existingRecord.inputs?.videoSample || "";
+    const galleryVidUrl = existingRecord.inputs?.galleryVideoUrl || "";
+    const imagesArr = existingRecord.inputs?.productImageUrls || existingRecord.inputs?.images || [];
+    const brandNameStr = existingRecord.inputs?.brandName || existingRecord.inputs?.productBrandName || "";
+    const rawDuration = existingRecord.inputs?.duration || existingRecord.inputs?.targetDurationSeconds || "4";
+    const targetDurationNum = parseInt(String(rawDuration), 10) || 4;
+    const aspectRatioStr = existingRecord.inputs?.aspectRatio || "16:9";
+    const instructionsStr = existingRecord.inputs?.userPrompt || existingRecord.inputs?.additionalInstructions || "";
+    const modelStr = existingRecord.inputs?.model || "seedance-2.5";
+    const identificationObj = existingRecord.identification || {};
+
+    const logoImageUrlStr = value.logoImageUrl || value.inputs?.logoImageUrl || "";
+    
+    // Automatically determine watermark based on user subscription plan ("8" is free plan -> watermark=true)
+    const plan = Object.keys(req.user?.userSubscriptionType || {})[0] || req.user?.subscription_plan_id || "8";
+    const watermark = plan == "8";
+
+    // Step 5: Determine required credits
+    const creditPerSecond = UnifiedCreditController.getModelDeduction(modelStr);
+    const totalRequiredCredits = targetDurationNum * creditPerSecond;
+
+    // Step 6: FREEZE / RESERVE CREDITS (Must happen BEFORE Python payload formation and Python call)
+    const freeze = await UnifiedCreditController.freezeCredits({
+      userId,
+      reservationKey: sessionId,
+      amount: totalRequiredCredits,
+      meta: {
+        service_type: "clone_your_ad",
+        model: modelStr,
+        duration: targetDurationNum,
+      },
+    });
+
+    if (!freeze.ok) {
+      if (freeze.reason === "NO_BASE_PLAN") {
+        return res.status(403).json({
+          success: false,
+          error: "An active subscription plan is required to generate video.",
+        });
+      }
+      if (freeze.reason === "INSUFFICIENT") {
+        return res.status(402).json({
+          success: false,
+          error: "Insufficient credits",
+          required: totalRequiredCredits,
+          remaining: freeze.remaining,
+        });
+      }
+      return res.status(503).json({
+        success: false,
+        error: "Could not reserve credits for this request. Please try again.",
+      });
+    }
+
+    emitCreditStatus(userId).catch(() => {});
+
+    // Step 7: ONLY AFTER CREDIT FREEZE SUCCEEDS - Form Python Generate payload exactly as required
+    const pythonPayload = {
+      sessionId,
+      inputs: {
+        sourceVideoUrl: sourceVidUrl,
+        galleryVideoUrl: galleryVidUrl,
+        productImageUrls: imagesArr,
+        productBrandName: brandNameStr,
+        identification: {
+          confidence: identificationObj.confidence || "high",
+          productCategory: identificationObj.productCategory || "",
+          visualDescription: identificationObj.visualDescription || "",
+          isCompositeImage: Boolean(identificationObj.isCompositeImage),
+        },
+        targetDurationSeconds: targetDurationNum,
+        aspectRatio: aspectRatioStr,
+        additionalInstructions: instructionsStr,
+        model: modelStr,
+        generateAudio: true,
+      },
+      subscription: req.user?.userSubscriptionType || req.body.subscription || {},
+      userId,
+      watermark,
+    };
+
+    // Step 9: Call Python Generate API
+    const pythonUrl = process.env.CLONE_YOUR_AD_GENERATE_PYTHON_API;
+
+    let pythonRes;
+    try {
+      pythonRes = await axios.post(pythonUrl, pythonPayload, { timeout: 15000 });
+    } catch (pythonErr) {
+      logger.error(`cloneAdGenerate Python API call failed: ${pythonErr.message}`);
+      // Release frozen credits if Python call failed
+      await UnifiedCreditController.releaseCredits(sessionId).catch(() => {});
+
+      if (pythonErr.response) {
+        const errorMsg =
+          pythonErr.response.data?.error ||
+          pythonErr.response.data?.message ||
+          pythonErr.response.data?.detail ||
+          "Failed to start video generation with Python service";
+        return res.status(pythonErr.response.status || 400).json({
+          success: false,
+          error: errorMsg,
+          details: pythonErr.response.data,
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        error: `Python service connection error: ${pythonErr.message}`,
+      });
+    }
+
+    const { status: pyStatus, jobId: pyJobId, message: pyMessage, success: pySuccess } =
+      pythonRes.data || {};
+
+    if (pythonRes.status !== 202 && pyStatus !== "processing" && pySuccess !== true) {
+      logger.error(`cloneAdGenerate: Python service rejected generation job with HTTP status ${pythonRes.status}`);
+      await UnifiedCreditController.releaseCredits(sessionId).catch(() => {});
+      return res.status(pythonRes.status || 400).json({
+        success: false,
+        error: pyMessage || "Python service rejected generation job",
+      });
+    }
+
+    // Step 10: Store Python jobId and update DB status
+    const actualJobId = pyJobId || sessionId;
+
+    await VideoGeneration.findByIdAndUpdate(sessionId, {
+      $set: {
+        jobId: actualJobId,
+        status: "processing",
+        watermark: watermark,
+        "inputs.logoUrl": logoImageUrlStr,
+      },
+    }).catch(() => {});
+
+    // Step 11: Return 202 acknowledgement to frontend
+    return res.status(202).json({
+      status: "processing",
+      sessionId: sessionId,
+      jobId: actualJobId,
+      message: pyMessage || "Generation started",
+    });
+  } catch (err) {
+    logger.error(`cloneAdGenerate error: ${err.message}`);
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+};
+
+exports.updateCloneAdGenerateResult = async (req, res) => {
+  try {
+    // Accept sessionId from URL param OR from request body (DS team sends it in body)
+    const sessionId = req.params.sessionId || req.body?.sessionId;
+    const {
+      url,
+      videoStatus,
+      error,
+      userId,
+      model,
+      duration,
+      status: pyStatus,
+      message,
+    } = req.body || {};
+
+    const record = await VideoGeneration.findById(sessionId);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        error: "SessionId not found",
+      });
+    }
+
+    const effectiveUserId = record.userId || userId;
+    const isSuccess = Number(videoStatus) === 200 && Boolean(url);
+
+    if (isSuccess) {
+      // Settle frozen credits on success
+      await UnifiedCreditController.settleCredits(sessionId).catch((creditErr) => {
+        logger.error(`Failed to settle credits for sessionId=${sessionId}: ${creditErr.message}`);
+      });
+      emitCreditStatus(effectiveUserId).catch(() => {});
+
+      const vModel = model || record.inputs?.model || "seedance-2.5";
+      const rawDur = duration || record.inputs?.duration || record.inputs?.targetDurationSeconds || "4";
+      const durationInSeconds = parseInt(String(rawDur), 10) || 4;
+      const vDuration = `${durationInSeconds}s`;
+
+      const newResult = {
+        model: vModel,
+        url: url,
+        waterMarkUrl: record.watermark ? url : "",
+        duration: vDuration,
+        videoStatus: 200,
+        error: null,
+      };
+
+      const updatedRecord = await VideoGeneration.findByIdAndUpdate(
+        sessionId,
+        {
+          $set: {
+            status: "completed",
+            cleanVideoUrl: url,
+            promptPercentage: 100,
+          },
+          $push: { results: newResult },
+        },
+        { new: true }
+      );
+
+      // Save to GeneratedMedia for Admin panel visibility
+      const creditPerSec = UnifiedCreditController.getModelDeduction(vModel);
+      const totalCreditsToDeduct = durationInSeconds * creditPerSec;
+      const actualCost = modelPricingConfig.getVideoCost(vModel, durationInSeconds);
+
+      await GeneratedMediaController.saveGeneratedMedia({
+        userId: effectiveUserId,
+        model: vModel,
+        type: "video",
+        image: "",
+        video: url,
+        credit_deduction: totalCreditsToDeduct,
+        cost: actualCost,
+        duration: durationInSeconds,
+        source: "clone_your_ad",
+      }).catch((gmErr) => {
+        logger.error(`Failed to save GeneratedMedia for sessionId=${sessionId}: ${gmErr.message}`);
+      });
+
+      if (global.io && effectiveUserId) {
+        global.io.to(effectiveUserId).emit("cloneAdGenerateReady", {
+          sessionId,
+          status: 200,
+          url,
+          result: newResult,
+          data: updatedRecord,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Generation result processed successfully",
+        sessionId,
+      });
+    } else {
+      const pythonError =
+        error ||
+        message ||
+        `Video generation failed with status ${videoStatus || pyStatus || 500}`;
+
+      logger.error(`Video generation failed for sessionId=${sessionId}: ${pythonError}`);
+
+      // Release frozen credits back to user on failed video generation
+      await UnifiedCreditController.releaseCredits(sessionId).catch((creditErr) => {
+        logger.error(`Failed to release credits for sessionId=${sessionId}: ${creditErr.message}`);
+      });
+      emitCreditStatus(effectiveUserId).catch(() => {});
+
+      await VideoGeneration.findByIdAndUpdate(sessionId, {
+        $set: {
+          status: "failed",
+          sceneError: pythonError,
+        },
+      }).catch(() => {});
+
+      if (global.io && effectiveUserId) {
+        global.io.to(effectiveUserId).emit("cloneAdGenerateFailed", {
+          sessionId,
+          status: Number(videoStatus) || 500,
+          error: pythonError,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Failed generation notification processed",
+        error: pythonError,
+        sessionId,
+      });
+    }
+  } catch (err) {
+    logger.error(`updateCloneAdGenerateResult error: ${err.message}`);
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+};
+
+

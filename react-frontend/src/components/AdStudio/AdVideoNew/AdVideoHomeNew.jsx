@@ -31,6 +31,13 @@ const cards = [
     type: 'b-roll',
   },
   {
+    title: 'CLONE YOUR AD',
+    desc: 'Create a new ad from an existing video',
+    img: 'https://dqv0cqkoy5oj7.cloudfront.net/marketing_studio_video_preset/4dcc2a50-47de-46a1-b7e6-d5bd378bb5d1-91841e48382ec5af.mp4',
+    gif: 'https://dqv0cqkoy5oj7.cloudfront.net/marketing_studio_video_preset/4dcc2a50-47de-46a1-b7e6-d5bd378bb5d1-91841e48382ec5af.mp4',
+    type: 'clone-ad',
+  },
+  {
     title: 'AI AVATARS',
     desc: 'Create ad videos with custom avatars',
     img: '/static/adVideo/ai-avatars-photo.jpg',
@@ -92,9 +99,8 @@ const AdVideoHomeNew = () => {
               className="flex w-full items-center justify-center pb-4 lg:h-[48vh] xl:h-[52vh] 2xl:h-[55vh]"
             >
               <div className="grid h-full w-full max-w-[650px] gap-2 grid-cols-2 lg:max-w-[1000px] lg:grid-cols-3 2xl:max-w-[1240px]">
-                {cards.map((card, index) => (
-                  //  <div key={card.title} className={`${index === 0 || index === 2 ? 'row-span-2' : ''}`}>
-                    <div key={card.title} className={`${index === 0 ? 'row-span-2' : ''}`}>
+                {cards.map((card) => (
+                  <div key={card.title}>
                     <AdVideoCard {...card} />
                   </div>
                 ))}

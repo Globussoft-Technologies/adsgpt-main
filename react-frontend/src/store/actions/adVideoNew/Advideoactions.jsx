@@ -1035,3 +1035,52 @@ export const selectAiAdsVersionAction = (sessionId, version) => async () => {
     throw error;
   }
 };
+
+export const cloneAdAnalyzeAction = (payload) => async () => {
+  try {
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/clone-ad-analyze`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    const errorMsg =
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      error.message ||
+      'Failed to start ad analysis';
+    globalToast.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+};
+
+export const cloneAdGenerateAction = (payload) => async () => {
+  try {
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/clone-ad-generate`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    const errorMsg =
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      error.message ||
+      'Failed to start video generation';
+    globalToast.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+};
+

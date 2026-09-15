@@ -33,7 +33,19 @@ export const toVideoDurationSeconds = (value) => toVideoDurationValue(value).rep
 
 export const getModelDurationOptions = (models, canonicalModel) => {
   const model = models.find((entry) => (entry.canonical || entry.model) === canonicalModel);
-  const durations = Array.isArray(model?.durations) ? model.durations : [];
+  let durations = Array.isArray(model?.durations) && model.durations.length > 0 ? model.durations : [];
+
+  if (!durations.length && model?.durationRange?.min != null && model?.durationRange?.max != null) {
+    const min = Number(model.durationRange.min);
+    const max = Number(model.durationRange.max);
+    if (Number.isFinite(min) && Number.isFinite(max) && min <= max) {
+      durations = [];
+      for (let i = min; i <= max; i++) {
+        durations.push(i);
+      }
+    }
+  }
+
   return [...new Set(durations.map(toVideoDurationValue).filter(Boolean))]
     .sort((a, b) => Number(a) - Number(b))
     .map((duration) => ({ value: duration, label: duration }));

@@ -462,6 +462,7 @@ export const initSocket = (url) => (dispatch, getState) => {
           })
         );
       }
+      emitter.emit('videoProgress', progressData);
     });
 
     socket.on('videoCreated', (completedData) => {
@@ -737,6 +738,20 @@ export const initSocket = (url) => (dispatch, getState) => {
         ? (data?.error || 'Voice generation failed')
         : (data?.error || 'Video generation failed');
       showFailureNotification('video', message);
+    });
+
+    // Clone Your Ad events (bridged to central emitter)
+    socket.on('cloneAdAnalyzeReady', (data) => {
+      emitter.emit('cloneAd:analyzeReady', data);
+    });
+    socket.on('cloneAdAnalyzeFailed', (data) => {
+      emitter.emit('cloneAd:analyzeFailed', data);
+    });
+    socket.on('cloneAdGenerateReady', (data) => {
+      emitter.emit('cloneAd:generateReady', data);
+    });
+    socket.on('cloneAdGenerateFailed', (data) => {
+      emitter.emit('cloneAd:generateFailed', data);
     });
 
     // AdFactory Autopilot — one terminal event per cycle, fired after the

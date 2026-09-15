@@ -458,6 +458,82 @@ class GeneratedMediaController {
     }
   }
 
+  /**
+   * Update isSavedAsTemplate field for a generated media item (e.g. Admin selects video)
+   */
+  static async updateSavedAsTemplate(req, res) {
+    try {
+      const mediaId = req.params.id || req.body.id;
+      if (!mediaId || !/^[0-9a-fA-F]{24}$/.test(mediaId)) {
+        return res.status(400).json({ success: false, message: "Invalid media ID" });
+      }
+
+      const isSaved = req.body.isSavedAsTemplate !== undefined ? Boolean(req.body.isSavedAsTemplate) : true;
+
+      const media = await GeneratedMedia.findByIdAndUpdate(
+        mediaId,
+        { $set: { isSavedAsTemplate: isSaved } },
+        { new: true }
+      );
+
+      if (!media) {
+        return res.status(404).json({ success: false, message: "Generated media item not found" });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Template saved status updated successfully",
+        isSavedAsTemplate: media.isSavedAsTemplate,
+        data: media,
+      });
+    } catch (error) {
+      console.error("Error updating template saved status:", error);
+      return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    }
+  }
+
+  /**
+   * GET API: Fetch ONLY video URLs for media where isSavedAsTemplate === true
+   */
+  static async getSavedVideoUrls(req, res) {
+    try {
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 25;
+
+      const skip = (page - 1) * limit;
+      const savedMedias = await GeneratedMedia.find({
+        isSavedAsTemplate: true,
+        type: "video",
+      })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+      // Extract ONLY the video URL strings
+      const videoUrls = savedMedias
+        .map((item) => {
+          if (typeof item.video === "string" && item.video.trim()) {
+            return item.video.trim();
+          }
+          if (item.video && typeof item.video === "object") {
+            return item.video.url || item.video.videoUrl || item.video.cleanVideoUrl || null;
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      return res.status(200).json({
+        success: true,
+        total: videoUrls.length,
+        videoUrls: videoUrls,
+      });
+    } catch (error) {
+      console.error("Error fetching saved video URLs:", error);
+      return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    }
+  }
+
 }
 
 module.exports = GeneratedMediaController;

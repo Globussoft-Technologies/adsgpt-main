@@ -140,6 +140,10 @@ const videoSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    stage: {
+      type: String,
+      default: "",
+    },
     status: {
       type: String,
       enum: ["pending", "processing", "completed", "failed", "copy"],
@@ -153,7 +157,7 @@ const videoSchema = new mongoose.Schema(
         // It arrives already finished from the storyboard service rather than
         // being produced by this backend's own pipeline, so its record carries a
         // result and nothing else: no scenes, no segments, no audio.
-        enum: ["ugc", "broll", "avatar", "clone", "ai_ads", "storyboard"],
+        enum: ["ugc", "broll", "avatar", "clone", "ai_ads", "storyboard", "clone_your_ad"],
         required: true,
       },
       model: {
@@ -186,6 +190,11 @@ const videoSchema = new mongoose.Schema(
       voiceSampleUrl: String,
       characterGender: String,
       uploadedAvatars: [String],
+
+      // ── AI Ads / Clone Ad Analysis input fields ─────────────
+      sourceVideoUrl: String,
+      galleryVideoUrl: String,
+      productImageUrls: [String],
 
       // ── AI Ads-specific input fields (stored for re-use in regenerate) ──────
       aiAdsType: { type: String, enum: ["brand", "product"] },
@@ -260,7 +269,10 @@ const videoSchema = new mongoose.Schema(
     pendingRegen: { type: aiAdsResultSchema, default: null },
     voicePreview: { type: aiAdsVoicePreviewSchema, default: null },
 
-    // ── AI Ads outputs ────────────────────────────────────────────────────────
+    // ── AI Ads / Clone Your Ad outputs & analysis ─────────────────────────────
+    jobId: { type: String, default: null },
+    identification: { type: mongoose.Schema.Types.Mixed, default: null },
+
     // Scenes delivered by Python /callback/scene-result
     scenes: [sceneSchema],
     totalSegments: { type: Number },

@@ -13,6 +13,7 @@ import UGCAdsPage from './pages/UGCAdsPage';
 import ProductBrollPage from './pages/ProductBrollPage';
 import AvatarAdsPage from './pages/AvatarAdsPage';
 import CloneYourselfPage from './pages/CloneYourselfPage';
+import CloneYourAdPage from './pages/CloneYourAdPage';
 import AIAdsPage from './pages/AI-ADS/AIAdsPage';
 
 import {
@@ -67,6 +68,10 @@ const pageConfig = {
     title: 'Clone Yourself',
     component: CloneYourselfPage,
   },
+  'clone-ad': {
+    title: 'Clone Your Ad',
+    component: CloneYourAdPage,
+  },
   myVideos: {
     title: 'My Space',
     component: MyVideosPage,
@@ -108,6 +113,10 @@ const selectVideoType = [
   {
     value: 'clone',
     label: 'Clone Yourself',
+  },
+  {
+    value: 'clone_ad',
+    label: 'Clone Your Ad',
   },
   {
     // Clips rendered from an onboarding storyboard concept. They are produced by
@@ -568,7 +577,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
           <div className="flex flex-1 items-center justify-center overflow-hidden px-4">
             <div
               ref={modalRef}
-              className={`min-w-112.5 rounded-3xl transition-all duration-300 2xl:max-h-[85vh] ${
+              className={`min-w-112.5 rounded-3xl transition-all duration-300 max-lg:max-h-[88vh] max-lg:overflow-y-auto 2xl:max-h-[85vh] ${
                 activePage === 'ai-ads' && currentAIAdsStep === 'details'
                   ? 'scale-75 2xl:scale-100'
                   : 'h-fit scale-75 2xl:scale-100'
@@ -587,7 +596,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
               } ${
                 activePage === 'ai-ads' && currentAIAdsStep === 'generation'
                   ? ''
-                  : 'overflow-hidden'
+                  : 'overflow-hidden max-lg:overflow-y-auto'
               }`}
             >
               {PageComponent && (

@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import {
   Activity,
   ArrowLeft,
+  Bookmark,
   Brain,
   DollarSign,
   Image as ImageIcon,
@@ -620,10 +621,50 @@ function MediaCard({ item }) {
   const url = pickMediaUrl(item);
   const isVideo = item.type === "video";
   const [playing, setPlaying] = useState(false);
+  const [saved, setSaved] = useState(Boolean(item?.isSavedAsTemplate));
+  const [updating, setUpdating] = useState(false);
+
+  const handleToggleSave = async (e) => {
+    e.stopPropagation();
+    if (updating || !item?._id) return;
+
+    const nextState = !saved;
+    setSaved(nextState);
+    setUpdating(true);
+
+    try {
+      await adminApi.updateGeneratedMediaTemplateStatus(item._id, nextState);
+    } catch (err) {
+      console.error("Failed to update template status:", err);
+      setSaved(!nextState); // Revert on error
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   return (
     <div className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="relative aspect-square w-full bg-slate-100">
+        {!playing && isVideo && (
+          <button
+            type="button"
+            disabled={updating}
+            title={saved ? "Template Saved (Click to unsave)" : "Save as Template"}
+            onClick={handleToggleSave}
+            className={
+              "absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg shadow-md transition-all duration-200 cursor-pointer disabled:opacity-60 " +
+              (saved
+                ? "bg-indigo-600 text-white hover:bg-indigo-700 ring-2 ring-indigo-400/50"
+                : "bg-black/50 text-white/90 hover:bg-black/70 hover:text-white backdrop-blur-sm")
+            }
+          >
+            {updating ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+            ) : (
+              <Bookmark className={`h-4 w-4 transition-transform ${saved ? "fill-white scale-105" : ""}`} />
+            )}
+          </button>
+        )}
         {url ? (
           isVideo ? (
             playing ? (

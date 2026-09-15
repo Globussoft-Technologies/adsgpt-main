@@ -7,8 +7,8 @@ const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const AdVideoCard = ({ title, desc, img, gif, type, comingSoon, premium }) => {
   const dispatch = useDispatch();
   const { userData } = useSelector((state) => state.socket);
-  const imgUrl = import.meta.env.VITE_S3_BASE_URL + img;
-  const gifUrl = import.meta.env.VITE_S3_BASE_URL + gif;
+  const imgUrl = img?.startsWith('http') ? img : import.meta.env.VITE_S3_BASE_URL + img;
+  const gifUrl = gif?.startsWith('http') ? gif : import.meta.env.VITE_S3_BASE_URL + gif;
 
   // Plan "8" is the free plan; premium-only features are locked for these users.
   const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');
@@ -23,6 +23,8 @@ const AdVideoCard = ({ title, desc, img, gif, type, comingSoon, premium }) => {
     dispatch(setActivePage(type));
   };
 
+  const isVideo = (url) => typeof url === 'string' && url.match(/\.(mp4|webm|mov)(\?.*)?$/i);
+
   return (
     <div
       id={`tour_ad-video-card_${type}`}
@@ -30,19 +32,39 @@ const AdVideoCard = ({ title, desc, img, gif, type, comingSoon, premium }) => {
       onClick={handleClick}
     >
       {/* image */}
-      <img
-        src={imgUrl}
-        alt={title}
-        className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:opacity-0"
-      />
+      {isVideo(imgUrl) ? (
+        <video
+          src={imgUrl}
+          muted
+          playsInline
+          preload="metadata"
+          className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:opacity-0"
+        />
+      ) : (
+        <img
+          src={imgUrl}
+          alt={title}
+          className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:opacity-0"
+        />
+      )}
 
-      {/* GIF */}
-      <img
-        src={gifUrl}
-        alt={`${title}-preview`}
-        // className={`absolute inset-0 ${type === 'b-roll' ? 'h-[180%]' : 'h-full'} w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100`}
-         className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-      />
+      {/* GIF / Video Preview */}
+      {isVideo(gifUrl) ? (
+        <video
+          src={gifUrl}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        />
+      ) : (
+        <img
+          src={gifUrl}
+          alt={`${title}-preview`}
+          className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        />
+      )}
 
       {/* overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent group-hover:from-black/70 group-hover:via-black/20 group-hover:to-transparent" />

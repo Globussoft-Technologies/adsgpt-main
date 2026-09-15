@@ -70,6 +70,29 @@ export const uploadToNAS = async (file, userId) => {
     }
     return response?.data?.data;
   } catch (error) {
-    console.error('Error uploading the image:', error);
+    console.error('Error uploading to NAS:', error);
+  }
+};
+
+export const uploadVideoToS3 = async (file, userId) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('userId', userId);
+
+    const response = await axios.post(`${GATEWAY_URL}/adsgpt/adCreative/upload-video`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        Authorization: `Bearer ${getCookies()}`,
+      },
+    });
+    if (response.status === 200) {
+      const url = response?.data?.data;
+      if (url) return url;
+    }
+    return '';
+  } catch (error) {
+    console.error('Error uploading video:', error);
+    return '';
   }
 };

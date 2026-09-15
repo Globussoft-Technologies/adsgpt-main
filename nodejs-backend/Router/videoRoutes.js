@@ -78,6 +78,17 @@ router.post(
   videoController.downloadMediaZip
 );
 router.get("/:id", authenticateJWT, videoController.getVideoById);
+router.post(
+  "/clone-ad-analyze",
+  authenticateJWT,
+  videoController.cloneAdAnalyze
+);
+router.post(
+  "/clone-ad-generate",
+  authenticateJWT,
+  requireBasePlan,
+  videoController.cloneAdGenerate
+);
 
 // ── AI Ads sub-routes ─────────────────────────────────────────────────────────
 // List/fetch: use existing GET /video/all  and  GET /video/:id
@@ -173,6 +184,16 @@ router.patch(
   "/ai-ads/callback/audio-result/:sessionId",
   verifySecretKey,
   videoController.updateAiAdsAudioResult
+);
+router.patch(
+  "/clone-your-ad/analyze/callback/:sessionId",
+  verifySecretKey,
+  videoController.updateCloneAdAnalyzeResult
+);
+router.patch(
+  "/clone-your-ad/generate/callback/:sessionId",
+  verifySecretKey,
+  videoController.updateCloneAdGenerateResult
 );
 
 router.post(

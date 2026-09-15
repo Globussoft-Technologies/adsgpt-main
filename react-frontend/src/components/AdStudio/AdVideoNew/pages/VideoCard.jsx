@@ -460,17 +460,21 @@ export default function VideoCard({
   const formatInfoValue = (value) => {
     if (value === true) return 'On';
     if (value === false) return 'Off';
-    if (value === null || value === undefined || value === '') return '-';
+    if (value === null || value === undefined || String(value).trim() === '' || String(value).trim() === '-') return null;
     return String(value)
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
-  const InfoRow = ({ label, value, className = '' }) => (
-    <p className={className}>
-      <span className="text-gray-400">{label}:</span> {formatInfoValue(value)}
-    </p>
-  );
+  const InfoRow = ({ label, value, className = '' }) => {
+    const formatted = formatInfoValue(value);
+    if (!formatted) return null;
+    return (
+      <p className={className}>
+        <span className="text-gray-400">{label}:</span> {formatted}
+      </p>
+    );
+  };
 
   const aiAdsInfo = (() => {
     const inputs = item?.inputs || {};
@@ -534,9 +538,9 @@ export default function VideoCard({
               <InfoRow label="Model" value={item?.inputs?.model} />
               <InfoRow
                 label={isAiAds ? 'Name' : 'Product'}
-                value={isAiAds ? aiAdsInfo.name : item?.inputs?.productName}
+                value={isAiAds ? aiAdsInfo.name : (item?.inputs?.productBrandName || item?.inputs?.brandName || item?.inputs?.productName)}
               />
-              <InfoRow label="Duration" value={item?.inputs?.duration} />
+              <InfoRow label="Duration" value={item?.inputs?.duration || (item?.inputs?.targetDurationSeconds ? `${item.inputs.targetDurationSeconds}s` : null)} />
               <InfoRow label="Aspect" value={item?.inputs?.aspectRatio} />
 
               {isAiAds && (

@@ -82,6 +82,12 @@ export const adminApi = {
   },
   removeModelIcon: (canonicalKey) => api.delete(`/models/${encodeURIComponent(canonicalKey)}/icon`),
   archiveModel: (canonicalKey) => api.delete(`/models/${encodeURIComponent(canonicalKey)}`),
+  updateGeneratedMediaTemplateStatus: (id, isSavedAsTemplate) =>
+    axios.post(
+      `${BASE_URL}/adsgpt/generated-media/update-template-status/${encodeURIComponent(id)}`,
+      { isSavedAsTemplate },
+      { headers: { Authorization: `Bearer ${getAdminToken()}` } }
+    ),
 };
 
 // Page-view summaries live under /adsgpt/analytics (a different base than the
