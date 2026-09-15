@@ -39,8 +39,10 @@ import { cn } from '@/lib/utils';
 import AdsGPTLogo from '@/assets/layouts/adsgpt-logo.webp';
 import creditIcon from '@/assets/layouts/profile/adcreative.svg';
 import CustomVideoPlayer from '../AdStudio/AdVideo/AdVideoChats/CustomVideoPlayer';
+import PostAdMySpaceModal from '../AdStudio/AdVideoNew/PostAdMySpace/PostAdMySpaceModal';
+import useOnboardingEligibility from '@/hooks/useOnboardingEligibility';
 import FreeAdBanner from './FreeAdBanner';
-import MosaicLoader from './MosaicLoader';
+import MosaicLoader, { ADSGPT_MOSAIC_PALETTE } from './MosaicLoader';
 import RetryCountdownButton from './RetryCountdownButton';
 
 /* ── tokens ───────────────────────────────────────────────────────────────────
@@ -71,7 +73,13 @@ const LINE_STRONG = 'rgba(255,255,255,0.16)';
  *   from `onFinish` — skipping leaves the free render unspent, so the offer bar
  *   stays up and comes back to this same session.
  */
-export function Header({ onStartOver, onFinish, onSkip }) {
+/**
+ * @param generated  At least one clip is ready. Swaps the exit for "Go to
+ *   dashboard" (which calls `onFinish` — the user got their clip, so this run is
+ *   completed, not skipped). Until then "Skip for now" is the only exit.
+ */
+export function Header({ onStartOver, onFinish, onSkip, generated = false }) {
+  const exit = generated ? onFinish || onSkip : onSkip;
   return (
     <header
       className="flex h-13 shrink-0 items-center justify-between border-b border-white/[0.07] px-4"
@@ -90,7 +98,7 @@ export function Header({ onStartOver, onFinish, onSkip }) {
             Start over
           </button>
         )}
-        {onSkip && (
+        {!generated && onSkip && (
           <button
             type="button"
             onClick={onSkip}
@@ -99,14 +107,14 @@ export function Header({ onStartOver, onFinish, onSkip }) {
             Skip for now
           </button>
         )}
-        {onFinish && (
+        {generated && exit && (
           <button
             type="button"
-            onClick={onFinish}
+            onClick={exit}
             className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-semibold text-white/80 transition hover:border-[#15DCFF]/50 hover:text-white"
             style={{ background: SURF2, borderColor: LINE_STRONG }}
           >
-            End onboarding
+            Go to dashboard
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M5 12h13M13 6l6 6-6 6" />
             </svg>
@@ -436,7 +444,7 @@ function useFitScale(deps) {
  * stretched the card to hold them. Capped at `calc(50% - 4px)` the pair adds up
  * to exactly the strip available, so the card's padding survives on both edges.
  */
-function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, framesExhausted }) {
+function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, framesExhausted, freeRenderSpent, palette }) {
   const frames = (board.images || [])
     .filter((img) => img.status === 'ready' && img.src)
     .slice(0, 2);
@@ -446,6 +454,13 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
   // user to another screen to see whether the promise was kept breaks the one
   // comparison the card exists to support.
   const [watching, setWatching] = useState(false);
+
+  // ── Full voiceover, in place ─────────────────────────────────────────────
+  // User decision 2026-09-15: one line collapsed; "See more" grows the text to
+  // its full length and the frames give up that room — smoothly. VoiceoverLine
+  // animates its own max-height; the frames row is `flex-1 basis-0`, so it is
+  // re-laid out on every frame of that animation and shrinks/grows with it.
+  const [voiceExpanded, setVoiceExpanded] = useState(false);
   const clip = videoState?.video?.video || null;
   const clipSrc = clip?.src || clip?.url || clip?.local_url || '';
 
@@ -455,10 +470,12 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
       className="flex h-full min-h-0 w-full min-w-0 flex-col gap-2.5 rounded-2xl border p-3"
       style={{ background: SURF, borderColor: LINE }}
     >
-      {/* `overflow-visible` so the transition badge can sit over both frames. */}
+      {/* `overflow-visible` so the transition badge can sit over both frames.
+          `flex-1 basis-0`: takes whatever the footer leaves, so it follows the
+          voiceover's height animation frame by frame. */}
       <div className="relative flex min-h-20 flex-1 basis-0 items-center justify-center overflow-visible">
         {watching && clipSrc ? (
-          <InlineClip src={clipSrc} onClose={() => setWatching(false)} onOpen={onOpen} />
+          <InlineClip src={clipSrc} board={board} onClose={() => setWatching(false)} onOpen={onOpen} />
         ) : frames.length ? (
           <>
             <Frame img={frames[0]} label="First frame" badge="First" />
@@ -497,9 +514,9 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
                 retries. A keyframe that failed upstream is usually recovered by
                 the retry it triggers, so showing "failed" the moment the first
                 attempt reports one would be wrong more often than not. */}
-            <FramePlaceholder badge="First" seed={index * 2} failed={framesExhausted} />
+            <FramePlaceholder badge="First" seed={index * 2} failed={framesExhausted} palette={palette} />
             <div className="w-2 shrink-0" />
-            <FramePlaceholder badge="Last" seed={index * 2 + 1} failed={framesExhausted} />
+            <FramePlaceholder badge="Last" seed={index * 2 + 1} failed={framesExhausted} palette={palette} />
           </>
         )}
       </div>
@@ -509,20 +526,26 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
         <h3 className="min-w-0 truncate text-sm font-semibold tracking-tight text-white 2xl:text-base">
           {board.title}
         </h3>
-        {board.recommended && (
-          <span className="shrink-0 rounded border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-[#15DCFF] uppercase">
-            Pick
-          </span>
-        )}
+        {/* HIDE-MARK — "Pick" badge off (user decision 2026-09-15). Restore:
+            {board.recommended && (
+              <span className="shrink-0 rounded border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-[#15DCFF] uppercase">
+                Pick
+              </span>
+            )} */}
       </div>
 
-      <VoiceoverLine text={board.voiceover} />
+      <VoiceoverLine
+        text={board.voiceover}
+        expanded={voiceExpanded}
+        onToggle={() => setVoiceExpanded((v) => !v)}
+      />
 
       <ConceptAction
         board={board}
         state={videoState}
         onGenerate={onGenerate}
         onWatch={() => setWatching(true)}
+        freeRenderSpent={freeRenderSpent}
         // Only used by the exhausted-retry state, to send the user somewhere
         // that is not this concept.
         onOpen={onOpen}
@@ -544,7 +567,20 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
  * in a grid of three, and a full control bar at that size is unusable. The
  * proper player is one click away on the clip screen.
  */
-function InlineClip({ src, onClose, onOpen }) {
+function InlineClip({ src, board, onClose, onOpen }) {
+  // Posting from the card, not only from the clip screen. Same modal and same
+  // payload shape ClipView sends, so there is still exactly one posting path.
+  // The OAuth-return reopen stays in ClipView's SidePanel only: mounting that
+  // effect on every card would open the modal once per card.
+  const [postOpen, setPostOpen] = useState(false);
+  const title = board?.title || '';
+  const postPayload = {
+    url: src,
+    isVideo: true,
+    prompt: board?.voiceover || board?.premise || title,
+    item: { url: src, title, aiAds: { source: 'onboarding' } },
+  };
+
   return (
     <div className="absolute inset-0 animate-[clipRise_320ms_cubic-bezier(0.16,1,0.3,1)]">
       {/* The app's own player, the same one the clip screen uses, filling the
@@ -559,6 +595,19 @@ function InlineClip({ src, onClose, onOpen }) {
       {/* Above the player's own overlays, and in the strip's empty margin beside
           the portrait rather than over the picture. */}
       <div className="absolute top-1.5 right-1.5 z-30 flex gap-1">
+        <button
+          type="button"
+          onClick={() => setPostOpen(true)}
+          title="Post to ad account"
+          className="grid h-7 w-7 place-items-center rounded-full border text-white/80 backdrop-blur-md transition hover:text-white"
+          style={{ background: 'rgba(10,10,13,0.72)', borderColor: LINE_STRONG }}
+        >
+          {/* lucide `megaphone`, inline — the icon ClipView's Post button uses. */}
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="m3 11 18-5v12L3 14v-3z" />
+            <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+          </svg>
+        </button>
         {onOpen && (
           <button
             type="button"
@@ -585,6 +634,8 @@ function InlineClip({ src, onClose, onOpen }) {
         </button>
       </div>
 
+      <PostAdMySpaceModal open={postOpen} onOpenChange={setPostOpen} payload={postPayload} />
+
       <style>{`
         @keyframes clipRise {
           from { opacity: 0; transform: scale(0.92) }
@@ -604,7 +655,7 @@ function InlineClip({ src, onClose, onOpen }) {
  * for a board that already has one, and a button still offering it would be a
  * promise nothing keeps.
  */
-function ConceptAction({ board, state, onGenerate, onWatch, onOpen }) {
+function ConceptAction({ board, state, onGenerate, onWatch, onOpen, freeRenderSpent = false }) {
   const status = state?.status;
   const open = () => onGenerate?.(board);
 
@@ -698,10 +749,18 @@ function ConceptAction({ board, state, onGenerate, onWatch, onOpen }) {
             icon rather than a small one. No backing plate: the plate was there
             to rescue a size that was simply too small. */}
         <img src={creditIcon} alt="" className="h-5 w-5 shrink-0" />
-        <s className="shrink-0 text-[13px] font-semibold opacity-75">32</s>
-        <span className="shrink-0 rounded-[5px] bg-black/30 px-[7px] py-[1px] text-[13px] font-bold">
-          Free
-        </span>
+        {/* Once the free render is spent the price is the price — no strike,
+            no "Free" pill promising something the backend will charge for. */}
+        {freeRenderSpent ? (
+          <span className="shrink-0 text-[13px] font-bold">32</span>
+        ) : (
+          <>
+            <s className="shrink-0 text-[13px] font-semibold opacity-75">32</s>
+            <span className="shrink-0 rounded-[5px] bg-black/30 px-[7px] py-[1px] text-[13px] font-bold">
+              Free
+            </span>
+          </>
+        )}
       </span>
     </button>
   );
@@ -717,7 +776,11 @@ function ConceptAction({ board, state, onGenerate, onWatch, onOpen }) {
  * often "being redrawn" than "gone". The mosaic stays until the retries are
  * spent (`failed`), and only then does the card admit the gap.
  */
-function FramePlaceholder({ badge, seed = 0, failed = false }) {
+/**
+ * @param palette  brand colours for the mosaic tint (already resolved by the
+ *   caller, AdsGPT ramp as fallback).
+ */
+function FramePlaceholder({ badge, seed = 0, failed = false, palette }) {
   return (
     <div
       // No `animate-pulse`. A box fading in and out as one says "placeholder",
@@ -739,7 +802,7 @@ function FramePlaceholder({ badge, seed = 0, failed = false }) {
       ) : (
         /* `seed` differs per frame, so the first and last placeholders on a card
            are not the same pattern twice. */
-        <MosaicLoader offset={seed} />
+        <MosaicLoader offset={seed} palette={palette} />
       )}
       <FrameBadge>{badge}</FrameBadge>
     </div>
@@ -758,35 +821,161 @@ function FrameBadge({ children }) {
 }
 
 /**
- * The script, on one line.
+ * The script — one line, expanding in place with a smooth height animation.
  *
- * A single row so it sits beside its icon the way a caption does, and so every
- * card's footer is the same height however much a brand's voiceover has to say.
- * The full line stays reachable on the `title`.
+ * Collapsed it is one truncated row beside its icon, with "See more" only when
+ * the text actually overflows (measured, re-measured on resize). Expanded, the
+ * full text wraps and the box's `max-height` animates from one line to the
+ * wrapped height (VOICE_ANIM_MS). The card's frames row is `flex-1 basis-0`, so
+ * it is re-laid out on every frame and shrinks/grows smoothly with this box —
+ * user decision 2026-09-15.
+ *
+ * Collapse runs the animation first and only then re-applies the ellipsis;
+ * truncating immediately would snap the text to one line mid-animation.
  */
-function VoiceoverLine({ text }) {
+const VOICE_ANIM_MS = 300;
+
+function VoiceoverLine({ text, expanded = false, onToggle }) {
+  const boxRef = useRef(null);
+  // Two invisible measuring copies at the box's width: `plainRef` is the bare
+  // text (decides whether one line overflows), `fullRef` includes the inline
+  // "See less" (the expanded target height, so the link is inside the animation
+  // instead of popping in as an extra row afterwards).
+  const plainRef = useRef(null);
+  const fullRef = useRef(null);
+  const lastWidth = useRef(-1);
+  const [truncated, setTruncated] = useState(false);
+  const [heights, setHeights] = useState({ line: 0, full: 0 });
+  // True from the moment collapse starts until its animation ends: keeps the
+  // text wrapped so the height can animate down before the ellipsis returns.
+  const [collapsing, setCollapsing] = useState(false);
+  const wasExpanded = useRef(expanded);
+
+  useEffect(() => {
+    if (wasExpanded.current && !expanded) {
+      setCollapsing(true);
+      const t = setTimeout(() => setCollapsing(false), VOICE_ANIM_MS);
+      wasExpanded.current = expanded;
+      return () => clearTimeout(t);
+    }
+    wasExpanded.current = expanded;
+    return undefined;
+  }, [expanded]);
+
+  // One-line height, full wrapped height, and whether the one line overflows.
+  // `fullRef` is an invisible wrapped copy at the same width, so the full
+  // height is known before expanding (the animation needs a real target).
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const plain = plainRef.current;
+    const full = fullRef.current;
+    if (!box || !plain || !full) return undefined;
+    lastWidth.current = -1;
+    const measure = () => {
+      // Only a WIDTH change can change these numbers. The box's height changes
+      // on every frame of its own animation; re-measuring (and setting state)
+      // then re-rendered the card mid-animation — the visible shiver.
+      const width = box.clientWidth;
+      if (width === lastWidth.current) return;
+      lastWidth.current = width;
+      const line = parseFloat(getComputedStyle(plain).lineHeight) || 19;
+      const fullH = full.scrollHeight;
+      const overflows = plain.scrollHeight > line + 1;
+      setHeights((h) => (h.line === line && h.full === fullH ? h : { line, full: fullH }));
+      setTruncated((t) => (t === overflows ? t : overflows));
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    measure();
+    return () => observer.disconnect();
+  }, [text]);
+
   if (!text) return <div className="h-[19px] shrink-0" />;
+
+  // `wasExpanded.current` covers the FIRST render after "See less": `collapsing`
+  // is only set in an effect, so without it that one frame rendered the text
+  // truncated, then wrapped again — the fast shiver before the smooth collapse.
+  const wrapped = expanded || collapsing || wasExpanded.current;
+  const maxHeight = expanded ? heights.full || undefined : heights.line || undefined;
+
+  // Inline at the end of the text, so it is part of the animated height.
+  const seeLess = onToggle ? (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded
+      className="ml-1.5 font-semibold whitespace-nowrap text-[#15DCFF]/85 transition hover:text-[#15DCFF]"
+    >
+      See less
+    </button>
+  ) : null;
+
   return (
-    <div className="flex min-w-0 shrink-0 items-center gap-[7px]" title={text}>
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        className="shrink-0 text-white/50"
-        aria-hidden
-      >
-        <path d="M3 14v-2a9 9 0 0 1 18 0v2" />
-        <rect x="2" y="14" width="4" height="7" rx="2" fill="currentColor" stroke="none" />
-        <rect x="18" y="14" width="4" height="7" rx="2" fill="currentColor" stroke="none" />
-        <path d="M9 11v6M12 9v10M15 11v6" />
-      </svg>
-      <span className="min-w-0 truncate text-xs leading-relaxed text-[#b6bcc3] 2xl:text-sm">
-        {text}
-      </span>
+    <div className="flex min-w-0 shrink-0 flex-col">
+      <div className="flex min-w-0 items-start gap-[7px]">
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="mt-[2px] shrink-0 text-white/50"
+          aria-hidden
+        >
+          <path d="M3 14v-2a9 9 0 0 1 18 0v2" />
+          <rect x="2" y="14" width="4" height="7" rx="2" fill="currentColor" stroke="none" />
+          <rect x="18" y="14" width="4" height="7" rx="2" fill="currentColor" stroke="none" />
+          <path d="M9 11v6M12 9v10M15 11v6" />
+        </svg>
+
+        <div
+          ref={boxRef}
+          className="relative min-w-0 flex-1 overflow-hidden text-xs leading-relaxed text-[#b6bcc3] 2xl:text-sm"
+          style={{
+            maxHeight,
+            transition: `max-height ${VOICE_ANIM_MS}ms cubic-bezier(.4,0,.2,1)`,
+          }}
+        >
+          <p className={wrapped ? '' : 'truncate'}>
+            {text}
+            {/* Kept through the collapse animation: removing it at the first
+                frame dropped a line instantly before the height animated. */}
+            {wrapped && seeLess}
+          </p>
+          {/* Measuring copies: always wrapped, never visible, same width. */}
+          <p
+            ref={plainRef}
+            aria-hidden
+            className="pointer-events-none invisible absolute inset-x-0 top-0"
+          >
+            {text}
+          </p>
+          <p
+            ref={fullRef}
+            aria-hidden
+            className="pointer-events-none invisible absolute inset-x-0 top-0"
+          >
+            {text}
+            {onToggle && (
+              <span className="ml-1.5 font-semibold whitespace-nowrap">See less</span>
+            )}
+          </p>
+        </div>
+
+        {!expanded && truncated && onToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={false}
+            className="shrink-0 text-xs font-semibold whitespace-nowrap text-[#15DCFF]/85 transition hover:text-[#15DCFF] 2xl:text-sm"
+          >
+            See more
+          </button>
+        )}
+      </div>
+
     </div>
   );
 }
@@ -912,7 +1101,7 @@ function ConceptSkeleton({ delay = 0 }) {
               i === 1 && 'ml-2'
             )}
           >
-            <MosaicLoader offset={delay / 140 + i * 7} />
+            <MosaicLoader offset={delay / 140 + i * 7} palette={ADSGPT_MOSAIC_PALETTE} />
           </div>
         ))}
       </div>
@@ -1589,13 +1778,19 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
       className="absolute inset-x-0 bottom-0 z-[5] flex min-h-0 flex-col border-t shadow-[0_-20px_46px_rgba(0,0,0,0.5)]"
       style={{ height, background: SURF, borderColor: LINE }}
     >
+      {/* The resize handle. No `title`: the native tooltip appeared late, over
+          the wrong spot, in OS styling. The handle explains itself instead —
+          on hover the strip tints, and the grip widens and turns brand cyan,
+          with the ns-resize cursor saying which way it moves. */}
       <div
         onMouseDown={startDrag}
         onDoubleClick={toggle}
-        title="Drag to resize"
-        className="grid h-3.5 shrink-0 cursor-ns-resize place-items-center bg-[#101317] transition-colors hover:bg-[#151a1f]"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize templates panel"
+        className="group/handle grid h-3.5 shrink-0 cursor-ns-resize place-items-center bg-[#101317] transition-colors duration-200 hover:bg-[#15DCFF]/[0.06]"
       >
-        <span className="h-[3px] w-11 rounded-[2px] bg-[#3a4149]" />
+        <span className="h-[3px] w-11 rounded-[2px] bg-[#3a4149] transition-all duration-200 group-hover/handle:w-16 group-hover/handle:bg-[#15DCFF] group-hover/handle:shadow-[0_0_10px_rgba(21,220,255,0.55)]" />
       </div>
 
       <div className="flex shrink-0 items-center justify-between gap-4 px-[18px] pt-2 pb-1.5">
@@ -1813,6 +2008,8 @@ export default function Workspace({
   // Leave without finishing. The free render stays unspent, so the offer bar
   // keeps this session reachable — see OnBoardHome's `skipOnboarding`.
   onSkip,
+  // Leave having got a clip — shown as "Go to dashboard" once one is ready.
+  onFinish,
   // Per-concept action. Not wired to a backend yet — `video.generate` exists in
   // the webhook contract but has no Node route — so the button is inert until a
   // handler is passed rather than pretending to start a render.
@@ -1848,6 +2045,19 @@ export default function Workspace({
   }, []);
 
   const templatesPending = ['queued', 'running'].includes(templates.status);
+
+  // Is the free render still owed? Two sources: the server (a render spent in
+  // an earlier visit) and this screen (a render started just now, before any
+  // re-read of eligibility). A failed render is not counted — it doesn't spend
+  // the free one. While eligibility is loading we assume unspent, so a new user
+  // never sees the price flash in.
+  const { eligibility, loading: eligibilityLoading } = useOnboardingEligibility();
+  const renderStartedHere = Object.values(videosByBoard).some(
+    (v) => v?.status && v.status !== 'failed'
+  );
+  const freeRenderSpent =
+    renderStartedHere ||
+    (!eligibilityLoading && Boolean(eligibility) && !eligibility.freeRenderAvailable);
 
   // The brand panel sizes itself to its own content. Re-measured whenever the
   // context changes, because that is the only thing that changes its length.
@@ -1901,6 +2111,10 @@ export default function Workspace({
     .replace(/\/$/, '');
   const industry = [context.industry_major, context.industry_sub].filter(Boolean).join(' · ');
   const brandName = context.brand_name || site || 'Your brand';
+  // Every mosaic placeholder uses the AdsGPT cyan→indigo ramp (user decision
+  // 2026-09-15). Brand palettes were tried first, but many brands come back
+  // black/white/grey and the placeholders read as colourless.
+  const mosaicPalette = ADSGPT_MOSAIC_PALETTE;
 
   return (
     // `dark` is asserted here because this screen renders outside Layout, which
@@ -1914,8 +2128,16 @@ export default function Workspace({
           button did nothing but scroll — an invitation to a place you are
           standing in. The line itself still earns its space: it is what tells
           the user the render they are about to start costs them nothing. */}
-      <FreeAdBanner available />
-      <Header onStartOver={onStartOver} onSkip={onSkip} />
+      <FreeAdBanner available={!freeRenderSpent} />
+      <Header
+        onStartOver={onStartOver}
+        onSkip={onSkip}
+        onFinish={onFinish}
+        // A finished clip, not a started render: the exit changes meaning
+        // only once the user actually has something. Hydration refills
+        // `videosByBoard` on reload, so this survives a refresh.
+        generated={Object.values(videosByBoard).some((v) => v?.status === 'ready')}
+      />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[296px_1fr]">
         {/* ═══ the brand ═══ */}
@@ -1996,8 +2218,11 @@ export default function Workspace({
               taken off the keyframes, which is exactly the behaviour the overlay
               exists to avoid. Pinned at the collapsed dock's height, the cards
               are sized once and the dock simply covers them on its way up. */}
+          {/* `isolate`: the inline player's controls carry z-20/z-30. Without a
+              stacking context here those competed with the dock's z-[5] in
+              `main` and painted OVER the dock when it was dragged up. */}
           <section
-            className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-[18px] pt-2.5"
+            className="isolate flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-[18px] pt-2.5"
             style={{ paddingBottom: DOCK_PAD }}
           >
             {/* Tighter than it was, on purpose. The heading names the section
@@ -2039,6 +2264,9 @@ export default function Workspace({
                       // the others still offer the price.
                       videoState={videosByBoard[board.id]}
                       framesExhausted={framesExhausted}
+                      freeRenderSpent={freeRenderSpent}
+                      // Keyframe placeholders tint in this brand's colours.
+                      palette={mosaicPalette}
                     />
                   ))
                 : storyboardsFailed

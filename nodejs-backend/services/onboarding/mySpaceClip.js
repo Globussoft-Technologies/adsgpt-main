@@ -37,6 +37,13 @@ const { createFlowLog } = require("../../utils/flowLog");
  * webhook that reports the render, or upstream will retry a render that
  * succeeded.
  */
+// Clips being filed right now, by `userId|url`. The webhook and the SSE bridge
+// deliver the same terminal result within milliseconds of each other, and the
+// dedupe below is a read followed by a write — two deliveries racing through it
+// could both find nothing and both insert. Both paths run in this process, so an
+// in-flight set closes that window; a later redelivery is caught by the read.
+const inFlight = new Set();
+
 async function fileClip({ userId, sessionId, board, log }) {
   const clip = board?.video;
   if (!clip || clip.status !== "ready") return null;
@@ -48,6 +55,18 @@ async function fileClip({ userId, sessionId, board, log }) {
     log.warn("skipped.no_durable_url", { board: board.board_id });
     return null;
   }
+
+  const lockKey = `${userId}|${url}`;
+  if (inFlight.has(lockKey)) return null;
+  inFlight.add(lockKey);
+  try {
+    return await fileClipOnce({ userId, board, clip, url, log });
+  } finally {
+    inFlight.delete(lockKey);
+  }
+}
+
+async function fileClipOnce({ userId, board, clip, url, log }) {
 
   // The dedupe key. The webhook is at-least-once and the same terminal payload
   // arrives from the SSE bridge as well, so this runs more than once per clip

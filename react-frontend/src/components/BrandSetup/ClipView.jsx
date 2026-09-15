@@ -49,7 +49,7 @@ import CustomVideoPlayer from '../AdStudio/AdVideo/AdVideoChats/CustomVideoPlaye
 import PostAdMySpaceModal from '../AdStudio/AdVideoNew/PostAdMySpace/PostAdMySpaceModal';
 import { readPendingPostAd } from '../AdStudio/AdVideoNew/PostAdMySpace/postAdPersistence';
 import { Header } from './Workspace';
-import MosaicLoader from './MosaicLoader';
+import MosaicLoader, { ADSGPT_MOSAIC_PALETTE } from './MosaicLoader';
 import RetryCountdownButton from './RetryCountdownButton';
 
 const SURF2 = '#232329';
@@ -159,7 +159,7 @@ function Frame({ children }) {
   );
 }
 
-function ShimmerStage({ line }) {
+function ShimmerStage({ line, palette }) {
   return (
     <>
       {/* The same mosaic the storyboard placeholders use, so the wait for a
@@ -167,7 +167,7 @@ function ShimmerStage({ line }) {
           travelling band said "loading over the wire"; nothing is loading, an
           image is being composed elsewhere, piece by piece. */}
       <div className="absolute inset-0 overflow-hidden">
-        <MosaicLoader />
+        <MosaicLoader palette={palette} />
       </div>
       <StatusPill>Processing</StatusPill>
       <p
@@ -224,6 +224,40 @@ function PulseStage() {
 }
 
 /**
+ * A render error, in words a user can act on.
+ *
+ * `state.error` is either copy this app already wrote for users (the
+ * `videoRejected` reasons in brandSetupSlice — credits, plan, service down…) or
+ * DS's raw internal message, e.g. "no clips could be rendered; check that each
+ * concept has generated keyframes". The raw text is never shown (user decision
+ * 2026-09-15): known causes get a specific friendly line, anything else a
+ * general one. The original is logged for debugging.
+ */
+const RENDER_ERROR_FALLBACK =
+  'Something went wrong while making this video. Try again, or pick another idea from the board.';
+
+// Our own user-facing messages from brandSetupSlice.videoRejected — shown as-is.
+const USER_FACING_RENDER_ERRORS = [
+  /enough credits/i,
+  /active plan/i,
+  /not switched on/i,
+  /not responding/i,
+  /already been rendered/i,
+  /could not find this concept/i,
+  /could not start this render/i,
+];
+
+function friendlyRenderError(error) {
+  const raw = String(error || '').trim();
+  if (!raw) return RENDER_ERROR_FALLBACK;
+  if (USER_FACING_RENDER_ERRORS.some((re) => re.test(raw))) return raw;
+  if (/keyframe|no clips could be rendered/i.test(raw)) {
+    return 'Some images for this storyboard weren’t ready, so the video couldn’t be made. Try again, or pick another idea from the board.';
+  }
+  return RENDER_ERROR_FALLBACK;
+}
+
+/**
  * The one failure screen.
  *
  * Back to the board lives HERE and nowhere else. On the way to a clip there is
@@ -238,18 +272,29 @@ function PulseStage() {
  */
 function FailedStage({ error, onRetry, onBack, attempts = 1 }) {
   const retriesSpent = Number(attempts) >= 2;
+  const message = friendlyRenderError(error);
+
+  // The raw error, for debugging — once per distinct error, not per render (the
+  // view re-renders every second on its loading clock).
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    if (error) console.warn('[onboarding] render failed (raw error):', error);
+  }, [error]);
 
   return (
     <div className="absolute inset-0 grid place-items-center px-8 text-center">
       <div>
-        <p className="text-[13.5px] font-semibold text-white/85">
-          {retriesSpent ? 'This concept still didn’t render' : 'This concept didn’t render'}
+        <p className="text-[13.5px] font-semibold text-white/90">
+          {retriesSpent ? 'We still couldn’t create this video' : 'We couldn’t create this video'}
         </p>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/45">
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/70">
           {retriesSpent
-            ? 'We tried twice. Try another storyboard — the other concepts are unaffected.'
-            : error || 'Something went wrong on the way to a clip.'}
+            ? 'We tried twice. Pick another idea from the board — the others are unaffected.'
+            : message}
         </p>
+        {/* A failed render releases its credit hold and never spends the free
+            render (renderBilling), so this is always true on this screen. */}
+        <p className="mt-2 text-[12px] font-medium text-[#5CE08A]/90">You haven&rsquo;t been charged.</p>
         <div className="mt-4 flex items-center justify-center gap-2">
           {onRetry && !retriesSpent && <RetryCountdownButton onClick={onRetry} />}
           {onBack && (
@@ -274,7 +319,7 @@ function FailedStage({ error, onRetry, onBack, attempts = 1 }) {
 function PanelLabel({ children, action }) {
   return (
     <div className="flex items-center justify-between">
-      <h2 className="text-[11px] font-semibold tracking-[0.08em] text-white/35 uppercase">
+      <h2 className="text-[11px] font-semibold tracking-[0.08em] text-white/60 uppercase">
         {children}
       </h2>
       {action}
@@ -312,8 +357,8 @@ function PanelButton({ children, onClick, primary = false, icon: Icon }) {
 function Meta({ label, children }) {
   return (
     <div className="flex min-w-0 items-baseline gap-1.5">
-      <dt className="shrink-0 text-white/25">{label}</dt>
-      <dd className="min-w-0 truncate font-medium text-white/60">{children}</dd>
+      <dt className="shrink-0 text-white/50">{label}</dt>
+      <dd className="min-w-0 truncate font-medium text-white/80">{children}</dd>
     </div>
   );
 }
@@ -382,7 +427,7 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
               </PanelButton>
             </div>
           ) : (
-            <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/40">
+            <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/70">
               {status === 'failed'
                 ? 'Nothing to send — this concept didn’t render.'
                 : message || 'Ready in about a minute.'}
@@ -392,7 +437,7 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
 
         <div>
           <PanelLabel>Versions</PanelLabel>
-          <p className="mt-1 text-[11.5px] text-white/30">A new version never destroys this cut.</p>
+          <p className="mt-1 text-[11.5px] text-white/55">A new version never destroys this cut.</p>
           <div className="mt-3 flex flex-col gap-2">
             {versions.length ? (
               versions.map((v) => (
@@ -413,7 +458,7 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
                 </div>
               ))
             ) : (
-              <p className="text-[12.5px] text-white/40">No cut yet.</p>
+              <p className="text-[12.5px] text-white/70">No cut yet.</p>
             )}
           </div>
         </div>
@@ -428,7 +473,7 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
           <h2 className="mt-2.5 text-[14px] leading-snug font-semibold text-white">{title}</h2>
 
           {angle && (
-            <p className="mt-1.5 text-[12px] leading-relaxed text-white/40">{angle}</p>
+            <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{angle}</p>
           )}
 
           {board?.voiceover && (
@@ -441,8 +486,8 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
           )}
 
           {board?.transition && (
-            <p className="mt-3 text-[12px] leading-relaxed text-white/35">
-              <span className="text-white/25">Camera · </span>
+            <p className="mt-3 text-[12px] leading-relaxed text-white/65">
+              <span className="text-white/50">Camera · </span>
               {board.transition}
             </p>
           )}
@@ -487,7 +532,8 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
  * @param onBack      return to the workspace while preserving the current run
  * @param onRetry     start the render again, after a failure
  * @param onStartOver the header's own control, same as the workspace's
- * @param onFinish    leave onboarding for the studio
+ * @param onFinish    leave onboarding for the studio, having got a clip
+ * @param onSkip      leave before the clip is ready
  */
 export default function ClipView({
   board,
@@ -497,7 +543,10 @@ export default function ClipView({
   onRetry,
   onStartOver,
   onFinish,
+  onSkip,
 }) {
+  // AdsGPT cyan→indigo for the render placeholder, same as page 2.
+  const mosaicPalette = ADSGPT_MOSAIC_PALETTE;
   const status = state.status || 'running';
   const clip = state.video?.video || null;
 
@@ -528,7 +577,9 @@ export default function ClipView({
 
   return (
     <div className="flex h-screen flex-col" style={{ background: '#0f0f0f' }}>
-      <Header onStartOver={onStartOver} onFinish={onFinish} />
+      {/* "Go to dashboard" once this clip is ready; "Skip for now" while it is
+          still rendering (or failed), since nothing has been generated yet. */}
+      <Header onStartOver={onStartOver} onFinish={onFinish} onSkip={onSkip} generated={ready} />
 
       <div className="shrink-0 px-5 py-3">
         <button
@@ -564,7 +615,7 @@ export default function ClipView({
               ) : stage === 'pulse' ? (
                 <PulseStage />
               ) : (
-                <ShimmerStage line={line} />
+                <ShimmerStage line={line} palette={mosaicPalette} />
               )}
             </Frame>
           )}
@@ -586,7 +637,7 @@ export default function ClipView({
         className="flex h-14 shrink-0 items-center justify-between border-t px-5"
         style={{ background: CHROME, borderColor: LINE }}
       >
-        <p className="text-[12.5px] text-white/35">
+        <p className="text-[12.5px] text-white/70">
           {ready
             ? 'Your first clip is ready.'
             : status === 'failed'

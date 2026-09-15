@@ -1,12 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { FileText, Link2, Loader2, Paperclip, X } from 'lucide-react';
+import { Check, FileText, Link2, Loader2, Paperclip, X } from 'lucide-react';
 import { initOnboarding } from '@/apis/onboarding/onboardingApi';
 import AdsGPTLogo from '@/assets/layouts/adsgpt-logo.webp';
 import { cn } from '@/lib/utils';
 import ReasoningStack from './ReasoningStack';
 import { rememberRun, clearRun } from './runStorage';
-import { resetRun } from '@/store/reducers/brandSetup/brandSetupSlice';
+import { resetRun, runFailed } from '@/store/reducers/brandSetup/brandSetupSlice';
+
+// ── A run that stops moving ─────────────────────────────────────────────────
+// DS can hang mid-run (seen 2026-09-15 stuck at `merging`). Measured from the
+// last sign of progress — a new step or a higher percent — not from the start,
+// so a long but moving run never trips it. User decisions 2026-09-15:
+//   SLOW_AFTER_MS   reassure: "Taking longer than usual — still working"
+//   STALL_AFTER_MS  give up: "This is taking too long" + Try again / Skip
+const SLOW_AFTER_MS = 90_000;
+const STALL_AFTER_MS = 3 * 60_000;
+// The error value that marks a stall, so the failed screen can word it apart
+// from a genuine failure.
+const STALLED = 'stalled';
 
 // Served from S3, not bundled. The file is 14.4 MB — importing it made it a
 // build artefact that every deploy re-uploaded and every visitor fetched from
@@ -81,7 +93,8 @@ function FilePreview({ file, onRemove }) {
   }, [file, isImage]);
 
   return (
-    <li className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-white/12 bg-white/[0.06]">
+    // `chipIn`: the thumbnail scales and fades in, so an add is visibly registered.
+    <li className="group relative h-12 w-12 shrink-0 animate-[chipIn_220ms_ease-out] overflow-hidden rounded-lg border border-white/12 bg-white/[0.06]">
       {isImage && previewUrl ? (
         <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" />
       ) : (
@@ -106,7 +119,40 @@ function FilePreview({ file, onRemove }) {
  * @param onFailedReset  Called when the user backs out of a failed run. The
  *   host owns `phase`, so it has to be told the screen is a form again.
  */
-const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
+/**
+ * Placeholder + hint for the prompt, written for what the user has ALREADY
+ * given. The old static text kept asking for a link after one was pasted and
+ * for images after they were attached. Typed text hides the placeholder, so
+ * only links and files decide it.
+ */
+function promptCopy({ hasUrl, fileCount }) {
+  const images = `${fileCount} ${fileCount === 1 ? 'image' : 'images'} added`;
+  if (hasUrl && fileCount) {
+    return { placeholder: 'Anything else we should know? ', hint: 'All set — hit Analyze' };
+  }
+  if (hasUrl) {
+    return {
+      placeholder: 'Add a few words about your brand ',
+      hint: 'Got your site. Images or a short description help sharpen it',
+    };
+  }
+  if (fileCount) {
+    return {
+      placeholder: 'Add your website link or describe your brand',
+      hint: `${images}. A link or description helps us get it right`,
+    };
+  }
+  return {
+    placeholder: 'Paste your website, describe your brand, or attach images',
+    hint: 'You can mix all three — a link, a few words, and your images',
+  };
+}
+
+/**
+ * @param onSkip  Leave onboarding from this first screen. The host decides how
+ *   to record it (with or without a session).
+ */
+const BrandSetup = ({ onStarted, resumed = false, onFailedReset, onSkip }) => {
   const dispatch = useDispatch();
   const [value, setValue] = useState('');
   const [urls, setUrls] = useState([]);
@@ -114,6 +160,9 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Bumped on an empty Analyze click. A counter rather than a boolean so a
+  // second empty click replays the shake (it is the `key` on the card).
+  const [shakeCount, setShakeCount] = useState(0);
   // Set the moment the run is accepted. Drives the handoff: the form lifts away
   // and the reasoning stack takes its place, on the same screen — the video and
   // the film never blink, so it reads as one surface changing its mind rather
@@ -236,6 +285,9 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
     const prompt = [website, description].filter(Boolean).join(' ');
     if (!prompt && files.length === 0) {
       setError('Add a link, a description, or an image to get started');
+      // The dim button is still clickable; a click answers with motion on the
+      // card, so the user's eye goes to where the input belongs.
+      setShakeCount((n) => n + 1);
       return;
     }
 
@@ -286,6 +338,57 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
     }
   };
 
+  const copy = promptCopy({
+    // A link still sitting in the typed text counts too — it is split out on blur.
+    hasUrl: urls.length > 0 || urlsFromText(value).length > 0,
+    fileCount: files.length,
+  });
+
+  // Anything Analyze could send. Drives the button's lit/dim state — before this
+  // the button looked identical empty and filled, so adding a link or an image
+  // gave no sign the form was now ready.
+  const ready = Boolean(value.trim()) || urls.length > 0 || files.length > 0;
+
+  // ── Stall watch ──────────────────────────────────────────────────────────
+  // Only while the thinking stack is up and the run is live. The clock resets
+  // on every new step or percent bump; `slow` drives the reassurance line and
+  // passing STALL_AFTER_MS fails the run with `STALLED`, which lands on the
+  // failed screen whose Try again keeps the form's input.
+  const [slow, setSlow] = useState(false);
+  const progressSignal = `${run.steps?.length || 0}:${run.percent || 0}`;
+  const lastProgressAt = useRef(Date.now());
+  useEffect(() => {
+    lastProgressAt.current = Date.now();
+    setSlow(false);
+  }, [progressSignal]);
+  useEffect(() => {
+    if (!handedOff || run.status !== 'running') {
+      setSlow(false);
+      return undefined;
+    }
+    const id = setInterval(() => {
+      const idle = Date.now() - lastProgressAt.current;
+      if (idle >= STALL_AFTER_MS) {
+        dispatch(runFailed(STALLED));
+      } else if (idle >= SLOW_AFTER_MS) {
+        setSlow(true);
+      }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [handedOff, run.status, dispatch]);
+
+  // ── Glow pulse on each add ───────────────────────────────────────────────
+  // Counts links + attachments; when the count GOES UP, bump `pulseCount`,
+  // which re-keys the glow overlay on the card and replays its animation.
+  // Removals and typing don't pulse — only a new item is news.
+  const attachedCount = urls.length + files.length;
+  const prevAttachedRef = useRef(attachedCount);
+  const [pulseCount, setPulseCount] = useState(0);
+  useEffect(() => {
+    if (attachedCount > prevAttachedRef.current) setPulseCount((n) => n + 1);
+    prevAttachedRef.current = attachedCount;
+  }, [attachedCount]);
+
   return (
     <div className="bg-background text-foreground relative flex min-h-screen w-full flex-col overflow-hidden">
       {/* TRIAL — background video. Muted + playsInline so it starts on its own
@@ -294,29 +397,29 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
           instead (see VIDEO_START_SECONDS). Played at full brightness — the
           film below is what buys legibility, so the footage stays clear.
           Remove this block and the film to go back to a plain canvas. */}
-      <video
-        ref={videoRef}
-        aria-hidden
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-        onLoadedMetadata={skipVideoIntro}
-        onEnded={skipVideoIntro}
-        className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover brightness-[1.0]"
-      >
-        <source src={BackdropVideo} type="video/mp4" />
-      </video>
-      {/* ONE uniform film over the whole frame — no gradients anywhere. Every
-          gradient scrim we tried drew a visible seam where it faded out (the
-          ellipse edge, the bottom of the top strip), because a soft edge over
-          moving footage still reads as a band. A flat film has no edge to see,
-          and it is what Luma does: the video stays legible underneath and the
-          type sits on a constant ground, so no text shadows are needed. */}
-      <div aria-hidden className="absolute inset-0 z-0 bg-black/55" />
+      {/* HIDE-MARK — backdrop video off (user decision 2026-09-15: AdsGPT glow
+          instead). To restore, put back the <video> (ref={videoRef}, src
+          BackdropVideo, onLoadedMetadata/onEnded={skipVideoIntro}) and the
+          `bg-black/55` film that sat over it.
 
-      <header className="relative z-10 flex items-center px-7 py-5">
+          The AdsGPT glow: the same cyan→indigo blurred orb the app Layout uses,
+          but centred BEHIND the form rather than rising from the bottom, so the
+          light sits where the user is meant to look. Fixed dark ground under it. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-[#0f0f0f]">
+        <div className="absolute top-1/2 left-1/2 h-[42vw] w-[42vw] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[linear-gradient(0deg,_#15DCFF_0%,_#5E66F5_100%)] opacity-45 blur-[120px] 2xl:blur-[160px]" />
+      </div>
+
+      <header className="relative z-10 flex items-center justify-between px-7 py-5">
         <img src={AdsGPTLogo} alt="AdsGPT" className="h-auto w-20 2xl:w-24" />
+        {onSkip && (
+          <button
+            type="button"
+            onClick={onSkip}
+            className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-white/60 transition hover:text-white"
+          >
+            Skip for now
+          </button>
+        )}
       </header>
 
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pb-28">
@@ -362,8 +465,11 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
               light reads as a raised object no matter what is behind it. The
               wrapper IS the border; the inner div is the panel. */}
             <div
+              // Re-keyed per empty click so the shake animation restarts.
+              key={`card-${shakeCount}`}
               className={cn(
-                'rounded-[20px] bg-linear-to-b p-px transition-all duration-300',
+                'relative rounded-[20px] bg-linear-to-b p-px transition-all duration-300',
+                shakeCount > 0 && 'animate-[brandShake_380ms_ease-in-out]',
                 // The brand edge is always lit, not a focus state — it is the one
                 // thing on the screen the user is meant to act on, so it reads as
                 // the target from the first frame.
@@ -376,13 +482,27 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
                 dragging && 'from-[#15DCFF] via-[#15DCFF]/70 to-[#15DCFF]/35'
               )}
             >
+              {/* Brief cyan pulse on the edge each time a link or image is added.
+                  Keyed on `pulseCount` so every add replays it; opacity ends at
+                  0, so it leaves nothing behind. */}
+              {pulseCount > 0 && (
+                <span
+                  key={`glow-${pulseCount}`}
+                  aria-hidden
+                  className="pointer-events-none absolute -inset-px rounded-[20px] opacity-0 animate-[brandGlow_600ms_ease-out]"
+                  style={{
+                    boxShadow: '0 0 0 1.5px #15DCFF, 0 0 28px 6px rgba(21,220,255,0.45)',
+                  }}
+                />
+              )}
               <div className="rounded-[19px] bg-[#101014]/85 p-2.5 backdrop-blur-2xl">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
+                    disabled={submitting}
                     aria-label="Attach logo or product images"
-                    className="ml-1 shrink-0 rounded-xl p-2 text-white/55 transition hover:bg-white/10 hover:text-[#15DCFF]"
+                    className="ml-1 shrink-0 rounded-xl p-2 text-white/55 transition hover:bg-white/10 hover:text-[#15DCFF] disabled:pointer-events-none disabled:opacity-40"
                   >
                     <Paperclip className="h-[18px] w-[18px]" />
                   </button>
@@ -413,22 +533,35 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
                       setValue(e.target.value);
                       setError('');
                     }}
-                    placeholder="Paste a link, describe your brand, or attach images"
-                    className="min-w-0 flex-1 truncate bg-transparent py-2.5 text-sm text-white placeholder:text-white/50 focus:outline-none"
+                    placeholder={copy.placeholder}
+                    // Locked while sending: an edit made mid-request would not
+                    // be part of the run the user is about to watch.
+                    disabled={submitting}
+                    className="min-w-0 flex-1 truncate bg-transparent py-2.5 text-sm text-white placeholder:text-white/50 focus:outline-none disabled:opacity-50"
                   />
 
-                  {/* Enabled even when the field is empty — an empty submit
-                    answers with a message instead of a dead button. The only
-                    disabled state is "already running", which is about not
-                    starting the same job twice, not about validation. */}
+                  {/* Dim until there is something to send, lit once there is.
+                    Still clickable while dim — an empty click shakes the card
+                    and explains, rather than being a dead button. The only
+                    truly disabled state is "already sending". */}
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="flex shrink-0 items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100"
-                    style={{ backgroundImage: 'linear-gradient(90deg, #15DCFF 0%, #5E66F5 100%)' }}
+                    aria-disabled={!ready}
+                    className={cn(
+                      'flex shrink-0 items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold transition-all duration-300 disabled:cursor-not-allowed',
+                      ready
+                        ? 'text-white shadow-[0_0_18px_rgba(21,220,255,0.35)] hover:brightness-110'
+                        : 'bg-white/[0.08] text-white/45 hover:bg-white/[0.12]'
+                    )}
+                    style={
+                      ready
+                        ? { backgroundImage: 'linear-gradient(90deg, #15DCFF 0%, #5E66F5 100%)' }
+                        : undefined
+                    }
                   >
                     {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {submitting ? 'Starting' : 'Analyze'}
+                    {submitting ? 'Starting…' : 'Analyze'}
                   </button>
                 </div>
 
@@ -437,7 +570,13 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
                   // composer for what is really a continuation of it — the
                   // attachments belong to the prompt, not to a section of their
                   // own.
-                  <ul className="no-scrollbar mt-2.5 flex min-w-0 flex-wrap items-center gap-2 overflow-x-auto px-1 pb-0.5">
+                  <ul
+                    className={cn(
+                      'no-scrollbar mt-2.5 flex min-w-0 flex-wrap items-center gap-2 overflow-x-auto px-1 pb-0.5 transition-opacity',
+                      // Attachments can't be removed mid-send either.
+                      submitting && 'pointer-events-none opacity-50'
+                    )}
+                  >
                     {/* Images first, links after, whatever order they were added
                         in. The thumbnails are the substantial thing here and a
                         link that happened to be pasted first was pushing them
@@ -459,7 +598,7 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
                       // way to take the URL back out.
                       <li
                         key={url}
-                        className="flex h-9 max-w-full min-w-0 items-center gap-1.5 pl-0.5 text-xs text-white/70"
+                        className="flex h-9 max-w-full min-w-0 animate-[chipIn_220ms_ease-out] items-center gap-1.5 pl-0.5 text-xs text-white/70"
                       >
                         <Link2 className="h-3.5 w-3.5 shrink-0 text-[#15DCFF]" />
                         <span className="min-w-0 flex-1 truncate" title={url}>
@@ -480,14 +619,47 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
               </div>
             </div>
 
-            <p
-              className={cn(
-                'mt-3.5 text-center text-[13px]',
-                error ? 'text-red-400' : 'text-white/75'
-              )}
-            >
-              {error || 'You can mix all three — a link, a few words, and your images'}
-            </p>
+            {/* The hint reacts to what was added: a ✓ and brighter text once
+                there is something to send, and a short fade whenever the words
+                change (keyed on the text) so the update is noticed. */}
+            {(() => {
+              const hintText = error || (submitting ? 'Sending to our analyst…' : copy.hint);
+              const confirmed = !error && !submitting && attachedCount > 0;
+              return (
+                <p
+                  key={hintText}
+                  className={cn(
+                    'mt-3.5 flex animate-[hintFade_260ms_ease-out] items-center justify-center gap-1.5 text-center text-[13px]',
+                    error ? 'text-red-400' : confirmed ? 'text-white/90' : 'text-white/75'
+                  )}
+                >
+                  {confirmed && <Check className="h-3.5 w-3.5 shrink-0 text-[#15DCFF]" aria-hidden />}
+                  {hintText}
+                </p>
+              );
+            })()}
+            <style>{`
+              @keyframes brandShake {
+                0%, 100% { transform: translateX(0) }
+                20% { transform: translateX(-7px) }
+                40% { transform: translateX(6px) }
+                60% { transform: translateX(-4px) }
+                80% { transform: translateX(3px) }
+              }
+              @keyframes chipIn {
+                from { opacity: 0; transform: scale(0.9) }
+                to { opacity: 1; transform: scale(1) }
+              }
+              @keyframes brandGlow {
+                0% { opacity: 0 }
+                25% { opacity: 1 }
+                100% { opacity: 0 }
+              }
+              @keyframes hintFade {
+                from { opacity: 0; transform: translateY(2px) }
+                to { opacity: 1; transform: none }
+              }
+            `}</style>
           </form>
 
           {/* Delayed a beat behind the form so the two never cross mid-flight. */}
@@ -512,10 +684,14 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
             {handedOff && run.status === 'failed' && (
               <div className="mx-auto max-w-md text-center">
                 <p className="text-[14px] font-semibold text-white">
-                  We couldn&rsquo;t finish reading your brand
+                  {run.error === STALLED
+                    ? 'This is taking too long'
+                    : 'We couldn’t finish reading your brand'}
                 </p>
                 <p className="mt-2 text-[13px] leading-relaxed text-white/55">
-                  {run.error || 'The analysis stopped before it finished.'}
+                  {run.error === STALLED
+                    ? 'Our analyst seems stuck on your brand. Try again, or skip for now and come back later.'
+                    : run.error || 'The analysis stopped before it finished.'}
                 </p>
                 <button
                   type="button"
@@ -540,11 +716,21 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset }) => {
             )}
 
             {handedOff && run.status !== 'failed' && (
-              <ReasoningStack
-                steps={run.steps}
-                percent={run.percent}
-                done={run.status === 'succeeded' || run.status === 'failed'}
-              />
+              <>
+                <ReasoningStack
+                  steps={run.steps}
+                  percent={run.percent}
+                  done={run.status === 'succeeded' || run.status === 'failed'}
+                />
+                {/* Reassurance after SLOW_AFTER_MS without progress. A line
+                    under the stack, not a fake step — a step would count as
+                    progress and reset the very clock that raised it. */}
+                {slow && run.status === 'running' && (
+                  <p className="mt-3 animate-pulse text-center text-[12.5px] text-white/60">
+                    Taking longer than usual — still working
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>

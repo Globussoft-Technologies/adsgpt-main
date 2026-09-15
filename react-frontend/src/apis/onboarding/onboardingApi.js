@@ -240,6 +240,26 @@ export const exitOnboarding = async (sessionId, exit) => {
 };
 
 /**
+ * Skip from the brand-setup form, before any session exists.
+ *
+ * `exitOnboarding` needs a session id, which that screen does not have yet.
+ * This records the per-user "skipped" flag so the first-run redirect does not
+ * bring the user back on the next login. Fire-and-forget, like the above.
+ */
+export const skipOnboardingWithoutSession = async () => {
+  try {
+    const { data } = await axios.post(
+      `${BASE_URL}/onboarding/skip`,
+      {},
+      { headers: { Authorization: `Bearer ${getCookies()}` } }
+    );
+    return data;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * The persisted brand context for a finished session. Authoritative once a job
  * has succeeded; safe to call after a refresh with only the session id.
  */

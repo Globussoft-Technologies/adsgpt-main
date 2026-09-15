@@ -70,16 +70,18 @@ export default function FreeAdBanner({ available = false, onCreate }) {
     // of borrowed lime read as somebody else's promo strip pasted above the
     // app; this reads as part of it.
     <div
-      className="relative flex w-full shrink-0 items-center justify-center gap-2.5 px-10 py-1.5 text-white"
+      // Medium weight (user decision 2026-09-15): ~40px tall, tint doubled and a
+      // 2px cyan bottom edge — the 28px strip with a faint tint was easy to miss.
+      className="relative flex w-full shrink-0 items-center justify-center gap-3 px-10 py-2.5 text-white"
       style={{
         background:
-          'linear-gradient(90deg, rgba(21,220,255,0.10) 0%, rgba(94,102,245,0.14) 50%, rgba(21,220,255,0.10) 100%), #131317',
-        boxShadow: 'inset 0 -1px 0 rgba(21,220,255,0.28)',
+          'linear-gradient(90deg, rgba(21,220,255,0.20) 0%, rgba(94,102,245,0.28) 50%, rgba(21,220,255,0.20) 100%), #131317',
+        boxShadow: 'inset 0 -2px 0 rgba(21,220,255,0.55)',
       }}
     >
       <svg
-        width="13"
-        height="13"
+        width="16"
+        height="16"
         viewBox="0 0 24 24"
         fill="currentColor"
         className="hidden shrink-0 text-[#15DCFF] sm:block"
@@ -88,9 +90,9 @@ export default function FreeAdBanner({ available = false, onCreate }) {
         <path d="M20.6 12.6 12 21.2a2.5 2.5 0 0 1-3.5 0l-5.7-5.7a2.5 2.5 0 0 1 0-3.5l8.6-8.6A2 2 0 0 1 12.8 3H19a2 2 0 0 1 2 2v6.2a2 2 0 0 1-.4 1.4ZM16.5 8.5a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4Z" />
       </svg>
 
-      <p className="min-w-0 truncate text-center text-[12.5px] font-semibold text-white/90">
+      <p className="min-w-0 truncate text-center text-[14px] font-semibold text-white">
         Make your first impression free.{' '}
-        <span className="font-medium text-white/45">Generate an 8-second ad on us.</span>
+        <span className="font-medium text-white/75">Generate an 8-second ad on us.</span>
       </p>
 
       {onCreate && (

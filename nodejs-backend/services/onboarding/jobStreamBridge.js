@@ -31,6 +31,8 @@
  */
 
 const onboardingClient = require("./onboardingClient");
+const { resolveVideoMedia, resolveResultMedia } = require("./mediaUrls");
+const { fileSessionClips } = require("./mySpaceClip");
 const AiJob = require("../../Module/ai/aiJob");
 const logger = require("../../utils/logger");
 const { createFlowLog } = require("../../utils/flowLog");
@@ -93,6 +95,14 @@ function describeResult(result) {
 // A frame with no blank line after it can never be parsed, so a stream that
 // stops emitting separators must not grow the buffer without bound.
 const MAX_BUFFER_BYTES = 512 * 1024;
+
+// Upstream sends a `: heartbeat` comment every 15s during quiet gaps, so a
+// stream that delivers NO bytes for this long is not a slow job — it is a dead
+// connection or a hung job. Without a cutoff such a stream stayed open for the
+// life of the process and the client waited for ever (seen 2026-09-15: job
+// stuck at `merging`, stream silent after a reconnect). Any chunk, heartbeat
+// included, resets the clock.
+const STREAM_IDLE_TIMEOUT_MS = 3 * 60 * 1000;
 
 // One bridge per job. Without this, an idempotent retry — which returns the
 // SAME job_id — would start a second consumer on the same stream, and the
@@ -222,13 +232,16 @@ async function pump({ jobId, userId, sessionId }) {
   const log = createFlowLog("onboarding.bridge", { job: jobId, session: sessionId, user: userId });
   let lastEventId = "";
   let terminal = false;
+  // Set when the idle cutoff fires. Stops the reconnect loop: a stream that
+  // said nothing for three minutes will not start talking on a second try.
+  let idledOut = false;
   let seqCounter = 0;
   // Counted per event name rather than logged per event: a 27-second run emits
   // 30+ frames, and one line each would bury everything else in the file. One
   // summary line at the end answers "did they all arrive?" just as well.
   const counts = {};
 
-  for (let attempt = 0; attempt < 2 && !terminal; attempt += 1) {
+  for (let attempt = 0; attempt < 2 && !terminal && !idledOut; attempt += 1) {
     let stream;
     try {
       log.ds("out", "jobs/events", { attempt });
@@ -245,13 +258,30 @@ async function pump({ jobId, userId, sessionId }) {
 
     // eslint-disable-next-line no-await-in-loop
     await new Promise((resolve) => {
+      let idleTimer = null;
       const finish = () => {
+        clearTimeout(idleTimer);
         stream.removeAllListeners();
         stream.destroy?.();
         resolve();
       };
 
+      // (Re)armed on open and on every chunk. Firing means upstream went
+      // completely silent — not even a heartbeat — for STREAM_IDLE_TIMEOUT_MS.
+      const armIdle = () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          idledOut = true;
+          log.warn("stream.idle_timeout", { ms: log.elapsed(), idleMs: STREAM_IDLE_TIMEOUT_MS, resumeFrom: lastEventId });
+          // Same `error` shape the client already handles for a lost channel.
+          emit(userId, { job_id: jobId, session_id: sessionId, event: "error", data: { error: "stream_idle_timeout" } });
+          finish();
+        }, STREAM_IDLE_TIMEOUT_MS);
+      };
+      armIdle();
+
       stream.on("data", (chunk) => {
+        armIdle();
         buffer += chunk.toString("utf8");
         if (buffer.length > MAX_BUFFER_BYTES) buffer = buffer.slice(-MAX_BUFFER_BYTES);
 
@@ -303,9 +333,24 @@ async function pump({ jobId, userId, sessionId }) {
               event: "done",
               status: frame.data?.status || "succeeded",
               seq: frame.id || "",
-              result: frame.data?.result || null,
+              // Resolved here, not only on the session read: the raw result
+              // carries root-relative clip paths, and a player handed one of
+              // those loads nothing until a reload re-reads the session.
+              result: resolveResultMedia(frame.data?.kind, frame.data?.result) || null,
             });
             persistTerminal(jobId, frame.data);
+
+            // File the clip into My Space from here too, not only from the
+            // webhook. A callback that never reaches this Node (local dev, a
+            // misconfigured callback URL) otherwise leaves the library empty.
+            // RAW result on purpose: My Space stores the root-relative S3 path
+            // and resolves it at render time. Deduped in `mySpaceClip`, so the
+            // webhook delivering the same result is a no-op. Fire-and-forget.
+            if (frame.data?.kind === "video.generate" && frame.data?.status === "succeeded") {
+              fileSessionClips({ userId, sessionId, result: frame.data?.result })
+                .then((filed) => filed && log.info("myspace.filed", { count: filed }))
+                .catch((e) => log.error("myspace.file_failed", { message: e.message }));
+            }
             return finish();
           }
 
@@ -329,13 +374,22 @@ async function pump({ jobId, userId, sessionId }) {
             persistProgress(jobId, seqCounter, frame.data);
           }
 
-          // progress · thinking · research · recall — all forwarded untouched.
+          // progress · thinking · research · recall — forwarded untouched.
+          // `board_video` is the exception: its clip links are root-relative
+          // (`/creatives/…`), so the client's `<video>` resolved them against
+          // our own origin and showed 0:00 until a reload re-read the session.
+          // Same resolver the session read uses, so the two shapes match.
+          let data = frame.data;
+          if (frame.event === "board_video" && data?.video && typeof data === "object") {
+            const resolved = resolveVideoMedia({ videos: [data] });
+            data = resolved?.videos?.[0] || data;
+          }
           emit(userId, {
             job_id: jobId,
             session_id: sessionId,
             event: frame.event,
             seq: frame.id || "",
-            data: frame.data,
+            data,
           });
         }
       });
@@ -352,7 +406,8 @@ async function pump({ jobId, userId, sessionId }) {
     });
   }
 
-  if (!terminal) {
+  // The idle cutoff already logged and told the client; don't report it twice.
+  if (!terminal && !idledOut) {
     // The job is very likely fine — upstream persists regardless. What is lost
     // is the LIVE channel, so this is the line that explains a screen that
     // stopped moving.

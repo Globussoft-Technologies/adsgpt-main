@@ -44,6 +44,7 @@ import {
   buildVideoLoader,
   getOnboardingEligibility,
   exitOnboarding,
+  skipOnboardingWithoutSession,
 } from '@/apis/onboarding/onboardingApi';
 
 /**
@@ -74,6 +75,12 @@ import {
 // tens of seconds; the ceiling is there so a failed image job cannot leave this
 // tab polling forever.
 const POLL_EVERY_MS = 4000;
+
+// "Start over" is a testing control. Shown only when the onboarding guard is
+// switched off (`VITE_ONBOARDING_GUARD_OFF=true`, the same flag
+// `pages/OnBoard/OnboardingRoute.jsx` reads) — i.e. dev/QA builds where anyone
+// can re-run onboarding. Production keeps it hidden.
+const START_OVER_ENABLED = String(import.meta.env.VITE_ONBOARDING_GUARD_OFF) === 'true';
 const POLL_MAX_MS = 5 * 60 * 1000;
 
 // ── How many failed reads in a row before we say something ────────────────
@@ -406,6 +413,20 @@ const OnBoardHome = () => {
   // secretly doing: one more read.
   //
   // So the poll also waits on the FRAMES themselves.
+  //
+  // And on renders started from THIS tab. By the time a user presses Generate
+  // both rails are usually done, so the poll has already stopped — and nothing
+  // restarted it, leaving the clip to arrive only on the socket. A frame that
+  // carried an unresolved link then showed a 0:00 player that only a reload
+  // fixed. Keyed on which boards are rendering, so each Generate (and retry)
+  // restarts the loop with a fresh deadline; `clipsPending` below keeps it going
+  // until the server has the clip.
+  const renderingBoardsKey = Object.entries(run.videos?.byBoard || {})
+    .filter(([, v]) => v?.status === 'running')
+    .map(([id]) => id)
+    .sort()
+    .join(',');
+
   useEffect(() => {
     // The clip view reads from the same session document — it is the recovery
     // path for a render whose socket dropped, and the only way a reload finds a
@@ -482,7 +503,7 @@ const OnBoardHome = () => {
     // deadline is recomputed with it, gives the image job that follows the
     // script job a fresh window to be polled through. That second job is why a
     // rail going `succeeded` is not the end of the wait.
-  }, [phase, run.sessionId, run.modulesSeq, dispatch]);
+  }, [phase, run.sessionId, run.modulesSeq, renderingBoardsKey, dispatch]);
 
   /**
    * Generate — render one concept into a clip.
@@ -667,7 +688,22 @@ const OnBoardHome = () => {
    * would have said the same thing anyway.
    */
   const skipOnboarding = () => {
+    // No session yet (skipped from the brand-setup form): record the per-user
+    // flag directly, or the first-run redirect brings them back next login.
     if (run.sessionId) exitOnboarding(run.sessionId, 'skipped');
+    else skipOnboardingWithoutSession();
+    navigate('/adstudio');
+  };
+
+  /**
+   * Leave having got a clip. `completed` retires the offer bar for good — no
+   * free render is still owed. Shared by the clip view and the workspace's
+   * "Go to dashboard". Not awaited: bookkeeping must not hold the user here.
+   */
+  const finishOnboarding = () => {
+    if (run.sessionId) exitOnboarding(run.sessionId, 'completed');
+    clearClipBoard();
+    clearRun();
     navigate('/adstudio');
   };
 
@@ -684,10 +720,13 @@ const OnBoardHome = () => {
   // they swap.
   const connectionBanner = offline ? <ConnectionLostBanner /> : null;
 
-  const devSwitcher = null;
-  // const devSwitcher = import.meta.env.DEV ? (
-  //   <DevSessionSwitcher onOpen={openExistingSession} currentId={run.sessionId} />
-  // ) : null;
+  // Dev session switcher (the bottom-right "dev" pill): same gate as Start over,
+  // `VITE_ONBOARDING_GUARD_OFF=true` (user decision 2026-09-15). Previously
+  // `import.meta.env.DEV`, which showed it on every local dev server regardless
+  // of the onboarding flag.
+  const devSwitcher = START_OVER_ENABLED ? (
+    <DevSessionSwitcher onOpen={openExistingSession} currentId={run.sessionId} />
+  ) : null;
 
   if (phase === 'booting')
     return (
@@ -704,28 +743,23 @@ const OnBoardHome = () => {
       <>
         <ClipView
           board={boards[boardIndex]}
-          index={boardIndex >= 0 ? boardIndex + 1 : 1}
-          state={run.videos?.byBoard?.[clipBoardId] || {}}
+          index={boardIndex >= 0 ? boardIndex + 1 : 1}          state={run.videos?.byBoard?.[clipBoardId] || {}}
           // Return to the board without clearing the run or its render state.
           onBack={() => {
             clearClipBoard();
             setPhase('workspace');
           }}
           onRetry={() => startVideo(boards[boardIndex])}
-          // HIDE-MARK - Start over off. Restore by un-commenting the prop.
-          // onStartOver={startOver}
+          // HIDE-MARK - Start over: only when the onboarding guard is off.
+          onStartOver={START_OVER_ENABLED ? startOver : undefined}
           // The exit. Onboarding ends here and the product begins.
           //
           // `completed` is what retires the offer bar for good — the user got
           // their clip, so there is no free render still owed. Not awaited:
           // they are already leaving, and bookkeeping must not hold them on a
           // screen they have finished with.
-          onFinish={() => {
-            if (run.sessionId) exitOnboarding(run.sessionId, 'completed');
-            clearClipBoard();
-            clearRun();
-            navigate('/adstudio');
-          }}
+          onFinish={finishOnboarding}
+          onSkip={skipOnboarding}
         />
         {connectionBanner}
         {devSwitcher}
@@ -750,12 +784,13 @@ const OnBoardHome = () => {
             templates: mergeRail(session?.templates, run.modules?.templates),
             storyboards: mergeRail(session?.storyboards, run.modules?.storyboards),
           }}
-          // HIDE-MARK - Start over off. Restore by un-commenting the prop.
-          // onStartOver={startOver}
+          // HIDE-MARK - Start over: only when the onboarding guard is off.
+          onStartOver={START_OVER_ENABLED ? startOver : undefined}
           // Always available, from the workspace on. Leaving here costs the
           // user nothing: no render has been started, so no credits and no free
           // claim are in play.
           onSkip={skipOnboarding}
+          onFinish={finishOnboarding}
           // Per concept. Opens the clip view and starts the render together —
           // see `startVideo`.
           onGenerateVideo={startVideo}
@@ -780,6 +815,7 @@ const OnBoardHome = () => {
         // A failed run backing out to the form. The phase has to follow, or the
         // next successful start would be judged against a stale 'thinking'.
         onFailedReset={() => setPhase('setup')}
+        onSkip={skipOnboarding}
       />
       {connectionBanner}
         {devSwitcher}

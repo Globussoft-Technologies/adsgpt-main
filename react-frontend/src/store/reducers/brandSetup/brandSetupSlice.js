@@ -181,6 +181,22 @@ const blankBoard = () => ({
  * it is the clear first frame of the clip, and pinning it stops the player
  * flashing black before the first frame decodes.
  */
+/**
+ * The clip's link, only if it can actually play in a `<video>` here.
+ *
+ * Node resolves clip paths before emitting (`services/onboarding/mediaUrls.js`),
+ * adding an absolute `src`. A frame that skipped that step still carries the
+ * root-relative `url` / `local_url` (`/api/v1/storyboards/videos/…`), which the
+ * browser resolves against OUR origin and the player sits on 0:00 — until a
+ * reload re-reads the session, which does resolve. So a relative link is
+ * treated as "no link yet": the tile keeps rendering and the session poll
+ * (`videosHydrated`) supplies the resolved one.
+ */
+const ABSOLUTE = /^https?:\/\//i;
+function playableSrc(video) {
+  return [video?.src, video?.url, video?.local_url].find((v) => v && ABSOLUTE.test(v)) || '';
+}
+
 function applyVideoEvent(board, msg) {
   if (!board) return;
   const d = msg.data || {};
@@ -204,9 +220,9 @@ function applyVideoEvent(board, msg) {
       // same as "there is something to play": the durable upload can still be
       // in flight. The tile waits for a link rather than showing an empty
       // player.
-      if (video?.status === 'ready' && (video.src || video.url || video.local_url)) {
+      if (video?.status === 'ready' && playableSrc(video)) {
         board.status = 'ready';
-        board.video = { board_id: d.board_id, video };
+        board.video = { board_id: d.board_id, video: { ...video, src: playableSrc(video) } };
         board.percent = 100;
       } else if (video?.status === 'failed') {
         board.status = 'failed';
@@ -221,9 +237,13 @@ function applyVideoEvent(board, msg) {
       // case where it did not.
       const clip = (msg.result?.videos || []).find((v) => v.board_id) || null;
       if (msg.status === 'succeeded' && clip?.video?.status === 'ready') {
-        board.status = 'ready';
-        board.video = clip;
-        board.percent = 100;
+        // Never let an unresolved terminal frame overwrite a clip that already
+        // plays. Without a usable link it stays `running` — the poll finishes it.
+        if (playableSrc(clip.video)) {
+          board.status = 'ready';
+          board.video = { ...clip, video: { ...clip.video, src: playableSrc(clip.video) } };
+          board.percent = 100;
+        }
       } else if (board.status !== 'ready') {
         board.status = 'failed';
         board.error = msg.error || clip?.video?.error || 'The render did not finish.';

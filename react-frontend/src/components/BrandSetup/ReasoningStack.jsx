@@ -46,7 +46,48 @@ const OPACITY_STEP = 0.3;
 const CARD_H = 84;
 const STACK_H = CARD_H + (DEPTH - 1) * LIFT;
 
-export default function ReasoningStack({ steps = [], percent = 0, done = false, className }) {
+// ── Pacing ──────────────────────────────────────────────────────────────────
+// DS streams steps faster than anyone can read — several inside one second —
+// so cards used to replace each other mid-slide. Now at most one new card
+// enters per REVEAL_EVERY_MS, and it is always the NEWEST step at that moment;
+// steps that arrived in between are skipped (user decision 2026-09-15: "show
+// only the latest, throttled"). When the run is `done` the throttle is lifted
+// so the final card appears at once; OnBoardHome holds it ~1.4s before moving on.
+const REVEAL_EVERY_MS = 1600;
+
+/** The subset of `steps` actually put on screen, throttled as above. */
+function usePacedSteps(steps, done) {
+  const [shown, setShown] = useState(() => steps.slice(-1));
+  const lastRevealAt = useRef(0);
+  const timer = useRef(null);
+  const latestStep = steps.length ? steps[steps.length - 1] : null;
+  const shownLatestId = shown.length ? shown[shown.length - 1].id : null;
+
+  useEffect(() => {
+    if (!latestStep || latestStep.id === shownLatestId) return undefined;
+
+    const reveal = () => {
+      lastRevealAt.current = Date.now();
+      // Keep what was already shown (it recedes as depth), add the newest.
+      setShown((prev) => [...prev, latestStep].slice(-DEPTH));
+    };
+
+    const wait = REVEAL_EVERY_MS - (Date.now() - lastRevealAt.current);
+    if (done || wait <= 0) {
+      reveal();
+      return undefined;
+    }
+    // Re-runs whenever a newer step arrives, so the pending reveal always
+    // shows whichever step is newest when the wait ends.
+    timer.current = setTimeout(reveal, wait);
+    return () => clearTimeout(timer.current);
+  }, [latestStep, shownLatestId, done]);
+
+  return shown;
+}
+
+export default function ReasoningStack({ steps: allSteps = [], percent = 0, done = false, className }) {
+  const steps = usePacedSteps(allSteps, done);
   // The newest card animates in; every other is already settled. Tracking the
   // id rather than a boolean means a re-render for any other reason does not
   // replay the entry.
@@ -83,7 +124,8 @@ export default function ReasoningStack({ steps = [], percent = 0, done = false, 
           {done ? 'Done' : 'Working'}
         </span>
         <span className="text-[12px] text-white/75 tabular-nums">
-          {steps.length ? `${steps.length} step${steps.length === 1 ? '' : 's'}` : ''}
+          {/* The real count, not the paced subset on screen. */}
+          {allSteps.length ? `${allSteps.length} step${allSteps.length === 1 ? '' : 's'}` : ''}
         </span>
       </div>
 

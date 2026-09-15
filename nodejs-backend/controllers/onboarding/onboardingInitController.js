@@ -876,6 +876,37 @@ exports.exitSession = async (req, res) => {
   }
 };
 
+/**
+ * POST /adsgpt/onboarding/skip
+ *
+ * The session-less skip: the user left from the brand-setup form, before a run
+ * (and so a session) existed. Sets only the per-user flag — the same one
+ * `exitSession` sets for "skipped" — which is what `shouldStartOnboarding`
+ * reads to stop the first-run redirect. No session is touched and no credit
+ * work happens; the free render stays unspent.
+ */
+exports.skipOnboarding = async (req, res) => {
+  /*
+    #swagger.tags = ['Onboarding']
+    #swagger.summary = 'Skip onboarding before a session exists'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const userId = req.user?.user_id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    await UserProfile.updateOne(
+      { user_id: userId },
+      { $set: { onboarding_skipped_at: new Date() } }
+    );
+
+    return res.status(200).json({ ok: true, exitReason: "skipped" });
+  } catch (error) {
+    logger.error("[onboarding] skipOnboarding failed", { message: error.message });
+    return res.status(500).json({ error: "Something went wrong. Please try again." });
+  }
+};
+
 // Media URL resolution moved to services/onboarding/mediaUrls.js so the socket
 // emit in the job webhook can produce the exact same shape this read does.
 /**

@@ -21,7 +21,7 @@ const upload = multer({
     // controller — this stops one absurd file before it is ever buffered.
     fileSize: 32 * 1024 * 1024,
     // A logo, a couple of product shots and a brand deck is the real use case.
-    files: 10,
+    files: 25,
   },
 });
 
@@ -56,6 +56,11 @@ router.get("/sessions", ctrl.listSessions);
 // onboarding finished with, and is there a session to drop the user back into.
 // Replaces the localStorage guesswork the banner and the resume used to do.
 router.get("/eligibility", ctrl.getEligibility);
+
+// Skip from the very first screen, before any session exists. The session
+// PATCH below cannot record that (no id to address), so without this the
+// first-run redirect would bring the user straight back on the next login.
+router.post("/skip", ctrl.skipOnboarding);
 
 // One session, every module section — what the workspace renders from.
 router.get("/sessions/:sessionId", ctrl.getSession);
