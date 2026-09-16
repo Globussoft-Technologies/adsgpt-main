@@ -47,23 +47,6 @@ const UserAvatar = () => (
   </div>
 );
 
-// Three-dot "thinking" indicator shown before the model has produced any
-// steps, cards, or text for the current turn.
-const TypingDots = () => (
-  <div className="flex items-center gap-1 py-1">
-    {[0, 1, 2].map((i) => (
-      <span
-        key={i}
-        className="h-1.5 w-1.5 animate-bounce rounded-full"
-        style={{
-          background: 'linear-gradient(135deg, #15DCFF 0%, #6b72f8 100%)',
-          animationDelay: `${i * 0.12}s`,
-          animationDuration: '0.9s',
-        }}
-      />
-    ))}
-  </div>
-);
 
 // Collapsible tool-activity trace — the reference's "Thought for 3s". Shows
 // for every completed/in-progress turn, not just ones with a discrete MCP
@@ -74,9 +57,15 @@ const WorkedTrace = ({ steps = [], activeStep, streaming, elapsedMs }) => {
   const [open, setOpen] = useState(false);
   if (!steps.length && !activeStep && !streaming && elapsedMs == null) return null;
   const hasSteps = steps.length > 0;
+  // Surface failures on the collapsed pill. A retry loop otherwise looks like
+  // several identical "Worked for Ns" rows, giving no hint that anything failed
+  // or why the assistant tried again — the reason sat one click away, unlabelled.
+  const failed = steps.filter((s) => typeof s === 'string' && s.includes('— failed:')).length;
   const label = streaming
     ? activeStep || 'Working…'
-    : `Worked for ${elapsedMs ? (elapsedMs / 1000).toFixed(1) : '0.0'}s`;
+    : `Worked for ${elapsedMs ? (elapsedMs / 1000).toFixed(1) : '0.0'}s${
+        failed ? ` · ${failed} failed` : ''
+      }`;
   return (
     <div className="mb-2">
       <button
@@ -138,11 +127,6 @@ const MessageActions = ({ text, onRegenerate }) => {
 };
 
 const AssistantMessage = ({ message, onAction, onRegenerate, streaming }) => {
-  const hasAny =
-    Boolean(message.text) ||
-    message.steps?.length ||
-    message.activeStep ||
-    message.cards?.length;
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
@@ -167,19 +151,16 @@ const AssistantMessage = ({ message, onAction, onRegenerate, streaming }) => {
           </div>
         )}
 
-        {message.text ? (
+        {/* No empty typing-dots bubble: WorkedTrace above already shows a live
+            "Working…" indicator for the whole streaming turn, so rendering dots
+            as well put two spinners on screen one under the other. */}
+        {message.text && (
           <div className="rounded-2xl rounded-tl-sm border border-gray-200/70 bg-gray-50 px-3.5 py-2.5 text-gray-900 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-white">
             <Markdown>{message.text}</Markdown>
             {!message.streaming && (
               <MessageActions text={message.text} onRegenerate={onRegenerate} />
             )}
           </div>
-        ) : (
-          message.streaming && !hasAny && (
-            <div className="rounded-2xl rounded-tl-sm border border-gray-200/70 bg-gray-50 px-3.5 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
-              <TypingDots />
-            </div>
-          )
         )}
       </div>
     </motion.div>

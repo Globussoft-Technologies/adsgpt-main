@@ -256,6 +256,13 @@ const MetaAdsChatPanel = ({
     (event, data) => {
       switch (event) {
         case 'session':
+          // Create the assistant bubble on the FIRST event of the turn, not on
+          // the first token. `session` is emitted before the backend does any
+          // work; the first token can be 5-6s later (MCP connect + listTools +
+          // the model reading 114 tool declarations), and until this ran the
+          // user saw nothing at all after pressing send. ensureAssistant is
+          // idempotent, so the later token/tool_call cases still work unchanged.
+          ensureAssistant();
           if (data.sessionId) {
             setSessionId(data.sessionId);
             setStoredSessionId(adAccountId, data.sessionId);
@@ -271,11 +278,18 @@ const MetaAdsChatPanel = ({
           }));
           break;
         case 'tool_result':
-          updateAssistant((m) => ({
-            ...m,
-            steps: m.activeStep ? [...m.steps, m.activeStep] : m.steps,
-            activeStep: null,
-          }));
+          updateAssistant((m) => {
+            // A failed call kept the same "done" styling as a successful one, so
+            // a retry loop read as four identical steps with no clue why the
+            // assistant was repeating itself. Record the reason on the step.
+            const label = m.activeStep || stepLabel(data.name);
+            const step = data.error ? `${label} — failed: ${data.error}` : label;
+            return {
+              ...m,
+              steps: m.activeStep || data.error ? [...m.steps, step] : m.steps,
+              activeStep: null,
+            };
+          });
           break;
         case 'tool_declined':
           updateAssistant((m) => ({

@@ -1,9 +1,21 @@
-// Translates a raw MCP write-tool call (tool name + args, straight off the
-// zod schemas in mcps/meta/src/tools/*.ts) into a plain-English summary for
-// the confirmation card — nobody approving "pause my campaign" should have to
-// read `{"status":"PAUSED"}` JSON to know what they're approving. Falls back
-// to a humanized (not raw) rendering for any write tool without a dedicated
-// summarizer below, so nothing regresses to a JSON dump.
+// Translates a raw MCP write-tool call (tool name + args) into a plain-English
+// summary for the confirmation card — nobody approving "pause my campaign"
+// should have to read `{"status":"PAUSED"}` JSON to know what they're approving.
+// Falls back to a humanized (not raw) rendering for any write tool without a
+// dedicated summarizer below, so nothing regresses to a JSON dump.
+//
+// Serves BOTH MCP servers (see META_MCP_MODE in docs/META_ADS_CHATBOT.md), which
+// name the same arguments differently and would otherwise render "undefined":
+//
+//   - the self-hosted fork sends `name` / `daily_budget` and passes objects as
+//     objects;
+//   - Meta's official server sends `campaign_name` / `campaign_daily_budget`,
+//     routes every edit through one `ads_update_entity` tool, and passes
+//     structured values (targeting, promoted_object, fields) as JSON STRINGS.
+//
+// Summarizers therefore read both vocabularies via `pick()` and both value
+// shapes via `parseMaybeJson()`, rather than being duplicated per mode — the
+// frontend never learns which server produced the call.
 
 // Fields that are always Meta "amount in cents" integers, wherever they appear.
 const CENTS_FIELDS = new Set([
@@ -43,7 +55,25 @@ const humanizeEnum = (value) => {
     .join(' ');
 };
 
+// Sentence case, not Title Case, so a generated label sits beside a hand-written
+// one ("Daily budget", "Bid strategy") without the casing giving it away.
+const LABEL_OVERRIDES = {
+  daily_budget: 'Daily budget',
+  lifetime_budget: 'Lifetime budget',
+  spend_cap: 'Spend cap',
+  bid_amount: 'Bid amount',
+  bid_strategy: 'Bid strategy',
+  optimization_goal: 'Optimizing for',
+  billing_event: 'Billing event',
+  special_ad_categories: 'Special ad category',
+  destination_type: 'Destination',
+  start_time: 'Starts',
+  end_time: 'Ends',
+  call_to_action_type: 'Button',
+};
+
 const humanizeKey = (key) =>
+  LABEL_OVERRIDES[key] ||
   key
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -82,7 +112,43 @@ const namesOrIds = (arr) =>
 
 const row = (label, value) => (value === undefined || value === null || value === '' ? null : { label, value });
 
-function summarizeTargeting(targeting) {
+// First defined value among several argument spellings.
+const pick = (args, ...keys) => {
+  for (const key of keys) {
+    const value = args?.[key];
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return undefined;
+};
+
+// Meta's official server types structured arguments as `string` and sends them
+// JSON-encoded; the fork sends real objects. Accept either, so one summarizer
+// covers both rather than one of them silently rendering escaped JSON.
+const parseMaybeJson = (value) => {
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return undefined;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return undefined;
+  }
+};
+
+// Plumbing the model fills in for its own bookkeeping — never worth showing
+// someone who is deciding whether to approve a change to their ad account.
+const NOISE_ARGS = new Set([
+  'advertiser_request',
+  'client_conversation_id',
+  'ad_account_id',
+  'account_id',
+  'confirmed',
+  'ignore_validation_errors',
+]);
+
+function summarizeTargeting(raw) {
+  const targeting = parseMaybeJson(raw);
   if (!targeting || typeof targeting !== 'object') return [];
   const rows = [];
   const ageMin = targeting.age_min;
@@ -122,17 +188,65 @@ function summarizeRuleFilters(filters) {
     .join(' AND ');
 }
 
+// "NONE" is Meta's way of saying "no special category", so showing it as one
+// would be actively misleading on a confirmation card.
+function specialAdCategories(value) {
+  const list = parseMaybeJson(value) ?? value;
+  if (!Array.isArray(list) || !list.length) return undefined;
+  const real = list.filter((c) => c && c !== 'NONE');
+  return real.length ? real.map(humanizeEnum).join(', ') : undefined;
+}
+
 function budgetRows(args) {
   const rows = [];
-  if (args.daily_budget !== undefined) rows.push(row('Daily budget', `${formatCurrency(args.daily_budget)}/day`));
-  if (args.lifetime_budget !== undefined) rows.push(row('Lifetime budget', formatCurrency(args.lifetime_budget)));
+  const daily = pick(args, 'daily_budget', 'campaign_daily_budget');
+  const lifetime = pick(args, 'lifetime_budget', 'campaign_lifetime_budget');
+  const cap = pick(args, 'spend_cap', 'campaign_spend_cap');
+  if (daily !== undefined) rows.push(row('Daily budget', `${formatCurrency(daily)}/day`));
+  if (lifetime !== undefined) rows.push(row('Lifetime budget', formatCurrency(lifetime)));
+  if (cap !== undefined) rows.push(row('Spend cap', formatCurrency(cap)));
   return rows.filter(Boolean);
+}
+
+// Renders an arbitrary field map (the official server's `fields` payload, or any
+// tool without a dedicated summarizer) as readable rows: money formatted in the
+// account's currency, enums humanized, targeting expanded rather than dumped.
+function fieldRows(obj) {
+  return Object.entries(obj || {})
+    .flatMap(([key, value]) => {
+      if (NOISE_ARGS.has(key)) return [];
+      if (value === undefined || value === null || value === '') return [];
+
+      if (key === 'targeting') return summarizeTargeting(value);
+      if (key === 'promoted_object') return [row('Promoted', summarizePromotedObject(value))];
+
+      if (CENTS_FIELDS.has(key) && !Number.isNaN(Number(value))) {
+        const money = formatCurrency(Number(value));
+        return [row(humanizeKey(key), key === 'daily_budget' ? `${money}/day` : money)];
+      }
+
+      const nested = parseMaybeJson(value);
+      if (nested) {
+        const joined = namesOrIds(nested);
+        return [row(humanizeKey(key), joined ?? JSON.stringify(nested))];
+      }
+      if (Array.isArray(value)) {
+        return [row(humanizeKey(key), namesOrIds(value) ?? value.join(', '))];
+      }
+      if (typeof value === 'boolean') return [row(humanizeKey(key), value ? 'Yes' : 'No')];
+      if (/status|goal|event|strategy|objective|type|destination|category/.test(key) && typeof value === 'string') {
+        return [row(humanizeKey(key), humanizeEnum(value))];
+      }
+      return [row(humanizeKey(key), String(value))];
+    })
+    .filter(Boolean);
 }
 
 // promoted_object is a free-form record whose shape depends on the
 // objective/destination — cover the common shapes (pixel conversions, Page
 // engagement, app installs) and fall back to raw JSON only for the rest.
-function summarizePromotedObject(obj) {
+function summarizePromotedObject(raw) {
+  const obj = parseMaybeJson(raw);
   if (!obj || typeof obj !== 'object') return undefined;
   if (obj.pixel_id) return `Pixel ${obj.pixel_id}${obj.custom_event_type ? ` — ${humanizeEnum(obj.custom_event_type)}` : ''}`;
   if (obj.page_id) return `Facebook Page ${obj.page_id}`;
@@ -144,18 +258,15 @@ function summarizePromotedObject(obj) {
 // the zod inputSchema for that tool 1:1 (see mcps/meta/src/tools/*.ts).
 const SUMMARIZERS = {
   ads_create_campaign: (args) => ({
-    title: `Create campaign — "${args.name}"`,
+    title: `Create campaign — "${pick(args, 'name', 'campaign_name') ?? ''}"`,
     rows: [
       row('Objective', humanizeEnum(args.objective)),
       row('Status', humanizeEnum(args.status) || 'Paused'),
       ...budgetRows(args),
-      row('Bid strategy', humanizeEnum(args.bid_strategy)),
-      row(
-        'Special ad category',
-        args.special_ad_categories?.length && !(args.special_ad_categories.length === 1 && args.special_ad_categories[0] === 'NONE')
-          ? args.special_ad_categories.map(humanizeEnum).join(', ')
-          : undefined,
-      ),
+      row('Bid strategy', humanizeEnum(pick(args, 'bid_strategy', 'campaign_bid_strategy'))),
+      row('Starts', pick(args, 'start_time', 'campaign_start_time')),
+      row('Ends', pick(args, 'stop_time', 'campaign_stop_time')),
+      row('Special ad category', specialAdCategories(args.special_ad_categories)),
       row('Buying type', args.buying_type && args.buying_type !== 'AUCTION' ? humanizeEnum(args.buying_type) : undefined),
     ].filter(Boolean),
   }),
@@ -174,7 +285,7 @@ const SUMMARIZERS = {
   }),
 
   ads_create_ad_set: (args) => ({
-    title: `Create ad set — "${args.name}"`,
+    title: `Create ad set — "${pick(args, 'name', 'ad_set_name') ?? ''}"`,
     rows: [
       row('Campaign', args.campaign_id),
       row('Destination', humanizeEnum(args.destination_type)),
@@ -216,12 +327,15 @@ const SUMMARIZERS = {
   }),
 
   ads_create_ad: (args) => ({
-    title: `Create ad — "${args.name}"`,
+    title: `Create ad — "${pick(args, 'name', 'ad_name') ?? ''}"`,
     rows: [
-      row('Ad set', args.ad_set_id),
-      row('Creative', args.creative_id),
+      row('Ad set', pick(args, 'ad_set_id', 'adset_id')),
+      // The official server passes the whole creative spec (or a {creative_id}
+      // wrapper) rather than a bare id.
+      row('Creative', args.creative_id ?? parseMaybeJson(args.creative)?.creative_id ?? args.creative),
       row('Status', humanizeEnum(args.status) || 'Paused'),
-      row('Tracking specs', args.tracking_specs?.length ? JSON.stringify(args.tracking_specs) : undefined),
+      row('Bid amount', args.bid_amount !== undefined ? formatCurrency(args.bid_amount) : undefined),
+      row('Conversion domain', args.conversion_domain),
     ].filter(Boolean),
   }),
   ads_update_ad: (args) => ({
@@ -264,6 +378,52 @@ const SUMMARIZERS = {
     title: `Rename ad creative ${args.creative_id}`,
     rows: [row('New name', args.name)].filter(Boolean),
   }),
+  // Official equivalent of ads_create_ad_creative. Same idea, different name and
+  // a couple of different keys (instagram_user_id, cards for carousels).
+  ads_create_creative: (args) => ({
+    title: `Create ad creative — "${args.name ?? ''}"`,
+    rows: [
+      row(
+        'Mode',
+        args.object_story_id
+          ? 'Boost existing Facebook post'
+          : args.product_set_id
+            ? 'Catalog / dynamic product ad'
+            : Array.isArray(args.cards) && args.cards.length
+              ? `Carousel — ${args.cards.length} cards`
+              : 'Build from image/video + text',
+      ),
+      row('Facebook Page', args.page_id),
+      row('Instagram account', pick(args, 'instagram_user_id', 'instagram_actor_id')),
+      row('Image', args.image_url || (args.image_hash ? `uploaded image (${args.image_hash})` : undefined)),
+      row('Video', args.video_id),
+      row('Destination link', args.link_url),
+      row('Headline', args.headline),
+      row('Primary text', args.message),
+      row('Description', args.description),
+      row('Button', humanizeEnum(args.call_to_action_type)),
+      row('Advantage+ enhancements', args.advantage_plus_creative === true ? 'On' : undefined),
+    ].filter(Boolean),
+  }),
+  ads_creative_update: (args) => ({
+    title: `Update ad creative ${args.creative_id}`,
+    rows: [row('New name', args.name), row('New status', humanizeEnum(args.status))].filter(Boolean),
+  }),
+  ads_creative_delete: (args) => ({
+    title: `Delete ad creative ${args.creative_id}`,
+    rows: [],
+  }),
+  ads_boost_ig_post: (args) => ({
+    title: `Boost Instagram post ${args.ig_media_id ?? ''}`.trim(),
+    rows: [
+      row('Instagram account', args.ig_account_id),
+      ...budgetRows(args),
+      row('Runs for', args.duration_days !== undefined ? `${args.duration_days} days` : undefined),
+      row('Objective', humanizeEnum(args.objective)),
+      row('Button', humanizeEnum(args.call_to_action)),
+      ...summarizeTargeting(args.targeting),
+    ].filter(Boolean),
+  }),
 
   ads_create_custom_audience: (args) => ({
     title: `Create audience — "${args.name}"`,
@@ -292,13 +452,41 @@ const SUMMARIZERS = {
     rows: [row('From account(s)', Array.isArray(args.ad_account_ids) ? args.ad_account_ids.join(', ') : args.ad_account_ids)].filter(Boolean),
   }),
   ads_delete_custom_audience: (args) => ({
-    title: `Delete audience ${args.audience_id}`,
+    title: `Delete audience ${pick(args, 'audience_id', 'custom_audience_id') ?? ''}`,
     rows: [],
   }),
+  ads_update_custom_audience: (args) => ({
+    title: `Update audience ${pick(args, 'audience_id', 'custom_audience_id') ?? ''}`,
+    rows: [row('New name', args.name), row('Description', args.description)].filter(Boolean),
+  }),
+  ads_update_custom_audience_users: (args) => ({
+    title: `${args.operation === 'remove' ? 'Remove' : 'Add'} people in audience ${pick(args, 'audience_id', 'custom_audience_id') ?? ''}`,
+    rows: [
+      row('People affected', Array.isArray(args.data) ? `${args.data.length}` : undefined),
+      row('Matched on', Array.isArray(args.schema) ? args.schema.map(humanizeKey).join(', ') : args.schema),
+      row('Customer consent confirmed', args.customer_consent === true ? 'Yes' : undefined),
+    ].filter(Boolean),
+  }),
 
+  // The official server routes EVERY edit through ads_update_entity, so this is
+  // the single most common write it produces — a budget change, a pause, a
+  // rename. Its `fields` payload is a JSON string; left unparsed the card would
+  // ask someone to approve a wall of escaped JSON, which is the exact failure
+  // this module exists to prevent.
+  ads_update_entity: (args) => {
+    const kind = humanizeEnum(args.entity_type) || 'entity';
+    const fields = parseMaybeJson(args.fields) ?? {};
+    const rows = fieldRows(fields);
+    return {
+      title: `Update ${kind.toLowerCase()} ${args.entity_id ?? ''}`.trim(),
+      rows: rows.length ? rows : [row('Change', 'No field changes specified')].filter(Boolean),
+    };
+  },
   ads_activate_entity: (args) => ({
-    title: `${humanizeEnum(args.status) || 'Change status of'} ${humanizeEnum(args.entity_type)} ${args.entity_id}`,
-    rows: [],
+    // Fork form carries an explicit status; the official tool only ever
+    // activates (it says so in its own description).
+    title: `${humanizeEnum(args.status) || 'Activate'} ${humanizeEnum(args.entity_type) || 'entity'} ${args.entity_id ?? ''}`.trim(),
+    rows: [row('Effect', args.status ? undefined : 'Starts serving — the entity goes live')].filter(Boolean),
   }),
   ads_update_spend_cap: (args) => ({
     title: `Update account spend cap`,
@@ -343,6 +531,15 @@ const SUMMARIZERS = {
     rows: [],
   }),
 
+  ads_creative_upload_video: (args) => ({
+    title: 'Upload a video to the ad account',
+    rows: [row('Source', pick(args, 'file_url', 'video_url', 'file_path')), row('Name', args.name)].filter(Boolean),
+  }),
+  ads_creative_upload_image: (args) => ({
+    title: 'Upload an image to the ad account',
+    rows: [row('Source', pick(args, 'file_url', 'image_url', 'file_path')), row('Name', args.name)].filter(Boolean),
+  }),
+
   ads_reply_comment: (args) => ({
     title: `Reply to comment ${args.comment_id}`,
     rows: [row('Reply', args.message)].filter(Boolean),
@@ -360,25 +557,9 @@ const SUMMARIZERS = {
 // Fallback for any write tool without a dedicated summarizer above — still
 // humanized labels + smart-formatted values, never a raw JSON dump.
 function genericSummary(toolName, args) {
-  const rows = Object.entries(args || {})
-    .map(([key, value]) => {
-      if (value === undefined || value === null || value === '') return null;
-      if (CENTS_FIELDS.has(key) && typeof value === 'number') return row(humanizeKey(key), formatCurrency(value));
-      if (Array.isArray(value)) {
-        const joined = namesOrIds(value) ?? value.map((v) => (typeof v === 'object' ? JSON.stringify(v) : v)).join(', ');
-        return row(humanizeKey(key), joined);
-      }
-      if (typeof value === 'boolean') return row(humanizeKey(key), value ? 'Yes' : 'No');
-      if (typeof value === 'object') return row(humanizeKey(key), JSON.stringify(value));
-      if (/status|goal|event|strategy|objective|type|destination/.test(key) && typeof value === 'string') {
-        return row(humanizeKey(key), humanizeEnum(value));
-      }
-      return row(humanizeKey(key), String(value));
-    })
-    .filter(Boolean);
   return {
     title: humanizeKey(toolName.replace(/^ads_/, '')),
-    rows,
+    rows: fieldRows(args),
   };
 }
 

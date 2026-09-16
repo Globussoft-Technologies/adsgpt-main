@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { getTableMetrics, updateMetaAdsPreference } from '@/apis/metaAds/metaAdsApi';
-import { formatMetricValue } from './metaAdsUtils';
+import { formatMetricValue, numCell } from './metaAdsUtils';
 
 /**
  * Shared pieces for the selectable metric COLUMNS on the campaign / ad set /
@@ -189,12 +189,11 @@ export function MetricHeaderCells({ entries, SortTh, sortKey, sortDir, onSort })
  * a 0 means it delivered and the metric is genuinely zero. Users read those
  * very differently, so don't collapse them.
  */
-export function MetricBodyCells({ entries, values, loading, currency }) {
+export function MetricBodyCells({ entries, values, loading, currency, dense = false }) {
   return (entries || []).map((entry) => (
-    <td
-      key={entry.key}
-      className="whitespace-nowrap px-4 py-3 text-right text-xs text-gray-900 tabular-nums dark:text-white"
-    >
+    // Shared with the fixed columns — these cells sit in the same row and were
+    // styled independently until they visibly disagreed. See numCell.
+    <td key={entry.key} className={numCell(dense)}>
       {loading && !values
         ? <span className="text-gray-400 dark:text-white/30">…</span>
         : values && values[entry.key] !== undefined

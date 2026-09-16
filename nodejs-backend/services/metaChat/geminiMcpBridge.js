@@ -7,6 +7,17 @@ const {
   INPUT_REQUIRED_TOOLS,
 } = require("./localTools");
 const { logTokenUsage } = require("../tokenUsage");
+const { getProfile, renderToolRefs } = require("./mcpMode");
+
+/**
+ * The profile the connection was built from. createMcpClient stamps it on the
+ * client so a turn can never mix one server's connection with another's rules;
+ * the fallback keeps this module usable with a hand-built client (tests).
+ */
+function profileOf(ctxOrClient) {
+  const client = ctxOrClient?.mcpClient || ctxOrClient;
+  return client?.mcpProfile || getProfile(ctxOrClient?.userId);
+}
 
 // Model id (and the reason for it) lives in services/ai/geminiClient MODELS.
 const GEMINI_MODEL = MODELS.CHAT;
@@ -15,6 +26,13 @@ const GEMINI_MODEL = MODELS.CHAT;
 // history we persist and re-send on every turn. Without a cap this grows
 // forever — bigger Mongo docs and a bigger (billed) prompt on every message.
 const MAX_HISTORY_TURNS = Number(process.env.META_CHAT_MAX_HISTORY_TURNS) || 30;
+
+// Hard cap on tool-calling rounds within ONE user message. The loop ends when the
+// model stops requesting tools, which normally takes 1-3 rounds — but a model
+// that keeps retrying a failing call (or re-querying data it already has) would
+// otherwise spin until the request times out, billing every round. Ending the
+// turn with whatever it has is strictly better than an unbounded loop.
+const MAX_TOOL_ROUNDS = Number(process.env.META_CHAT_MAX_TOOL_ROUNDS) || 12;
 
 // Trims `history` (the `Content[]` from chat.getHistory()) down to the last
 // `maxTurns` user-initiated turns, always cutting at the START of a user's
@@ -89,7 +107,92 @@ scope for that turn and say so briefly, but don't assume the dashboard's own vie
 keep defaulting back to ${most} on their next message unless they open something else there.`;
 }
 
-const systemInstruction = (adAccountId, currency, scope) => `# Role
+/**
+ * Worked money examples for THIS account's currency.
+ *
+ * The prompt used to hardcode rupees — "in this INR account", "₹50", "multiply
+ * by 100" — which is wrong for most of the user base and actively harmful for a
+ * 0-decimal currency: JPY has no minor unit, so ¥50 is `50`, not `5000`. A
+ * hardcoded "multiply by 100" would have overstated every Japanese budget 100x.
+ *
+ * Intl knows each currency's symbol and decimal count, and the decimal count IS
+ * the minor-unit exponent — the same trick actionSummaries.js uses on the
+ * frontend. Falls back to the bare ISO code for anything Intl doesn't know,
+ * which is still unambiguous.
+ */
+function currencyFacts(code) {
+  const c = String(code || "").trim().toUpperCase();
+  if (!c) return null;
+
+  let fmt;
+  try {
+    fmt = new Intl.NumberFormat("en", { style: "currency", currency: c });
+  } catch {
+    return { code: c, digits: 2, factor: 100, money: (n) => `${n.toFixed(2)} ${c}` };
+  }
+  const digits = fmt.resolvedOptions().maximumFractionDigits ?? 2;
+  return {
+    code: c,
+    digits,
+    factor: 10 ** digits,
+    money: (n) => fmt.format(n),
+  };
+}
+
+const systemInstruction = (adAccountId, currency, scope, profile) => {
+  // Every monetary example below is rendered in the account's own currency.
+  const cur = currencyFacts(currency);
+  const money = (n) => (cur ? cur.money(n) : `${n}`);
+  const factor = cur ? cur.factor : 100;
+  const minorUnitRule = cur
+    ? cur.digits === 0
+      ? `${cur.code} has no minor unit, so pass the amount unchanged (${cur.money(50)} → 50)`
+      : `multiply by ${factor} (${cur.money(50)} → ${50 * factor})`
+    : "multiply by 100 for a 2-decimal currency, or pass it unchanged for a 0-decimal one";
+  // Real tool names for this mode. `null` = the active server has no such tool,
+  // in which case the line naming it is dropped entirely — pointing the model at
+  // a tool absent from its declarations just burns a turn on a call that cannot
+  // resolve. See TOOL_ALIASES in mcpMode.js.
+  const T = (key) => profile.tool(key);
+  const keep = (arr) => arr.filter(Boolean).join("\n");
+
+  // Where exact spend/budget figures come from. On the official server the three
+  // fork tools are one generic reader, so de-duplicate rather than repeating it.
+  const figureSources = [...new Set([T("campaignDetails"), T("adSetDetails"), T("insights")])]
+    .filter(Boolean)
+    .join(" / ");
+
+  const listCards = keep([
+    T("leads") && `- show_leads_table — captured leads from ${T("leads")}.`,
+    T("customAudiences") &&
+      `- show_audiences_list — custom/lookalike audiences from ${T("customAudiences")}.`,
+    `- show_creative_gallery — ad creative thumbnails from ${T("adImages")} / ${T("adVideos")} /
+  ${T("adCreatives")}.`,
+    T("adRules") && `- show_ad_rules — automated rules (condition → action) from ${T("adRules")}.`,
+  ]);
+
+  const healthCards = keep([
+    T("opportunityScore") &&
+      `- show_opportunity_score — Meta's 0-100 Opportunity Score as a gauge, from ${T("opportunityScore")}.`,
+    `- show_pixel_health — pixel/dataset status from ${T("datasetQuality")} (+ ${T("pixelDetails")} for
+  the name).`,
+    `- show_diagnostics — the raw technical error/issue list from ${T("errors")}${
+      T("diagnose") ? ` or\n  ${T("diagnose")}` : ""
+    } (error codes, subcodes). More technical than show_findings — use
+  show_findings for an audit narrative with one-tap fixes, use this when the user wants the actual
+  error list.`,
+    T("adStudies") && `- show_ab_test_results — split-test variants + winner from ${T("adStudies")}.`,
+    (T("billingInfo") || T("invoices")) &&
+      `- show_billing_summary — funding source / amount due / next bill from ${[T("billingInfo"), T("invoices")]
+        .filter(Boolean)
+        .join(" or ")}.`,
+    `- show_activity_timeline — a vertical timeline of real events you can actually attribute (e.g. from
+  what you've read/done this conversation). Never fabricate entries just to fill this in.`,
+  ]);
+
+  const previewTools = [T("adPreview"), T("generatePreview")].filter(Boolean).join(" or ");
+
+  return `# Role
 
 You are the Meta (Facebook) Ads assistant embedded in this app. You help the user manage
 ad account ${adAccountId} through the connected tools — inspecting performance, and creating,
@@ -122,26 +225,71 @@ ${currentViewSection(adAccountId, scope)}
 
 # Currency — CRITICAL
 
-This ad account's currency is ${currency || "the currency returned by the account info tools"}.
-Format EVERY monetary value (spend, CPC, CPM, cost-per-lead, budgets, bids) in this currency${
-  currency === "INR" ? " — use the ₹ symbol" : ""
-}. NEVER display a "$" sign or assume USD unless the account's actual currency is USD. Meta returns
-spend/cost figures as raw numbers in the account currency — they are ${currency || "the account currency"},
+This ad account's currency is ${cur ? cur.code : "the currency returned by the account info tools"}${
+  cur ? ` — write it as ${cur.money(1234.5)}` : ""
+}.
+Format EVERY monetary value (spend, CPC, CPM, cost-per-lead, budgets, bids) in that currency.
+NEVER display a "$" sign or assume USD unless the account's actual currency is USD. Meta returns
+spend/cost figures as raw numbers in the account currency — they are ${cur ? cur.code : "the account currency"},
 not dollars. This applies to plain text AND to every card (stat cards, comparisons, bars).
-Round monetary values to 2 decimal places for display (e.g. ₹0.18, not ₹0.177524), and use
-thousands separators for large amounts (e.g. ₹1,13,853 or ₹113,853). Percentages: 2 decimals
-(e.g. 10.72%).
+Round monetary values to ${cur ? cur.digits : 2} decimal places for display — write ${money(0.18)},
+never a raw 0.177524 — and use thousands separators for large amounts (e.g. ${money(113853)}).
+Percentages: 2 decimals (e.g. 10.72%).
 
 # Monetary write inputs — CRITICAL
 
-Users state budgets and bids in normal display units. For example, "₹50", "50 rupees", or
-"a bid of 50" in this INR account means fifty rupees — NOT fifty paise. However, Meta write-tool
-fields named daily_budget, lifetime_budget, bid_amount, spend_cap, and amount require an INTEGER
-in the currency's minor unit. Convert the user's amount before calling a write tool: for INR, USD,
-EUR, GBP, and other 2-decimal currencies, multiply by 100 (₹50 → bid_amount: 5000); for a
-0-decimal currency, use the whole amount. Never pass a user-facing display amount directly into
-one of these tool fields. The confirmation card converts the minor-unit value back for display, so
-always sanity-check that its intended display value matches what the user requested.
+Users state budgets and bids in normal display units: "50", "${money(50)}", or "a bid of 50" in
+this account all mean ${money(50)}. However, Meta write-tool fields named daily_budget,
+lifetime_budget, bid_amount, spend_cap, and amount require an INTEGER in the currency's minor
+unit. Convert the user's amount before calling a write tool: ${minorUnitRule}. Never pass a
+user-facing display amount directly into one of these tool fields. The confirmation card converts
+the minor-unit value back for display, so always sanity-check that its intended display value
+matches what the user requested.
+
+Converting back OUT is just as important. When you tell the user what you set, divide by the same
+factor: a campaign created with daily_budget ${100 * factor} in this account has a budget of
+${money(100)}${factor > 1 ? `, not ${money(100 * factor)}` : ""}. Never echo a minor-unit integer
+back as if it were a display amount.
+
+# Bid strategy — it decides whether ad sets need a bid amount
+
+Only set a bid strategy when the user asked for one. A plain "spend ${money(100)} a day" means
+automatic bidding: bid_strategy LOWEST_COST_WITHOUT_CAP, and no bid_amount anywhere.
+
+The cap strategies — LOWEST_COST_WITH_BID_CAP and COST_CAP — are a commitment: EVERY ad set under
+that campaign must then carry a bid_amount, and Meta rejects the ad set without one ("Bid amount
+required for bid strategy provided", subcode 1815857). If you choose a cap strategy on a campaign
+you must supply bid_amount on each ad set you create in it; if the user did not ask for a cap, do
+not choose one. Should that error appear, fix the cause — either add bid_amount or recreate the
+campaign on LOWEST_COST_WITHOUT_CAP — rather than retrying the identical call.
+
+# Where the budget lives — the campaign, or each ad set
+
+A campaign either carries the budget itself (campaign budget optimisation, "CBO") or leaves it
+to each ad set ("ABO"). Exactly one of the two is true, and Meta enforces it in both directions:
+an ad set carrying its own budget inside a campaign that has one is rejected, and so is an ad set
+with no budget in a campaign that has none ("No budget specified for this ad set, and the parent
+campaign does not use CBO").
+
+Work out which kind of campaign you are creating the ad set in BEFORE you call the tool:
+
+- If you created that campaign earlier in this conversation, you already know which it is. Don't
+  re-read it.
+- Otherwise read the campaign first and look at its daily_budget and lifetime_budget.
+
+Then set the ad set accordingly:
+
+- Campaign HAS daily_budget or lifetime_budget → the ad set must carry NEITHER. It draws on the
+  campaign's budget, and that is what to tell the user — not that it has no budget.
+- Campaign has NEITHER → the ad set MUST carry daily_budget or lifetime_budget. If the user has
+  not named an amount, ask for one instead of inventing a figure.
+
+Read the user's intent the same way. "A campaign with ${money(100)} a day" puts the budget on the
+campaign; "an ad set with ${money(100)} a day" puts it on the ad set; one budget mentioned across
+a campaign and its ad set belongs on the campaign.
+
+If either rejection comes back, move the budget to the other level — do not retry the identical
+call.
 
 # Greeting and tone
  
@@ -174,8 +322,8 @@ then wait — call the tool and let the confirmation card do that job.
   (media_type 'image' or 'video') — it opens an in-chat picker where they choose from their media
   library or upload a file. Do NOT ask the user to paste a URL as text. You'll get the chosen
   media's public URL back as that tool's result; use that EXACT URL to build the creative — for an
-  image, pass it as image_url to ads_create_ad_creative; for a video, first call ads_upload_ad_video
-  with file_url set to that URL to get a video_id, then ads_create_ad_creative with that video_id
+  image, pass it as image_url to ${T("createCreative")}; for a video, first call ${T("uploadVideo")}
+  with file_url set to that URL to get a video_id, then ${T("createCreative")} with that video_id
   plus an image thumbnail. If the user already gave you a direct, usable media URL, use it directly
   and do NOT call pick_creative_media. Never invent a media URL.
 - If the user's request is ambiguous about which resource to act on (e.g., two campaigns share
@@ -184,6 +332,13 @@ then wait — call the tool and let the confirmation card do that job.
 - If a tool call fails or returns an error, tell the user plainly what failed and why (if known).
   Don't silently retry a failed write, don't retry indefinitely, and don't paper over the
   failure by claiming the action succeeded.
+- **Retry at most ONCE, and only with changed arguments.** Repeating a call byte-for-byte cannot
+  produce a different result — if the first attempt was rejected, either fix the arguments or stop
+  and explain. This applies even when the error says "internal error" or "please try again later":
+  a validation failure is often reported that way, so a second identical attempt just wastes the
+  user's time. After one failed retry, say what you tried and what the error was, and ask for
+  what you need — don't tell the user to try again later unless you have genuine evidence the
+  problem is transient.
 - Never state a metric, status, or ID that wasn't actually returned by a tool call. If you
   don't have the data, say so and offer to fetch it, rather than estimating or guessing.
  
@@ -238,42 +393,27 @@ Snapshot / comparison (a single point in time, across entities or metrics):
 - show_bar_breakdown — how a total splits across several ENTITIES (e.g. share of spend across
   campaigns). Ranked-list shape.
 - show_audience_breakdown — how ONE entity's total splits by a DIMENSION (age, gender, device,
-  placement, region) — a donut. Call ads_get_insights with its 'breakdowns' param first. Don't
+  placement, region) — a donut. Call ${T("insights")} with its 'breakdowns' param first. Don't
   confuse this with show_bar_breakdown: breakdown = one entity's composition, bar = many entities
   ranked.
 - show_comparison — a table comparing several entities; set highlightIndex to the winning row.
 - show_budget_pacing — spend vs. budget for one campaign/ad set, as a meter. Use exact spend/budget
-  from ads_get_campaign_details / ads_get_ad_set_details / ads_get_insights.
+  from ${figureSources}.
 
 Time series (the ONLY tool for genuine date-wise trend data):
-- show_trend_chart — line/area chart of one or more metrics over time. Call ads_get_insights with
+- show_trend_chart — line/area chart of one or more metrics over time. Call ${T("insights")} with
   time_increment set (e.g. 1 for daily) to get real per-day values — never invent a trend.
 
 Lists / galleries (raw records, not aggregated metrics):
-- show_leads_table — captured leads from ads_get_leads.
-- show_audiences_list — custom/lookalike audiences from ads_get_custom_audiences.
-- show_creative_gallery — ad creative thumbnails from ads_get_ad_images / ads_get_ad_videos /
-  ads_get_ad_creatives.
-- show_ad_rules — automated rules (condition → action) from ads_get_ad_rules.
+${listCards}
 
 Health / diagnostics:
-- show_opportunity_score — Meta's 0-100 Opportunity Score as a gauge, from ads_get_opportunity_score.
-- show_pixel_health — pixel/dataset status from ads_get_dataset_quality (+ ads_get_pixel_details for
-  the name).
-- show_diagnostics — the raw technical error/issue list from ads_get_errors or
-  ads_diagnose_underperformance (error codes, subcodes). More technical than show_findings — use
-  show_findings for an audit narrative with one-tap fixes, use this when the user wants the actual
-  error list.
-- show_ab_test_results — split-test variants + winner from ads_get_ad_studies.
-- show_billing_summary — funding source / amount due / next bill from ads_get_billing_info or
-  ads_get_invoices.
-- show_activity_timeline — a vertical timeline of real events you can actually attribute (e.g. from
-  what you've read/done this conversation). Never fabricate entries just to fill this in.
+${healthCards}
 
 Interaction:
 - suggest_actions — 2-4 one-tap follow-up chips.
 - show_ad_preview — embeds an actual ad preview inline, with the raw URL shown/copyable beneath
-  it. REQUIRED whenever you call ads_get_ad_preview or ads_generate_preview: extract the
+  it. REQUIRED whenever you call ${previewTools}: extract the
   "Preview URL: ..." value from that tool's result and pass it straight to show_ad_preview.
   NEVER paste a preview URL as a plain markdown link instead — the card already renders the ad
   AND shows the URL, so afterwards just say something like "Here's the preview" — don't tell the
@@ -317,6 +457,7 @@ When the user asks you to audit, review, find problems, or optimize the account:
   chip — at which point you call the appropriate Meta WRITE tool, which routes through the
   confirmation card before anything changes on Meta. Every change to the account goes through
   these Meta tools; there is no other way to modify the account.`;
+};
 
 /**
  * Fetch the MCP tool catalog once and derive both what Gemini needs and what
@@ -330,11 +471,42 @@ When the user asks you to audit, review, find problems, or optimize the account:
  *   - toolMap: name -> annotations, used to classify read vs write. Unknown /
  *     annotation-less tools fail closed (treated as writes).
  */
-async function loadTools(mcpClient) {
+/**
+ * Cached MCP tool catalogues, keyed by endpoint.
+ *
+ * `listTools()` pulls ~583 KB of JSON schemas and costs 0.6-1.4s, and the chat
+ * builds a fresh MCP client per turn (deliberately — see mcpClient.js), so every
+ * single message paid that toll before the user saw anything at all.
+ *
+ * The catalogue is a property of the SERVER, not of the user: the per-request
+ * Meta token scopes what a call may touch, never which tools exist. So it is
+ * safe to share across users, and keyed by endpoint so the two modes never mix.
+ * The TTL is short because a server redeploy can add or rename tools, and a
+ * stale catalogue would have the model calling something that no longer exists.
+ */
+const TOOL_CACHE_TTL_MS = Number(process.env.META_CHAT_TOOL_CACHE_MS) || 5 * 60 * 1000;
+const toolCache = new Map();
+
+async function listToolsCached(mcpClient, profile) {
+  const key = `${profile.mode}:${profile.url()}`;
+  const hit = toolCache.get(key);
+  if (hit && Date.now() - hit.at < TOOL_CACHE_TTL_MS) return hit.tools;
+
   const { tools } = await mcpClient.listTools();
+  toolCache.set(key, { tools, at: Date.now() });
+  return tools;
+}
+
+async function loadTools(mcpClient) {
+  const profile = profileOf(mcpClient);
+  const tools = await listToolsCached(mcpClient, profile);
   const toolMap = new Map();
   const functionDeclarations = [];
   for (const tool of tools) {
+    // Tools the active server exposes but this mode should not offer the model
+    // (see mcpMode.js) are dropped from BOTH the declarations and the annotation
+    // map, so a filtered tool can be neither proposed nor classified.
+    if (!profile.includeTool(tool.name)) continue;
     toolMap.set(tool.name, tool.annotations || {});
     functionDeclarations.push({
       name: tool.name,
@@ -344,8 +516,21 @@ async function loadTools(mcpClient) {
   }
   // Merge in the in-process local tools (UI-render + audit). They're declared
   // to the model just like MCP tools; the loop routes them to localHandlers.
-  for (const decl of LOCAL_TOOL_DECLARATIONS) functionDeclarations.push(decl);
-  for (const [name, ann] of LOCAL_TOOL_ANNOTATIONS) toolMap.set(name, ann);
+  // Render tools whose data source does not exist in this mode are held back —
+  // a card the model can never populate is worse than no card at all.
+  for (const decl of LOCAL_TOOL_DECLARATIONS) {
+    if (profile.disabledLocalTools.has(decl.name)) continue;
+    // Descriptions cite the read tool a card's data comes from, and the two
+    // servers name those differently — resolve per mode (see TOOL_ALIASES).
+    functionDeclarations.push({
+      ...decl,
+      description: renderToolRefs(decl.description, profile),
+    });
+  }
+  for (const [name, ann] of LOCAL_TOOL_ANNOTATIONS) {
+    if (profile.disabledLocalTools.has(name)) continue;
+    toolMap.set(name, ann);
+  }
   return { toolMap, functionDeclarations, localHandlers };
 }
 
@@ -353,27 +538,46 @@ function isReadOnly(annotations) {
   return annotations?.readOnlyHint === true;
 }
 
-function createChat({ adAccountId, currency, scope, history, functionDeclarations }) {
+function createChat({ adAccountId, currency, scope, history, functionDeclarations, profile }) {
+  // Never build a prompt without a profile — systemInstruction resolves tool
+  // names through it, and the default mode is the safe one.
+  profile = profile || getProfile();
   return getClient().chats.create({
     model: GEMINI_MODEL,
     config: {
       tools: [{ functionDeclarations }],
-      systemInstruction: systemInstruction(adAccountId, currency, scope),
+      systemInstruction: systemInstruction(adAccountId, currency, scope, profile),
     },
     history: history && history.length ? history : undefined,
   });
 }
 
-// Campaign-id arg names seen across the MCP tool surface. The server is an
-// external package (mcps/meta-2), so we match on shape rather than importing
-// a schema — a tool whose args name a campaign is campaign-scoped.
-const CAMPAIGN_ID_ARG_KEYS = ["campaign_id", "campaignId"];
+/**
+ * Resolve the campaign a write targets, following an ad-set / ad id up to its
+ * parent when the tool names only a child.
+ *
+ * Mirrors campaignIdOfAdSet / campaignIdOfAd in adController.js. Those are
+ * module-private there and that module is a heavyweight controller this file
+ * must not pull in eagerly, so the lookup is repeated here rather than exported
+ * across that boundary. Fails open (null = "cannot determine" = allowed), like
+ * every other plan check.
+ */
+async function resolveCampaignIdForWrite(profile, args, accessToken) {
+  const target = profile.targetFromArgs(args || {});
+  if (target.campaignId) return target.campaignId;
+  if (!accessToken) return null;
+  if (!target.adSetId && !target.adId) return null;
 
-function extractCampaignId(args = {}) {
-  for (const key of CAMPAIGN_ID_ARG_KEYS) {
-    if (args[key]) return String(args[key]);
+  try {
+    const bizSdk = require("facebook-nodejs-business-sdk");
+    bizSdk.FacebookAdsApi.init(accessToken);
+    const row = target.adSetId
+      ? await new bizSdk.AdSet(target.adSetId).get(["campaign_id"])
+      : await new bizSdk.Ad(target.adId).get(["campaign_id"]);
+    return (row?._data || row)?.campaign_id || null;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 /**
@@ -385,14 +589,19 @@ function extractCampaignId(args = {}) {
  * to the model (so it explains the refusal in its own words) or null when
  * allowed.
  *
- * LIMITATION: only tools whose args carry a campaign id can be checked. A
- * chat-issued ad-set/ad write that names no parent campaign passes through —
- * same residual gap as the dashboard's ad-set endpoints, and acceptable for
- * the same reason (this is a commercial limit, not a security boundary).
+ * Which args identify the target is MODE-DEPENDENT: the fork names the object
+ * directly (campaign_id / ad_set_id / ad_id), while the official server carries
+ * entity_id + entity_type and has no campaign_id argument anywhere. Reading the
+ * fork's keys against official tools would match nothing and silently stop
+ * enforcing the limit, so the extraction lives in the profile.
+ *
+ * LIMITATION: a write naming no campaign, ad set or ad at all still passes
+ * through, as does one whose parent lookup fails — acceptable, since this is a
+ * commercial limit, not a security boundary.
  */
-async function planBlockReasonForWrite(userId, args) {
+async function planBlockReasonForWrite(userId, args, profile, accessToken) {
   try {
-    const campaignId = extractCampaignId(args);
+    const campaignId = await resolveCampaignIdForWrite(profile, args, accessToken);
     if (!campaignId) return null;
     const { requireManagedCampaign } = require("../managedCampaigns");
     const gate = await requireManagedCampaign(userId, campaignId);
@@ -413,11 +622,45 @@ async function executeCall(call, ctx) {
     const result = await local(args, ctx);
     return createPartFromFunctionResponse(call.id, call.name, { result });
   }
+  const profile = profileOf(ctx);
   ctx.onEvent("tool_call", { name: call.name, args, auto: true });
-  const result = await ctx.mcpClient.callTool({
-    name: call.name,
-    arguments: args,
-  });
+
+  let result;
+  try {
+    const raw = await ctx.mcpClient.callTool(
+      { name: call.name, arguments: args },
+      undefined,
+      { timeout: profile.timeoutFor(call.name) }
+    );
+    // Normalise before the result reaches Gemini OR the session: each server
+    // returns a shape the model handles badly raw (see mcpMode.js). Images come
+    // back separately — they must never enter the parts that get persisted.
+    const normalized = profile.normalizeResult(raw);
+    result = normalized.result;
+    if (normalized.imageParts.length && Array.isArray(ctx.imageParts)) {
+      ctx.imageParts.push(...normalized.imageParts);
+    }
+  } catch (err) {
+    // A rejected call (bad parameter, rate limit, timeout) used to throw
+    // straight out of the turn, so one malformed argument ended the whole
+    // exchange with an error banner. Hand the failure back as this call's
+    // response instead: the model can correct the arguments and try again, or
+    // explain the failure to the user. The round cap bounds any retry loop.
+    const message = String(err?.message || err).slice(0, 500);
+    ctx.onEvent("tool_result", {
+      name: call.name,
+      args,
+      result: { error: message },
+      auto: true,
+    });
+    return createPartFromFunctionResponse(call.id, call.name, {
+      error:
+        `${message}. If this was caused by an invalid argument, correct it and call the tool ` +
+        `once more; otherwise tell the user plainly what failed. Do not repeat an identical ` +
+        `failing call.`,
+    });
+  }
+
   ctx.onEvent("tool_result", { name: call.name, args, result, auto: true });
   return createPartFromFunctionResponse(call.id, call.name, { result });
 }
@@ -484,7 +727,20 @@ async function streamTurn(chat, message, ctx) {
 async function sendAndProcess({ chat, toolMap, message, ctx }) {
   let turn = await streamTurn(chat, message, ctx);
 
-  while (true) {
+  for (let round = 0; ; round += 1) {
+    if (round >= MAX_TOOL_ROUNDS) {
+      // Out of rounds with the model still asking for tools. Return what it has
+      // rather than looping: an answer-shaped reply beats a spinner, and the
+      // history is intact so the user's next message continues normally.
+      return {
+        status: "done",
+        text:
+          turn.text ||
+          "I wasn't able to finish that — I kept needing more data without reaching an answer. " +
+            "Could you narrow the question (a specific campaign, or a shorter date range)?",
+        history: chat.getHistory(),
+      };
+    }
     const calls = turn.functionCalls;
     if (!calls || calls.length === 0) {
       return {
@@ -506,9 +762,17 @@ async function sendAndProcess({ chat, toolMap, message, ctx }) {
     // execute the reads now and carry their responses forward into whichever
     // pause we return — never partially answering the batch.
     const readResponseParts = [];
+    // Per-batch and deliberately transient: inline image parts lifted out of read
+    // results. They ride the LIVE message only. readResponseParts is persisted
+    // onto the session when a turn pauses, and base64 there would push the Mongo
+    // document toward its 16MB ceiling — so a turn that pauses falls back to the
+    // text markers rather than carrying the images forward.
+    ctx.imageParts = [];
     for (const call of readCalls) {
       readResponseParts.push(await executeCall(call, ctx));
     }
+    const inlineImageParts = ctx.imageParts;
+    ctx.imageParts = null;
 
     if (inputCalls.length > 0) {
       // Only one media pick is handled per pause. The first input call is the
@@ -557,7 +821,13 @@ async function sendAndProcess({ chat, toolMap, message, ctx }) {
       };
     }
 
-    turn = await streamTurn(chat, readResponseParts, ctx);
+    turn = await streamTurn(
+      chat,
+      inlineImageParts.length
+        ? [...readResponseParts, ...inlineImageParts]
+        : readResponseParts,
+      ctx
+    );
   }
 }
 
@@ -588,6 +858,7 @@ async function resumeAfterConfirmation({
     scope,
     history: pendingAction.historySoFar,
     functionDeclarations,
+    profile: profileOf(ctx),
   });
 
   const writeResponseParts = [];
@@ -596,7 +867,12 @@ async function resumeAfterConfirmation({
       // Plan gate — a chat-approved write must respect the same managed-
       // campaign limit as the dashboard, or "pause campaign X" in chat walks
       // straight around the UI's lock.
-      const planBlock = await planBlockReasonForWrite(ctx.userId, call.args);
+      const planBlock = await planBlockReasonForWrite(
+        ctx.userId,
+        call.args,
+        profileOf(ctx),
+        ctx.accessToken
+      );
       if (planBlock) {
         ctx.onEvent("tool_declined", { name: call.name, args: call.args });
         writeResponseParts.push(
@@ -612,10 +888,34 @@ async function resumeAfterConfirmation({
         args: call.args,
         auto: false,
       });
-      const result = await ctx.mcpClient.callTool({
-        name: call.name,
-        arguments: call.args,
-      });
+      const writeProfile = profileOf(ctx);
+      let result;
+      try {
+        ({ result } = writeProfile.normalizeResult(
+          await ctx.mcpClient.callTool(
+            { name: call.name, arguments: call.args },
+            undefined,
+            { timeout: writeProfile.timeoutFor(call.name) }
+          )
+        ));
+      } catch (err) {
+        // A failed write is reported, never silently retried — the user already
+        // approved this specific action, so a corrected retry needs their
+        // approval again rather than happening behind the confirmation card.
+        const message = String(err?.message || err).slice(0, 500);
+        ctx.onEvent("tool_result", {
+          name: call.name,
+          args: call.args,
+          result: { error: message },
+          auto: false,
+        });
+        writeResponseParts.push(
+          createPartFromFunctionResponse(call.id, call.name, {
+            error: `The write failed: ${message}. Tell the user plainly what failed and do not retry it automatically.`,
+          })
+        );
+        continue;
+      }
       ctx.onEvent("tool_result", {
         name: call.name,
         args: call.args,
@@ -671,20 +971,26 @@ async function resumeAfterMediaPick({
     scope,
     history: pendingInput.historySoFar,
     functionDeclarations,
+    profile: profileOf(ctx),
   });
 
   const parts = [...(pendingInput.readResponseParts || [])];
 
   const { inputCall } = pendingInput;
   if (mediaUrl) {
+    // Name the creative tools this mode actually declares — a nudge pointing at
+    // the other server's names sends the model after a tool that is not there.
+    const mediaProfile = profileOf(ctx);
+    const createCreative = mediaProfile.tool("createCreative");
+    const uploadVideo = mediaProfile.tool("uploadVideo");
     const instructions =
       mediaType === "video"
         ? `The user selected a video. Its public URL is ${mediaUrl}. To use it: call ` +
-          `ads_upload_ad_video with file_url set to this exact URL to get a video_id, then call ` +
-          `ads_create_ad_creative with that video_id plus an image thumbnail (image_url or ` +
+          `${uploadVideo} with file_url set to this exact URL to get a video_id, then call ` +
+          `${createCreative} with that video_id plus an image thumbnail (image_url or ` +
           `image_hash). Do not paste the URL to the user as text.`
         : `The user selected an image. Its public URL is ${mediaUrl}. Use this exact URL as ` +
-          `image_url when calling ads_create_ad_creative. Do not paste the URL to the user as text.`;
+          `image_url when calling ${createCreative}. Do not paste the URL to the user as text.`;
     parts.push(
       createPartFromFunctionResponse(inputCall.id, inputCall.name, {
         result: { provided: true, media_type: mediaType, url: mediaUrl, instructions },
@@ -736,4 +1042,12 @@ module.exports = {
   resumeAfterConfirmation,
   resumeAfterMediaPick,
   trimHistory,
+  // Exported for tests (like trimHistory): no MCP or Gemini I/O of their own.
+  isReadOnly,
+  resolveCampaignIdForWrite,
+  executeCall,
+  MAX_TOOL_ROUNDS,
+  // Exported so tests can assert the prompt still carries the rules that were
+  // written in response to real failures (bid strategy, budget echo, retries).
+  systemInstruction,
 };

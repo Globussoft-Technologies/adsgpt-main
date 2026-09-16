@@ -93,6 +93,23 @@ class AuthController {
       // the new scope — until then, /get-form-leads returns Meta's
       // permission-denied error for their existing token.
       "leads_retrieval",
+      // Required by Meta's hosted Ads MCP server (mcp.facebook.com/ads), which
+      // Ads Chat can run against instead of the self-hosted fork — see
+      // META_MCP_MODE in docs/META_ADS_CHATBOT.md §7.1. Its 401 names this
+      // permission explicitly in the WWW-Authenticate scope list.
+      //
+      // Requested unconditionally rather than only when META_MCP_MODE=official:
+      // scopes are fixed on the token at connect time, so gating it on the mode
+      // would mean every already-connected user had to re-consent on the day we
+      // flip. Requesting it now means tokens minted from here already carry it.
+      //
+      // Safe to request before App Review approves it. Facebook silently OMITS
+      // an unapproved permission from the consent dialog rather than erroring,
+      // so users simply don't see this row and everything else is granted as
+      // normal (confirmed against a live dialog). Accounts holding a role on the
+      // app — Admin / Developer / Tester — CAN grant it today, which is what
+      // makes official mode testable before approval lands.
+      "ads_mcp_management",
     ].join(",");
 
     // `auth_type=rerequest` forces Facebook to re-show the permissions

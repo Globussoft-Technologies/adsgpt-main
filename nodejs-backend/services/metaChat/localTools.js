@@ -189,7 +189,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_ad_preview",
     description:
       "Render an ad preview embedded directly in the chat. Use this whenever you call " +
-      "ads_get_ad_preview or ads_generate_preview and the result contains a 'Preview URL:' — " +
+      "{{tool:adPreview}} or {{tool:generatePreview}} and the result contains a 'Preview URL:' — " +
       "extract that URL and pass it here so the user sees the actual ad mockup instead of a bare " +
       "link. ALWAYS call this after generating a preview; never just paste the preview URL as " +
       "markdown text.",
@@ -210,7 +210,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_trend_chart",
     description:
       "Render a line/area chart of one or more metrics over time. Use this for 'how has spend/CTR/" +
-      "clicks trended' questions — call ads_get_insights with time_increment (e.g. 1 for daily) to " +
+      "clicks trended' questions — call {{tool:insights}} with time_increment (e.g. 1 for daily) to " +
       "get the series, then pass the exact per-day values here. This is the ONLY tool for genuinely " +
       "time-series data; show_bar_breakdown/show_comparison are for a single snapshot across entities.",
     parametersJsonSchema: {
@@ -248,7 +248,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_audience_breakdown",
     description:
       "Render a donut chart showing how a total splits by a demographic/placement dimension (age, " +
-      "gender, device, platform, region). Call ads_get_insights with the relevant `breakdowns` value " +
+      "gender, device, platform, region). Call {{tool:insights}} with the relevant `breakdowns` value " +
       "first, then pass the exact returned shares here. For a ranked list across entities (e.g. " +
       "campaigns) use show_bar_breakdown instead — this is specifically for one entity's composition.",
     parametersJsonSchema: {
@@ -275,7 +275,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_budget_pacing",
     description:
       "Render a budget pacing meter — spend so far vs. the budget for a campaign/ad set. Use exact " +
-      "spend/budget figures from ads_get_campaign_details, ads_get_ad_set_details, or ads_get_insights.",
+      "spend/budget figures from {{tool:campaignDetails}}, {{tool:adSetDetails}}, or {{tool:insights}}.",
     parametersJsonSchema: {
       type: "object",
       properties: {
@@ -291,7 +291,7 @@ const LOCAL_TOOL_DECLARATIONS = [
   {
     name: "show_leads_table",
     description:
-      "Render a table of captured leads. Use exact field values returned by ads_get_leads — never " +
+      "Render a table of captured leads. Use exact field values returned by {{tool:leads}} — never " +
       "invent a lead's contact details.",
     parametersJsonSchema: {
       type: "object",
@@ -318,7 +318,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_audiences_list",
     description:
       "Render a list of custom/lookalike audiences with their type and size. Use exact data from " +
-      "ads_get_custom_audiences (its results include lookalikes, website, customer-list, and " +
+      "{{tool:customAudiences}} (its results include lookalikes, website, customer-list, and " +
       "engagement audiences distinguished by subtype).",
     parametersJsonSchema: {
       type: "object",
@@ -345,7 +345,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_creative_gallery",
     description:
       "Render a grid of ad creative thumbnails (images and/or videos). Use exact URLs from " +
-      "ads_get_ad_images, ads_get_ad_videos, or ads_get_ad_creatives — never invent a thumbnail URL.",
+      "{{tool:adImages}}, {{tool:adVideos}}, or {{tool:adCreatives}} — never invent a thumbnail URL.",
     parametersJsonSchema: {
       type: "object",
       properties: {
@@ -370,7 +370,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_opportunity_score",
     description:
       "Render Meta's Opportunity Score (0-100 account/campaign health signal) as a gauge, with any " +
-      "recommendations. Use the exact score and recommendations from ads_get_opportunity_score.",
+      "recommendations. Use the exact score and recommendations from {{tool:opportunityScore}}.",
     parametersJsonSchema: {
       type: "object",
       properties: {
@@ -395,7 +395,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_pixel_health",
     description:
       "Render a pixel/dataset health summary — last fired time, match rate, status. Use exact data " +
-      "from ads_get_dataset_quality (and ads_get_pixel_details for the pixel's name/id).",
+      "from {{tool:datasetQuality}} (and {{tool:pixelDetails}} for the pixel's name/id).",
     parametersJsonSchema: {
       type: "object",
       properties: {
@@ -412,7 +412,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_diagnostics",
     description:
       "Render a technical issues list — rejected ads, delivery issues, account restrictions, error " +
-      "codes. Use exact data from ads_get_errors or ads_diagnose_underperformance. This is more " +
+      "codes. Use exact data from {{tool:errors}} or {{tool:diagnose}}. This is more " +
       "technical than show_findings (which is for audit narrative + one-tap fixes) — use this when " +
       "the user wants the raw error/issue list itself.",
     parametersJsonSchema: {
@@ -440,7 +440,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_ad_rules",
     description:
       "Render a list of an account's automated rules (condition → action). Use exact data from " +
-      "ads_get_ad_rules.",
+      "{{tool:adRules}}.",
     parametersJsonSchema: {
       type: "object",
       properties: {
@@ -466,7 +466,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_ab_test_results",
     description:
       "Render A/B test (split test) results comparing variants on one metric, with the winner " +
-      "highlighted. Use exact data from ads_get_ad_studies.",
+      "highlighted. Use exact data from {{tool:adStudies}}.",
     parametersJsonSchema: {
       type: "object",
       properties: {
@@ -493,7 +493,7 @@ const LOCAL_TOOL_DECLARATIONS = [
     name: "show_billing_summary",
     description:
       "Render account billing/payment info — funding source, amount due, next bill date. Use exact " +
-      "data from ads_get_billing_info / ads_get_invoices.",
+      "data from {{tool:billingInfo}} / {{tool:invoices}}.",
     parametersJsonSchema: {
       type: "object",
       properties: {
@@ -543,9 +543,9 @@ const LOCAL_TOOL_DECLARATIONS = [
       "build an ad and the user has NOT already given you a usable media URL earlier in the " +
       "conversation. Do NOT ask the user to paste a media URL in text — call this instead. After " +
       "they pick, you receive the media's public URL as this tool's result; use that EXACT URL to " +
-      "build the creative (for an image: pass it as image_url to ads_create_ad_creative; for a " +
-      "video: first call ads_upload_ad_video with file_url set to that URL to get a video_id, then " +
-      "ads_create_ad_creative with that video_id plus an image thumbnail). If the user already gave " +
+      "build the creative (for an image: pass it as image_url to {{tool:createCreative}}; for a " +
+      "video: first call {{tool:uploadVideo}} with file_url set to that URL to get a video_id, then " +
+      "{{tool:createCreative}} with that video_id plus an image thumbnail). If the user already gave " +
       "you a direct media URL, use it directly and do NOT call this.",
     parametersJsonSchema: {
       type: "object",

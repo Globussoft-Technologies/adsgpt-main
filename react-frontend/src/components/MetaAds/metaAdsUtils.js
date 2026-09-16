@@ -450,3 +450,28 @@ export const metaErrorText = (err, fallback = 'Something went wrong.') => {
   if (title && detail && detail !== title) return `${title} — ${detail}`;
   return detail || title || err?.message || fallback;
 };
+
+/**
+ * Shared table-cell classes for the campaign / ad-set / ad tables.
+ *
+ * These exist because the fixed columns live in MetaAdsTableView.jsx and the
+ * user-chosen metric columns live in MetricColumns.jsx, so the two halves of
+ * the SAME row were styled independently and drifted: the metrics rendered at
+ * text-xs in text-gray-900/white while everything left of them was text-sm in
+ * text-gray-600/white-80 — visibly smaller and brighter, reported by QA as
+ * "font and color variation on right".
+ *
+ * `tabular-nums` drifted the other way: the metric columns had it and the
+ * fixed money columns didn't, so Daily Budget and Budget Remaining had
+ * proportional digits and their decimal points didn't line up down the column.
+ * Every numeric cell uses NUM_CELL now.
+ *
+ * `dense` exists for the Ads table, which uses py-3 throughout where campaigns
+ * and ad sets use py-4. That difference is intentional (the ads table carries
+ * more columns); mixing the two inside one row is not.
+ */
+export const CELL_TEXT = 'text-sm text-gray-600 dark:text-white/80';
+
+/** Right-aligned numeric cell — money, percentages, counts. */
+export const numCell = (dense = false) =>
+  `whitespace-nowrap px-4 ${dense ? 'py-3' : 'py-4'} text-right ${CELL_TEXT} tabular-nums`;

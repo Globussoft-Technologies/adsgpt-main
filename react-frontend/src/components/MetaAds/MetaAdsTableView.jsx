@@ -61,6 +61,7 @@ import {
   labelCTA,
   matchesTableFilter,
   metaErrorText,
+  numCell,
 } from './metaAdsUtils';
 import {
   FilterPills,
@@ -877,8 +878,8 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, opportunityS
               <SortTh label="Campaign"         colKey="name"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[34%] pl-1" />
               <SortTh label="Status"           colKey="status"           sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Objective"        colKey="objective"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Daily Budget"     colKey="daily_budget"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Budget Remaining" colKey="budget_remaining" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Daily Budget"     colKey="daily_budget"     align="right" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Budget Remaining" colKey="budget_remaining" align="right" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Start Date"       colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <th className="min-w-40 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-white/70">Recommendations</th>
               <MetricHeaderCells entries={metrics.entries} SortTh={SortTh} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -964,7 +965,7 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, opportunityS
                   </td>
                   {/* budget — CBO campaigns set this on the campaign (daily
                       or lifetime); non-CBO campaigns push it down to adsets. */}
-                  <td className="px-4 py-4 text-sm font-medium text-gray-600 dark:text-white/80">
+                  <td className={`${numCell()} font-medium`}>
                     {hasBudget(c.daily_budget)
                       ? c.daily_budget
                       : hasBudget(c.lifetime_budget)
@@ -972,7 +973,7 @@ function CampaignTable({ campaigns, loading, adAccountId, currency, opportunityS
                         : <span className="text-gray-400 dark:text-white/40">Set on ad set</span>}
                   </td>
                   {/* remaining */}
-                  <td className="px-4 py-4 text-sm text-gray-600 dark:text-white/80">
+                  <td className={numCell()}>
                     {hasBudget(c.budget_remaining)
                       ? c.budget_remaining
                       : <span className="text-gray-400 dark:text-white/40">—</span>}
@@ -1540,7 +1541,7 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
               </th>
               <SortTh label="Ad Set"            colKey="name"             sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="w-[32%] pl-1" />
               <SortTh label="Status"            colKey="status"           sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortTh label="Daily Budget"      colKey="daily_budget"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortTh label="Daily Budget"      colKey="daily_budget"     align="right" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Billing Event"     colKey="billing_event"    sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Optimization Goal" colKey="optimization_goal" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortTh label="Start Date"        colKey="start_time"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -1593,7 +1594,7 @@ function AdSetTable({ campaign, adAccountId, currency, onDrillDown, onLaunchWiza
                       <LearningBadge learning={s.learning} />
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-sm font-medium text-gray-600 dark:text-white/80">
+                  <td className={`${numCell()} font-medium`}>
                     {hasBudget(s.daily_budget)
                       ? s.daily_budget
                       : hasBudget(s.lifetime_budget)
@@ -2463,6 +2464,7 @@ function AdsTable({ adSet, campaign, currency, onLaunchWizard, manageNonce, rest
                       values={metrics.metricsById[a.id]}
                       loading={metrics.loading}
                       currency={currency}
+                      dense
                     />
                     <td className="pr-5 pl-2 py-3">
                       <div className="flex items-center justify-end gap-1.5">

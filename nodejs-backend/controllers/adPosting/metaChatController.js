@@ -8,6 +8,7 @@ const {
   getFacebookIdFromRequest,
 } = require("../../utils/metaConnection");
 const { createMcpClient } = require("../../services/metaChat/mcpClient");
+const { toolErrorSummary } = require("../../services/metaChat/toolErrors");
 const { s3Client } = require("../../storage/s3");
 const {
   createChat,
@@ -84,17 +85,26 @@ function emitConfirm(res, sessionId, pendingAction) {
   });
 }
 
-// A delete-campaign tool call deliberately accepts only an immutable campaign
-// ID, so its raw arguments do not carry the human-readable name needed by the
-// confirmation UI. Fetch it immediately before displaying the card. This is a
-// best-effort read: a lookup failure must never block a user from reviewing or
-// cancelling a pending action, and the card still shows the exact ID.
+// Campaign-scoped write tools accept an immutable campaign ID, so their raw
+// arguments do not carry the human-readable name the confirmation UI needs —
+// "Delete campaign 120248552251470135" is not something anyone can sanity-check.
+// Fetch it immediately before displaying the card. Best-effort: a lookup failure
+// must never block a user from reviewing or cancelling a pending action, and the
+// card still shows the exact ID.
+//
+// Both servers are supported: the shape of the lookup call, and of its result,
+// differ per mode, so the recipe comes from the profile.
 function campaignNameFromToolResult(result) {
   for (const part of result?.content || []) {
     if (part?.type !== "text" || typeof part.text !== "string") continue;
     try {
       const parsed = JSON.parse(part.text);
       if (typeof parsed?.name === "string" && parsed.name.trim()) return parsed.name.trim();
+      // The official server answers with a collection, already unwrapped from
+      // its JSON-string encoding by the profile's normalizeResult.
+      const rows = parsed?.ad_entities ?? parsed?.data ?? parsed?.campaigns;
+      const first = Array.isArray(rows) ? rows[0] : undefined;
+      if (typeof first?.name === "string" && first.name.trim()) return first.name.trim();
     } catch {
       const match = part.text.match(/^Campaign:\s*(.+)$/m);
       if (match?.[1]?.trim()) return match[1].trim();
@@ -105,14 +115,24 @@ function campaignNameFromToolResult(result) {
 
 async function addPendingActionDisplayNames(pendingAction, mcpClient) {
   const calls = pendingAction?.calls || [];
+  const profile = mcpClient?.mcpProfile;
+  if (!profile) return pendingAction;
+
   await Promise.all(
     calls.map(async (call) => {
-      if (call.name !== "ads_delete_campaign" || !call.args?.campaign_id || call.displayName) return;
+      if (call.displayName) return;
+      // Any write whose target resolves to a campaign, not just deletes — the
+      // official server routes every edit through one ads_update_entity tool, so
+      // matching on tool name alone would name nothing there.
+      const campaignId = profile.targetFromArgs(call.args || {}).campaignId;
+      if (!campaignId) return;
+
+      const lookup = profile.campaignNameLookup(campaignId, call.args || {});
+      if (!lookup?.name) return;
+
       try {
-        const result = await mcpClient.callTool({
-          name: "ads_get_campaign_details",
-          arguments: { campaign_id: call.args.campaign_id, fields: ["id", "name"] },
-        });
+        const raw = await mcpClient.callTool(lookup);
+        const { result } = profile.normalizeResult(raw);
         call.displayName = campaignNameFromToolResult(result);
       } catch (err) {
         logger.warn(`metaChat campaign-name lookup failed: ${err.message}`);
@@ -185,7 +205,13 @@ function makeOnEvent({ res, sessionId, userId, adAccountId, confirmedBy, cards }
       return;
     }
     if (type === "tool_result") {
-      sendEvent(res, "tool_result", { name: data.name });
+      // Forward a short failure reason, not just the tool name. Without it a
+      // failed call is indistinguishable from a successful one in the UI: a
+      // retry loop showed four identical "Worked for Ns" pills and no hint that
+      // anything had gone wrong, so the user could not tell why the assistant
+      // kept trying. Only the reason travels — never the result body, which can
+      // carry base64 images and whole insight payloads.
+      sendEvent(res, "tool_result", { name: data.name, error: toolErrorSummary(data.result) });
       logToolExecution({
         sessionId,
         userId,
@@ -287,7 +313,7 @@ exports.streamChat = async (req, res) => {
       return;
     }
 
-    mcpClient = await createMcpClient(accessToken);
+    mcpClient = await createMcpClient(accessToken, userId);
     const { toolMap, functionDeclarations, localHandlers } = await loadTools(mcpClient);
     const scope = { campaignId: session.campaignId, adSetId: session.adSetId, adId: session.adId };
     const chat = createChat({
@@ -296,6 +322,9 @@ exports.streamChat = async (req, res) => {
       scope,
       history: session.history,
       functionDeclarations,
+      // The prompt names MCP tools directly, and the two servers name them
+      // differently — build it from the same profile this connection uses.
+      profile: mcpClient.mcpProfile,
     });
 
     const turnCards = [];
@@ -419,7 +448,7 @@ exports.confirmAction = async (req, res) => {
     }
     claimedAction = claimed.pendingAction;
 
-    mcpClient = await createMcpClient(accessToken);
+    mcpClient = await createMcpClient(accessToken, userId);
     const { toolMap, functionDeclarations, localHandlers } = await loadTools(mcpClient);
 
     const turnCards = [];
@@ -615,7 +644,7 @@ exports.pickMedia = async (req, res) => {
     }
     const claimedInput = claimed.pendingInput;
 
-    mcpClient = await createMcpClient(accessToken);
+    mcpClient = await createMcpClient(accessToken, userId);
     const { toolMap, functionDeclarations, localHandlers } = await loadTools(mcpClient);
 
     const turnCards = [];
