@@ -26,8 +26,8 @@ import {
   PanelLeft,
   MenuIcon,
   Save,
+  X,
 } from 'lucide-react';
-import { LuLayoutTemplate } from 'react-icons/lu';
 import { useDispatch, useSelector } from 'react-redux';
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -37,7 +37,9 @@ import {
   setActiveBrandIQTab,
   setSelectedCompetitorBrand,
   setSelectedCompetitorPlatform,
+  setAdLibraryFilters,
 } from '@/store/reducers/brandIQ/brandIQTabsSlice';
+import AdLibraryFilterDropdown from './AdStudio/AdLibrary/AdLibraryFilterDropdown';
 import { Button } from '@/components/ui/button';
 import { resetAdCopySlice } from '@/store/reducers/adStudio/adCopySlice';
 import { resetPromptSlice, setField } from '@/store/reducers/adStudio/promptSlice';
@@ -80,6 +82,7 @@ import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
 import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
 const ENABLE_NEW_LAYOUT = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
 const AUTO_GENERATED_PLAN_ID = import.meta.env.VITE_AUTO_GENERATED_PLAN_ID;
+const SELECTED_BRAND_STORAGE_PREFIX = 'adsgpt:selectedBrand';
 
 // HIDE-MARK — intentionally-hidden header UI (Templates / Refresh buttons and
 // the global theme toggle). Named flag avoids a literal `false &&`
@@ -279,6 +282,16 @@ export default function TopHeader() {
   const adCreativeNewActivePage = useSelector(
     (state) => state.adStudioTabs.adCreativeNewActivePage
   );
+  const adLibraryFilters = useSelector((state) => state.brandIQTabs.adLibraryFilters);
+  const [adLibrarySearch, setAdLibrarySearch] = useState(adLibraryFilters?.searchQuery || '');
+
+  useEffect(() => {
+    setAdLibrarySearch(adLibraryFilters?.searchQuery || '');
+  }, [adLibraryFilters?.searchQuery]);
+
+  const submitAdLibrarySearch = () => {
+    dispatch(setAdLibraryFilters({ searchQuery: adLibrarySearch.trim() }));
+  };
 
   useEffect(() => {
     if (
@@ -406,12 +419,44 @@ export default function TopHeader() {
     };
   }, [mobileTabsOpenRef]);
 
-  // Initialize selectedCompetitorBrand from myBrands if not set
+  // Restore the user's last selected brand after the current brand list loads.
+  // Persist only the stable ID; the full, current brand object always comes
+  // from myBrands so deleted or updated brands cannot leave stale Redux data.
   useEffect(() => {
-    if (Array.isArray(myBrands) && myBrands.length > 0 && !selectedCompetitorBrand) {
-      dispatch(setSelectedCompetitorBrand(myBrands[0]));
+    if (!userData?.user_id || !Array.isArray(myBrands) || myBrands.length === 0) return;
+
+    const selectedBrandIsAvailable = myBrands.some(
+      (brand) => brand.id === selectedCompetitorBrand?.id
+    );
+    if (selectedBrandIsAvailable) return;
+
+    let storedBrandId = '';
+    try {
+      storedBrandId =
+        localStorage.getItem(`${SELECTED_BRAND_STORAGE_PREFIX}:${userData.user_id}`) || '';
+    } catch {
+      // Storage may be unavailable in restricted browsing contexts.
     }
-  }, [myBrands, selectedCompetitorBrand, dispatch]);
+
+    const restoredBrand = myBrands.find((brand) => brand.id === storedBrandId);
+    dispatch(setSelectedCompetitorBrand(restoredBrand || myBrands[0]));
+  }, [dispatch, myBrands, selectedCompetitorBrand?.id, userData?.user_id]);
+
+  // Keep the selection refresh-safe for this user. Brand existence is checked
+  // first so an obsolete/deleted ID is never written back to storage.
+  useEffect(() => {
+    if (!userData?.user_id || !selectedCompetitorBrand?.id || !Array.isArray(myBrands)) return;
+    if (!myBrands.some((brand) => brand.id === selectedCompetitorBrand.id)) return;
+
+    try {
+      localStorage.setItem(
+        `${SELECTED_BRAND_STORAGE_PREFIX}:${userData.user_id}`,
+        selectedCompetitorBrand.id
+      );
+    } catch {
+      // Redux selection still works when browser storage is unavailable.
+    }
+  }, [myBrands, selectedCompetitorBrand?.id, userData?.user_id]);
 
   const isMySpaceView =
     currentRoute === '/my-space' ||
@@ -541,10 +586,9 @@ export default function TopHeader() {
                 </Button>
               )}
             {currentRoute === '/adstudio' &&
-              ((activeAdStudioTabId === 'adCreative' &&
-                Array.isArray(creativeConversations) &&
-                creativeConversations.length === 0) ||
-                activeAdStudioTabId === 'adLibrary') && (
+              activeAdStudioTabId === 'adCreative' &&
+              Array.isArray(creativeConversations) &&
+              creativeConversations.length === 0 && (
                 <>
                   {/* <div className="backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-white/20 bg-[#0D0D0D]/50 px-3 py-2 text-[#AFAFAF] transition-colors 2xl:px-5 2xl:pr-3 2xl:text-sm">
               <Input
@@ -650,27 +694,163 @@ export default function TopHeader() {
                 </>
               )}
 
-            {currentRoute === '/adstudio' && activeAdStudioTabId === 'adVideo' && (
+            {/* for AdStudio Ad Library */}
+            {currentRoute === '/adstudio' && activeAdStudioTabId === 'adLibrary' && (
               <>
-                <Button
-                  variant="ghost"
-                  onClick={handleNewChatClick}
-                  className="backdrop-blur-100 relative flex h-8 items-center gap-1.5 rounded-full border border-black/10 bg-white/70 text-xs text-zinc-700 transition-colors hover:bg-zinc-200 hover:text-black has-[>svg]:px-4 2xl:h-9 2xl:gap-2 2xl:px-5 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:bg-[#2A2A2A]/70 dark:hover:text-white"
-                >
-                  <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
-                  <span>New Chat </span>
-                </Button>
-                {SHOW_HIDDEN_HEADER_UI && (
-                  <Button
-                    variant="ghost"
-                    onClick={handleNewChatClick}
-                    className="backdrop-blur-100 relative flex h-8 items-center gap-1.5 rounded-full border border-black/10 bg-white/70 text-xs text-zinc-700 transition-colors hover:bg-zinc-200 hover:text-black has-[>svg]:px-4 2xl:h-9 2xl:gap-2 2xl:px-5 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:bg-[#2A2A2A]/70 dark:hover:text-white"
+                {/* Search field with Competitor and Keyword selector */}
+                <div className="ad-library-search backdrop-blur-100 relative flex h-9 min-w-[260px] max-w-[400px] items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 text-zinc-600 shadow-xs transition-colors md:min-w-[320px] 2xl:min-w-[390px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]">
+                  <button
+                    type="button"
+                    aria-label="Search Ad Library"
+                    onClick={submitAdLibrarySearch}
+                    className="flex shrink-0 items-center justify-center text-zinc-400 transition-colors hover:text-zinc-700 dark:text-[#AFAFAF] dark:hover:text-white"
                   >
-                    <LuLayoutTemplate className="h-4 w-4 2xl:h-5 2xl:w-5" />
-                    <span>Templates </span>
-                  </Button>
-                )}
+                    <Search className="h-4 w-4" />
+                  </button>
+                  <input
+                    type="text"
+                    placeholder={
+                      adLibraryFilters?.searchType === 'keyword'
+                        ? 'Search by keyword...'
+                        : 'Search by competitor...'
+                    }
+                    aria-label="Search ads"
+                    className="ad-library-search-input min-w-0 flex-1 border-none bg-transparent text-xs text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-sm dark:text-[#D1D1D1] dark:placeholder:text-[#777777]"
+                    value={adLibrarySearch}
+                    maxLength={120}
+                    onChange={(e) => setAdLibrarySearch(e.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') submitAdLibrarySearch();
+                      if (event.key === 'Escape') {
+                        setAdLibrarySearch('');
+                        dispatch(setAdLibraryFilters({ searchQuery: '' }));
+                      }
+                    }}
+                  />
+                  {adLibrarySearch && (
+                    <button
+                      type="button"
+                      aria-label="Clear Ad Library search"
+                      onClick={() => {
+                        setAdLibrarySearch('');
+                        dispatch(setAdLibraryFilters({ searchQuery: '' }));
+                      }}
+                      className="flex shrink-0 items-center justify-center text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-white"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <div className="ml-1 flex space-x-1">
+                    {!isMobile ? (
+                      <>
+                        {['competitor', 'keyword'].map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize transition-colors duration-200 ${
+                              adLibraryFilters?.searchType === type
+                                ? 'bg-zinc-200 text-zinc-900 dark:bg-[#2A2A2A] dark:text-white'
+                                : 'text-zinc-500 hover:text-zinc-800 dark:text-[#777777] dark:hover:text-white'
+                            }`}
+                            onClick={() => {
+                              dispatch(
+                                setAdLibraryFilters({
+                                  searchType: type,
+                                  searchQuery: adLibrarySearch.trim(),
+                                })
+                              );
+                            }}
+                          >
+                            {type === 'competitor' ? 'Competitor' : 'Keyword'}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <MenuIcon className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4" />
+                        </PopoverTrigger>
+                        <PopoverContent className="flex w-fit flex-col gap-2 overflow-hidden rounded-lg border border-white/10 bg-[#0D0D0D]/50 p-2 shadow-lg backdrop-blur-[50px] transition-all duration-150">
+                          {['competitor', 'keyword'].map((type) => (
+                            <button
+                              key={type}
+                              type="button"
+                              className={`rounded-full px-2.5 py-0.5 text-xs capitalize transition-colors duration-200 ${
+                                adLibraryFilters?.searchType === type
+                                  ? 'bg-[#2A2A2A] text-white'
+                                  : 'text-[#777777]'
+                              }`}
+                              onClick={() => {
+                                dispatch(
+                                  setAdLibraryFilters({
+                                    searchType: type,
+                                    searchQuery: adLibrarySearch.trim(),
+                                  })
+                                );
+                              }}
+                            >
+                              {type === 'competitor' ? 'Competitor' : 'Keyword'}
+                            </button>
+                          ))}
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  </div>
+                </div>
+
+                {/* Modern Platform Filter Dropdown */}
+                <AdLibraryFilterDropdown />
               </>
+            )}
+
+            {/* Brand Switcher for all AdStudio sections (Ad Copy, Ad Creative, Ad Video, Ad Library) */}
+            {currentRoute === '/adstudio' && (
+              <BrandsDropdown
+                compact
+                options={
+                  Array.isArray(myBrands)
+                    ? myBrands.map((b) => ({
+                        value: b.id,
+                        label: b.name || 'Unnamed',
+                        logoUrl: b.logoUrls?.[0] || b.logoUrl || b.logo || '',
+                      }))
+                    : []
+                }
+                value={
+                  selectedCompetitorBrand
+                    ? {
+                        value: selectedCompetitorBrand.id,
+                        label: selectedCompetitorBrand.name || 'Unnamed',
+                        logoUrl:
+                          selectedCompetitorBrand.logoUrls?.[0] ||
+                          selectedCompetitorBrand.logoUrl ||
+                          selectedCompetitorBrand.logo ||
+                          '',
+                      }
+                    : Array.isArray(myBrands) && myBrands[0]
+                      ? {
+                          value: myBrands[0].id,
+                          label: myBrands[0].name || 'Unnamed',
+                          logoUrl:
+                            myBrands[0].logoUrls?.[0] ||
+                            myBrands[0].logoUrl ||
+                            myBrands[0].logo ||
+                            '',
+                        }
+                      : null
+                }
+                label="Select brand"
+                onChange={(brandId) => {
+                  const brand = Array.isArray(myBrands)
+                    ? myBrands.find((candidate) => candidate.id === brandId)
+                    : null;
+                  if (brand) dispatch(setSelectedCompetitorBrand(brand));
+                }}
+                onManageBrands={() => {
+                  dispatch(setActiveBrandIQTab('myBrands'));
+                  navigate('/brandiq');
+                }}
+              />
             )}
 
             {/* for BrandIQ */}
@@ -698,9 +878,14 @@ export default function TopHeader() {
             {currentRoute === '/brandiq' && activeBrandIQTabId === 'competitors' && (
               <div className="flex items-center gap-2">
                 <BrandsDropdown
+                  compact
                   options={
                     Array.isArray(myBrands)
-                      ? myBrands.map((b) => ({ value: b.id, label: b.name || 'Unnamed' }))
+                      ? myBrands.map((b) => ({
+                          value: b.id,
+                          label: b.name || 'Unnamed',
+                          logoUrl: b.logoUrls?.[0] || b.logoUrl || b.logo || '',
+                        }))
                       : []
                   }
                   value={
@@ -708,9 +893,22 @@ export default function TopHeader() {
                       ? {
                           value: selectedCompetitorBrand.id,
                           label: selectedCompetitorBrand.name || 'Unnamed',
+                          logoUrl:
+                            selectedCompetitorBrand.logoUrls?.[0] ||
+                            selectedCompetitorBrand.logoUrl ||
+                            selectedCompetitorBrand.logo ||
+                            '',
                         }
                       : Array.isArray(myBrands) && myBrands[0]
-                        ? { value: myBrands[0].id, label: myBrands[0].name }
+                        ? {
+                            value: myBrands[0].id,
+                            label: myBrands[0].name || 'Unnamed',
+                            logoUrl:
+                              myBrands[0].logoUrls?.[0] ||
+                              myBrands[0].logoUrl ||
+                              myBrands[0].logo ||
+                              '',
+                          }
                         : null
                   }
                   onChange={(val) => {
@@ -721,6 +919,7 @@ export default function TopHeader() {
                       dispatch(setSelectedCompetitorBrand(brand));
                     }
                   }}
+                  onManageBrands={() => dispatch(setActiveBrandIQTab('myBrands'))}
                 />
               </div>
             )}

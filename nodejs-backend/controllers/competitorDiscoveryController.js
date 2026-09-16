@@ -192,17 +192,29 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
     dateFrom,
     dateTo,
     sortOrder = 'desc',
+    search = '',
+    searchType = 'competitor',
   } = opts;
 
   const keywordTerms = keywords.map(k => k.term);
   // Advertiser variants are stored as their OWN competitor entries (e.g. "Sony"
   // and "Sony Electronics" are two competitors), so the names list already covers
   // every advertiser we want to match. De-duped for safety.
-  const competitorNames = [...new Set(
+  let competitorNames = [...new Set(
     competitors
       .map(c => (typeof c?.name === 'string' ? c.name.trim() : ''))
       .filter(Boolean)
   )];
+
+  const normalizedSearch = String(search || '').trim().toLowerCase();
+  if (normalizedSearch && searchType === 'competitor') {
+    competitorNames = competitorNames.filter((name) =>
+      name.toLowerCase().includes(normalizedSearch)
+    );
+    if (competitorNames.length === 0) {
+      return { ads: [], total: 0, hasMore: false };
+    }
+  }
 
   // Merge competitors + keywords, remove duplicates
   const allSearchTerms = [...new Set([...competitorNames, ...keywordTerms])];
@@ -225,6 +237,10 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
         ...(subCategoryIds.length === 1 && { subCategoryId: subCategoryIds[0] }),
         dateFrom,
         dateTo,
+        ...(normalizedSearch && {
+          searchQuery: normalizedSearch,
+          searchType,
+        }),
       },
     );
 
@@ -237,7 +253,19 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
       advertiserName: ad.advertiser_name || ad.advertiserName || null,
       advertiserDomain: ad.advertiser_domain || ad.advertiserDomain || null,
       thumbnailUrl: ad.thumbnail_url || ad.thumbnailUrl || ad.creativeUrl || null,
+      mediaCandidates: Array.isArray(ad.media_candidates)
+        ? ad.media_candidates
+        : Array.isArray(ad.mediaCandidates)
+          ? ad.mediaCandidates
+          : [],
       creativeUrl: ad.creative_url || ad.creativeUrl || null,
+      videoUrl: ad.video_url || ad.videoUrl || null,
+      videoCandidates: Array.isArray(ad.video_candidates)
+        ? ad.video_candidates
+        : Array.isArray(ad.videoCandidates)
+          ? ad.videoCandidates
+          : [],
+      adType: ad.ad_type || ad.adType || (ad.video_url || ad.videoUrl ? 'VIDEO' : 'IMAGE'),
       adTitle: ad.ad_title || ad.adTitle || null,
       adDescription: ad.ad_description || ad.adDescription || null,
       category: ad.category || null,
@@ -275,6 +303,8 @@ async function getCompetitorAds(req, res) {
       dateFrom,
       dateTo,
       sort = 'newest',
+      search = '',
+      searchType = 'competitor',
     } = req.query;
 
     // Category filters arrive as a comma-joined list ("12,34") or, defensively,
@@ -293,7 +323,7 @@ async function getCompetitorAds(req, res) {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const pageSize = Math.max(1, parseInt(req.query.pageSize, 10) || 24);
 
-    const userId = req.query.userId || req.user?.id;
+    const userId = req.user?.user_id;
 
     if (!userId || !brandId) {
       return res.status(400).json({ message: 'userId and brandId are required' });
@@ -357,11 +387,13 @@ async function getCompetitorAds(req, res) {
     }
 
     // ── Fetch ONE page from ES (pagination + filters happen inside ES now) ──
-    // platform: frontend sends a single platform or omits it for "All".
+    // The header filter supports multiple platforms. Omit it for "All".
     let platformParam = 'all';
     if (platform) {
-      if (Array.isArray(platform)) platformParam = platform[0];
-      else if (typeof platform === 'string') platformParam = platform.split(',')[0];
+      const values = (Array.isArray(platform) ? platform : String(platform).split(','))
+        .map((value) => String(value).trim())
+        .filter(Boolean);
+      if (values.length > 0) platformParam = [...new Set(values)];
     }
     const sortOrder = sort === 'oldest' ? 'asc' : 'desc';
 
@@ -378,6 +410,8 @@ async function getCompetitorAds(req, res) {
         dateFrom,
         dateTo,
         sortOrder,
+        search,
+        searchType,
       }
     );
 
@@ -404,10 +438,89 @@ async function getCompetitorAds(req, res) {
 
 // ── Refresh API: re-run discovery ───────────────────────────────────────
 
+// Brand-independent Ad Library search. The entered term is the sole discovery
+// seed, so switching the global Ad Studio brand cannot change search results.
+async function searchCompetitorAds(req, res) {
+  try {
+    const {
+      platform,
+      categoryId,
+      subCategoryId,
+      dateFrom,
+      dateTo,
+      sort = 'newest',
+      search,
+      searchType = 'competitor',
+    } = req.query;
+
+    if (!req.user?.user_id) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const toIdArray = (value) => {
+      if (value == null) return [];
+      const parts = Array.isArray(value) ? value : [value];
+      return parts
+        .flatMap((item) => String(item).split(','))
+        .map((item) => item.trim())
+        .filter(Boolean);
+    };
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.max(1, parseInt(req.query.pageSize, 10) || 24);
+    const categoryIds = toIdArray(categoryId);
+    const subCategoryIds = toIdArray(subCategoryId);
+
+    let platformParam = 'all';
+    if (platform) {
+      const values = (Array.isArray(platform) ? platform : String(platform).split(','))
+        .map((value) => String(value).trim())
+        .filter(Boolean);
+      if (values.length > 0) platformParam = [...new Set(values)];
+    }
+
+    const normalizedSearch = String(search).trim();
+    const keywords = searchType === 'keyword' ? [{ term: normalizedSearch }] : [];
+    const competitors = searchType === 'competitor' ? [{ name: normalizedSearch }] : [];
+
+    const { ads, total, hasMore } = await fetchAdsFromPas(
+      keywords,
+      competitors,
+      req.headers.authorization,
+      {
+        page,
+        pageSize,
+        platform: platformParam,
+        categoryIds,
+        subCategoryIds,
+        dateFrom,
+        dateTo,
+        sortOrder: sort === 'oldest' ? 'asc' : 'desc',
+        search: normalizedSearch,
+        searchType,
+      }
+    );
+
+    return res.status(200).json({
+      brandId: null,
+      searchScope: 'global',
+      status: page === 1 && ads.length === 0 ? 'EMPTY' : 'READY',
+      page,
+      pageSize,
+      totalCount: total,
+      hasMore,
+      filtersAvailable: { platforms: [], categories: [] },
+      ads,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message || 'Failed to search competitor ads' });
+  }
+}
+
 async function refreshCompetitorAds(req, res) {
   try {
     const { brandId } = req.params;
-    const userId = req.body.userId || req.user?.id;
+    const userId = req.user?.user_id;
 
     if (!userId || !brandId) {
       return res.status(400).json({ message: 'userId and brandId are required' });
@@ -464,6 +577,7 @@ async function refreshCompetitorAds(req, res) {
 module.exports = {
   runDiscoveryJob,
   getCompetitorAds,
+  searchCompetitorAds,
   refreshCompetitorAds,
   fetchAdsFromPas,
 };

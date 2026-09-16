@@ -1,9 +1,10 @@
 const express = require("express");
 const {getBrandNames,getBrandsList,updateBrandsList,createBrands,totalCount,deleteBrand,searchBrandsByName,removeBrandLogo} = require("../controllers/brandNamesList")
 const { getAudienceSuggestions } = require("../controllers/audienceSuggestionsController");
-const { getCompetitorAds, refreshCompetitorAds } = require("../controllers/competitorDiscoveryController");
+const { getCompetitorAds, searchCompetitorAds, refreshCompetitorAds } = require("../controllers/competitorDiscoveryController");
 const { ensureCategoryHandler } = require("../controllers/brandCategoryClassifier");
 const { authenticateJWT } = require("../services/authService");
+const { validateCompetitorAdsQuery, validateCompetitorAdsSearchQuery } = require("../Validations/competitorAds.validator");
 const router = express.Router();
 
 
@@ -80,7 +81,15 @@ router.post("/audience-suggestions", (req, res, next) => {
 });
 
 // ── Competitor Ads routes ───────────────────────────────────────────────
-router.get("/:brandId/competitor-ads", authenticateJWT, (req, res, next) => {
+router.get("/competitor-ads/search", authenticateJWT, validateCompetitorAdsSearchQuery, (req, res, next) => {
+  /*
+    #swagger.tags = ['BrandIQ']
+    #swagger.summary = 'Search competitor ads independently of a selected brand'
+  */
+  searchCompetitorAds(req, res, next);
+});
+
+router.get("/:brandId/competitor-ads", authenticateJWT, validateCompetitorAdsQuery, (req, res, next) => {
   /* 
     #swagger.tags = ['BrandIQ']
     #swagger.summary = 'Fetch competitor ads for a brand'

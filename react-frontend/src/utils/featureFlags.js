@@ -68,3 +68,11 @@ export const isAdsChatAllowedForEmail = (email) => {
   if (!email) return false;
   return ADS_CHAT_ALLOWED_EMAILS.includes(String(email).trim().toLowerCase());
 };
+
+// Global theme switcher toggle visibility across header toolbars & dashboard sections.
+// When false (default), the theme toggle is hidden from top headers/dashboards across the app
+// and exclusively available inside the Profile page.
+// To re-enable globally, set VITE_ENABLE_GLOBAL_THEME_TOGGLE=true in .env or flip the boolean here.
+export const IS_GLOBAL_THEME_TOGGLE_ENABLED =
+  import.meta.env.VITE_ENABLE_GLOBAL_THEME_TOGGLE === 'true';
+

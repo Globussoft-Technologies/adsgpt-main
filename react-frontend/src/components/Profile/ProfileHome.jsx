@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronDown, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Loader2, LogOut, Plus, Trash2 } from 'lucide-react';
 
 import adCreativeLogo from '@/assets/layouts/profile/adcreative.svg';
 import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
@@ -11,6 +11,7 @@ import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import getCookies from '@/utils/getCookies';
 import GenerationUsageGraph from './GenerationUsageGraph';
 import ModelCreditValue from './ModelCreditValue';
+import ProfileThemeToggle from './ProfileThemeToggle';
 import { fetchModelCredits, fetchAdCreativeImageTiers } from '@/utils/fetchModelCredits';
 import { getCanvaStatus, disconnectCanva, checkCanvaAuth } from '@/apis/canva/canvaApi';
 import { getFacebookAccounts, metaDisconnect } from '@/apis/metaAds/metaAdsApi';
@@ -260,12 +261,12 @@ export default function ProfileHome() {
   };
 
   return (
-    <div className="flex items-start justify-center p-0 text-zinc-900 lg:p-6 dark:text-white">
+    <div className="profile_container flex items-start justify-center p-0 text-zinc-900 lg:p-6 dark:text-white">
       <div className="mx-auto flex w-full max-w-[43rem] flex-col gap-6 lg:max-w-6xl lg:gap-8 2xl:max-w-7xl">
         {/* Two-column area: Profile + Subscription (left), Integrations (right), Credits full width below */}
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8">
         {/* Profile Section */}
-        <div className="flex items-center space-x-6 lg:col-start-1 lg:row-start-1">
+        <div className="flex items-center space-x-6 lg:col-span-2">
           <div className="relative size-[6.75rem] overflow-hidden rounded-full bg-zinc-100 2xl:size-[6.75rem] dark:bg-white/10">
             {userData?.profileImage ? (
               <img
@@ -319,14 +320,16 @@ export default function ProfileHome() {
               {' '}
               {userData?.user_email || 'user@email.com'}
             </p>
-            {
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
               <Link
                 to={'/logout'}
-                className="block w-[135px] max-w-max items-center gap-2 rounded-full bg-zinc-200 px-5 py-[7px] text-xs font-medium whitespace-nowrap text-zinc-800 backdrop-blur-2xl transition-colors hover:bg-zinc-300 disabled:opacity-40 disabled:hover:bg-zinc-200 2xl:text-sm dark:bg-white/20 dark:text-white dark:hover:bg-white/30 dark:disabled:hover:bg-white/20"
+                className="group inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/70 bg-white/[0.45] px-4 text-xs font-semibold whitespace-nowrap text-[#0F172A] shadow-[0_8px_20px_-4px_rgba(0,0,0,0.08),0_4px_8px_-2px_rgba(0,0,0,0.04),inset_0_1px_1px_0_rgba(255,255,255,0.8)] backdrop-blur-[16px] transition-[border-color,background-color,color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-px hover:scale-[1.01] hover:border-white/85 hover:bg-white/[0.56] hover:shadow-[0_10px_23px_-5px_rgba(0,0,0,0.1),0_5px_9px_-3px_rgba(0,0,0,0.05),inset_0_1px_1px_0_rgba(255,255,255,0.88)] hover:duration-[320ms] focus-visible:ring-2 focus-visible:ring-[#8B5CF6]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F7F4EE] focus-visible:outline-none active:translate-y-0 active:scale-[0.98] motion-reduce:transform-none sm:gap-2 sm:px-5 sm:text-[13px] dark:border-white/[0.12] dark:bg-white/[0.06] dark:text-white/90 dark:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.3),0_4px_8px_-2px_rgba(0,0,0,0.2),inset_0_1px_1px_0_rgba(255,255,255,0.1)] dark:hover:border-white/[0.17] dark:hover:bg-white/[0.085] dark:hover:shadow-[0_10px_24px_-5px_rgba(0,0,0,0.36),0_5px_9px_-3px_rgba(0,0,0,0.22),inset_0_1px_1px_0_rgba(255,255,255,0.12)] dark:focus-visible:ring-offset-[#0F0F0F]"
               >
+                <LogOut className="h-3 w-3 text-[#64748B] transition-transform delay-0 duration-150 ease-out group-hover:translate-x-px group-hover:delay-75 group-hover:duration-300 motion-reduce:transform-none sm:h-3.5 sm:w-3.5 dark:text-[#A8AFBC]" aria-hidden="true" />
                 Sign Out
               </Link>
-            }
+              <ProfileThemeToggle />
+            </div>
           </div>
         </div>
 

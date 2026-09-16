@@ -41,6 +41,21 @@ const initialState = {
   competitorAdsError: null,
   selectedCompetitorBrand: null,
   selectedCompetitorPlatform: null,
+  adLibraryFilters: {
+    platforms: [
+      'facebook',
+      'instagram',
+      'gdn',
+    ],
+    categoryIds: [],
+    subCategoryIds: [],
+    datePreset: 'all',
+    dateFrom: '',
+    dateTo: '',
+    sort: 'newest',
+    searchQuery: '',
+    searchType: 'competitor',
+  },
 };
 
 const brandIQTabsSlice = createSlice({
@@ -81,6 +96,25 @@ const brandIQTabsSlice = createSlice({
     },
     setSelectedCompetitorPlatform: (state, action) => {
       state.selectedCompetitorPlatform = action.payload;
+    },
+    setAdLibraryFilters: (state, action) => {
+      state.adLibraryFilters = {
+        ...state.adLibraryFilters,
+        ...action.payload,
+      };
+    },
+    resetAdLibraryFilters: (state) => {
+      state.adLibraryFilters = {
+        platforms: [],
+        categoryIds: [],
+        subCategoryIds: [],
+        datePreset: 'all',
+        dateFrom: '',
+        dateTo: '',
+        sort: 'newest',
+        searchQuery: '',
+        searchType: 'competitor',
+      };
     },
   },
   extraReducers: (builder) => {
@@ -198,6 +232,17 @@ const brandIQTabsSlice = createSlice({
   },
 });
 
-export const { setActiveBrandIQTab, setBrandIQLoading, setBrandIQError, setGetSessionError, setCompetitorAds, setCompetitorAdsLoading, setCompetitorAdsError, setSelectedCompetitorBrand, setSelectedCompetitorPlatform } =
-  brandIQTabsSlice.actions;
+export const {
+  setActiveBrandIQTab,
+  setBrandIQLoading,
+  setBrandIQError,
+  setGetSessionError,
+  setCompetitorAds,
+  setCompetitorAdsLoading,
+  setCompetitorAdsError,
+  setSelectedCompetitorBrand,
+  setSelectedCompetitorPlatform,
+  setAdLibraryFilters,
+  resetAdLibraryFilters,
+} = brandIQTabsSlice.actions;
 export default brandIQTabsSlice.reducer;

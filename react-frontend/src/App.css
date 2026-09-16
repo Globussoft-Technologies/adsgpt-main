@@ -1954,9 +1954,10 @@ html.theme-changing *::after {
 }
 ::view-transition-new(root) {
   z-index: 99999;
-  animation: lm-theme-circle-reveal 0.45s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: lm-theme-circle-reveal 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   will-change: clip-path;
   transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 @keyframes lm-theme-circle-reveal {
@@ -1969,6 +1970,48 @@ html.theme-changing *::after {
 }
 
 /* ── Visible scrollbar on Profile page in Light Mode ─────────────────────── */
+/* Profile uses a quieter dissolve after its segmented control settles. */
+html.profile-theme-changing::view-transition-old(root) {
+  z-index: 1;
+  clip-path: none;
+  animation: profile-theme-fade-out 220ms ease-out both;
+  will-change: opacity, filter;
+}
+
+html.profile-theme-changing::view-transition-new(root) {
+  z-index: 2;
+  clip-path: none;
+  animation: profile-theme-fade-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, filter;
+  transform: none;
+}
+
+@keyframes profile-theme-fade-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(1px);
+  }
+}
+
+@keyframes profile-theme-fade-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto {
+  scrollbar-gutter: stable;
+}
+
 html:not(.dark) body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto,
 html:not(.dark) .profile_container {
   scrollbar-width: thin !important;
@@ -1990,6 +2033,30 @@ html:not(.dark) .profile_container::-webkit-scrollbar-thumb {
 
 html:not(.dark) body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar-track,
 html:not(.dark) .profile_container::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+html.dark body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto,
+html.dark .profile_container {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent !important;
+  -ms-overflow-style: auto !important;
+}
+
+html.dark body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar,
+html.dark .profile_container::-webkit-scrollbar {
+  display: block !important;
+  width: 6px !important;
+}
+
+html.dark body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar-thumb,
+html.dark .profile_container::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.24) !important;
+  border-radius: 9999px !important;
+}
+
+html.dark body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar-track,
+html.dark .profile_container::-webkit-scrollbar-track {
   background: transparent !important;
 }
 
@@ -2866,7 +2933,7 @@ html:not(.dark) .ad-library-search .ad-library-search-input:focus-visible {
 }
 
 html:not(.dark) .ad-library-search {
-  background: var(--ws-surface-control) !important;
+  background: rgb(255 255 255 / 90%) !important;
   border-color: var(--ws-border) !important;
   box-shadow: none !important;
 }
@@ -4022,8 +4089,7 @@ html:not(.dark) .light-ambient-ui-layer > * {
   }
 }
 
-/* Keep the two fields in the Describe Brand popover on the same Light Mode
-   control surface. BrandSelect is shared elsewhere, so this remains local. */
+/* Keep the retained Describe Brand popover ready for future reuse in Light Mode. */
 html:not(.dark) .describe-brand-popover .describe-brand-name-field .brand-select-control,
 html:not(.dark) .describe-brand-popover .describe-brand-cta-input {
   background: var(--ws-surface-control) !important;
@@ -4033,6 +4099,18 @@ html:not(.dark) .describe-brand-popover .describe-brand-cta-input {
 
 html:not(.dark) .describe-brand-popover .describe-brand-name-field .brand-select-control:focus-within,
 html:not(.dark) .describe-brand-popover .describe-brand-cta-input:focus {
+  border-color: var(--ws-input-focus-border) !important;
+  box-shadow: 0 0 0 3px var(--ws-input-focus-ring) !important;
+}
+
+/* Keep the active Ad Copy CTA popover aligned with the workspace Light Mode controls. */
+html:not(.dark) .adcopy-cta-popover .adcopy-cta-input {
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border-strong) !important;
+  box-shadow: var(--ws-shadow-inner) !important;
+}
+
+html:not(.dark) .adcopy-cta-popover .adcopy-cta-input:focus {
   border-color: var(--ws-input-focus-border) !important;
   box-shadow: 0 0 0 3px var(--ws-input-focus-ring) !important;
 }

@@ -40,7 +40,7 @@ import {
 import { submitAdCopyRequest } from '@/store/actions/adStudio/adCopyActions';
 import SpeechToText from '../SpeechToText';
 import BrandPreferenceDropdown from './BrandPrefernceDropdown';
-import DescribeBrandDropdown from './DescribeBrandDropdown';
+import CallToActionDropdown from './CallToActionDropdown';
 import ColorVariantsDropdown from './ColorVariantsDropdown';
 import VideoTypePreference from './AdVideo/VideoTypePreference';
 import { deleteImage, submitAdCreativeRequest } from '@/store/actions/adStudio/adCreativeActions';
@@ -730,6 +730,7 @@ const AdPromptComponent = () => {
                   icon={SparkleDark}
                   value={selectPlateformsOptions.find((p) => p.value === platform)}
                   onChange={handlePlatformChange}
+                  showChevron
                 />
 
                 {/* VARIANTS */}
@@ -739,7 +740,12 @@ const AdPromptComponent = () => {
                   icon={ShapeDark}
                   onChange={handleVariantsChange}
                   value={shapes.find((s) => s.value === no_of_ads)}
+                  showChevron
                 />
+
+                <div id="tour_call_to_action_for_copy">
+                  <CallToActionDropdown />
+                </div>
               </div>
               <div className="right_side_filter_adcopy flex items-center gap-2">
                 {improvedPrompt && (
@@ -759,10 +765,6 @@ const AdPromptComponent = () => {
                 <span className="hidden md:flex items-center gap-1 rounded-full border border-black/10 bg-zinc-100 px-2 py-1 text-[10px] text-zinc-700 2xl:text-xs whitespace-nowrap dark:border-white/10 dark:bg-white/15 dark:text-white">
                   🌐 All regional languages supported
                 </span>
-                <div id="tour_describe_brand_for_copy">
-                  <DescribeBrandDropdown />
-                </div>
-
                 {prompt && !isListening ? (
                   <button
                     id="tour_copy_prompt_by_mic"

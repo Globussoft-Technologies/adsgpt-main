@@ -17,7 +17,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
-import { getCompetitorAds, refreshCompetitorAds } from '@/apis/brandIQ/competitorAdsApi';
+import {
+  getCompetitorAds,
+  refreshCompetitorAds,
+  searchCompetitorAds,
+} from '@/apis/brandIQ/competitorAdsApi';
 import CompetitorAdCard from './CompetitorAdCard';
 import CompetitorAdCardLoader from './CompetitorAdCardLoader';
 import CategoryFilter from './CategoryFilter';
@@ -86,11 +90,21 @@ const formatLocalISODate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-const CompetitorsHome = () => {
+const CompetitorsHome = ({ surface = 'brandIq' }) => {
   const dispatch = useDispatch();
+  const isAdStudioLibrary = surface === 'adStudioLibrary';
   const [width] = useWindowSize();
   const userData = useSelector((state) => state.socket.userData);
   const selectedBrand = useSelector((state) => state.brandIQTabs.selectedCompetitorBrand);
+  const adLibraryFilters = useSelector((state) => state.brandIQTabs.adLibraryFilters);
+  const independentSearchQuery = isAdStudioLibrary
+    ? String(adLibraryFilters?.searchQuery || '').trim()
+    : '';
+  const hasIndependentSearch = independentSearchQuery.length > 0;
+  const brandFeedId = hasIndependentSearch ? '' : selectedBrand?.id || '';
+  const requestScopeKey = hasIndependentSearch
+    ? `search:${adLibraryFilters?.searchType || 'competitor'}:${independentSearchQuery}`
+    : `brand:${brandFeedId}`;
 
   const [ads, setAds] = useState([]);
   const [status, setStatus] = useState(null); // null | PENDING | READY | EMPTY | FAILED
@@ -102,6 +116,37 @@ const CompetitorsHome = () => {
   const [activeCategoryIds, setActiveCategoryIds] = useState([]);
   const [activeSubCategoryIds, setActiveSubCategoryIds] = useState([]);
   const [activeSort, setActiveSort] = useState('newest');
+
+  // Effective filters (uses Redux adLibraryFilters when on Ad Studio Library surface)
+  const effectivePlatforms = useMemo(() => {
+    if (!isAdStudioLibrary) {
+      const selectedPill = platformPills.find((p) => p.key === activePlatform);
+      return selectedPill?.platforms || [];
+    }
+    const plats = adLibraryFilters?.platforms || [];
+    if (plats.includes('all') || plats.length === 7) return [];
+    return plats;
+  }, [isAdStudioLibrary, activePlatform, adLibraryFilters?.platforms]);
+
+  const effectiveCategoryIds = isAdStudioLibrary
+    ? adLibraryFilters?.categoryIds || []
+    : activeCategoryIds;
+
+  const effectiveSubCategoryIds = isAdStudioLibrary
+    ? adLibraryFilters?.subCategoryIds || []
+    : activeSubCategoryIds;
+
+  const effectiveSort = isAdStudioLibrary
+    ? adLibraryFilters?.sort || 'newest'
+    : activeSort;
+
+  const effectiveDateFrom = isAdStudioLibrary
+    ? adLibraryFilters?.dateFrom || ''
+    : null;
+
+  const effectiveDateTo = isAdStudioLibrary
+    ? adLibraryFilters?.dateTo || ''
+    : null;
 
   // Date range picker states — initialize synchronously to prevent race condition
   const getInitialDateRange = useCallback(() => {
@@ -187,7 +232,7 @@ const CompetitorsHome = () => {
   const fetchAdsRef = useRef();
   const fetchAds = useCallback(
     async (isPolling = false, isAppend = false, overridePage = null) => {
-      if (!selectedBrand?.id || !userData?.user_id) return;
+      if (!userData?.user_id || (!hasIndependentSearch && !selectedBrand?.id)) return;
 
       if (isAppend) {
         setLoadingMore(true);
@@ -199,29 +244,36 @@ const CompetitorsHome = () => {
       const requestId = ++latestRequestRef.current;
 
       try {
-        const selectedPill = platformPills.find((p) => p.key === activePlatform);
-        const platformFilter = activePlatform === 'all' ? '' : selectedPill?.platforms;
+        const platformFilter = effectivePlatforms;
 
         const targetPage = overridePage !== null ? overridePage : isAppend ? page + 1 : page;
 
+        const dateFromParam = effectiveDateFrom !== null ? effectiveDateFrom : dateFrom;
+        const dateToParam = effectiveDateTo !== null ? effectiveDateTo : dateTo;
+
         const params = {
-          userId: userData.user_id,
           page: targetPage,
           pageSize: PAGE_SIZE,
-          sort: activeSort,
+          sort: effectiveSort,
           ...(platformFilter &&
             platformFilter.length > 0 && { platform: platformFilter.join(',') }),
-          ...(activeCategoryIds.length > 0 && { categoryId: activeCategoryIds.join(',') }),
-          ...(activeSubCategoryIds.length > 0 && { subCategoryId: activeSubCategoryIds.join(',') }),
-          ...(dateFrom && {
-            dateFrom: new Date(dateFrom).toISOString(),
-            dateTo: dateTo
-              ? new Date(dateTo + 'T23:59:59').toISOString()
+          ...(effectiveCategoryIds.length > 0 && { categoryId: effectiveCategoryIds.join(',') }),
+          ...(effectiveSubCategoryIds.length > 0 && { subCategoryId: effectiveSubCategoryIds.join(',') }),
+          ...(dateFromParam && {
+            dateFrom: new Date(dateFromParam).toISOString(),
+            dateTo: dateToParam
+              ? new Date(dateToParam + 'T23:59:59').toISOString()
               : new Date().toISOString(),
+          }),
+          ...(isAdStudioLibrary && adLibraryFilters?.searchQuery?.trim() && {
+            search: adLibraryFilters.searchQuery.trim(),
+            searchType: adLibraryFilters.searchType || 'competitor',
           }),
         };
 
-        const data = await getCompetitorAds(selectedBrand.id, params);
+        const data = hasIndependentSearch
+          ? await searchCompetitorAds(params)
+          : await getCompetitorAds(selectedBrand.id, params);
 
         // Ignore stale responses — a newer request was made
         if (requestId !== latestRequestRef.current) return;
@@ -263,10 +315,16 @@ const CompetitorsHome = () => {
     [
       selectedBrand,
       userData,
-      activePlatform,
-      activeCategoryIds,
-      activeSubCategoryIds,
-      activeSort,
+      hasIndependentSearch,
+      effectivePlatforms,
+      effectiveCategoryIds,
+      effectiveSubCategoryIds,
+      effectiveSort,
+      effectiveDateFrom,
+      effectiveDateTo,
+      isAdStudioLibrary,
+      adLibraryFilters?.searchQuery,
+      adLibraryFilters?.searchType,
       dateFrom,
       dateTo,
       page,
@@ -280,7 +338,7 @@ const CompetitorsHome = () => {
   // changes. Replaces the previous two-effect setup whose independent fetches
   // could race and briefly flash a stale EMPTY state during a fast switch.
   useEffect(() => {
-    if (!selectedBrand?.id) return;
+    if (!userData?.user_id || (!hasIndependentSearch && !brandFeedId)) return;
     setStatus(null);
     setPage(1);
     setAds([]);
@@ -291,11 +349,16 @@ const CompetitorsHome = () => {
     setLoading(true);
     fetchAdsRef.current(false, false, 1);
   }, [
-    selectedBrand?.id,
-    activePlatform,
-    activeCategoryIds,
-    activeSubCategoryIds,
-    activeSort,
+    requestScopeKey,
+    userData?.user_id,
+    hasIndependentSearch,
+    brandFeedId,
+    effectivePlatforms,
+    effectiveCategoryIds,
+    effectiveSubCategoryIds,
+    effectiveSort,
+    effectiveDateFrom,
+    effectiveDateTo,
     dateFrom,
     dateTo,
   ]);
@@ -497,7 +560,8 @@ const CompetitorsHome = () => {
       </div>
 
       {/* Filters Bar */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
+      {!isAdStudioLibrary && (
+        <div className="mb-6 flex flex-wrap items-center gap-3">
         {/* Platform Pills */}
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium tracking-wide text-gray-500 uppercase dark:text-white/40">
@@ -675,6 +739,7 @@ const CompetitorsHome = () => {
           </Select>
         </div>
       </div>
+      )}
 
       {/* Ads Grid */}
       <div ref={gridContainerRef} className="flex-1 overflow-y-auto pb-20">
@@ -742,9 +807,11 @@ const CompetitorsHome = () => {
                   </div>
                   <h3 className="mb-2 text-lg font-medium text-gray-900 dark:text-white">No competitor ads found</h3>
                   <p className="mb-6 max-w-md text-center text-sm text-gray-500 dark:text-white/50">
-                    {activePlatform === 'all'
+                    {(isAdStudioLibrary ? effectivePlatforms.length === 0 : activePlatform === 'all')
                       ? "We couldn't find any ads matching your brand's competitors. Try adjusting your filters or refreshing."
-                      : `No ${platformPills.find((p) => p.key === activePlatform)?.label || ''} ads found for this brand's competitors. Try another platform or adjust your filters.`}
+                      : isAdStudioLibrary
+                        ? `No ads were found for the selected platforms. Try another platform or adjust your filters.`
+                        : `No ${platformPills.find((p) => p.key === activePlatform)?.label || ''} ads found for this brand's competitors. Try another platform or adjust your filters.`}
                   </p>
                   <div className="flex items-center gap-3">
                     <button

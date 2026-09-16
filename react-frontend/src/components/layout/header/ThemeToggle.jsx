@@ -3,10 +3,15 @@ import { flushSync } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { toggleTheme } from '@/store/reducers/theme/themeSlice';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+import { IS_GLOBAL_THEME_TOGGLE_ENABLED } from '@/utils/featureFlags';
 
-export default function ThemeToggle() {
+export default function ThemeToggle({ forceShow = false, className = '' }) {
   const dispatch = useDispatch();
   const isDarkMode = useSelector((state) => state.theme.isDarkMode);
+
+  if (!IS_GLOBAL_THEME_TOGGLE_ENABLED && !forceShow) {
+    return null;
+  }
 
   const handleToggle = (e) => {
     const root = document.documentElement;
@@ -49,7 +54,7 @@ export default function ThemeToggle() {
         type="button"
         aria-label="Toggle theme"
         onClick={handleToggle}
-        className="group relative flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-black/10 bg-white/80 text-zinc-700 backdrop-blur-md transition-all duration-300 hover:scale-105 active:scale-95 2xl:h-9 2xl:w-9 lm-pill-btn shadow-sm hover:text-zinc-900 dark:border-white/20 dark:bg-[#0D0D0D]/70 dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white"
+        className={`group relative flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-black/10 bg-white/80 text-zinc-700 backdrop-blur-md transition-all duration-300 hover:scale-105 active:scale-95 2xl:h-9 2xl:w-9 lm-pill-btn shadow-sm hover:text-zinc-900 dark:border-white/20 dark:bg-[#0D0D0D]/70 dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white ${className}`}
       >
         <Sun
           className={`absolute h-4 w-4 transition-all duration-500 2xl:h-5 2xl:w-5 ${

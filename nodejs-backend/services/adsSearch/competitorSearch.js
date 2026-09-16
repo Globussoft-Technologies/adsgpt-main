@@ -156,7 +156,51 @@ const PLATFORM_CONFIGS = {
     categoryId: 'category_id',
     subCategoryId: 'subCategory_id',
     skipSourceFields: ['image_url_original'], // base64 blob — never fetch
-  }
+  },
+  pinterest: {
+    index: process.env.COMPETITOR_INDEX_PINTEREST || 'pinterest_search_mix',
+    adIdField: 'pinterest_ad.id',
+    postOwner: 'pinterest_ad_post_owners.post_owner_name',
+    postOwnerImage: 'post_owner_image',
+    adTitle: 'pinterest_ad_variants.title',
+    adText: 'pinterest_ad_variants.text',
+    newsfeedDescription: 'pinterest_ad_variants.newsfeed_description',
+    firstSeen: 'pinterest_ad.post_date',
+    lastSeen: 'pinterest_ad.last_seen',
+    adType: 'pinterest_ad.type',
+    adUrl: 'pinterest_ad_meta_data.destination_url',
+    imageUrl: 'new_nas_image_url',
+    fallbackImage: 'thumbnail',
+    imageExistsFields: ['new_nas_image_url', 'thumbnail'],
+    validImageFields: ['new_nas_image_url', 'thumbnail'],
+    popularity: 'pinterest_ad.hits',
+    categoryName: 'pinterest.category',
+    subCategoryName: 'pinterest.subCategory',
+    categoryId: 'category_id',
+    subCategoryId: 'subCategory_id',
+  },
+  reddit: {
+    index: process.env.COMPETITOR_INDEX_REDDIT || 'reddit_search_mix',
+    adIdField: 'reddit_ad.id',
+    postOwner: 'reddit_ad_post_owners.post_owner_name',
+    postOwnerImage: 'reddit_ad_post_owners.post_owner_image',
+    adTitle: 'reddit_ad_variants.title',
+    adText: 'reddit_ad_variants.text',
+    newsfeedDescription: 'reddit_ad_variants.newsfeed_description',
+    firstSeen: 'reddit_ad.post_date',
+    lastSeen: 'reddit_ad.last_seen',
+    adType: 'reddit_ad.type',
+    adUrl: 'reddit_ad_meta_data.destination_url',
+    imageUrl: 'new_nas_image_url',
+    fallbackImage: 'reddit_ad_variants.image_url',
+    imageExistsFields: ['new_nas_image_url', 'reddit_ad_variants.image_url'],
+    validImageFields: ['new_nas_image_url', 'reddit_ad_variants.image_url'],
+    popularity: 'reddit_ad.hits',
+    categoryName: 'reddit.category',
+    subCategoryName: 'reddit.subCategory',
+    categoryId: 'category_id',
+    subCategoryId: 'subCategory_id',
+  },
 };
 
 // ── Nested getter helper ────────────────────────────────────────────────
@@ -363,6 +407,36 @@ function flattenAd(ad, platform, config, docId = null) {
     }
     
     const thumbnailUrl = transformMediaUrl(mediaUrl);
+    const skippedSourceFields = new Set(config.skipSourceFields || []);
+    const imageCandidateFields = [
+      config.imageUrl,
+      config.fallbackImage,
+      'new_nas_image_url',
+      'thumbnail',
+      'thumbnail_url',
+      'image_url',
+      'image_url_original',
+      'ad_image_or_video',
+    ].filter((field, index, fields) =>
+      field && !skippedSourceFields.has(field) && fields.indexOf(field) === index
+    );
+    const mediaCandidates = [...new Set(
+      [
+        thumbnailUrl,
+        ...imageCandidateFields.flatMap((field) => {
+          const value = getNested(ad, field);
+          return Array.isArray(value) ? value : [value];
+        }),
+      ]
+        .filter((candidate) =>
+          isValidMediaUrl(candidate) &&
+          !isVideoFileUrl(candidate) &&
+          !isPlaceholderImage(candidate) &&
+          !isBlockedCdnUrl(candidate)
+        )
+        .map(transformMediaUrl)
+        .filter(Boolean)
+    )];
 
     // Video URL (for video ads)
     const adType = getNested(ad, config.adType);
@@ -378,7 +452,29 @@ function flattenAd(ad, platform, config, docId = null) {
         }
       }
     }
-    const videoUrl = videoUrlRaw ? transformMediaUrl(videoUrlRaw) : null;
+    const videoCandidateFields = [
+      config.videoUrl,
+      'nas_video_url',
+      'video_url',
+      'new_nas_video_url',
+    ].filter((field, index, fields) => field && fields.indexOf(field) === index);
+    const videoCandidates = [...new Set(
+      [
+        videoUrlRaw,
+        ...videoCandidateFields.flatMap((field) => {
+          const value = getNested(ad, field);
+          return Array.isArray(value) ? value : [value];
+        }),
+      ]
+        .filter((candidate) =>
+          isValidMediaUrl(candidate) &&
+          !isPlaceholderImage(candidate) &&
+          !isBlockedCdnUrl(candidate)
+        )
+        .map(transformMediaUrl)
+        .filter(Boolean)
+    )];
+    const videoUrl = videoCandidates[0] || null;
 
     // Require a valid image thumbnail for all ads.
     // Video ads also need a poster frame thumbnail — <img> can't render .mp4 files.
@@ -407,9 +503,11 @@ function flattenAd(ad, platform, config, docId = null) {
       postOwner: getNested(ad, config.postOwner),
       postOwnerImage: transformMediaUrl(getNested(ad, config.postOwnerImage)),
       thumbnailUrl: thumbnailUrl,
+      mediaCandidates: mediaCandidates,
       mediaUrl: mediaUrl,
       creativeUrl: creativeUrl,
       videoUrl: videoUrl,
+      videoCandidates: videoCandidates,
       adTitle: getNested(ad, config.adTitle),
       adDescription: getNested(ad, config.newsfeedDescription) || getNested(ad, config.adText),
       adText: getNested(ad, config.adText),
@@ -488,12 +586,17 @@ exports.searchAdsByKeywords = async (
     return { ads: [], total: 0, hasMore: false };
   }
 
-  const platformsToSearch = platform === 'all'
-    ? Object.keys(PLATFORM_CONFIGS)
-    : [platform];
+  const requestedPlatforms = Array.isArray(platform)
+    ? platform
+    : typeof platform === 'string' && platform !== 'all'
+      ? platform.split(',')
+      : [];
+  const platformsToSearch = requestedPlatforms.length > 0
+    ? [...new Set(requestedPlatforms.map((value) => String(value).trim()).filter(Boolean))]
+    : Object.keys(PLATFORM_CONFIGS);
 
   // Search each platform's index in PARALLEL, each paginated independently
-  // at the ES level (from/size). Works whether the 4 platforms share a cluster
+  // at the ES level. Works whether platforms share a cluster
   // (dev) or live on separate clusters (prod) — we never cross-query indices.
   const searchPromises = platformsToSearch.map((plat) => {
     const config = PLATFORM_CONFIGS[plat];
@@ -636,6 +739,25 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
           operator: 'or',
           boost: 2.0
         }
+      });
+    }
+
+    // A user-entered keyword is a hard constraint. Discovery keywords above
+    // remain ranking signals, while this clause controls the visible result set
+    // and therefore keeps totals/pagination accurate.
+    const userSearchQuery = String(filters.searchQuery || '').trim();
+    if (userSearchQuery && filters.searchType === 'keyword') {
+      mustClauses.push({
+        multi_match: {
+          query: userSearchQuery,
+          fields: [
+            config.adTitle,
+            config.adText,
+            config.newsfeedDescription,
+          ].filter(Boolean),
+          type: 'best_fields',
+          operator: 'and',
+        },
       });
     }
 

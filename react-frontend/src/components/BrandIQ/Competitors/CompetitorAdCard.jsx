@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Instagram } from 'lucide-react';
-import { FaFacebookF, FaYoutube, FaLinkedinIn } from 'react-icons/fa';
+import { Globe2, ImageOff, Instagram } from 'lucide-react';
+import {
+  FaFacebookF,
+  FaLinkedinIn,
+  FaPinterestP,
+  FaRedditAlien,
+  FaYoutube,
+} from 'react-icons/fa';
 import { SiGoogle, SiGoogleads } from 'react-icons/si';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import RecreateAdModal from '@/components/AdLibrary/RecreateAdModal';
@@ -14,6 +20,8 @@ const platformIcons = {
   youtube: <FaYoutube className="h-4 w-4" />,
   linkedin: <FaLinkedinIn className="h-4 w-4" />,
   gdn: <SiGoogleads className="h-4 w-4" />,
+  pinterest: <FaPinterestP className="h-4 w-4" />,
+  reddit: <FaRedditAlien className="h-4 w-4" />,
 };
 
 const platformLabels = {
@@ -23,14 +31,14 @@ const platformLabels = {
   youtube: 'YouTube',
   linkedin: 'LinkedIn',
   gdn: 'Google Display Network',
+  pinterest: 'Pinterest',
+  reddit: 'Reddit',
 };
 
 
 
 const CompetitorAdCard = ({ ad, onClick }) => {
   const isDarkMode = useSelector((state) => state.theme.isDarkMode);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [textExpanded, setTextExpanded] = useState(false);
   const [isRecreateModalOpen, setIsRecreateModalOpen] = useState(false);
@@ -38,11 +46,78 @@ const CompetitorAdCard = ({ ad, onClick }) => {
   const MAX_CHARS = 100;
 
   const platform = ad.platform?.toLowerCase() || 'facebook';
-  const platformIcon = platformIcons[platform];
+  const platformIcon = platformIcons[platform] || <Globe2 className="h-4 w-4" />;
   const platformLabel = platformLabels[platform] || platform;
 
 
-  const imageUrl = ad.thumbnailUrl || ad.creativeUrl || '';
+  const isVideoAd = String(ad.adType || '').toUpperCase() === 'VIDEO';
+  const imageCandidates = useMemo(
+    () =>
+      [...new Set([
+        ...(Array.isArray(ad.mediaCandidates) ? ad.mediaCandidates : []),
+        ad.thumbnailUrl,
+        !isVideoAd ? ad.creativeUrl : null,
+      ].filter((url) => typeof url === 'string' && url.trim()))],
+    [ad, isVideoAd]
+  );
+  const videoCandidates = useMemo(
+    () =>
+      [...new Set([
+        ...(Array.isArray(ad.videoCandidates) ? ad.videoCandidates : []),
+        ad.videoUrl,
+        isVideoAd ? ad.creativeUrl : null,
+      ].filter((url) => typeof url === 'string' && url.trim()))],
+    [ad, isVideoAd]
+  );
+  const [imageCandidateIndex, setImageCandidateIndex] = useState(0);
+  const [videoCandidateIndex, setVideoCandidateIndex] = useState(0);
+  const [showImageFallback, setShowImageFallback] = useState(
+    !isVideoAd || videoCandidates.length === 0
+  );
+  const [mediaState, setMediaState] = useState('loading');
+
+  const imageCandidatesKey = imageCandidates.join('|');
+  const videoCandidatesKey = videoCandidates.join('|');
+
+  useEffect(() => {
+    setImageCandidateIndex(0);
+    setVideoCandidateIndex(0);
+    setShowImageFallback(!isVideoAd || videoCandidates.length === 0);
+    setMediaState(
+      videoCandidates.length > 0 || imageCandidates.length > 0 ? 'loading' : 'unavailable'
+    );
+  }, [ad.adId, ad.id, imageCandidatesKey, isVideoAd, videoCandidates.length, videoCandidatesKey]);
+
+  const currentImageUrl = imageCandidates[imageCandidateIndex] || '';
+  const currentVideoUrl = showImageFallback ? '' : videoCandidates[videoCandidateIndex] || '';
+  const activeMediaUrl = currentVideoUrl || currentImageUrl;
+
+  const handleVideoError = () => {
+    if (videoCandidateIndex + 1 < videoCandidates.length) {
+      setVideoCandidateIndex((index) => index + 1);
+      setMediaState('loading');
+      return;
+    }
+
+    if (imageCandidates.length > 0) {
+      setShowImageFallback(true);
+      setMediaState('loading');
+      return;
+    }
+
+    setMediaState('unavailable');
+  };
+
+  const handleImageError = () => {
+    if (imageCandidateIndex + 1 < imageCandidates.length) {
+      setImageCandidateIndex((index) => index + 1);
+      setMediaState('loading');
+      return;
+    }
+
+    setMediaState('unavailable');
+  };
+
   const advertiserName = ad.advertiserName || 'Unknown';
   const dateRange = ad.lastSeen
     ? formatDate(ad.lastSeen)
@@ -75,7 +150,11 @@ const CompetitorAdCard = ({ ad, onClick }) => {
         <div className="right_header flex items-center gap-2">
           {/* Platform icon — AdLibrary style tooltip */}
           <ShadcnTooltip label={platformLabel}>
-            <button className="flex cursor-pointer items-center justify-center rounded-full text-center text-zinc-500 hover:text-zinc-800 dark:text-white/70 dark:hover:text-white transition-all duration-200 hover:scale-110">
+            <button
+              type="button"
+              aria-label={platformLabel}
+              className="flex cursor-pointer items-center justify-center rounded-full text-center text-zinc-500 hover:text-zinc-800 dark:text-white/70 dark:hover:text-white transition-all duration-200 hover:scale-110"
+            >
               {platformIcon}
             </button>
           </ShadcnTooltip>
@@ -85,41 +164,39 @@ const CompetitorAdCard = ({ ad, onClick }) => {
       {/* ── Image / Video ── */}
       <div className="relative w-full overflow-hidden">
         {/* Loading spinner */}
-        {imageUrl && !imageLoaded && !imageError && (
+        {activeMediaUrl && mediaState === 'loading' && (
           <div className="absolute inset-0 z-10 flex min-h-[250px] items-center justify-center bg-gradient-to-r from-gray-600 via-gray-700 to-gray-600">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
           </div>
         )}
 
         {/* No image / Error placeholder */}
-        {(!imageUrl || imageError) && (
+        {(!activeMediaUrl || mediaState === 'unavailable') && (
           <div className="flex min-h-[250px] items-center justify-center bg-gradient-to-r from-gray-600 via-gray-700 to-gray-600 text-white/40">
-            <div className="text-center">
-              <div className="mb-2 text-2xl">🖼️</div>
-              <p className="text-xs">{imageUrl ? 'Failed to load' : 'No creative'}</p>
+            <div className="flex flex-col items-center gap-2 text-center">
+              <ImageOff className="h-6 w-6" aria-hidden="true" />
+              <p className="text-xs">Media unavailable</p>
             </div>
           </div>
         )}
 
         {/* Video Ad */}
-        {ad.adType === 'VIDEO' && ad.videoUrl ? (
+        {currentVideoUrl && mediaState !== 'unavailable' ? (
           <>
             <video
-              src={ad.videoUrl}
-              poster={imageUrl}
+              key={currentVideoUrl}
+              src={currentVideoUrl}
+              poster={currentImageUrl || undefined}
               className={`h-auto w-full object-cover transition-transform duration-500 ${
-                imageLoaded ? 'opacity-100' : 'opacity-0'
+                mediaState === 'loaded' ? 'opacity-100' : 'opacity-0'
               } ${isHovered ? 'scale-105' : 'scale-100'}`}
               style={{ minHeight: '250px' }}
               muted
               loop
               playsInline
               preload="metadata"
-              onLoadedData={() => setImageLoaded(true)}
-              onError={() => {
-                setImageError(true);
-                setImageLoaded(true);
-              }}
+              onLoadedData={() => setMediaState('loaded')}
+              onError={handleVideoError}
             />
             {/* Play Icon Overlay */}
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -132,21 +209,19 @@ const CompetitorAdCard = ({ ad, onClick }) => {
           </>
         ) : (
           /* Image Ad */
-          imageUrl &&
-          !imageError && (
+          currentImageUrl &&
+          mediaState !== 'unavailable' && (
             <img
-              src={imageUrl}
+              key={currentImageUrl}
+              src={currentImageUrl}
               alt={ad.adTitle || 'Ad creative'}
               className={`h-auto w-full rounded-t-xl object-cover transition-transform duration-500 ${
-                imageLoaded ? 'opacity-100' : 'opacity-0'
+                mediaState === 'loaded' ? 'opacity-100' : 'opacity-0'
               } ${isHovered ? 'scale-105' : 'scale-100'}`}
               style={{ minHeight: '250px' }}
               loading="lazy"
-              onLoad={() => setImageLoaded(true)}
-              onError={() => {
-                setImageError(true);
-                setImageLoaded(true);
-              }}
+              onLoad={() => setMediaState('loaded')}
+              onError={handleImageError}
             />
           )
         )}
@@ -211,7 +286,7 @@ const CompetitorAdCard = ({ ad, onClick }) => {
       <RecreateAdModal
         open={isRecreateModalOpen}
         onOpenChange={setIsRecreateModalOpen}
-        image={imageUrl}
+        image={currentImageUrl}
         ad={ad}
       />
     </>

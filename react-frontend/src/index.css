@@ -193,16 +193,6 @@ html {
   }
 }
 
-/* Theme cross-fade via the View Transitions API.
-   When supported, the browser snapshots the page before + after the class
-   change and cross-fades them as one image, so every surface flips in sync. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 350ms;
-  animation-timing-function: ease;
-  mix-blend-mode: normal;
-}
-
 /* While the toggle is mid-flight, freeze every per-element CSS transition
    so the "new" snapshot the browser captures reflects the final colors,
    not whatever Tailwind's `transition-colors` happens to be tweening. */
@@ -212,6 +202,7 @@ html.theme-changing *::before,
 html.theme-changing *::after {
   transition: none !important;
 }
+
 
 /* Fallback transition for browsers without View Transitions support.
    Limited to color/background/border so unrelated transforms aren't slowed. */

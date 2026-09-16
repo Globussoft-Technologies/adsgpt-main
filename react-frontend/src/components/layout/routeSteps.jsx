@@ -238,9 +238,9 @@ const getRouteSteps = (pathname, isAddieChatVisible) => {
         'Adjust generation options to control platform and output variations.'
       ),
       makeStep(
-        '#tour_describe_brand_for_copy',
-        'Brand Preferences',
-        'Select your brand and add a call to action.'
+        '#tour_call_to_action_for_copy',
+        'Call to Action',
+        'Choose a call to action or enter a custom one from the prompt toolbar.'
       ),
       makeStep(
         '#tour_copy_prompt_by_mic',

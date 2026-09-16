@@ -16,7 +16,7 @@ import AdLibraryPage from '@/pages/AdLibrary/AdLibraryPage';
 import AdPromptComponent from '@/components/common/AdPrompt/AdPromptComponent';
 import { fetchBrands } from '@/store/actions/brandIQ/myBrandActions';
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
-import { addImage } from '@/store/reducers/adStudio/promptSlice';
+import { addImage, setFields } from '@/store/reducers/adStudio/promptSlice';
 import { formatUrl } from '@/utils/formatUrl';
 import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
 import { nanoid } from 'nanoid';
@@ -30,6 +30,13 @@ const AdStudioPage = () => {
     (state) => state.adStudioTabs.adCreativeNewActivePage
   );
   const userData = useSelector((state) => state.socket.userData);
+  const selectedAdStudioBrand = useSelector(
+    (state) => state.brandIQTabs.selectedCompetitorBrand
+  );
+  const adStudioBrands = useSelector((state) => state.brandIQTabs.myBrands);
+  const promptSelectedBrandId = useSelector((state) => state.prompt.selectedBrand?.id);
+  const promptBrandName = useSelector((state) => state.prompt.brand_name);
+  const promptBrandDescription = useSelector((state) => state.prompt.brand_description);
   const { conversations } = useSelector((state) => state.adVideo);
   const tabFeatures = useMemo(
     () => ({
@@ -64,6 +71,39 @@ const AdStudioPage = () => {
     if (!userData?.user_id) return;
     dispatch(fetchBrands(userData?.user_id));
   }, [dispatch, userData?.user_id]);
+
+  // The header switcher is the Ad Studio brand source of truth. Keep the
+  // generation prompt synchronized, including after New Chat resets it.
+  useEffect(() => {
+    const currentBrand = Array.isArray(adStudioBrands)
+      ? adStudioBrands.find((brand) => brand.id === selectedAdStudioBrand?.id)
+      : null;
+    if (!currentBrand) return;
+
+    const brandName = currentBrand.name || '';
+    const brandDescription = currentBrand.description || '';
+    const isSynchronized =
+      promptSelectedBrandId === currentBrand.id &&
+      promptBrandName === brandName &&
+      promptBrandDescription === brandDescription;
+
+    if (isSynchronized) return;
+
+    dispatch(
+      setFields({
+        selectedBrand: currentBrand,
+        brand_name: brandName,
+        brand_description: brandDescription,
+      })
+    );
+  }, [
+    adStudioBrands,
+    dispatch,
+    promptBrandDescription,
+    promptBrandName,
+    promptSelectedBrandId,
+    selectedAdStudioBrand?.id,
+  ]);
 
   // network based apis
   const networkBasedApis = useMemo(
@@ -187,7 +227,7 @@ const AdStudioPage = () => {
 
         {effectiveTabId === 'adLibrary' && (
           <div className="adcopy_container max-h-[calc(100svh-73px)] w-full overflow-y-auto 2xl:max-h-[calc(100svh-112px)]">
-            <AdLibraryPage />
+            <AdLibraryPage source="brandCompetitors" />
           </div>
         )}
       </div>

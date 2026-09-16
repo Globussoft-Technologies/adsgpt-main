@@ -1,7 +1,7 @@
-// eslint-disable-next-line no-unused-vars
 import { motion } from 'framer-motion';
 import { Mail, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
 import UserProfilePage from '@/pages/Profile/UserProfilePage';
+import ProfileThemeToggle from '@/components/Profile/ProfileThemeToggle';
 import {
   featureIdsOf,
   isWorkspaceMember,
@@ -29,18 +29,21 @@ export default function WorkspaceProfilePage() {
         className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white backdrop-blur-xl dark:border-white/[0.06] dark:bg-[#0D0D0D]/60"
       >
         <div className="border-b border-gray-200 px-6 py-6 dark:border-white/[0.07]">
-          <div className="flex items-center gap-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-base font-bold text-white ring-1 ring-white/10">
-              {(payload.actorUserName || payload.actorUserEmail || 'M').slice(0, 1).toUpperCase()}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-r from-[#02C8C4] to-[#5867EB] text-base font-bold text-white ring-1 ring-white/10">
+                {(payload.actorUserName || payload.actorUserEmail || 'M').slice(0, 1).toUpperCase()}
+              </div>
+              <div>
+                <p className="text-xs font-semibold tracking-[0.14em] text-cyan-500 uppercase">
+                  Workspace member
+                </p>
+                <h1 className="mt-1 text-xl font-semibold">
+                  {payload.actorUserName || 'Workspace member'}
+                </h1>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-semibold tracking-[0.14em] text-cyan-500 uppercase">
-                Workspace member
-              </p>
-              <h1 className="mt-1 text-xl font-semibold">
-                {payload.actorUserName || 'Workspace member'}
-              </h1>
-            </div>
+            <ProfileThemeToggle />
           </div>
         </div>
 
