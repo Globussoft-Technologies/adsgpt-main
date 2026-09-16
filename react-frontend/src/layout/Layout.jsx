@@ -7,6 +7,7 @@ import AdPrompt from '@/components/common/AdPrompt/AdPromptComponent';
 import AppSidebar from '@/components/layout/sidebar/AppSidebar';
 import TopHeader from '@/components/layout/header/TopHeader';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Loader } from 'lucide-react';
 import FreeAdBanner from '@/components/BrandSetup/FreeAdBanner';
 import useOnboardingEligibility from '@/hooks/useOnboardingEligibility';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -30,8 +31,12 @@ const ONBOARDING_OFFERED_KEY = 'adsgpt.onboarding.offered';
 const Layout = () => {
   // Whether the free render is still owed, and which session the offer bar owes
   // it in. One call per app load, shared with OnBoardHome's resume.
-  const { freeRenderAvailable, resumeSessionId, shouldStartOnboarding } =
-    useOnboardingEligibility();
+  const {
+    freeRenderAvailable,
+    resumeSessionId,
+    shouldStartOnboarding,
+    loading: eligibilityLoading,
+  } = useOnboardingEligibility();
   const { baseImage, isEditorOpen, adIndex, isOldEditorOpen } = useSelector(
     (state) => state.editor
   );
@@ -136,6 +141,30 @@ const Layout = () => {
     baseImage ? `${HOST}/adsgpt/img/preview?url=${S3_BASE_URL}${baseImage}` : null,
     'Anonymous'
   );
+
+  // ── First paint waits for the eligibility answer ─────────────────────────
+  //
+  // Without this a brand-new user lands on /adstudio, sees the dashboard for
+  // the length of one round trip, and is then bounced to /onboarding by the
+  // effect above — the flash reported after "click here to go to your
+  // membership area" (2026-09-16).
+  //
+  // It costs exactly one wait per app load, which IS the post-login entry:
+  // `useOnboardingEligibility` asks once when this Layout mounts, so every
+  // later navigation inside the app renders immediately. The call swallows its
+  // own failures and answers with the new-user shape, so this can never hang
+  // on a backend that is down.
+  //
+  // The app's own stall screen, verbatim from `utils/RunBackLog.jsx` — the very
+  // loader shown moments earlier while the session is established. Reusing it
+  // means this wait reads as the same one continuing, not a second screen.
+  if (eligibilityLoading) {
+    return (
+      <div className="bg-background text-foreground flex h-screen w-screen items-center justify-center">
+        <Loader className="h-8 w-8 animate-spin opacity-60" />
+      </div>
+    );
+  }
 
   if (isOldEditorOpen) {
     // ------------------ OLD LAYOUT ------------------

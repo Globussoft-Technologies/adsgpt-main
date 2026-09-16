@@ -111,14 +111,28 @@ function rateFor(dsModel) {
 }
 
 /**
- * The ceiling hold: the dearest model this map knows, for the longest duration
- * we expect. Computed rather than hardcoded so that adding a pricier model to
- * the map cannot leave the ceiling silently too low.
+ * The model onboarding renders with, every time.
+ *
+ * The ceiling USED TO be "the dearest model in the map", which came out at
+ * `veo` 5/s x 8s = 40. That number is now unaffordable by the people it has to
+ * work for: a free-plan user is granted 35 credits, so a 40-credit hold failed
+ * INSUFFICIENT on the one render the banner had just called free, even though
+ * the render only ever costs 32.
+ *
+ * Onboarding picks no model — Python does, from a fixed server-side config, and
+ * that config is Veo 3.1 fast. So the ceiling is priced from THAT rather than
+ * from the worst case the map can express. If Python ever returns something
+ * dearer, `trueUp` already catches it: it holds at the ceiling and logs
+ * "actual EXCEEDS ceiling", which is the signal to raise this.
+ */
+const ONBOARDING_MODEL_KEY = "veo-3.1-fast";
+
+/**
+ * The ceiling hold: onboarding's fixed model, for the longest duration we
+ * expect. 4/s x 8s = 32, which fits inside a free plan's 35-credit grant.
  */
 function ceilingAmount() {
-  const rates = Object.keys(DS_MODEL_TO_CONFIG_KEY).map(rateFor);
-  const dearest = rates.length ? Math.max(...rates) : 0;
-  return dearest * CEILING_DURATION_S;
+  return rateFor(ONBOARDING_MODEL_KEY) * CEILING_DURATION_S;
 }
 
 /**
@@ -143,6 +157,39 @@ function priceFor(meta) {
   const seconds = Number(meta?.duration_s) || CEILING_DURATION_S;
   const count = Number(meta?.count) || 1;
   return rate * seconds * count;
+}
+
+/**
+ * Is this user on the free plan?
+ *
+ * The free plan is the one case where "your first render is free" stops being
+ * literally true. Those users are ALREADY being given something free — the 35
+ * credits in their grant — and the first render is presented as free on top of
+ * that while still being paid for out of the grant. Every other plan keeps the
+ * genuine freebie.
+ *
+ * Keyed on `FREE_PLAN_ID`, the same env var `scheduleFreePlanDrip` uses
+ * (`controllers/newsletter.controller.js`), so there is one answer to "is this
+ * a free user" in the backend rather than two that can drift.
+ *
+ * If the var is unset we answer NO, which means the render stays genuinely
+ * free. That is the safe direction to fail: a missing config gives a render
+ * away, it never charges someone who should not have been charged.
+ */
+async function isFreePlanUser(userId) {
+  const freePlanId = String(process.env.FREE_PLAN_ID || "").trim();
+  if (!freePlanId) {
+    logger.warn(
+      "[onboarding][credits] FREE_PLAN_ID is not set — treating every user as " +
+        "paid-plan, so onboarding's first render stays free for everyone.",
+    );
+    return false;
+  }
+  const profile = await UserProfile.findOne(
+    { user_id: userId },
+    { subscription_plan_id: 1 },
+  ).lean();
+  return String(profile?.subscription_plan_id || "") === freePlanId;
 }
 
 /**
@@ -224,12 +271,34 @@ async function returnFreeRender(userId, sessionId) {
  * open from the previous attempt.
  */
 async function securePayment({ userId, sessionId, boardId, renderId }) {
-  // The free one first: if it is available, nothing is frozen at all.
-  if (await claimFreeRender(userId, sessionId)) {
+  // The claim and the charge are two separate questions, and they were one
+  // until free-plan billing existed.
+  //
+  //   freeClaimed — did this user just spend their one lifetime free render?
+  //                 Everyone claims. It is what retires the banner and what
+  //                 `/eligibility` reads, so entry and exit behave identically
+  //                 for every plan.
+  //   free        — is the render actually costing them nothing? Only on a
+  //                 PAID plan. A free-plan user is shown "free" and charged,
+  //                 out of the 35 credits we gave them for nothing.
+  //
+  // They have to be tracked separately because the undo paths differ: a render
+  // that never happens has to hand back the claim AND release the hold, and
+  // before this those were the same branch.
+  const freeClaimed = await claimFreeRender(userId, sessionId);
+
+  if (freeClaimed && !(await isFreePlanUser(userId))) {
     logger.info(
       `[onboarding][credits] FREE render claimed user=${userId} session=${sessionId} board=${boardId}`,
     );
-    return { ok: true, free: true, renderId, amount: 0 };
+    return { ok: true, free: true, freeClaimed: true, renderId, amount: 0 };
+  }
+
+  if (freeClaimed) {
+    logger.info(
+      `[onboarding][credits] free render claimed but CHARGED (free plan) ` +
+        `user=${userId} session=${sessionId} board=${boardId}`,
+    );
   }
 
   const amount = ceilingAmount();
@@ -240,6 +309,8 @@ async function securePayment({ userId, sessionId, boardId, renderId }) {
     logger.error(
       "[onboarding][credits] ceiling computed as 0 — model configuration missing. Refusing to render.",
     );
+    // Nothing rendered, so the lifetime freebie must not stay spent.
+    if (freeClaimed) await returnFreeRender(userId, sessionId);
     return { ok: false, reason: "not_configured" };
   }
 
@@ -256,12 +327,18 @@ async function securePayment({ userId, sessionId, boardId, renderId }) {
     },
   });
 
-  if (!freeze.ok) return { ok: false, reason: freeze.reason };
+  if (!freeze.ok) {
+    // A free-plan user who cannot cover 32 gets the ordinary 402. Handing the
+    // claim back matters here: without it one failed freeze would silently burn
+    // their one free render and retire the banner for a clip they never got.
+    if (freeClaimed) await returnFreeRender(userId, sessionId);
+    return { ok: false, reason: freeze.reason };
+  }
 
   logger.info(
     `[onboarding][credits] froze ceiling ${amount} user=${userId} render=${renderId}`,
   );
-  return { ok: true, free: false, renderId, amount };
+  return { ok: true, free: false, freeClaimed, renderId, amount };
 }
 
 /**
@@ -329,6 +406,15 @@ async function settleBoard({ sessionId, userId, boardId, entry }) {
     return returnFreeRender(userId, sessionId);
   }
 
+  // A free-plan user's first render is BOTH: the lifetime claim is spent and a
+  // hold is open. `billing.free` is false, so the hold is settled below — but
+  // if the render failed the claim has to come back too, or they lose the
+  // freebie to a render that never existed. Older boards carry no
+  // `freeClaimed`, and `undefined` reads as false, which is the old behaviour.
+  if (!succeeded && billing.freeClaimed) {
+    await returnFreeRender(userId, sessionId);
+  }
+
   if (!billing.renderId) return false;
 
   if (succeeded) {
@@ -345,10 +431,17 @@ async function settleBoard({ sessionId, userId, boardId, entry }) {
   return true;
 }
 
-/** Undoes payment when the render never started. */
-async function refund({ free, userId, sessionId, renderId }) {
-  if (free) return returnFreeRender(userId, sessionId);
-  if (!renderId) return false;
+/**
+ * Undoes payment when the render never started.
+ *
+ * Both forms of payment are undone independently, because a free-plan user's
+ * first render takes both: the lifetime claim AND a credit hold.
+ */
+async function refund({ free, freeClaimed, userId, sessionId, renderId }) {
+  // The claim comes back whenever it was taken — on a genuinely free render,
+  // and on a charged one.
+  if (free || freeClaimed) await returnFreeRender(userId, sessionId);
+  if (free || !renderId) return true;
   await UnifiedCreditController.releaseCredits(renderId);
   return true;
 }
@@ -362,5 +455,11 @@ module.exports = {
   returnFreeRender,
   priceFor,
   ceilingAmount,
-  _internals: { DS_MODEL_TO_CONFIG_KEY, rateFor, CEILING_DURATION_S },
+  isFreePlanUser,
+  _internals: {
+    DS_MODEL_TO_CONFIG_KEY,
+    rateFor,
+    CEILING_DURATION_S,
+    ONBOARDING_MODEL_KEY,
+  },
 };

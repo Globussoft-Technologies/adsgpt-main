@@ -144,7 +144,13 @@ async function startVideoRun({ userId, sessionId, boardId }) {
     if (!jobId) {
       log.error("accept.no_job_id");
       // Nothing is rendering, so nothing is owed.
-      await refund({ free: payment.free, userId, sessionId, renderId });
+      await refund({
+        free: payment.free,
+        freeClaimed: payment.freeClaimed,
+        userId,
+        sessionId,
+        renderId,
+      });
       return { ok: false, reason: "upstream_error" };
     }
 
@@ -176,6 +182,11 @@ async function startVideoRun({ userId, sessionId, boardId }) {
     await markBoardStarted(sessionId, boardId, jobId, {
       renderId: payment.free ? "" : renderId,
       free: payment.free,
+      // Whether the one lifetime free render was spent on this board. Distinct
+      // from `free`: a free-plan user spends the claim AND pays, so a failed
+      // render has to hand the claim back even though it settles a hold. The
+      // webhook (`settleBoard`) is the only reader.
+      freeClaimed: Boolean(payment.freeClaimed),
       amount: chargedAmount,
       model: data?.meta?.model || "",
     }, attempts);
@@ -190,7 +201,13 @@ async function startVideoRun({ userId, sessionId, boardId }) {
     const status = error?.response?.status;
     // The POST threw, so no render exists to pay for. Give back whichever form
     // of payment was taken — the freeze, or the free render itself.
-    await refund({ free: payment.free, userId, sessionId, renderId }).catch((e) =>
+    await refund({
+      free: payment.free,
+      freeClaimed: payment.freeClaimed,
+      userId,
+      sessionId,
+      renderId,
+    }).catch((e) =>
       log.error("refund.failed", { board: boardId, message: e.message })
     );
     log.error("create.failed", {
