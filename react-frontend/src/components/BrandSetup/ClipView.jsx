@@ -271,7 +271,8 @@ function friendlyRenderError(error) {
  *   same one again. See ONBOARDING_FAILURE_HANDLING.md §2.
  */
 function FailedStage({ error, onRetry, onBack, attempts = 1 }) {
-  const retriesSpent = Number(attempts) >= 2;
+  // Retries are unlimited (user decision 2026-09-15); `attempts` is kept only
+  // for callers and no longer gates anything.
   const message = friendlyRenderError(error);
 
   // The raw error, for debugging — once per distinct error, not per render (the
@@ -284,19 +285,13 @@ function FailedStage({ error, onRetry, onBack, attempts = 1 }) {
   return (
     <div className="absolute inset-0 grid place-items-center px-8 text-center">
       <div>
-        <p className="text-[13.5px] font-semibold text-white/90">
-          {retriesSpent ? 'We still couldn’t create this video' : 'We couldn’t create this video'}
-        </p>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/70">
-          {retriesSpent
-            ? 'We tried twice. Pick another idea from the board — the others are unaffected.'
-            : message}
-        </p>
+        <p className="text-[13.5px] font-semibold text-white/90">We couldn&rsquo;t create this video</p>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/70">{message}</p>
         {/* A failed render releases its credit hold and never spends the free
             render (renderBilling), so this is always true on this screen. */}
         <p className="mt-2 text-[12px] font-medium text-[#5CE08A]/90">You haven&rsquo;t been charged.</p>
         <div className="mt-4 flex items-center justify-center gap-2">
-          {onRetry && !retriesSpent && <RetryCountdownButton onClick={onRetry} />}
+          {onRetry && <RetryCountdownButton onClick={onRetry} />}
           {onBack && (
             <button
               type="button"

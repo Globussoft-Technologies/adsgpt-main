@@ -659,35 +659,24 @@ function ConceptAction({ board, state, onGenerate, onWatch, onOpen, freeRenderSp
   const status = state?.status;
   const open = () => onGenerate?.(board);
 
-  // One retry, then the advice changes. Pressing the same failed concept a
-  // third time is not a plan, and each attempt costs a credit freeze — so past
-  // that point the card points at the other concepts instead. The count is the
-  // server's (`videos.boards.<id>.attempts`), so a reload does not reopen it.
+  // Failed: Retry (unlimited) + View. User decision 2026-09-15 — retries are no
+  // longer capped at one, and a failed render is never charged (the credit hold
+  // is released / the free render returned server-side), so there is nothing to
+  // protect by refusing another try. "View" opens the clip screen's failure
+  // state WITHOUT starting a render; the old "Open board" button started one.
   if (status === 'failed') {
-    if (Number(state?.attempts) >= 2) {
-      return (
-        <div className="flex shrink-0 flex-col items-end gap-1 self-end">
-          <p className="text-right text-[11.5px] leading-tight text-white/40">
-            Didn&rsquo;t render. Try another storyboard.
-          </p>
-          {onOpen && (
-            <button
-              type="button"
-              onClick={onOpen}
-              className="rounded-[7px] border px-[11px] py-1.5 text-[12px] font-semibold text-white/70 transition hover:text-white"
-              style={{ background: SURF2, borderColor: LINE_STRONG }}
-            >
-              Open board
-            </button>
-          )}
-        </div>
-      );
-    }
     return (
-      <div className="flex shrink-0 flex-col items-end gap-1 self-end">
-        <p className="text-right text-[11.5px] leading-tight text-white/40">
-          Didn&rsquo;t render.
-        </p>
+      <div className="flex shrink-0 items-center gap-2 self-end">
+        <p className="text-[11.5px] leading-tight text-white/60">Didn&rsquo;t render.</p>
+        {onOpen && (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="text-[12px] font-semibold text-white/60 underline-offset-2 transition hover:text-white hover:underline"
+          >
+            View
+          </button>
+        )}
         <RetryCountdownButton onClick={open} />
       </div>
     );
@@ -1597,20 +1586,8 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
  * about to fill, which is also what keeps the scroll position from lurching
  * when the page lands: the space was already there.
  */
-function LoadingTile({ expanded }) {
-  return (
-    <div
-      aria-hidden
-      className={cn(
-        'flex shrink-0 flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-white/[0.12] bg-white/[0.02] text-white/40',
-        expanded ? 'aspect-4/5 w-full' : 'aspect-4/5 h-full w-auto'
-      )}
-    >
-      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
-      <span className="px-2 text-center text-[10px] leading-[1.3] font-medium">Finding more…</span>
-    </div>
-  );
-}
+// (LoadingTile removed 2026-09-15 — replaced by the bottom-centre spinner in
+// TemplateDock; see the comment there.)
 
 /**
  * The dock.
@@ -1646,14 +1623,21 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
     return () => clearTimeout(timer);
   }, [busy]);
 
+  // `busy` = a load-more request is in flight: set when it is sent, cleared when
+  // the page lands (items grow), when the server declines it (`false`), on error,
+  // or when there is nothing more to load. The spinner shows only while busy.
   const loadMore = useCallback(async () => {
     setBusy(true);
     try {
-      await onLoadMore?.();
+      const accepted = await onLoadMore?.();
+      if (accepted === false) setBusy(false);
     } catch {
       setBusy(false);
     }
   }, [onLoadMore]);
+  useEffect(() => {
+    if (!canLoadMore) setBusy(false);
+  }, [canLoadMore]);
 
   // ── Infinite scroll, on whichever axis the dock is currently using ─────────
   //
@@ -1733,7 +1717,9 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
     window.addEventListener('mouseup', onUp);
   };
 
-  const toggle = () => onResize(expanded ? DOCK_MIN_H : Math.round(window.innerHeight * 0.72));
+  // Expand goes to the ceiling — the same height dragging stops at. The parent's
+  // `resizeDock` clamps, so asking for "as tall as possible" lands exactly there.
+  const toggle = () => onResize(expanded ? DOCK_MIN_H : Number.MAX_SAFE_INTEGER);
 
   const scrollBy = (dir) =>
     strip.current?.scrollBy({
@@ -1750,7 +1736,8 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
   // 129px tall, which is a letterbox slot rather than a picture. At 300 it is
   // ~170, and the portrait tiles that share the grid grow with it. 390 is that
   // again with another third on top.
-  const columnCount = Math.max(2, Math.min(5, Math.round((box.width || 1100) / 390)));
+  // 330 (was 390): expanded tiles 15% smaller, per user decision 2026-09-15.
+  const columnCount = Math.max(2, Math.min(6, Math.round((box.width || 1100) / 330)));
 
   // The slot each tile has to fill. Expanded that is the column's width and the
   // tile takes all of it; collapsed it is the strip's HEIGHT, and the tile's own
@@ -1845,7 +1832,10 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
           className={cn(
             'no-scrollbar min-h-0 min-w-0 flex-1 scroll-smooth px-[18px] pt-0.5 pb-3.5',
             expanded
-              ? 'flex gap-1.5 overflow-x-hidden overflow-y-auto'
+              // `flex-wrap content-start`: the columns stay on one line (they
+              // are `flex-1 basis-0`) and the load-more spinner, `basis-full`,
+              // wraps to its own row at the very end of the scroll.
+              ? 'flex flex-wrap content-start gap-1.5 overflow-x-hidden overflow-y-auto'
               : 'flex items-start gap-2.5 overflow-x-auto overflow-y-hidden',
             // A brand that matched five templates left them huddled against the
             // left edge of a 1600px band, which reads as a layout that failed
@@ -1858,26 +1848,34 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
         >
           {items.length ? (
             expanded ? (
-              columns.map((column, i) => (
+              <>
+              {columns.map((column, i) => (
                 <div key={i} className="flex min-w-0 flex-1 basis-0 flex-col gap-1.5">
                   {column.items.map((t) => (
                     <TemplateTile key={t.template_id} template={t} expanded slot={slot} />
                   ))}
-                  {/* In the LAST column, where the grid's ragged bottom edge
-                      already is — dropping it in a full column would push that
-                      column longer than the rest for no reason. */}
-                  {busy && i === columns.length - 1 && <LoadingTile expanded />}
                 </div>
-              ))
+              ))}
+              {/* Load-more spinner, IN the scroll content: a full-width row
+                  after the grid, so it appears where scrolling ends rather than
+                  pinned over the tiles (user decision 2026-09-15). */}
+              {busy && canLoadMore && (
+                <div role="status" aria-label="Loading more templates" className="flex basis-full justify-center py-3">
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[#38E1FF]" />
+                </div>
+              )}
+              </>
             ) : (
               <>
                 {items.map((t) => (
                   <TemplateTile key={t.template_id} template={t} slot={slot} />
                 ))}
-                {/* At the END of the row, shaped like a tile, because that is
-                    where you arrive having looked at all of them — a control in
-                    the header would be asking you to go back for it. */}
-                {busy && <LoadingTile />}
+                {/* Collapsed row: same spinner at the end of the row. */}
+                {busy && canLoadMore && (
+                  <div role="status" aria-label="Loading more templates" className="grid h-full shrink-0 place-items-center px-4">
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[#38E1FF]" />
+                  </div>
+                )}
               </>
             )
           ) : pending ? (
@@ -1989,7 +1987,17 @@ const DOCK_EXPANDED_AT = 420;
 // What the storyboards reserve for the dock: its collapsed height plus the drag
 // handle. Fixed on purpose — see the note on the section that uses it.
 const DOCK_PAD = DOCK_MIN_H + 14;
-const dockCeiling = () => Math.max(DOCK_MIN_H, window.innerHeight - 160);
+// How much of the storyboard area stays visible above a fully raised dock:
+// just the "Video ideas" heading — the dock covers the cards (user correction
+// 2026-09-15; 112px left a strip of cards showing, which matched the old
+// height). Measured from `main`, not the window, so it holds regardless of the
+// offer bar or header above.
+const DOCK_PEEK_PX = 40;
+
+// Brand panel widths and the localStorage key for its collapsed state.
+const BRAND_PANEL_W = 296;
+const BRAND_RAIL_W = 56;
+const BRAND_PANEL_KEY = 'adsgpt.onboarding.brandPanelCollapsed';
 
 // The furthest item the template contract can address: `skip` tops out at 15
 // and `limit` at 20, so the highest legal window ends at the 35th. Past that
@@ -2014,6 +2022,8 @@ export default function Workspace({
   // the webhook contract but has no Node route — so the button is inert until a
   // handler is passed rather than pretending to start a render.
   onGenerateVideo,
+  // Opens a concept's clip view and nothing else — never starts a render.
+  onOpenVideo,
   // `{ [boardId]: { status, … } }` — one entry per concept a render was started
   // for. Not part of `session`, because it is live client state: the section
   // read tells you what the SERVER has, and this also holds the click that has
@@ -2033,16 +2043,23 @@ export default function Workspace({
 
   // Owned here because the storyboards behind the dock pad themselves with it.
   const [dockH, setDockH] = useState(DOCK_MIN_H);
+  // The dock's top limit — the same for dragging and for "Expand all": main's
+  // height minus the strip of storyboards that must stay in view.
+  const mainRef = useRef(null);
+  const dockCeiling = useCallback(() => {
+    const mainH = mainRef.current?.clientHeight || window.innerHeight - 160;
+    return Math.max(DOCK_MIN_H, mainH - DOCK_PEEK_PX);
+  }, []);
   const resizeDock = useCallback(
     (next) => setDockH(Math.min(Math.max(next, DOCK_MIN_H), dockCeiling())),
-    []
+    [dockCeiling]
   );
   // A window that shrinks can leave the dock taller than its own ceiling.
   useEffect(() => {
     const onResize = () => setDockH((h) => Math.min(h, dockCeiling()));
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [dockCeiling]);
 
   const templatesPending = ['queued', 'running'].includes(templates.status);
 
@@ -2051,7 +2068,26 @@ export default function Workspace({
   // re-read of eligibility). A failed render is not counted — it doesn't spend
   // the free one. While eligibility is loading we assume unspent, so a new user
   // never sees the price flash in.
-  const { eligibility, loading: eligibilityLoading } = useOnboardingEligibility();
+  const {
+    eligibility,
+    loading: eligibilityLoading,
+    refresh: refreshEligibility,
+  } = useOnboardingEligibility();
+
+  // Re-ask the server whenever a render settles. Eligibility was read once on
+  // mount — so if this screen mounted while a render was running (the free
+  // render already claimed) and that render then FAILED, the server returned
+  // the freebie but this screen never heard, and kept showing the price instead
+  // of "Free". Keyed on the set of settled board states, so it fires once per
+  // render that finishes or fails, not on every progress frame. Bug 2026-09-15.
+  const settledKey = Object.entries(videosByBoard)
+    .filter(([, v]) => v?.status === 'failed' || v?.status === 'ready')
+    .map(([id, v]) => `${id}:${v.status}:${v.attempts || 0}`)
+    .sort()
+    .join('|');
+  useEffect(() => {
+    if (settledKey) refreshEligibility();
+  }, [settledKey, refreshEligibility]);
   const renderStartedHere = Object.values(videosByBoard).some(
     (v) => v?.status && v.status !== 'failed'
   );
@@ -2116,6 +2152,27 @@ export default function Workspace({
   // black/white/grey and the placeholders read as colourless.
   const mosaicPalette = ADSGPT_MOSAIC_PALETTE;
 
+  // ── Brand panel collapse ─────────────────────────────────────────────────
+  // User decisions 2026-09-15: collapses to a 56px rail with the logo, toggled
+  // by a chevron beside the brand name, width animated, remembered per browser.
+  const [brandCollapsed, setBrandCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(BRAND_PANEL_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleBrandPanel = () =>
+    setBrandCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem(BRAND_PANEL_KEY, next ? '1' : '0');
+      } catch {
+        /* storage blocked — the toggle still works for this visit */
+      }
+      return next;
+    });
+
   return (
     // `dark` is asserted here because this screen renders outside Layout, which
     // is what normally carries it.
@@ -2139,17 +2196,79 @@ export default function Workspace({
         generated={Object.values(videosByBoard).some((v) => v?.status === 'ready')}
       />
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[296px_1fr]">
+      {/* The first column animates between the panel and the rail widths
+          (`grid-template-columns` interpolates), so storyboards and templates
+          widen/narrow smoothly with it. Below `lg` the panel is hidden anyway. */}
+      <div
+        className="grid min-h-0 flex-1 grid-cols-1 lg:[grid-template-columns:var(--brand-col)_1fr]"
+        style={{
+          '--brand-col': `${brandCollapsed ? BRAND_RAIL_W : BRAND_PANEL_W}px`,
+          transition: 'grid-template-columns 300ms cubic-bezier(.4,0,.2,1)',
+        }}
+      >
         {/* ═══ the brand ═══ */}
         <aside
-          className="hidden min-h-0 flex-col overflow-hidden border-r lg:flex"
+          className="relative hidden min-h-0 flex-col overflow-hidden border-r lg:flex"
           style={{ background: CHROME, borderColor: LINE }}
         >
+          {/* Collapsed rail: logo + expand chevron. Fades in over the clipped
+              panel so the width animation never reflows the panel's text. */}
+          <div
+            className={cn(
+              'absolute inset-0 z-[2] flex flex-col items-center gap-3 pt-4 transition-opacity duration-200',
+              brandCollapsed ? 'opacity-100 delay-100' : 'pointer-events-none opacity-0'
+            )}
+            style={{ background: CHROME }}
+            aria-hidden={!brandCollapsed}
+          >
+            <BrandMark src={logos[0]} name={brandName} />
+            <button
+              type="button"
+              onClick={toggleBrandPanel}
+              aria-label="Expand brand details"
+              title="Expand brand details"
+              className="grid h-7 w-7 place-items-center rounded-md border text-white/70 transition hover:border-[#15DCFF]/50 hover:text-white"
+              style={{ background: SURF2, borderColor: LINE_STRONG }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="m13 17 5-5-5-5M6 17l5-5-5-5" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Collapse chevron, top-right of the brand header. */}
+          {!brandCollapsed && (
+            <button
+              type="button"
+              onClick={toggleBrandPanel}
+              aria-label="Collapse brand details"
+              title="Collapse brand details"
+              className="absolute top-4 right-3 z-[3] grid h-7 w-7 place-items-center rounded-md border text-white/60 transition hover:border-[#15DCFF]/50 hover:text-white"
+              style={{ background: SURF2, borderColor: LINE_STRONG }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="m11 17-5-5 5-5M18 17l-5-5 5-5" />
+              </svg>
+            </button>
+          )}
+
+          {/* The full panel keeps its own fixed width so the column's width
+              animation clips it instead of squeezing and re-wrapping its text. */}
+          <div
+            className={cn(
+              'flex h-full min-h-0 shrink-0 flex-col transition-opacity duration-200',
+              brandCollapsed ? 'pointer-events-none opacity-0' : 'opacity-100 delay-100'
+            )}
+            style={{ width: BRAND_PANEL_W }}
+            aria-hidden={brandCollapsed}
+          >
           {/* The header sits in a lit band rather than on the flat panel. The
               brand's name is the one thing on this screen that is the user's
               own, and it was rendering as small grey text against the same
               surface as everything under it. */}
-          <div className="shrink-0 border-b border-white/[0.07] bg-linear-to-b from-white/[0.06] to-transparent px-4 pt-4 pb-3.5">
+          {/* `pr-12`: room for the collapse chevron so long names truncate
+              before reaching it. */}
+          <div className="shrink-0 border-b border-white/[0.07] bg-linear-to-b from-white/[0.06] to-transparent pt-4 pr-12 pb-3.5 pl-4">
             <div className="flex items-center gap-3">
               <BrandMark src={logos[0]} name={brandName} />
               <div className="min-w-0 flex-1">
@@ -2204,10 +2323,11 @@ export default function Workspace({
 
             <ImageStrip urls={images} label="From your site" max={6} />
           </div>
+          </div>
         </aside>
 
         {/* ═══ what comes next ═══ */}
-        <main className="relative flex min-w-0 flex-col overflow-hidden">
+        <main ref={mainRef} className="relative flex min-w-0 flex-col overflow-hidden">
           {/* The reserved strip under the cards is a CONSTANT, not the dock's
               live height, and that is the whole reason dragging the dock up no
               longer squashes the storyboards.
@@ -2259,7 +2379,11 @@ export default function Workspace({
                       // The expand control on the inline player. Same handler:
                       // the board already has a clip, so it opens the screen
                       // rather than starting anything.
-                      onOpen={() => onGenerateVideo?.(board)}
+                      // Open only. This used to call onGenerateVideo, which
+                      // starts a render for a FAILED board — so opening a
+                      // failed card re-rendered it. Falls back only for the
+                      // preview harness, which passes no onOpenVideo.
+                      onOpen={() => (onOpenVideo || onGenerateVideo)?.(board)}
                       // Per concept, so a tile that is rendering says so while
                       // the others still offer the price.
                       videoState={videosByBoard[board.id]}

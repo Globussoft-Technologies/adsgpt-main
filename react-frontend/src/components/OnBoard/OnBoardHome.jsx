@@ -572,6 +572,22 @@ const OnBoardHome = () => {
   };
 
   /**
+   * Open a concept's clip view WITHOUT starting anything.
+   *
+   * `startVideo` starts a render for any board that isn't ready or running —
+   * including a FAILED one. Wiring the card's "open" affordances to it meant
+   * Back to board → open a failed card silently fired a new render (and walked
+   * straight past the retry UI). Opening is only ever this. Bug 2026-09-15.
+   */
+  const openClip = (board) => {
+    const boardId = board?.id;
+    if (!boardId) return;
+    setClipBoardId(boardId);
+    setPhase('clip');
+    rememberClipBoard(boardId);
+  };
+
+  /**
    * The next page of template recommendations.
    *
    * Upstream matches five per call and takes a cursor, so this is the same
@@ -583,9 +599,11 @@ const OnBoardHome = () => {
    * section going `queued` — and that is what puts the rail's spinner up.
    */
   const requestMoreTemplates = async () => {
-    if (!run.sessionId) return;
+    if (!run.sessionId) return false;
     const { accepted } = (await loadMoreTemplates(run.sessionId)) || {};
-    if (!accepted) return;
+    // Returned so the dock can drop its spinner at once when the server
+    // declines — otherwise it waited for a page that was never coming.
+    if (!accepted) return false;
     try {
       const doc = await getOnboardingSession(run.sessionId);
       setSession(doc);
@@ -593,6 +611,7 @@ const OnBoardHome = () => {
       // The page is still coming; the socket event will bring it. A failed
       // refresh costs the spinner, not the result.
     }
+    return true;
   };
 
   /**
@@ -794,6 +813,8 @@ const OnBoardHome = () => {
           // Per concept. Opens the clip view and starts the render together —
           // see `startVideo`.
           onGenerateVideo={startVideo}
+          // View a concept's clip screen without starting a render.
+          onOpenVideo={openClip}
           videosByBoard={run.videos?.byBoard || {}}
           // Template matching runs once, for five, when the brand lands. This
           // asks for the next five. It answers 202 and nothing else — the page
