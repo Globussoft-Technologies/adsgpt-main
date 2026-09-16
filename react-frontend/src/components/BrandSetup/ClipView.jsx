@@ -49,7 +49,7 @@ import CustomVideoPlayer from '../AdStudio/AdVideo/AdVideoChats/CustomVideoPlaye
 import PostAdMySpaceModal from '../AdStudio/AdVideoNew/PostAdMySpace/PostAdMySpaceModal';
 import { readPendingPostAd } from '../AdStudio/AdVideoNew/PostAdMySpace/postAdPersistence';
 import { Header } from './Workspace';
-import MosaicLoader, { ADSGPT_MOSAIC_PALETTE } from './MosaicLoader';
+import { ClipSettleLoader, CLIP_LINES } from './FrameLoader';
 import RetryCountdownButton from './RetryCountdownButton';
 
 const SURF2 = '#232329';
@@ -68,15 +68,11 @@ const PULSE_AT = 50_000;
  * what the model is doing with the two keyframes, so a person reading them
  * learns something instead of being kept busy.
  */
-const SHIMMER_LINES = [
-  'Reading your storyboard…',
-  'Studying the first and last frames…',
-  'Working out the motion between them…',
-  'Directing the camera move…',
-  'Laying in the voiceover…',
-];
+// Design handoff `design_handoff_frame_loaders` (4b), 2026-09-16: three lines,
+// 4.2s apart, each rising into place over 0.9s.
+const SHIMMER_LINES = CLIP_LINES;
 
-const LINE_EVERY = 4_000;
+const LINE_EVERY = 4_200;
 
 /* ── the waiting stages ──────────────────────────────────────────────────── */
 
@@ -159,30 +155,16 @@ function Frame({ children }) {
   );
 }
 
-function ShimmerStage({ line, palette }) {
-  return (
-    <>
-      {/* The same mosaic the storyboard placeholders use, so the wait for a
-          keyframe and the wait for a clip look like the same kind of work. A
-          travelling band said "loading over the wire"; nothing is loading, an
-          image is being composed elsewhere, piece by piece. */}
-      <div className="absolute inset-0 overflow-hidden">
-        <MosaicLoader palette={palette} />
-      </div>
-      <StatusPill>Processing</StatusPill>
-      <p
-        // `key` on the text so React remounts it and the fade replays; without
-        // it the line swaps hard and reads as a glitch.
-        key={line}
-        className="absolute inset-x-6 bottom-8 animate-[clipFade_600ms_ease-out] text-center text-[13px] font-medium text-white/45"
-      >
-        {line}
-      </p>
-      <style>{`
-        @keyframes clipFade { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
-      `}</style>
-    </>
-  );
+/**
+ * Stage 1 — the settle loader from the design handoff (option 4b).
+ *
+ * Glow orbs behind a dim mosaic behind a blurred scrim, with a "Working" chip
+ * top-left and, at the foot, the rotating line over an indeterminate rule. It
+ * carries its own ground (`#0f1017`) and its own status, so the shared
+ * `StatusPill` is not used here.
+ */
+function ShimmerStage({ line }) {
+  return <ClipSettleLoader line={line} />;
 }
 
 function GifStage({ loader }) {
@@ -540,8 +522,6 @@ export default function ClipView({
   onFinish,
   onSkip,
 }) {
-  // AdsGPT cyan→indigo for the render placeholder, same as page 2.
-  const mosaicPalette = ADSGPT_MOSAIC_PALETTE;
   const status = state.status || 'running';
   const clip = state.video?.video || null;
 
@@ -610,7 +590,7 @@ export default function ClipView({
               ) : stage === 'pulse' ? (
                 <PulseStage />
               ) : (
-                <ShimmerStage line={line} palette={mosaicPalette} />
+                <ShimmerStage line={line} />
               )}
             </Frame>
           )}

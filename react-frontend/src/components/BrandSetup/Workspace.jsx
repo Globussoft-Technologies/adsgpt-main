@@ -42,7 +42,7 @@ import CustomVideoPlayer from '../AdStudio/AdVideo/AdVideoChats/CustomVideoPlaye
 import PostAdMySpaceModal from '../AdStudio/AdVideoNew/PostAdMySpace/PostAdMySpaceModal';
 import useOnboardingEligibility from '@/hooks/useOnboardingEligibility';
 import FreeAdBanner from './FreeAdBanner';
-import MosaicLoader, { ADSGPT_MOSAIC_PALETTE } from './MosaicLoader';
+import { FrameSettleLoader, FrameStatusLine, FRAME_LINES, useRotatingCopy } from './FrameLoader';
 import RetryCountdownButton from './RetryCountdownButton';
 
 /* ── tokens ───────────────────────────────────────────────────────────────────
@@ -444,7 +444,7 @@ function useFitScale(deps) {
  * stretched the card to hold them. Capped at `calc(50% - 4px)` the pair adds up
  * to exactly the strip available, so the card's padding survives on both edges.
  */
-function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, framesExhausted, freeRenderSpent, palette }) {
+function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, framesExhausted, freeRenderSpent }) {
   const frames = (board.images || [])
     .filter((img) => img.status === 'ready' && img.src)
     .slice(0, 2);
@@ -461,6 +461,14 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
   // animates its own max-height; the frames row is `flex-1 basis-0`, so it is
   // re-laid out on every frame of that animation and shrinks/grows with it.
   const [voiceExpanded, setVoiceExpanded] = useState(false);
+
+  // Keyframes still being drawn: the slots show the settle loader with a
+  // rotating status, and Generate is disabled — there is nothing to render yet
+  // (design handoff 5b). `framesExhausted` is the other branch: the frames are
+  // not coming, which `FramePlaceholder` states outright.
+  const framesPending = frames.length === 0 && !framesExhausted;
+  const frameLine = useRotatingCopy(FRAME_LINES, framesPending);
+
   const clip = videoState?.video?.video || null;
   const clipSrc = clip?.src || clip?.url || clip?.local_url || '';
 
@@ -478,7 +486,7 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
           <InlineClip src={clipSrc} board={board} onClose={() => setWatching(false)} onOpen={onOpen} />
         ) : frames.length ? (
           <>
-            <Frame img={frames[0]} label="First frame" badge="First" />
+            <Frame frames={frames} index={0} />
             {/* An 8px channel between the frames with the badge centred over it.
                 The badge is absolute, so the channel is what actually reserves
                 the space it sits in. */}
@@ -504,7 +512,7 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
                 </span>
               )}
             </div>
-            {frames[1] && <Frame img={frames[1]} label="Last frame" badge="Last" />}
+            {frames[1] && <Frame frames={frames} index={1} />}
           </>
         ) : (
           // No picture YET is the normal case, not a failure: the script arrives
@@ -514,9 +522,12 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
                 retries. A keyframe that failed upstream is usually recovered by
                 the retry it triggers, so showing "failed" the moment the first
                 attempt reports one would be wrong more often than not. */}
-            <FramePlaceholder badge="First" seed={index * 2} failed={framesExhausted} palette={palette} />
+            <FramePlaceholder badge="First" seed={index * 2} failed={framesExhausted} />
             <div className="w-2 shrink-0" />
-            <FramePlaceholder badge="Last" seed={index * 2 + 1} failed={framesExhausted} palette={palette} />
+            <FramePlaceholder badge="Last" seed={index * 2 + 1} failed={framesExhausted} />
+            {/* One status for the pair: the UI cannot tell which frame is in
+                flight, so the copy never names First or Last. */}
+            {framesPending && <FrameStatusLine line={frameLine} />}
           </>
         )}
       </div>
@@ -546,6 +557,8 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
         onGenerate={onGenerate}
         onWatch={() => setWatching(true)}
         freeRenderSpent={freeRenderSpent}
+        // Nothing to render until the keyframes exist.
+        disabled={framesPending}
         // Only used by the exhausted-retry state, to send the user somewhere
         // that is not this concept.
         onOpen={onOpen}
@@ -655,7 +668,7 @@ function InlineClip({ src, board, onClose, onOpen }) {
  * for a board that already has one, and a button still offering it would be a
  * promise nothing keeps.
  */
-function ConceptAction({ board, state, onGenerate, onWatch, onOpen, freeRenderSpent = false }) {
+function ConceptAction({ board, state, onGenerate, onWatch, onOpen, freeRenderSpent = false, disabled = false }) {
   const status = state?.status;
   const open = () => onGenerate?.(board);
 
@@ -721,7 +734,15 @@ function ConceptAction({ board, state, onGenerate, onWatch, onOpen, freeRenderSp
     <button
       type="button"
       onClick={open}
-      className="inline-flex shrink-0 items-center gap-2 self-end rounded-[7px] bg-[linear-gradient(180deg,#9176ff_0%,#7c5cff_46%,#6148c7_100%)] px-[11px] py-1.5 text-[12.5px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-1px_0_rgba(0,0,0,0.28),0_1px_0_rgba(0,0,0,0.5),0_4px_10px_-4px_rgba(0,0,0,0.75)] transition hover:brightness-110 active:translate-y-px active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)]"
+      // Disabled while the keyframes are still being drawn — same button, at
+      // half strength, so the card does not change shape when they land.
+      disabled={disabled}
+      className={cn(
+        'inline-flex shrink-0 items-center gap-2 self-end rounded-[7px] bg-[linear-gradient(180deg,#9176ff_0%,#7c5cff_46%,#6148c7_100%)] px-[11px] py-1.5 text-[12.5px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-1px_0_rgba(0,0,0,0.28),0_1px_0_rgba(0,0,0,0.5),0_4px_10px_-4px_rgba(0,0,0,0.75)] transition',
+        disabled
+          ? 'cursor-not-allowed opacity-50'
+          : 'hover:brightness-110 active:translate-y-px active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)]'
+      )}
     >
       <span className="shrink-0 whitespace-nowrap" style={{ textShadow: '0 1px 0 rgba(0,0,0,0.22)' }}>
         Generate
@@ -766,10 +787,10 @@ function ConceptAction({ board, state, onGenerate, onWatch, onOpen, freeRenderSp
  * spent (`failed`), and only then does the card admit the gap.
  */
 /**
- * @param palette  brand colours for the mosaic tint (already resolved by the
- *   caller, AdsGPT ramp as fallback).
+ * @param seed  shifts the loader's pattern so the First and Last slots on a
+ *   card never look identical.
  */
-function FramePlaceholder({ badge, seed = 0, failed = false, palette }) {
+function FramePlaceholder({ badge, seed = 0, failed = false }) {
   return (
     <div
       // No `animate-pulse`. A box fading in and out as one says "placeholder",
@@ -789,9 +810,9 @@ function FramePlaceholder({ badge, seed = 0, failed = false, palette }) {
           </span>
         </div>
       ) : (
-        /* `seed` differs per frame, so the first and last placeholders on a card
-           are not the same pattern twice. */
-        <MosaicLoader offset={seed} palette={palette} />
+        /* Design handoff (5b), 2026-09-16. `seed` differs per frame, so the
+           first and last slots on a card never show the same pattern. */
+        <FrameSettleLoader seed={seed} />
       )}
       <FrameBadge>{badge}</FrameBadge>
     </div>
@@ -977,15 +998,40 @@ function VoiceoverLine({ text, expanded = false, onToggle }) {
  * visible letterbox bars, so every scene sat in an obvious black box instead of
  * filling its frame. Cover crops about a pixel and the box disappears.
  */
-function Frame({ img, label, badge }) {
+const FRAME_LABELS = ['First frame', 'Last frame'];
+const FRAME_BADGES = ['First', 'Last'];
+
+/**
+ * @param frames  BOTH keyframes of this concept. The tile renders its own
+ *   (`frames[index]`), but the full-size view steps between them: from First a
+ *   right-hand arrow goes to Last, and from Last a left-hand one comes back —
+ *   user request 2026-09-16. Arrow keys do the same.
+ */
+function Frame({ frames, index }) {
+  const img = frames[index];
   const [open, setOpen] = useState(false);
+  // Which frame the lightbox is showing; always re-seeded from the tile that
+  // was clicked, so opening Last never starts on First.
+  const [viewIndex, setViewIndex] = useState(index);
+  const viewed = frames[viewIndex] || img;
+  const canStep = frames.length > 1;
+
+  const openAt = () => {
+    setViewIndex(index);
+    setOpen(true);
+  };
 
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+      if (!canStep) return;
+      if (e.key === 'ArrowRight') setViewIndex(1);
+      if (e.key === 'ArrowLeft') setViewIndex(0);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, canStep]);
 
   return (
     <div
@@ -999,14 +1045,19 @@ function Frame({ img, label, badge }) {
     >
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openAt}
         className="block h-full w-full cursor-zoom-in"
-        aria-label={`Open ${label} full size`}
+        aria-label={`Open ${FRAME_LABELS[index]} full size`}
       >
-        <img src={img.src} alt={label} loading="lazy" className="h-full w-full object-cover" />
+        <img
+          src={img.src}
+          alt={FRAME_LABELS[index]}
+          loading="lazy"
+          className="h-full w-full object-cover"
+        />
       </button>
 
-      <FrameBadge>{badge}</FrameBadge>
+      <FrameBadge>{FRAME_BADGES[index]}</FrameBadge>
 
       {/* Portalled to `document.body` — every panel on this screen clips its own
           overflow, so a modal rendered in place would be cut by the very card it
@@ -1019,15 +1070,42 @@ function Frame({ img, label, badge }) {
           >
             <figure className="relative max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
               <img
-                src={img.src}
-                alt={label}
+                // Keyed so stepping between the two actually swaps the picture
+                // rather than leaving the old one until the new file decodes.
+                key={viewed.src}
+                src={viewed.src}
+                alt={FRAME_LABELS[viewIndex]}
                 className="max-h-[88vh] max-w-[88vw] rounded-xl border border-white/15 object-contain shadow-[0_40px_120px_-20px_rgba(0,0,0,0.95)]"
               />
               <figcaption className="absolute right-3 bottom-3 rounded bg-black/65 px-2 py-1 text-[10px] tracking-[0.08em] text-white/70 uppercase backdrop-blur-sm">
-                {label}
+                {FRAME_LABELS[viewIndex]}
               </figcaption>
               <CloseButton onClick={() => setOpen(false)} />
             </figure>
+
+            {/* One arrow at a time, on the side you are travelling towards:
+                right while the First frame is up, left while the Last is. At
+                the screen's edge rather than on the picture, so it never covers
+                the frame you came to look at. */}
+            {canStep && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setViewIndex(viewIndex === 0 ? 1 : 0);
+                }}
+                aria-label={viewIndex === 0 ? 'Show the last frame' : 'Show the first frame'}
+                className={cn(
+                  'absolute top-1/2 z-[2] grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border text-white/80 backdrop-blur-md transition hover:border-[#15DCFF]/50 hover:text-white',
+                  viewIndex === 0 ? 'right-6' : 'left-6'
+                )}
+                style={{ background: 'rgba(14,14,17,0.9)', borderColor: LINE_STRONG }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  {viewIndex === 0 ? <path d="M5 12h13M13 6l6 6-6 6" /> : <path d="M19 12H6M11 18l-6-6 6-6" />}
+                </svg>
+              </button>
+            )}
           </div>,
           document.body
         )}
@@ -1067,39 +1145,97 @@ function ConceptsUnavailable({ message }) {
   );
 }
 
-function ConceptSkeleton({ delay = 0 }) {
-  const pulse = { animationDelay: `${delay}ms` };
+/**
+ * The concept card before ANY of it exists — design handoff option `5b`.
+ *
+ * This is the state the handoff was drawn for: the frames are being generated
+ * and the title and voiceover have not arrived either, so the footer is two
+ * shimmering bars and Generate is present but disabled. Card chrome, badges and
+ * the transition node are the live component's, so nothing moves when the real
+ * card replaces this one.
+ */
+function ConceptSkeleton({ delay = 0, index = 1 }) {
+  // One rotating status for the pair — the UI cannot know which frame is being
+  // drawn, so the copy never names First or Last.
+  const line = useRotatingCopy(FRAME_LINES);
+  // A sweeping highlight over each bar; the second offset so they do not move
+  // in lockstep. `fl-sweep` comes from the loader's own keyframes, which are
+  // mounted by the frame slots above.
+  const bar = (widthClass, heightClass, tint, sweepDelay) => (
+    <div className={cn('relative shrink-0 overflow-hidden rounded-[3px]', widthClass, heightClass)} style={{ background: tint }}>
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.14) 50%, rgba(255,255,255,0) 100%)',
+          animation: `fl-sweep 2.2s ease-in-out ${sweepDelay} infinite`,
+        }}
+      />
+    </div>
+  );
+
   return (
     <article
       className="flex h-full min-h-0 w-full min-w-0 flex-col gap-2.5 rounded-2xl border p-3"
       style={{ background: SURF, borderColor: LINE }}
     >
-      {/* The two frame slots carry the same mosaic the real placeholders do —
-          this is the same wait one step earlier, and a plain pulsing rectangle
-          here followed by a mosaic a few seconds later looked like two
-          different loading states for one continuous thing.
+      {/* Same strip as the real card: two slots, an 8px channel, the node over
+          it. `flex-1`, not an aspect lock, so the layout does not jump when the
+          real frames arrive. */}
+      <div className="relative flex min-h-20 flex-1 basis-0 items-center justify-center overflow-visible">
+        <div
+          className="relative h-full min-w-0 flex-1 overflow-hidden rounded-lg border bg-white/[0.03]"
+          style={{ borderColor: LINE }}
+        >
+          <FrameSettleLoader seed={Math.round(delay / 140) * 2} />
+          <FrameBadge>First</FrameBadge>
+        </div>
 
-          `flex-1`, not an aspect lock, so these fill the strip exactly as the
-          real frames do and the layout does not jump when they arrive. */}
-      <div className="flex min-h-20 flex-1 basis-0 items-center justify-center">
-        {[0, 1].map((i) => (
-          <div
-            key={i}
-            className={cn(
-              'h-full min-w-0 flex-1 overflow-hidden rounded-lg bg-white/[0.03]',
-              i === 1 && 'ml-2'
-            )}
+        <div className="z-[3] w-2 shrink-0">
+          <span
+            aria-hidden
+            className="absolute top-1/2 left-1/2 grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border text-white shadow-[0_4px_14px_rgba(0,0,0,0.7)]"
+            style={{ background: 'rgba(14,14,17,0.9)', borderColor: LINE_STRONG }}
           >
-            <MosaicLoader offset={delay / 140 + i * 7} palette={ADSGPT_MOSAIC_PALETTE} />
-          </div>
-        ))}
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h13M13 6l6 6-6 6" />
+            </svg>
+          </span>
+        </div>
+
+        <div
+          className="relative h-full min-w-0 flex-1 overflow-hidden rounded-lg border bg-white/[0.03]"
+          style={{ borderColor: LINE }}
+        >
+          <FrameSettleLoader seed={Math.round(delay / 140) * 2 + 1} />
+          <FrameBadge>Last</FrameBadge>
+        </div>
+
+        <FrameStatusLine line={line} />
       </div>
-      <div className="h-4 w-2/3 shrink-0 animate-pulse rounded bg-white/[0.07]" style={pulse} />
-      <div className="h-3.5 w-full shrink-0 animate-pulse rounded bg-white/[0.05]" style={pulse} />
-      <div
-        className="h-7 w-32 shrink-0 animate-pulse rounded-[7px] bg-white/[0.05]"
-        style={pulse}
-      />
+
+      {/* The footer the title and voiceover will fill. */}
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="text-xs font-semibold text-white/50 tabular-nums">{index}</span>
+        {bar('w-[58%]', 'h-[11px]', 'rgba(255,255,255,0.09)', '0s')}
+      </div>
+      {bar('w-[78%]', 'h-[9px]', 'rgba(255,255,255,0.07)', '.5s')}
+
+      {/* The real Generate button, disabled: there is nothing to render yet. */}
+      <button
+        type="button"
+        disabled
+        aria-hidden
+        className="inline-flex shrink-0 cursor-not-allowed items-center gap-2 self-end rounded-[7px] bg-[linear-gradient(180deg,#9176ff_0%,#7c5cff_46%,#6148c7_100%)] px-[11px] py-1.5 text-[12.5px] font-bold text-white opacity-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-1px_0_rgba(0,0,0,0.28),0_1px_0_rgba(0,0,0,0.5)]"
+      >
+        <span className="shrink-0 whitespace-nowrap" style={{ textShadow: '0 1px 0 rgba(0,0,0,0.22)' }}>
+          Generate
+        </span>
+        <span className="flex shrink-0 items-center gap-[6px]">
+          <img src={creditIcon} alt="" className="h-5 w-5 shrink-0" />
+          <span className="shrink-0 text-[13px] font-bold">32</span>
+        </span>
+      </button>
     </article>
   );
 }
@@ -2147,10 +2283,6 @@ export default function Workspace({
     .replace(/\/$/, '');
   const industry = [context.industry_major, context.industry_sub].filter(Boolean).join(' · ');
   const brandName = context.brand_name || site || 'Your brand';
-  // Every mosaic placeholder uses the AdsGPT cyan→indigo ramp (user decision
-  // 2026-09-15). Brand palettes were tried first, but many brands come back
-  // black/white/grey and the placeholders read as colourless.
-  const mosaicPalette = ADSGPT_MOSAIC_PALETTE;
 
   // ── Brand panel collapse ─────────────────────────────────────────────────
   // User decisions 2026-09-15: collapses to a 56px rail with the logo, toggled
@@ -2389,13 +2521,13 @@ export default function Workspace({
                       videoState={videosByBoard[board.id]}
                       framesExhausted={framesExhausted}
                       freeRenderSpent={freeRenderSpent}
-                      // Keyframe placeholders tint in this brand's colours.
-                      palette={mosaicPalette}
                     />
                   ))
                 : storyboardsFailed
                   ? <ConceptsUnavailable message={storyboards.error} />
-                  : [0, 1, 2].map((i) => <ConceptSkeleton key={i} delay={i * 140} />)}
+                  : [0, 1, 2].map((i) => (
+                      <ConceptSkeleton key={i} delay={i * 140} index={i + 1} />
+                    ))}
             </div>
           </section>
 
