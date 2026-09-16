@@ -148,8 +148,22 @@ function attachUsageTracking(api, { accessToken, logger = null } = {}) {
     if (api[OPT_OUT]) return originalCall(...args);
 
     const [, path] = args;
-    const accountId = extractAccountId(path);
-    const { userId = null, source, throttle = false } = currentUsageContext();
+    const {
+      userId = null,
+      source,
+      throttle = false,
+      adAccountId: ctxAccountId = null,
+    } = currentUsageContext();
+
+    // The path is the better source of truth when it carries `act_<id>`, but
+    // an ENTITY-level write does not: pausing an ad is `POST /<adId>`, with
+    // the account nowhere in it. Those are exactly Autopilot's writes, and
+    // without this fallback every one of them is filed against a null
+    // account — visible in the totals, invisible in the per-account table
+    // that says which advertiser is expensive.
+    const accountId =
+      extractAccountId(path) ||
+      (ctxAccountId ? String(ctxAccountId).replace(/^act_/, "") : null);
 
     // Rebuilt per call because one instance serves many accounts.
     const limiterCtx = { tokenHash, accountId };
@@ -174,12 +188,15 @@ function attachUsageTracking(api, { accessToken, logger = null } = {}) {
       response = await originalCall(...args);
     } catch (err) {
       let throttled = false;
+      let code = null;
       try {
-        throttled = classifyMetaError(err).kind === "rate-limit";
+        const cls = classifyMetaError(err);
+        throttled = cls.kind === "rate-limit";
+        code = cls.code;
       } catch {
         /* classification is a nicety; never let it mask the real error */
       }
-      sharedUsageRecorder.recordFailure(usageCtx, { throttled });
+      sharedUsageRecorder.recordFailure(usageCtx, { throttled, code });
       throw err; // unchanged — this wrapper observes, it does not intervene
     }
 

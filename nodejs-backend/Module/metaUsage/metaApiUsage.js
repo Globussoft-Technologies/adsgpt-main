@@ -83,6 +83,33 @@ const metaApiUsageSchema = new mongoose.Schema(
     // anything about capacity.
     throttles: { type: Number, default: 0 },
 
+    // WHY the failures failed: Meta error code -> count within this hour.
+    //
+    // `failures` alone answers "how many", which is never the question. An
+    // account failing 100% of its requests is a dead token, a revoked
+    // permission or a disabled account, and those have three different
+    // owners and three different fixes — but they arrive as the same
+    // increment to the same counter. Investigating act_1125685999756619
+    // (161/161 failures over 13 days) took six ad-hoc queries and still
+    // could not name the code, because the code was never written down.
+    //
+    // A Map, not a sub-document: the key space belongs to Meta, which adds
+    // codes without telling us, and a fixed schema would silently drop every
+    // code it did not already know about — reproducing this exact gap.
+    //
+    // Keyed on the CODE ALONE, not code/subcode — subcodes would multiply the
+    // cardinality of a per-hour-per-account field, and the code is enough to
+    // separate the causes that have different OWNERS: capacity, access,
+    // a temporary block, a malformed request.
+    //
+    // It is not enough to separate every cause. Meta's `100` and `200` are
+    // catch-alls whose specific meaning lives in the subcode, and negative
+    // codes are internal Meta errors that report their real failure there
+    // too. Those rows narrow the question rather than answering it. A subcode
+    // breakdown is additive — a second field, not a change to this one — and
+    // is worth adding once this column shows which of them we actually hit.
+    byCode: { type: Map, of: Number, default: () => new Map() },
+
     // ── Meta's meters ───────────────────────────────────────────────────
     peak: { type: PeakSchema, default: () => ({}) },
 

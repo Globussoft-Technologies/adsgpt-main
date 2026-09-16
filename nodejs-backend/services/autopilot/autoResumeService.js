@@ -86,18 +86,22 @@ function countFlaps(rows) {
 // Meta write — mirror of pauseEntity in autoPauseService
 // ---------------------------------------------------------------------------
 
-async function resumeEntity({ level, entityId }) {
+// `api` is OPTIONAL and falls back to the SDK's default instance, which is
+// what the v3 caller below still relies on. The v4 orchestrator passes one
+// explicitly so its writes are metered as Autopilot rather than as whatever
+// set the default last — see writeApi in userRuleOrchestrator.js.
+async function resumeEntity({ level, entityId, api }) {
   const sdk = bizSdk();
   let obj;
   let StatusField;
   if (level === "campaign") {
-    obj = new sdk.Campaign(entityId);
+    obj = new sdk.Campaign(entityId, {}, undefined, api);
     StatusField = sdk.Campaign.Fields;
   } else if (level === "adset") {
-    obj = new sdk.AdSet(entityId);
+    obj = new sdk.AdSet(entityId, {}, undefined, api);
     StatusField = sdk.AdSet.Fields;
   } else if (level === "ad") {
-    obj = new sdk.Ad(entityId);
+    obj = new sdk.Ad(entityId, {}, undefined, api);
     StatusField = sdk.Ad.Fields;
   } else {
     throw new Error(`unknown entity level: ${level}`);
@@ -113,18 +117,18 @@ async function resumeEntity({ level, entityId }) {
  * to refuse to resume something a human just touched. Returns null if Meta
  * call fails — caller decides how to fail-safe.
  */
-async function getEntityMeta({ level, entityId }) {
+async function getEntityMeta({ level, entityId, api }) {
   const sdk = bizSdk();
   let obj;
   let Fields;
   if (level === "campaign") {
-    obj = new sdk.Campaign(entityId);
+    obj = new sdk.Campaign(entityId, {}, undefined, api);
     Fields = sdk.Campaign.Fields;
   } else if (level === "adset") {
-    obj = new sdk.AdSet(entityId);
+    obj = new sdk.AdSet(entityId, {}, undefined, api);
     Fields = sdk.AdSet.Fields;
   } else if (level === "ad") {
-    obj = new sdk.Ad(entityId);
+    obj = new sdk.Ad(entityId, {}, undefined, api);
     Fields = sdk.Ad.Fields;
   } else {
     throw new Error(`unknown entity level: ${level}`);

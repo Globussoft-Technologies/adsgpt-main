@@ -165,6 +165,58 @@ function newRecorder() {
       );
       assert.equal(_internals.peakFieldFor({ kind: "future", key: "x" }), null);
     });
+
+    test("normalizeErrorCode keeps numeric Meta codes as plain digits", () => {
+      const n = _internals.normalizeErrorCode;
+      assert.equal(n(4), "4");
+      assert.equal(n(190), "190");
+      assert.equal(n(80004), "80004");
+      // A code that arrived as a string must land in the SAME bucket as the
+      // number, or one cause would be counted under two keys.
+      assert.equal(n("4"), "4");
+      assert.equal(n(" 10 "), "10");
+    });
+
+    test("normalizeErrorCode keeps negative Meta codes intact", () => {
+      // Meta documents negative codes as its own internal errors. The minus
+      // sign is legal in a Mongo field name and must survive: stripping it
+      // would fold -1 and 1 — an internal Meta fault and a transient API
+      // error — into one row.
+      const n = _internals.normalizeErrorCode;
+      assert.equal(n(-1), "-1");
+      assert.equal(n("-2"), "-2");
+    });
+
+    test("normalizeErrorCode keeps Node errno strings", () => {
+      const n = _internals.normalizeErrorCode;
+      assert.equal(n("ECONNRESET"), "ECONNRESET");
+      assert.equal(n("ERR_SOCKET_CONNECTION_TIMEOUT"), "ERR_SOCKET_CONNECTION_TIMEOUT");
+    });
+
+    test("normalizeErrorCode folds every absent value into one bucket", () => {
+      // classifyMetaError's no-response branch reports null, and a permanent
+      // error with no code in the body yields NaN (`Number(undefined) ?? null`
+      // is NaN, not null). Both mean the same thing and must not split.
+      const n = _internals.normalizeErrorCode;
+      assert.equal(n(null), "unknown");
+      assert.equal(n(undefined), "unknown");
+      assert.equal(n(NaN), "unknown");
+      assert.equal(n(""), "unknown");
+      assert.equal(_internals.UNKNOWN_CODE, "unknown");
+    });
+
+    test("normalizeErrorCode strips characters Mongo would reject in a key", () => {
+      // These become `$inc` PATHS. A dot reads as a nested path and a leading
+      // `$` is rejected as an operator — either would fail the whole batch,
+      // losing the counts for every other account in the same flush.
+      const n = _internals.normalizeErrorCode;
+      assert.equal(n("10.5"), "105");
+      assert.equal(n("$set"), "set");
+      assert.equal(n("a.b$c"), "abc");
+      // Nothing survivable left => the unknown bucket, never an empty key.
+      assert.equal(n("..."), "unknown");
+      assert.equal(n("x".repeat(200)).length, 40);
+    });
   });
 
   group("accumulation", () => {
@@ -196,6 +248,41 @@ function newRecorder() {
       const b = [...r.pending.values()][0];
       assert.equal(b.failures, 2);
       assert.equal(b.throttles, 1);
+    });
+
+    test("recordFailure tallies each error code separately", () => {
+      const r = newRecorder();
+      r.recordFailure(CTX, { throttled: true, code: 4 });
+      r.recordFailure(CTX, { throttled: true, code: 4 });
+      r.recordFailure(CTX, { code: 190 });
+      r.recordFailure(CTX, { code: "ECONNRESET" });
+      const b = [...r.pending.values()][0];
+      assert.equal(b.failures, 4);
+      assert.equal(b.throttles, 2);
+      assert.deepEqual(b.byCode, { 4: 2, 190: 1, ECONNRESET: 1 });
+    });
+
+    test("every failure lands in byCode, even an unidentified one", () => {
+      // The totals must reconcile: sum(byCode) === failures. A dropped write
+      // for an unknown code would make the breakdown quietly understate the
+      // exact case it exists to explain.
+      const r = newRecorder();
+      r.recordFailure(CTX);
+      r.recordFailure(CTX, { code: null });
+      r.recordFailure(CTX, { code: 100 });
+      const b = [...r.pending.values()][0];
+      const total = Object.values(b.byCode).reduce((s, n) => s + n, 0);
+      assert.equal(total, b.failures);
+      assert.equal(b.byCode.unknown, 2);
+    });
+
+    test("codes are tracked per bucket, not shared across accounts", () => {
+      const r = newRecorder();
+      r.recordFailure(CTX, { code: 10 });
+      r.recordFailure({ ...CTX, adAccountId: "act_2002" }, { code: 190 });
+      const [a, b] = [...r.pending.values()];
+      assert.deepEqual(a.byCode, { 10: 1 });
+      assert.deepEqual(b.byCode, { 190: 1 });
     });
 
     test("peaks keep the MAX, not the most recent reading", () => {
@@ -237,13 +324,60 @@ function newRecorder() {
     });
   });
 
+  group("classifier seam", () => {
+    // The recorder is only as good as what it is handed. These pin the
+    // contract between classifyMetaError and the key it produces, using the
+    // error shapes the SDK actually delivers (body flattened onto
+    // `.response`, NOT `.response.error`).
+    const { classifyMetaError } = require("../../services/autopilot/metaRetry");
+    const keyFor = (err) =>
+      _internals.normalizeErrorCode(classifyMetaError(err).code);
+
+    test("the causes behind a 100%-failing account each get their own key", () => {
+      // The three candidates for act_1125685999756619 — an expired token, a
+      // restricted account and a missing object — are one counter today and
+      // three different fixes. They must never share a bucket.
+      assert.equal(keyFor({ response: { code: 190, error_subcode: 460 } }), "190");
+      assert.equal(keyFor({ response: { code: 10, error_subcode: 1404078 } }), "10");
+      assert.equal(keyFor({ response: { code: 100, error_subcode: 33 } }), "100");
+      assert.equal(keyFor({ response: { code: 200 } }), "200");
+    });
+
+    test("rate limits keep their distinct codes", () => {
+      assert.equal(keyFor({ response: { code: 4 } }), "4");
+      assert.equal(keyFor({ response: { code: 17 } }), "17");
+      assert.equal(keyFor({ response: { code: 80004 } }), "80004");
+    });
+
+    test("a network failure keeps its errno rather than collapsing to unknown", () => {
+      const err = Object.assign(new Error("boom"), { code: "ECONNRESET" });
+      assert.equal(keyFor(err), "ECONNRESET");
+    });
+
+    test("an HTTP 5xx is distinguishable from no response at all", () => {
+      // Regression: `numeric ?? status` yielded NaN, because Number(undefined)
+      // is NaN and NaN is not nullish — so every Meta server error was filed
+      // as "unknown" alongside genuine no-response failures.
+      assert.equal(keyFor({ response: {}, status: 503 }), "HTTP_503");
+      assert.equal(
+        keyFor({ message: "The request was made but no response was received" }),
+        "unknown",
+      );
+    });
+
+    test("an error carrying nothing usable still produces a key", () => {
+      assert.equal(keyFor({}), "unknown");
+      assert.equal(keyFor(new Error("plain")), "unknown");
+    });
+  });
+
   await group("flush", async () => {
     await testAsync("emits $inc and $max with the bucket as the filter", async () => {
       modelMock.reset();
       const r = newRecorder();
       r.recordCall(CTX);
       r.recordCall(CTX);
-      r.recordFailure(CTX, { throttled: true });
+      r.recordFailure(CTX, { throttled: true, code: 4 });
       r.recordHeaders(CTX, [
         { kind: "app", key: "app:t", usage: 12, tier: "standard_access" },
       ]);
@@ -260,11 +394,49 @@ function newRecorder() {
         calls: 2,
         failures: 1,
         throttles: 1,
+        "byCode.4": 1,
       });
       assert.deepEqual(op.updateOne.update.$max, { "peak.app": 12 });
       assert.deepEqual(op.updateOne.update.$setOnInsert, {
         tier: "standard_access",
       });
+    });
+
+    await testAsync("emits one $inc path per error code", async () => {
+      modelMock.reset();
+      const r = newRecorder();
+      r.recordFailure(CTX, { throttled: true, code: 4 });
+      r.recordFailure(CTX, { throttled: true, code: 4 });
+      r.recordFailure(CTX, { code: 10 });
+      r.recordFailure(CTX, {});
+      await r.flush();
+
+      const [op] = modelMock.writes[0];
+      assert.deepEqual(op.updateOne.update.$inc, {
+        failures: 4,
+        throttles: 2,
+        "byCode.4": 2,
+        "byCode.10": 1,
+        "byCode.unknown": 1,
+      });
+    });
+
+    await testAsync("code counts compose via $inc rather than overwriting", async () => {
+      // Two workers can flush the same hour concurrently. Each must send its
+      // own share as an increment — a `$set` here would make the last writer
+      // erase the other's failures.
+      modelMock.reset();
+      const r = newRecorder();
+      r.recordFailure(CTX, { code: 10 });
+      await r.flush();
+      r.recordFailure(CTX, { code: 10 });
+      await r.flush();
+
+      assert.equal(modelMock.writes.length, 2);
+      for (const [op] of modelMock.writes) {
+        assert.equal(op.updateOne.update.$inc["byCode.10"], 1);
+        assert.equal(op.updateOne.update.$set, undefined);
+      }
     });
 
     await testAsync("clears pending so the next flush does not double-count", async () => {

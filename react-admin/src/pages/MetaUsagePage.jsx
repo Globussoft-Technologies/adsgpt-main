@@ -42,6 +42,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import StatCard from "@/components/StatCard.jsx";
+import FailureCodes from "@/components/FailureCodes.jsx";
 import DateRangePicker from "@/components/DateRangePicker.jsx";
 import MeterBar, { meterTone } from "@/components/MeterBar.jsx";
 import UsageFilterBar, {
@@ -123,6 +124,7 @@ export default function MetaUsagePage() {
   const totals = data?.totals || {};
   const hourly = data?.hourly || [];
   const bySource = data?.bySource || [];
+  const byCode = data?.byCode || [];
   const topAccounts = data?.topAccounts || [];
   const recorder = data?.recorder;
   const counts = data?.counts || {};
@@ -377,6 +379,8 @@ export default function MetaUsagePage() {
               </ResponsiveContainer>
             </div>
           </section>
+
+          <FailureCodes rows={byCode} />
 
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 px-5 py-4">

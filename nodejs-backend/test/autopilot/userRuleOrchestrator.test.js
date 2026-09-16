@@ -64,6 +64,7 @@ const stubs = {
   auditByAccountAndLookback: new Map(),
   auditCalls: [],     // every runAuditForAccount invocation, in order
   pauseCalls: [],     // pauseEntity invocations
+  writeApis: [],      // api instance handed to each SDK entity constructor
   pauseFailNext: null,
   actionLogWrites: [],
   alertCalls: [],
@@ -99,6 +100,7 @@ function resetStubs() {
   stubs.auditByAccountAndLookback = new Map();
   stubs.auditCalls = [];
   stubs.pauseCalls = [];
+  stubs.writeApis = [];
   stubs.pauseFailNext = null;
   stubs.actionLogWrites = [];
   stubs.alertCalls = [];
@@ -281,9 +283,15 @@ Module._load = function patched(request, parent, isMain) {
   if (request === "facebook-nodejs-business-sdk") {
     const SDKLevel = (level) =>
       class {
-        constructor(id) {
+        // 4th arg is the api the SDK would otherwise take from
+        // `getDefaultApi()`. Recorded so tests can assert that Autopilot's
+        // writes carry their OWN metered instance rather than riding the
+        // audit's, which reports everything as `source: "audit"`.
+        constructor(id, _data, _parentId, api) {
           this.id = id;
           this._level = level;
+          this._api = api;
+          stubs.writeApis.push({ level, entityId: id, api });
         }
         async update(_fields, payload) {
           if (payload && payload.daily_budget !== undefined) {
@@ -342,7 +350,23 @@ Module._load = function patched(request, parent, isMain) {
       daily_budget: "daily_budget",
       lifetime_budget: "lifetime_budget",
     };
+    // Minimal stand-in for the real api object. Its presence is what makes
+    // the orchestrator build a metered instance instead of falling back to
+    // the SDK default — without it `writeApi` bails out and the tracked path
+    // this mock exists to cover is never executed.
+    class FacebookAdsApi {
+      constructor(accessToken) {
+        this.accessToken = accessToken;
+      }
+      setShowHeader(v) {
+        this.showHeader = v;
+      }
+      async call() {
+        return {};
+      }
+    }
     return {
+      FacebookAdsApi,
       Campaign: Object.assign(SDKLevel("campaign"), { Fields: FIELDS }),
       AdSet: Object.assign(SDKLevel("adset"), { Fields: FIELDS }),
       Ad: Object.assign(SDKLevel("ad"), { Fields: FIELDS }),
@@ -658,6 +682,24 @@ const { runUserRuleCycle } = orchestrator;
         assert.equal(row.dryRun, false);
         assert.equal(result.accounts.length, 1);
         assert.equal(result.accounts[0].pause.paused, 1);
+
+        // The write must carry its OWN api instance. Left undefined, the SDK
+        // reaches for `getDefaultApi()` — which `runAuditForAccount` set to
+        // an instance that opts out of global tracking and reports under a
+        // hardcoded `source: "audit"`. That is how 2,188 production writes
+        // came to be metered as audit reads while the dashboard showed
+        // Autopilot spending 54 calls.
+        const paused = stubs.writeApis.filter((w) => w.entityId === "camp_1");
+        assert.equal(paused.length, 1, "one entity built for the pause");
+        assert.ok(paused[0].api, "pause must not fall back to the default api");
+        // The DECRYPTED token — the same one the audit used, so both land in
+        // the same rate-limiter bucket rather than looking like two callers.
+        assert.equal(paused[0].api.accessToken, "decrypted:tok-u1");
+        assert.equal(
+          paused[0].api.showHeader,
+          true,
+          "instance must be instrumented, not merely constructed",
+        );
       },
     );
 

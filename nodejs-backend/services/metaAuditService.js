@@ -184,12 +184,15 @@ function attachRateLimiting(
       // parameter says nothing about how much quota is left, and lumping the
       // two together would make the throttle count meaningless.
       let throttled = false;
+      let code = null;
       try {
-        throttled = classifyMetaError(err).kind === "rate-limit";
+        const cls = classifyMetaError(err);
+        throttled = cls.kind === "rate-limit";
+        code = cls.code;
       } catch {
         /* classification is a nicety; never let it mask the real error */
       }
-      sharedUsageRecorder.recordFailure(usageCtx, { throttled });
+      sharedUsageRecorder.recordFailure(usageCtx, { throttled, code });
       throw err;
     }
     if (response && typeof response === "object" && response.headers) {

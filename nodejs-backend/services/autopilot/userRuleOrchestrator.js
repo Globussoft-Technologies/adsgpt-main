@@ -76,6 +76,8 @@ const {
   normalizeAdAccountId,
 } = require("../../config/autopilotConfig");
 const { runAuditForAccount } = require("../metaAuditService");
+const { attachUsageTracking } = require("../meta/attachUsageTracking");
+const { runWithUsageContext } = require("../meta/metaUsageContext");
 const { evaluateRule } = require("./userRuleEvaluator");
 const { pickMetricsSnapshot } = require("./metricsSnapshot");
 const { notifyAutopilotCycle } = require("./alertService");
@@ -359,25 +361,74 @@ function formatMetaError(err) {
   return codeTag ? `${base} (code ${codeTag})` : base;
 }
 
+/**
+ * A metered api instance for WRITES.
+ *
+ * WHY WRITES NEED THEIR OWN. Every SDK object built without an explicit api
+ * falls back to `FacebookAdsApi.getDefaultApi()`, and the last thing to set
+ * that is `runAuditForAccount` — an instance that deliberately opts OUT of
+ * global usage tracking and reports its own traffic under a hardcoded
+ * `source: "audit"`. So every pause, resume and budget change Autopilot has
+ * ever made was metered as audit read traffic. In production that is 2,188
+ * writes in 30 days folded into the audit column, while the dashboard
+ * reported Autopilot's own draw as 54 calls.
+ *
+ * `new FacebookAdsApi(...)` rather than `FacebookAdsApi.init(...)`, because
+ * `init` also calls `setDefaultApi` — which would replace the audit's
+ * instance mid-cycle and silently switch off the self-throttling it installs.
+ *
+ * Attached explicitly rather than relying on the global patch, so this is
+ * correct in the worker whether or not that patch was installed. Not cached:
+ * the wrap is an object and a closure, which is nothing beside the HTTP round
+ * trip it precedes, and a per-token cache would outlive the tokens in it.
+ *
+ * Returns undefined if an instance cannot be built or instrumented, which
+ * makes the SDK fall back to the default api — the pre-existing behaviour.
+ * Metering must never be the reason a pause does not happen; losing the
+ * attribution for a write is a worse-labelled row, losing the write is a
+ * campaign that kept spending.
+ */
+function writeApi(accessToken) {
+  try {
+    const sdk = bizSdk();
+    if (typeof sdk.FacebookAdsApi !== "function") return undefined;
+    const api = new sdk.FacebookAdsApi(accessToken);
+    attachUsageTracking(api, { accessToken, logger: getLogger() });
+    return api;
+  } catch (err) {
+    try {
+      getLogger().warn(
+        `[autopilot v4] usage tracking unavailable for writes: ${err.message}`,
+      );
+    } catch {
+      /* logging must not be the thing that throws */
+    }
+    return undefined;
+  }
+}
+
 // ─── Meta write — pause an entity ──────────────────────────────────────────
-async function pauseEntity({ level, entityId }) {
+async function pauseEntity({ level, entityId, api }) {
   const sdk = bizSdk();
   if (level === "campaign") {
-    await new sdk.Campaign(entityId).update([sdk.Campaign.Fields.status], {
-      [sdk.Campaign.Fields.status]: "PAUSED",
-    });
+    await new sdk.Campaign(entityId, {}, undefined, api).update(
+      [sdk.Campaign.Fields.status],
+      { [sdk.Campaign.Fields.status]: "PAUSED" },
+    );
     return;
   }
   if (level === "adset") {
-    await new sdk.AdSet(entityId).update([sdk.AdSet.Fields.status], {
-      [sdk.AdSet.Fields.status]: "PAUSED",
-    });
+    await new sdk.AdSet(entityId, {}, undefined, api).update(
+      [sdk.AdSet.Fields.status],
+      { [sdk.AdSet.Fields.status]: "PAUSED" },
+    );
     return;
   }
   if (level === "ad") {
-    await new sdk.Ad(entityId).update([sdk.Ad.Fields.status], {
-      [sdk.Ad.Fields.status]: "PAUSED",
-    });
+    await new sdk.Ad(entityId, {}, undefined, api).update(
+      [sdk.Ad.Fields.status],
+      { [sdk.Ad.Fields.status]: "PAUSED" },
+    );
     return;
   }
   throw new Error(`Unknown level: ${level}`);
@@ -690,12 +741,18 @@ async function evaluateRuleAtAccount({
       if (isPause && !finalDryRun) {
         try {
           await metaCall(
-            () =>
+            (api) =>
               pauseEntity({
                 level: rule.evaluateOn,
                 entityId: target[`${rule.evaluateOn}_id`] || target.id,
+                api,
               }),
-            { acctKey, accessToken, label: `pause ${rule.evaluateOn}` },
+            {
+              acctKey,
+              accessToken,
+              userId,
+              label: `pause ${rule.evaluateOn}`,
+            },
           );
         } catch (err) {
           outcome = "failed";
@@ -754,8 +811,13 @@ async function evaluateRuleAtAccount({
  * with no retry and no body-throttle feedback at all. Nothing in the body was
  * ever write-specific.
  */
-function metaCall(fn, { acctKey, accessToken, label }) {
-  return withRetry(fn, {
+function metaCall(fn, { acctKey, accessToken, label, userId = null }) {
+  // `fn` receives a metered api instance. Passing it in rather than letting
+  // the SDK reach for the default is what keeps this traffic out of the
+  // audit's column — see writeApi.
+  const api = writeApi(accessToken);
+  const run = () =>
+    withRetry(() => fn(api), {
     onRetry: (err, cls, attempt) => {
       getLogger().warn(
         `[autopilot v4] ${label} attempt ${attempt} failed (${cls.reason}) — retrying`,
@@ -777,7 +839,26 @@ function metaCall(fn, { acctKey, accessToken, label }) {
           (retryAfterMs ? ` — deferring ${Math.ceil(retryAfterMs / 60000)}min` : ""),
       );
     },
-  });
+    });
+
+  // Attribution, resolved here because this is the one place every Autopilot
+  // Meta call passes through. The cron already sets `source: "autopilot"` for
+  // the whole cycle, but with a null user and no account — neither is known
+  // that far out. Both are known here.
+  //
+  // `adAccountId` is what lets an entity-level write be attributed at all:
+  // `POST /<adId>` carries no `act_` for the tracker to read off the path.
+  return runWithUsageContext(
+    {
+      userId: userId || null,
+      source: "autopilot",
+      adAccountId: acctKey || null,
+      // Nothing here is interactive. A scheduled job waiting out a hot
+      // bucket is strictly better than one being refused.
+      throttle: true,
+    },
+    run,
+  );
 }
 
 // ─── scale: move a winner's (or loser's) budget ────────────────────────────
@@ -837,10 +918,10 @@ function resolveScaleTarget(rule, target, entities) {
 // forever for an entity that will never be scalable. Here the absence is
 // information: it tells us whether this is a lifetime-budget entity or a CBO
 // child, and both become skips with a specific reason.
-async function readBudget({ level, entityId }) {
+async function readBudget({ level, entityId, api }) {
   const sdk = bizSdk();
   const Klass = level === "campaign" ? sdk.Campaign : sdk.AdSet;
-  const res = await new Klass(entityId).read([
+  const res = await new Klass(entityId, {}, undefined, api).read([
     Klass.Fields.daily_budget,
     Klass.Fields.lifetime_budget,
   ]);
@@ -855,10 +936,10 @@ async function readBudget({ level, entityId }) {
   };
 }
 
-async function writeBudget({ level, entityId, newBudget }) {
+async function writeBudget({ level, entityId, newBudget, api }) {
   const sdk = bizSdk();
   const Klass = level === "campaign" ? sdk.Campaign : sdk.AdSet;
-  await new Klass(entityId).update([Klass.Fields.daily_budget], {
+  await new Klass(entityId, {}, undefined, api).update([Klass.Fields.daily_budget], {
     [Klass.Fields.daily_budget]: newBudget,
   });
 }
@@ -959,9 +1040,10 @@ async function applyScale({
 
   let budgets;
   try {
-    budgets = await metaCall(() => readBudget({ level, entityId }), {
+    budgets = await metaCall((api) => readBudget({ level, entityId, api }), {
       acctKey,
       accessToken: scaleContext.accessToken,
+      userId,
       label: `budget read ${level}`,
     });
   } catch (err) {
@@ -1088,11 +1170,15 @@ async function applyScale({
   let error = null;
   if (!finalDryRun) {
     try {
-      await metaCall(() => writeBudget({ level, entityId, newBudget }), {
-        acctKey,
-        accessToken: scaleContext.accessToken,
-        label: `budget write ${level}`,
-      });
+      await metaCall(
+        (api) => writeBudget({ level, entityId, newBudget, api }),
+        {
+          acctKey,
+          accessToken: scaleContext.accessToken,
+          userId,
+          label: `budget write ${level}`,
+        },
+      );
     } catch (err) {
       outcome = "failed";
       error = formatMetaError(err);
@@ -1428,7 +1514,17 @@ async function resumeAtAccount({
     // not theirs.
     let entityMeta = null;
     try {
-      entityMeta = await getEntityMeta({ level, entityId });
+      // Through metaCall like every other Meta call here, so it is metered
+      // and retried rather than being the one read that silently is not.
+      entityMeta = await metaCall(
+        (api) => getEntityMeta({ level, entityId, api }),
+        {
+          acctKey,
+          accessToken,
+          userId,
+          label: `updated_time read ${level}`,
+        },
+      );
     } catch (err) {
       logger.warn(
         `[autopilot v4] resume: updated_time read failed ${level}=${entityId}: ${err.message}`,
@@ -1472,9 +1568,10 @@ async function resumeAtAccount({
     let error = null;
     if (!finalDryRun) {
       try {
-        await metaCall(() => resumeEntity({ level, entityId }), {
+        await metaCall((api) => resumeEntity({ level, entityId, api }), {
           acctKey,
           accessToken,
+          userId,
           label: `resume ${level}`,
         });
       } catch (err) {

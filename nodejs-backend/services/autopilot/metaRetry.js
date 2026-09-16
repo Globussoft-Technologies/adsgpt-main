@@ -128,6 +128,10 @@ function classifyMetaError(err) {
   }
 
   const numeric = Number(code);
+  // `Number(undefined)` is NaN, and NaN is NOT nullish — so `numeric ?? x`
+  // silently yields NaN rather than the intended fallback. Every `code`
+  // returned below therefore goes through this check instead of `??`.
+  const hasCode = Number.isFinite(numeric);
   if (RATE_LIMIT_CODES.has(numeric)) {
     return {
       kind: "rate-limit",
@@ -152,7 +156,11 @@ function classifyMetaError(err) {
       kind: "transient",
       retryable: true,
       retryAfterMs: 0,
-      code: numeric ?? status,
+      // Prefixed rather than the bare status: these share a key space with
+      // Meta's own codes downstream, and "503" meaning an HTTP status in one
+      // row and a Meta code in the next is how a breakdown stops being
+      // evidence.
+      code: hasCode ? numeric : `HTTP_${status}`,
       reason: `HTTP ${status}`,
     };
   }
@@ -161,8 +169,8 @@ function classifyMetaError(err) {
     kind: "permanent",
     retryable: false,
     retryAfterMs: 0,
-    code: numeric ?? null,
-    reason: `permanent (code ${numeric ?? "n/a"}${subcode ? `/${subcode}` : ""})`,
+    code: hasCode ? numeric : null,
+    reason: `permanent (code ${hasCode ? numeric : "n/a"}${subcode ? `/${subcode}` : ""})`,
   };
 }
 

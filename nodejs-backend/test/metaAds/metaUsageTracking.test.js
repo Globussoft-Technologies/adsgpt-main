@@ -221,6 +221,41 @@ function fakeApi({ response = {}, throws = null } = {}) {
       });
     });
 
+    await testAsync("falls back to the context account when the path has none", async () => {
+      // An ENTITY-level write — Autopilot pausing an ad — is `POST /<adId>`
+      // and carries no `act_` at all. Without this fallback every pause,
+      // resume and budget change is filed against a null account: present in
+      // the totals, absent from the table that says which advertiser is
+      // expensive.
+      recorderMock.reset();
+      const api = fakeApi();
+      attachUsageTracking(api, { accessToken: "tok" });
+      await runWithUsageContext(
+        { userId: "u1", source: "autopilot", adAccountId: "act_555" },
+        () => api.call("POST", ["120246418577540658"]),
+      );
+      assert.deepEqual(recorderMock.calls[0], {
+        userId: "u1",
+        // Normalised to bare digits, so a write and a read on the same
+        // account cannot land in two different buckets.
+        adAccountId: "555",
+        source: "autopilot",
+      });
+    });
+
+    await testAsync("the path still wins over the context account", async () => {
+      // The context carries a per-account default; a path that names its own
+      // account is the more specific fact and must not be overridden by it.
+      recorderMock.reset();
+      const api = fakeApi();
+      attachUsageTracking(api, { accessToken: "tok" });
+      await runWithUsageContext(
+        { userId: "u1", source: "autopilot", adAccountId: "act_555" },
+        () => api.call("GET", ["act_999", "insights"]),
+      );
+      assert.equal(recorderMock.calls[0].adAccountId, "999");
+    });
+
     await testAsync("turns on setShowHeader so meters are readable", async () => {
       const api = fakeApi();
       attachUsageTracking(api, { accessToken: "tok" });

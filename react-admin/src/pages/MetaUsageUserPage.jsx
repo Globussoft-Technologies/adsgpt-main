@@ -19,6 +19,7 @@ import {
 } from "recharts";
 import { AlertTriangle, ArrowLeft, Ban, Gauge, Loader2, PhoneCall } from "lucide-react";
 import StatCard from "@/components/StatCard.jsx";
+import FailureCodes from "@/components/FailureCodes.jsx";
 import DateRangePicker from "@/components/DateRangePicker.jsx";
 import MeterBar, { meterTone } from "@/components/MeterBar.jsx";
 import { sourceLabel } from "@/components/UsageFilterBar.jsx";
@@ -63,6 +64,7 @@ export default function MetaUsageUserPage() {
   const totals = data?.totals || {};
   const byAccount = data?.byAccount || [];
   const bySource = data?.bySource || [];
+  const byCode = data?.byCode || [];
   const recorder = data?.recorder;
 
   // The hourly series arrives split per account; the chart wants one row per
@@ -255,6 +257,8 @@ export default function MetaUsageUserPage() {
               keyOf={(r) => r.source || "_"}
             />
           </div>
+
+          <FailureCodes rows={byCode} />
         </>
       )}
     </div>

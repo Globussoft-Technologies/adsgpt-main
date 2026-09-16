@@ -61,6 +61,131 @@ const EMPTY_TOTALS = {
 };
 
 /**
+ * Plain-English for the codes we actually see, so the page answers "what
+ * broke" rather than handing an admin a number to go and search for.
+ *
+ * Only a lookup — an unknown code still renders, labelled by its number.
+ * Meta invents codes faster than anyone updates a table, and a code with no
+ * label is exactly the row worth noticing.
+ *
+ * WORDING IS META'S, NOT OURS. Their published descriptions are reused almost
+ * verbatim so that searching the text here finds their documentation. Meta
+ * warns that the descriptions change without notice and that handling must
+ * key on the CODE — which is what the breakdown groups by; this column is for
+ * the human reading the page.
+ *
+ * TWO THINGS THIS DELIBERATELY CANNOT SAY, both consequences of keying on the
+ * code alone:
+ *
+ *   - `100` and `200` are catch-alls whose real meaning is in the SUBCODE
+ *     (100/33 unsupported request, 100/1487694 deprecated targeting,
+ *     200/1870034 audience terms not accepted, and dozens more). A row
+ *     reading "Invalid parameter" narrows the question without answering it.
+ *   - NEGATIVE codes are internal Meta errors whose actual failure is also
+ *     reported in the subcode, so they all collapse together here.
+ *
+ * Adding subcodes is additive — a second key space, not a change to this one
+ * — and worth doing once the code column shows which of them we actually hit.
+ */
+const META_ERROR_LABELS = {
+  1: "Unknown or transient Meta error",
+  2: "Meta service temporarily unavailable",
+  102: "Session key invalid or no longer valid",
+  104: "Incorrect signature",
+  5000: "Unknown error code",
+
+  // Rate limits. The only failures that say anything about capacity, and the
+  // only ones a schedule change can fix.
+  4: "Application request limit reached",
+  17: "User request limit reached",
+  32: "Page request limit reached",
+  341: "Feature temporarily blocked",
+  368: "Temporarily blocked for policy violations",
+  613: "API call rate limit exceeded",
+  80000: "Business use case limit — ads management",
+  80001: "Business use case limit — ads insights",
+  80002: "Business use case limit — Instagram",
+  80003: "Business use case limit — custom audiences",
+  80004: "Business use case limit — pages",
+  80005: "Business use case limit — catalogue",
+  80006: "Business use case limit — LeadGen",
+
+  // Access. These end with a human doing something — reconnecting an account,
+  // granting a role in Business Manager — never with a retry.
+  10: "Application does not have permission for this action",
+  190: "Invalid OAuth access token — the user must reconnect",
+  200: "Permission error",
+  294: "Managing ads requires the ads_management permission",
+  1815694: "The user does not have permission for this action",
+  2654: "Failed to create custom audience",
+
+  // Blocks. 1404078 and 2859015 are TEMPORARY and clear on their own; 1404163
+  // is permanent and no amount of retrying will change it. Telling them apart
+  // is the difference between waiting and contacting the advertiser.
+  1404078: "Temporarily blocked from performing this action",
+  2859015: "Temporarily blocked from performing this action",
+  1404163: "No longer allowed to advertise on Meta — permanent",
+  3910001: "The account is experiencing trouble — try again later",
+
+  // Invalid request. `100` is Meta's catch-all and its meaning lives in the
+  // SUBCODE, which this breakdown does not keep — see the note below.
+  100: "Invalid parameter (see subcode for the real cause)",
+
+  // Writes Autopilot makes that Meta refuses on the object's own state. These
+  // are the shape of a rule acting on something that has since been deleted
+  // or has ended, and no retry ever succeeds.
+  1487007: "Ad set has reached its end date — edits rejected",
+  1487056: "Ad set is deleted — only its name may be edited",
+  1487566: "Campaign is deleted — only its name may be edited",
+  1885088: "Ad is archived — only its name may be edited",
+  2490427: "Ad was rejected at review and cannot be re-enabled",
+
+  ECONNRESET: "Connection reset before Meta answered",
+  ECONNREFUSED: "Connection refused",
+  ETIMEDOUT: "Request timed out",
+  ENOTFOUND: "DNS lookup failed",
+  EAI_AGAIN: "DNS lookup failed (temporary)",
+  EPIPE: "Connection closed mid-request",
+  ERR_SOCKET_CONNECTION_TIMEOUT: "Socket connection timed out",
+  HTTP_500: "Meta returned a server error (500)",
+  HTTP_502: "Meta returned a bad gateway (502)",
+  HTTP_503: "Meta was unavailable (503)",
+  HTTP_504: "Meta gateway timed out (504)",
+  unknown: "No code reported — usually no response from Meta at all",
+};
+
+/**
+ * Failures split by Meta error code, worst first.
+ *
+ * `byCode` is a Map, so the counts live in field NAMES rather than values and
+ * no plain `$group` can reach them. `$objectToArray` turns each document's
+ * map into `{k, v}` pairs that `$unwind` + `$group` can then sum across
+ * documents — the only shape that survives a key space we do not control.
+ *
+ * `$ifNull` covers the rows written before this field existed. Verified
+ * against 2,383 such rows: `$objectToArray` on a missing field yields null
+ * and `$unwind` then drops the document, so they are skipped either way —
+ * the guard states the intent and keeps the stage total rather than relying
+ * on that null-propagation staying true.
+ */
+async function failuresByCode(match, limit = 15) {
+  const rows = await MetaApiUsage.aggregate([
+    { $match: match },
+    { $project: { pairs: { $objectToArray: { $ifNull: ["$byCode", {}] } } } },
+    { $unwind: "$pairs" },
+    { $group: { _id: "$pairs.k", failures: { $sum: "$pairs.v" } } },
+    { $match: { failures: { $gt: 0 } } },
+    { $sort: { failures: -1 } },
+    { $limit: limit },
+  ]);
+  return rows.map((r) => ({
+    code: r._id,
+    label: META_ERROR_LABELS[r._id] || `Meta error ${r._id}`,
+    failures: r.failures,
+  }));
+}
+
+/**
  * A bare `YYYY-MM-DD` is a DAY, not an instant — and which instant it means
  * depends on which end of the range it is.
  *
@@ -264,7 +389,7 @@ exports.overview = async (req, res) => {
     const sort = buildSort(req.query);
     const limit = parseLimit(req.query.limit, 25, 200);
 
-    const [totalsAgg, hourly, bySource, topAccounts, topUsers] =
+    const [totalsAgg, hourly, bySource, topAccounts, topUsers, byCode] =
       await Promise.all([
         MetaApiUsage.aggregate([
           { $match: match },
@@ -319,6 +444,7 @@ exports.overview = async (req, res) => {
           { $sort: sort },
           { $limit: Math.max(limit * 4, 100) },
         ]),
+        failuresByCode(match),
       ]);
 
     const totals = stripId(totalsAgg[0]) || { ...EMPTY_TOTALS };
@@ -330,6 +456,9 @@ exports.overview = async (req, res) => {
       totals,
       hourly,
       bySource,
+      // Why the `failures` total above is what it is. Without this the
+      // number is a fact nobody can act on.
+      byCode,
       topAccounts: accounts.slice(0, limit),
       topUsers: users.slice(0, limit),
       // So the table can say "showing 25 of 140" rather than implying the
@@ -351,7 +480,7 @@ exports.userDetail = async (req, res) => {
 
     const { match, from, to } = buildMatch(req.query, { userId });
 
-    const [totalsAgg, byAccount, hourly, bySource] = await Promise.all([
+    const [totalsAgg, byAccount, hourly, bySource, byCode] = await Promise.all([
       MetaApiUsage.aggregate([
         { $match: match },
         { $group: { _id: null, ...COUNT_SUMS, ...PEAK_MAXES } },
@@ -387,6 +516,7 @@ exports.userDetail = async (req, res) => {
         { $project: { _id: 0, source: "$_id", ...projectAll() } },
         { $sort: { calls: -1 } },
       ]),
+      failuresByCode(match),
     ]);
 
     const [profile] = await UserProfile.find({ user_id: userId })
@@ -410,6 +540,7 @@ exports.userDetail = async (req, res) => {
       byAccount: applySearch(await decorate(byAccount), req.query.search),
       hourly,
       bySource,
+      byCode,
       recorder: recorderHealth(),
     });
   } catch (err) {

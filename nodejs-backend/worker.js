@@ -68,6 +68,30 @@ async function start() {
 
   await connectMongoDB();
 
+  // Meter every Meta call this process makes.
+  //
+  // WHY IT HAS TO BE REPEATED HERE. The patch goes on `FacebookAdsApi.init`
+  // once at startup, and the gateway does it from Router/MainRouter.js — a
+  // module this process never loads and should not. Without this line the
+  // worker is the one place where an api instance is born untracked, and it
+  // is also the process that makes the most Meta calls of any of them.
+  //
+  // The audit path is unaffected either way: metaAuditService installs its
+  // own wrapper and reports directly to the recorder. What this covers is
+  // everything that relies on the global patch instead — target discovery
+  // today, and whatever is added next without anyone reading this comment.
+  try {
+    const bizSdk = require("facebook-nodejs-business-sdk");
+    const {
+      installGlobalUsageTracking,
+    } = require("./services/meta/attachUsageTracking");
+    const installed = installGlobalUsageTracking(bizSdk, { logger: console });
+    console.log(`[worker] meta usage tracking: ${installed ? "on" : "off"}`);
+  } catch (err) {
+    // Telemetry must never be the reason the worker fails to boot.
+    console.warn(`[worker] meta usage tracking unavailable: ${err.message}`);
+  }
+
   // Autopilot's own scheduler reads AUTOPILOT_ENABLED and AUTOPILOT_CRON; the
   // registry logs what it registered, so a misconfigured worker is visible in
   // the first few lines of `pm2 logs adsgpt-worker` rather than by its silence

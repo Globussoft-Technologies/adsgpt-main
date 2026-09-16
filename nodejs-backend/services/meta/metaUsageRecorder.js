@@ -70,6 +70,41 @@ function normalizeAccountId(id) {
   return String(id).replace(/^act_/, "") || null;
 }
 
+// The bucket a failure lands in when nothing identified it. Deliberately a
+// real key rather than a dropped write: "we do not know why 161 requests
+// failed" is itself the finding, and it only shows up if it is counted.
+const UNKNOWN_CODE = "unknown";
+
+// Long enough for the longest Node errno (ERR_SOCKET_CONNECTION_TIMEOUT, 29),
+// short enough that a malformed value cannot become a giant field name.
+const MAX_CODE_KEY = 40;
+
+/**
+ * Turn whatever `classifyMetaError` produced into a Mongo field name.
+ *
+ * Three shapes arrive here and all three must survive: a numeric Meta code
+ * (4, 10, 190), a Node errno string (ECONNRESET), and nothing at all — the
+ * SDK's no-response branch reports `code: null`, and a permanent error with
+ * no code in the body yields `NaN` because `Number(undefined)` is NaN and
+ * `NaN ?? null` is NaN, not null.
+ *
+ * Sanitising is not cosmetic. These become KEYS IN A `$inc` PATH: a `.` would
+ * be read as a nested path and a leading `$` would be rejected as an
+ * operator, so an unexpected value could fail the whole batch — losing the
+ * counts for every other account in the same flush.
+ */
+function normalizeErrorCode(code) {
+  if (code === null || code === undefined || code === "") return UNKNOWN_CODE;
+  if (typeof code === "number") {
+    return Number.isFinite(code) ? String(code) : UNKNOWN_CODE;
+  }
+  const clean = String(code)
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .slice(0, MAX_CODE_KEY);
+  return clean || UNKNOWN_CODE;
+}
+
 /**
  * Which `peak.*` field one of `MetaRateLimiter.allFor()`'s buckets maps to.
  *
@@ -138,6 +173,10 @@ class MetaUsageRecorder {
         calls: 0,
         failures: 0,
         throttles: 0,
+        // code -> count. A plain object, not a Map, because it is written
+        // straight into a `$inc` path and Object.entries is the shape the
+        // flush already wants.
+        byCode: {},
         peak: {},
         maxBlockedMs: 0,
         tier: null,
@@ -159,15 +198,22 @@ class MetaUsageRecorder {
   }
 
   /**
-   * One request that failed. `throttled` marks the rate-limit kind, which is
-   * the only failure that says anything about capacity.
+   * One request that failed.
+   *
+   * `throttled` marks the rate-limit kind, which is the only failure that
+   * says anything about capacity. `code` is Meta's verdict — kept separately
+   * because `throttled` is a yes/no about ONE cause, and every other cause
+   * collapses into the same "no". A missing `code` is recorded as `unknown`
+   * rather than skipped; see normalizeErrorCode.
    */
-  recordFailure(ctx = {}, { throttled = false } = {}) {
+  recordFailure(ctx = {}, { throttled = false, code = null } = {}) {
     if (!enabled()) return;
     try {
       const b = this._bucket(ctx);
       b.failures += 1;
       if (throttled) b.throttles += 1;
+      const key = normalizeErrorCode(code);
+      b.byCode[key] = (b.byCode[key] || 0) + 1;
       this._maybeFlush();
     } catch (err) {
       this._swallow(err, "recordFailure");
@@ -291,6 +337,11 @@ class MetaUsageRecorder {
         if (b.calls) inc.calls = b.calls;
         if (b.failures) inc.failures = b.failures;
         if (b.throttles) inc.throttles = b.throttles;
+        // Same `$inc` composition as the counters above, one path per code,
+        // so concurrent workers on the same hour add up instead of racing.
+        for (const [code, n] of Object.entries(b.byCode)) {
+          if (n > 0) inc[`byCode.${code}`] = n;
+        }
 
         const max = {};
         for (const [field, value] of Object.entries(b.peak)) {
@@ -355,5 +406,11 @@ const sharedUsageRecorder = new MetaUsageRecorder();
 module.exports = {
   sharedUsageRecorder,
   MetaUsageRecorder,
-  _internals: { hourStart, peakFieldFor, normalizeAccountId },
+  _internals: {
+    hourStart,
+    peakFieldFor,
+    normalizeAccountId,
+    normalizeErrorCode,
+    UNKNOWN_CODE,
+  },
 };
