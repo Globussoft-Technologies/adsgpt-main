@@ -375,14 +375,16 @@ function getConfiguredProductCredit(product) {
   return Number.isNaN(credit) ? null : credit;
 }
 
-function getStorePlanDescriptor(storePlan) {
+function getStorePlanDescriptor(storePlan, basePlanId = null) {
   const productId = String(storePlan?.productId || "").toLowerCase();
-  const segments = productId.split(".");
+  const basePlan = String(basePlanId || "").toLowerCase();
+  const searchTokens = `${productId}-${basePlan}`.split(/[^a-z0-9]+/);
+  
   const tier = ["scale", "growth", "creator", "individual", "starter"].find(
-    (candidate) => segments.includes(candidate),
+    (candidate) => searchTokens.includes(candidate),
   );
   if (!tier) return null;
-  return { tier, isAnnual: segments.includes("annual") };
+  return { tier, isAnnual: searchTokens.includes("annual") || searchTokens.includes("yearly") };
 }
 
 function getProductCategoryIds(product) {
@@ -410,8 +412,8 @@ function getProductSortOrderNumber(product) {
   return Number.isFinite(value) ? value : null;
 }
 
-function resolveAmemberProduct(products, storePlan, categoryMap) {
-  const descriptor = getStorePlanDescriptor(storePlan);
+function resolveAmemberProduct(products, storePlan, categoryMap, basePlanId = null) {
+  const descriptor = getStorePlanDescriptor(storePlan, basePlanId);
   if (!descriptor) return null;
 
   const candidates = products
@@ -451,12 +453,12 @@ function findConfiguredStorePlan(storeProductId) {
     .find((plan) => plan.productId === targetId) || null;
 }
 
-async function matchAmemberProduct(storeProductId) {
+async function matchAmemberProduct(storeProductId, basePlanId = null) {
   const prods = await getAmemberProducts();
   const categoryMap = await getAmemberProductCategoryMap();
   const targetId = String(storeProductId || "").trim();
   const storePlan = findConfiguredStorePlan(targetId);
-  const matched = storePlan ? resolveAmemberProduct(prods, storePlan, categoryMap) : null;
+  const matched = storePlan ? resolveAmemberProduct(prods, storePlan, categoryMap, basePlanId) : null;
 
   if (!matched) {
     const error = new Error("The selected subscription plan is currently unavailable. Please contact support.");
@@ -469,10 +471,13 @@ async function matchAmemberProduct(storeProductId) {
   const title = matched?.title || "AdsGPT Subscription";
   const billingPlanId = matched?.default_billing_plan_id || amemberProductId;
   const targetIdLower = targetId.toLowerCase();
+  const basePlanLower = String(basePlanId || "").toLowerCase();
   const titleLower = (matched.title || "").toLowerCase();
   const isAnnual =
     targetIdLower.includes("annual") ||
     targetIdLower.includes("year") ||
+    basePlanLower.includes("annual") ||
+    basePlanLower.includes("year") ||
     titleLower.includes("annual") ||
     titleLower.includes("year");
 
@@ -2083,9 +2088,13 @@ const verifyGooglePayment = async (req, res) => {
     let amount = 0.00;
     let expiresDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const now = new Date();
+    let basePlanId = null;
 
     if (subscriptionState.lineItems && subscriptionState.lineItems.length > 0) {
       const item = subscriptionState.lineItems[0];
+      if (item.offerDetails && item.offerDetails.basePlanId) {
+        basePlanId = item.offerDetails.basePlanId;
+      }
       if (item.expiryTime) {
         expiresDate = new Date(item.expiryTime);
       }
@@ -2111,7 +2120,7 @@ const verifyGooglePayment = async (req, res) => {
 
     const matchedProduct = isTrial
       ? await matchAmemberFreeTrialProduct()
-      : await matchAmemberProduct(productId);
+      : await matchAmemberProduct(productId, basePlanId);
 
     try {
       await postAmemberInvoice({
@@ -2149,7 +2158,7 @@ const verifyGooglePayment = async (req, res) => {
       purchased_at: now,
       expires_at: expiresDate,
       raw_payload: subscriptionState,
-      meta: { packageName },
+      meta: { packageName, base_plan_id: basePlanId },
     });
 
     await activateAmemberUserStatus({
@@ -2762,8 +2771,12 @@ const handleGoogleWebhook = async (req, res) => {
           const subscriptionState = response.data;
 
           let expiresDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // fallback
+          let basePlanId = null;
           if (subscriptionState.lineItems && subscriptionState.lineItems.length > 0) {
             const item = subscriptionState.lineItems[0];
+            if (item.offerDetails && item.offerDetails.basePlanId) {
+              basePlanId = item.offerDetails.basePlanId;
+            }
             if (item.expiryTime) {
               expiresDate = new Date(item.expiryTime);
             }
@@ -2771,12 +2784,13 @@ const handleGoogleWebhook = async (req, res) => {
 
           await MobileStoreTransaction.updateMany(
             { original_transaction_id: purchaseToken },
-            { $set: { event_type: "renewal", amember_sync_pending: false, expires_at: expiresDate } }
+            { $set: { event_type: "renewal", amember_sync_pending: false, expires_at: expiresDate, "meta.base_plan_id": basePlanId || "" } }
           );
 
           const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken });
           if (existingTx && existingTx.amember_user_id) {
-            const matchedProduct = await matchAmemberProduct(existingTx.store_product_id);
+            const resolvedBasePlanId = basePlanId || existingTx.meta?.base_plan_id;
+            const matchedProduct = await matchAmemberProduct(existingTx.store_product_id, resolvedBasePlanId);
             const renewalAmount = existingTx.amount;
             await postAmemberInvoice({
               amemberUserId: existingTx.amember_user_id,
