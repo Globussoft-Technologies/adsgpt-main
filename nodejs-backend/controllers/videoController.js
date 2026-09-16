@@ -12,7 +12,9 @@ const {
   finalMergeSchema,
   cloneAdAnalyzeSchema,
   cloneAdGenerateSchema,
+  resolveMediaSchema,
 } = require("../Validations/videoValidator");
+const mediaResolverService = require("../services/mediaResolverService");
 const VideoGeneration = require("../Module/videoGeneration/videoModel");
 const UnifiedCreditController = require("./UnifiedCreditController");
 const modelConfigurationService = require("../services/modelConfigurationService");
@@ -5051,6 +5053,43 @@ exports.updateCloneAdGenerateResult = async (req, res) => {
     return res.status(500).json({
       success: false,
       error: err.message,
+    });
+  }
+};
+
+exports.resolveMedia = async (req, res) => {
+  try {
+    const { error, value } = resolveMediaSchema.validate(req.body, { abortEarly: false });
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: error.details.map((d) => d.message).join("; "),
+      });
+    }
+
+    const { url } = value;
+    const isInstagram = /(?:instagram\.com|instagr\.am)\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i.test(url);
+
+    if (isInstagram) {
+      const result = await mediaResolverService.resolveInstagramVideoUrl(url);
+      return res.status(200).json({
+        success: true,
+        originalUrl: result.originalUrl,
+        playableUrl: result.playableUrl,
+      });
+    }
+
+    // Default passthrough if URL is already a direct video stream
+    return res.status(200).json({
+      success: true,
+      originalUrl: url,
+      playableUrl: url,
+    });
+  } catch (err) {
+    logger.error(`resolveMedia error: ${err.message}`);
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Failed to resolve media URL",
     });
   }
 };

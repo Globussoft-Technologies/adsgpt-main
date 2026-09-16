@@ -10,7 +10,7 @@ import { getSocket } from '@/store/reducers/socket/socketSlice';
 import emitter from '@/utils/eventEmitter';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
-import { cloneAdAnalyzeAction, cloneAdGenerateAction } from '@/store/actions/adVideoNew/Advideoactions';
+import { cloneAdAnalyzeAction, cloneAdGenerateAction, resolveMediaAction } from '@/store/actions/adVideoNew/Advideoactions';
 import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
 import {
   AspectRatioPreview,
@@ -22,6 +22,7 @@ import { getFirstAvailableVideoModel, isVideoModelBlocked } from '@/utils/videoM
 
 import { uploadToS3, uploadUrlToS3, uploadVideoToS3 } from '@/utils/imageUpload';
 import getCookies from '@/utils/getCookies';
+import { setRecreateInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
 
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
@@ -38,15 +39,28 @@ const getYouTubeVideoId = (url) => {
   return match && match[2].length === 11 ? match[2] : null;
 };
 
+// Helper function to check if URL has an image file extension
+const isImageUrl = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  const imageRegex = /\.(jpe?g|png|webp|gif|svg|avif|bmp|tiff|heic|ico)(\?.*)?$/i;
+  return imageRegex.test(url.trim());
+};
+
 // Helper function to extract Instagram embed URL from Instagram Reels/Posts/TV URLs
 const getInstagramEmbedUrl = (url) => {
   if (!url || typeof url !== 'string') return null;
   const regExp = /(?:instagram\.com|instagr\.am)\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i;
   const match = url.trim().match(regExp);
   if (match && match[1]) {
-    return `https://www.instagram.com/p/${match[1]}/embed`;
+    return `https://www.instagram.com/reel/${match[1]}/embed/`;
   }
   return null;
+};
+
+// Helper function to check for valid Instagram Reel/Post/TV URLs
+const isInstagramUrl = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  return Boolean(getInstagramEmbedUrl(url));
 };
 
 // Helper function to extract TikTok embed URL
@@ -58,6 +72,191 @@ const getTikTokEmbedUrl = (url) => {
     return `https://www.tiktok.com/player/v1/${match[1]}?autoplay=1&loop=1`;
   }
   return null;
+};
+
+// Helper function to sanitize and extract single clean URL if concatenated
+const extractCleanUrl = (raw) => {
+  if (!raw || typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  const urlMatches = trimmed.match(/https?:\/\/[^\s]+/gi);
+  if (urlMatches && urlMatches.length > 0) {
+    return urlMatches[urlMatches.length - 1].trim();
+  }
+  return trimmed;
+};
+
+// Dedicated YouTube player that loops continuously without replay button, end screen, or control overlays
+const YouTubePreviewPlayer = ({ videoId, onDurationChange }) => {
+  const containerRef = useRef(null);
+  const playerRef = useRef(null);
+
+  useEffect(() => {
+    if (!videoId) return;
+
+    let playerInstance = null;
+    let isCancelled = false;
+
+    const createPlayer = () => {
+      if (isCancelled || !containerRef.current || !window.YT || !window.YT.Player) return;
+
+      const playerDiv = document.createElement('div');
+      containerRef.current.innerHTML = '';
+      containerRef.current.appendChild(playerDiv);
+
+      try {
+        playerInstance = new window.YT.Player(playerDiv, {
+          videoId,
+          playerVars: {
+            autoplay: 1,
+            mute: 1,
+            controls: 0,
+            showinfo: 0,
+            rel: 0,
+            modestbranding: 1,
+            playsinline: 1,
+            iv_load_policy: 3,
+            disablekb: 1,
+            fs: 0,
+            cc_load_policy: 0,
+            autohide: 1,
+          },
+          events: {
+            onReady: (event) => {
+              try {
+                event.target.mute();
+                event.target.playVideo();
+                const dur = event.target.getDuration?.();
+                if (dur && typeof onDurationChange === 'function') {
+                  onDurationChange(dur);
+                }
+              } catch (e) {
+                console.warn('[YouTubePreviewPlayer] onReady warning:', e);
+              }
+            },
+            onStateChange: (event) => {
+              // event.data === 0 (YT.PlayerState.ENDED)
+              if (event.data === 0) {
+                try {
+                  event.target.seekTo(0, true);
+                  event.target.playVideo();
+                } catch (e) {
+                  console.warn('[YouTubePreviewPlayer] loop restart warning:', e);
+                }
+              }
+            },
+            onError: (err) => {
+              console.warn('[YouTubePreviewPlayer] player warning:', err);
+            },
+          },
+        });
+        playerRef.current = playerInstance;
+      } catch (err) {
+        console.warn('[YouTubePreviewPlayer] init error:', err);
+      }
+    };
+
+    if (window.YT && window.YT.Player) {
+      createPlayer();
+    } else {
+      if (!window._ytIframeApiLoading) {
+        window._ytIframeApiLoading = true;
+        const tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        if (firstScriptTag && firstScriptTag.parentNode) {
+          firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        } else {
+          document.head.appendChild(tag);
+        }
+      }
+
+      const existingCallback = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (typeof existingCallback === 'function') existingCallback();
+        createPlayer();
+      };
+
+      const pollInterval = setInterval(() => {
+        if (window.YT && window.YT.Player) {
+          clearInterval(pollInterval);
+          createPlayer();
+        }
+      }, 100);
+
+      return () => {
+        isCancelled = true;
+        clearInterval(pollInterval);
+        if (playerInstance && typeof playerInstance.destroy === 'function') {
+          try {
+            playerInstance.destroy();
+          } catch (e) {}
+        }
+      };
+    }
+
+    return () => {
+      isCancelled = true;
+      if (playerInstance && typeof playerInstance.destroy === 'function') {
+        try {
+          playerInstance.destroy();
+        } catch (e) {}
+      }
+    };
+  }, [videoId]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none [&_iframe]:w-[140%] [&_iframe]:h-[140%] [&_iframe]:min-w-full [&_iframe]:min-h-full [&_iframe]:border-0 [&_iframe]:object-cover [&_iframe]:scale-110 [&_iframe]:pointer-events-none"
+    />
+  );
+};
+
+// Dedicated Instagram Reel player with interaction shielding, navigation protection, and in-app replay control
+const InstagramPreviewPlayer = ({ embedUrl }) => {
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const blockInteraction = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleReplay = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setReloadKey((prev) => prev + 1);
+  };
+
+  return (
+    <div className="absolute inset-0 z-0 flex items-start justify-center overflow-hidden bg-black select-none">
+      {/* Scaled and top-anchored Instagram Reel player */}
+      <iframe
+        key={`${embedUrl}-${reloadKey}`}
+        src={embedUrl}
+        title="Instagram Source Video"
+        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+        allowFullScreen
+        sandbox="allow-scripts allow-same-origin allow-presentation"
+        className="w-[240%] h-[390%] min-w-full border-0 object-cover -translate-y-24 translate-x-4 scale-[1.75] origin-top pointer-events-auto"
+      />
+
+      {/* Top interaction guard: Blocks any clicks on the author profile header, audio title, or View profile */}
+      <div
+        className="absolute top-0 inset-x-0 h-16 z-20 pointer-events-auto cursor-default"
+        onClick={blockInteraction}
+        onMouseDown={blockInteraction}
+        onTouchStart={blockInteraction}
+      />
+
+      {/* Bottom interaction & visual guard: Completely hides and blocks clicks on more on Instagram, likes, and comments */}
+      <div
+        className="absolute bottom-0 inset-x-0 h-14 bg-gradient-to-t from-black via-black/90 to-transparent z-20 pointer-events-auto cursor-default"
+        onClick={blockInteraction}
+        onMouseDown={blockInteraction}
+        onTouchStart={blockInteraction}
+      />
+    </div>
+  );
 };
 
 // Helper function to format seconds into mm:ss format
@@ -104,6 +303,9 @@ const getSanitizedErrorMessage = (rawError) => {
 const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerate: onGenerateProp }) => {
   const [sourceVideoUrl, setSourceVideoUrl] = useState('');
   const [sourceDuration, setSourceDuration] = useState(null); // Isolated source video length in seconds
+  const [previewVideoError, setPreviewVideoError] = useState(false);
+  const [resolvedPreviewUrl, setResolvedPreviewUrl] = useState(null);
+  const [isResolvingMedia, setIsResolvingMedia] = useState(false);
   const [productImages, setProductImages] = useState([]);
   const [productUrlInput, setProductUrlInput] = useState('');
   const [videoModel, setVideoModel] = useState('');
@@ -234,7 +436,101 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   const { connected, userData } = useSelector((state) => state.socket);
+  const { recreateInputs } = useSelector((state) => state.adVideoNew || {});
   const dispatch = useDispatch();
+
+  // Handle Recreate flow from MySpace video cards
+  useEffect(() => {
+    if (!recreateInputs) return;
+
+    const isCloneAd =
+      recreateInputs.type === 'clone_your_ad' ||
+      recreateInputs.type === 'clone-ad' ||
+      recreateInputs.type === 'clone_ad' ||
+      recreateInputs.type === 'clone_video' ||
+      Boolean(recreateInputs.sourceVideoUrl || recreateInputs.galleryVideoUrl);
+
+    if (!isCloneAd) return;
+
+    const srcUrl =
+      recreateInputs.sourceVideoUrl ||
+      recreateInputs.galleryVideoUrl ||
+      recreateInputs.videoSample ||
+      '';
+
+    if (srcUrl) {
+      setSourceVideoUrl(srcUrl);
+      setPreviewVideoError(false);
+    }
+
+    const rawImgs =
+      recreateInputs.productImageUrls ||
+      recreateInputs.images ||
+      recreateInputs.productImages ||
+      [];
+
+    if (Array.isArray(rawImgs) && rawImgs.length > 0) {
+      setProductImages(
+        rawImgs.slice(0, 3).map((img) => {
+          if (typeof img === 'string') return { file: null, preview: img };
+          return {
+            file: img.file || null,
+            preview: img.preview || img.url || img.imageUrl || '',
+          };
+        })
+      );
+    }
+
+    if (recreateInputs.model) {
+      setVideoModel(recreateInputs.model);
+    }
+
+    if (recreateInputs.duration) {
+      const rawDur = String(recreateInputs.duration);
+      const durStr = rawDur.endsWith('s') ? rawDur : `${rawDur}s`;
+      setVideoDuration(durStr);
+      setDurationInputText(String(parseInt(durStr, 10) || 4));
+    }
+
+    if (recreateInputs.aspectRatio) {
+      setAspectRatio(recreateInputs.aspectRatio);
+    }
+
+    const bName =
+      recreateInputs.brandName ||
+      recreateInputs.productBrandName ||
+      recreateInputs.identification?.productBrandName ||
+      '';
+    if (bName) {
+      setBrandName(bName);
+    }
+
+    const uPrompt =
+      recreateInputs.userPrompt ||
+      recreateInputs.additionalInstructions ||
+      recreateInputs.instructions ||
+      '';
+    if (uPrompt) {
+      setAdditionalInfo(uPrompt);
+    }
+
+    const visualDesc =
+      recreateInputs.visualDescription ||
+      recreateInputs.identification?.visualDescription ||
+      '';
+    if (visualDesc) {
+      setEditableVisualDescription(visualDesc);
+      setAnalysisResult({
+        visualDescription: visualDesc,
+        productBrandName: bName,
+        ...(recreateInputs.identification || {}),
+      });
+      setAnalysisState('success');
+      setAnalyzeProgress(100);
+    }
+
+    dispatch(setRecreateInputs(null));
+  }, [recreateInputs, dispatch]);
 
   const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('clone_video');
 
@@ -311,30 +607,55 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   };
 
   const handleDurationInputChange = (e) => {
-    const rawVal = e.target.value.replace(/\D/g, '');
+    let rawVal = e.target.value.replace(/\D/g, '');
+
+    // Disallow leading zeros
+    rawVal = rawVal.replace(/^0+/, '');
+
+    if (!rawVal) {
+      setDurationInputText('');
+      return;
+    }
+
+    let parsed = parseInt(rawVal, 10);
+    if (!Number.isFinite(parsed)) {
+      setDurationInputText('');
+      return;
+    }
+
+    // Never accept values exceeding maxDuration — clamp immediately
+    if (parsed > maxDuration) {
+      parsed = maxDuration;
+      rawVal = String(maxDuration);
+    }
+
     setDurationInputText(rawVal);
-    if (rawVal) {
-      const parsed = parseInt(rawVal, 10);
-      if (Number.isFinite(parsed) && parsed >= minDuration && parsed <= maxDuration) {
-        setVideoDuration(`${parsed}s`);
-        setErrors((prevErr) => ({ ...prevErr, videoDuration: '' }));
-      }
+
+    if (parsed >= minDuration && parsed <= maxDuration) {
+      setVideoDuration(`${parsed}s`);
+      setErrors((prevErr) => ({ ...prevErr, videoDuration: '' }));
     }
   };
 
   const handleDurationInputBlur = () => {
     setIsEditingDuration(false);
-    if (!durationInputText) {
-      return;
+
+    let parsed = parseInt(durationInputText, 10);
+    if (!Number.isFinite(parsed) || parsed < minDuration) {
+      parsed = minDuration;
+    } else if (parsed > maxDuration) {
+      parsed = maxDuration;
     }
-    const parsed = parseInt(durationInputText, 10);
-    if (!Number.isFinite(parsed)) return;
 
-    let clamped = parsed;
-    if (clamped < minDuration) clamped = minDuration;
-    if (clamped > maxDuration) clamped = maxDuration;
+    // Snap to nearest configured duration if discrete options exist
+    const closest = numericDurations.length > 0
+      ? numericDurations.reduce((prev, curr) =>
+          Math.abs(curr - parsed) < Math.abs(prev - parsed) ? curr : prev
+        , minDuration)
+      : parsed;
 
-    setVideoDuration(`${clamped}s`);
+    setVideoDuration(`${closest}s`);
+    setDurationInputText(String(closest));
     setErrors((prevErr) => ({ ...prevErr, videoDuration: '' }));
   };
 
@@ -367,14 +688,46 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const youtubeId = useMemo(() => getYouTubeVideoId(sourceVideoUrl), [sourceVideoUrl]);
   const instagramEmbedUrl = useMemo(() => getInstagramEmbedUrl(sourceVideoUrl), [sourceVideoUrl]);
   const tiktokEmbedUrl = useMemo(() => getTikTokEmbedUrl(sourceVideoUrl), [sourceVideoUrl]);
+  const isImage = useMemo(() => isImageUrl(sourceVideoUrl), [sourceVideoUrl]);
 
   const sourceType = useMemo(() => {
+    if (!sourceVideoUrl || isImage) return 'default';
     if (youtubeId) return 'youtube';
     if (instagramEmbedUrl) return 'instagram';
     if (tiktokEmbedUrl) return 'tiktok';
-    if (sourceVideoUrl) return 'direct-video';
-    return 'default';
-  }, [youtubeId, instagramEmbedUrl, tiktokEmbedUrl, sourceVideoUrl]);
+    return 'direct-video';
+  }, [youtubeId, instagramEmbedUrl, tiktokEmbedUrl, sourceVideoUrl, isImage]);
+
+  // Resolve Instagram URL to playable native MP4 stream URL for preview looping
+  useEffect(() => {
+    if (!sourceVideoUrl || isImage || !isInstagramUrl(sourceVideoUrl)) {
+      setResolvedPreviewUrl(null);
+      setIsResolvingMedia(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsResolvingMedia(true);
+
+    dispatch(resolveMediaAction(sourceVideoUrl))
+      .then((res) => {
+        if (isMounted && res?.playableUrl) {
+          setResolvedPreviewUrl(res.playableUrl);
+        }
+      })
+      .catch((err) => {
+        console.warn('[CloneYourAd] Failed to resolve media URL, fallback to embed:', err);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsResolvingMedia(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [sourceVideoUrl, isImage, dispatch]);
 
   useEffect(() => {
     dispatch(fetchModelCreditsAction());
@@ -601,57 +954,182 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     }
   };
 
+  // Validate source URL and detect invalid image/photo sources
+  const validateSourceUrl = (url) => {
+    if (!url) {
+      setErrors((prev) => ({ ...prev, sourceVideo: '' }));
+      return;
+    }
+
+    if (isImageUrl(url)) {
+      setErrors((prev) => ({
+        ...prev,
+        sourceVideo: 'Invalid video source. Please enter a video URL or select a video from Gallery.',
+      }));
+      setPreviewVideoError(true);
+      return;
+    }
+
+    // Supported platform URLs (YouTube, Instagram, TikTok)
+    if (getYouTubeVideoId(url) || isInstagramUrl(url) || getTikTokEmbedUrl(url)) {
+      setErrors((prev) => ({ ...prev, sourceVideo: '' }));
+      setPreviewVideoError(false);
+      return;
+    }
+
+    // Direct / external URL probe: Check if URL resolves to an image
+    const probeImg = new Image();
+    probeImg.onload = () => {
+      setErrors((prev) => ({
+        ...prev,
+        sourceVideo: 'Invalid video source. Please enter a video URL or select a video from Gallery.',
+      }));
+      setPreviewVideoError(true);
+    };
+    probeImg.onerror = () => {
+      const tempVid = document.createElement('video');
+      tempVid.src = url;
+      tempVid.onloadedmetadata = () => {
+        validateSourceDuration(tempVid.duration);
+      };
+      tempVid.onerror = () => {
+        setPreviewVideoError(true);
+        setErrors((prev) => ({
+          ...prev,
+          sourceVideo: 'Invalid video source. Please enter a video URL or select a video from Gallery.',
+        }));
+      };
+    };
+    probeImg.src = url;
+  };
+
   // Video URL paste & File Upload handlers
   const handlePasteVideoUrl = (e) => {
-    const items = e.clipboardData.items;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('video') !== -1) {
-        const file = items[i].getAsFile();
-        if (file) {
-          const url = URL.createObjectURL(file);
-          setSourceVideoUrl(url);
-          setSourceDuration(null);
-          setErrors((prev) => ({ ...prev, sourceVideo: '' }));
+    const items = e.clipboardData?.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          e.preventDefault();
+          setErrors((prev) => ({
+            ...prev,
+            sourceVideo: 'Invalid video source. Please enter a video URL or select a video from Gallery.',
+          }));
+          setPreviewVideoError(true);
           return;
+        }
+        if (items[i].type.indexOf('video') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            if (sourceVideoUrl && sourceVideoUrl.startsWith('blob:')) {
+              URL.revokeObjectURL(sourceVideoUrl);
+            }
+            const url = URL.createObjectURL(file);
+            setSourceVideoUrl(url);
+            setSourceVideoFile(file);
+            setSourceDuration(null);
+            setPreviewVideoError(false);
+            setErrors((prev) => ({ ...prev, sourceVideo: '' }));
+
+            const tempVid = document.createElement('video');
+            tempVid.src = url;
+            tempVid.onloadedmetadata = () => validateSourceDuration(tempVid.duration);
+            tempVid.onerror = () => {
+              setPreviewVideoError(true);
+              setErrors((prev) => ({
+                ...prev,
+                sourceVideo: 'Invalid video source. Please enter a video URL or select a video from Gallery.',
+              }));
+            };
+            return;
+          }
         }
       }
     }
-    const pastedText = e.clipboardData.getData('text');
-    if (pastedText && pastedText.startsWith('http')) {
-      const url = pastedText.trim();
-      setSourceVideoUrl(url);
-      setSourceDuration(null);
-      setErrors((prev) => ({ ...prev, sourceVideo: '' }));
 
-      // If direct video URL, check duration using offscreen video
-      if (!getYouTubeVideoId(url)) {
-        const tempVid = document.createElement('video');
-        tempVid.src = url;
-        tempVid.onloadedmetadata = () => validateSourceDuration(tempVid.duration);
+    const pastedText = e.clipboardData?.getData('text');
+    if (pastedText && pastedText.trim().startsWith('http')) {
+      e.preventDefault(); // Crucial: prevent browser native double-paste
+      if (sourceVideoUrl && sourceVideoUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(sourceVideoUrl);
       }
+      const cleanUrl = extractCleanUrl(pastedText);
+      setSourceVideoUrl(cleanUrl);
+      setSourceVideoFile(null);
+      setSourceDuration(null);
+      setPreviewVideoError(false);
+
+      validateSourceUrl(cleanUrl);
+    }
+  };
+
+  const handleUrlInputChange = (e) => {
+    const rawVal = e.target.value;
+    if (sourceVideoUrl && sourceVideoUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(sourceVideoUrl);
+    }
+    const cleanUrl = extractCleanUrl(rawVal);
+    setSourceVideoUrl(cleanUrl);
+    setSourceVideoFile(null);
+    setSourceDuration(null);
+    setPreviewVideoError(false);
+    if (cleanUrl) {
+      validateSourceUrl(cleanUrl);
+    } else {
+      setErrors((prev) => ({ ...prev, sourceVideo: '' }));
     }
   };
 
   const [sourceVideoFile, setSourceVideoFile] = useState(null);
 
   const handleVideoFileUpload = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate MIME type
+    if (file.type && !file.type.startsWith('video/')) {
+      setErrors((prev) => ({
+        ...prev,
+        sourceVideo: 'Invalid video source. Please enter a video URL or select a video from Gallery.',
+      }));
+      setPreviewVideoError(true);
+      e.target.value = '';
+      return;
+    }
+
+    if (sourceVideoUrl && sourceVideoUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(sourceVideoUrl);
+    }
     const url = URL.createObjectURL(file);
     setSourceVideoUrl(url);
     setSourceVideoFile(file);
     setSourceDuration(null);
+    setPreviewVideoError(false);
     setErrors((prev) => ({ ...prev, sourceVideo: '' }));
 
     const tempVid = document.createElement('video');
     tempVid.src = url;
     tempVid.onloadedmetadata = () => validateSourceDuration(tempVid.duration);
+    tempVid.onerror = () => {
+      setPreviewVideoError(true);
+      setErrors((prev) => ({
+        ...prev,
+        sourceVideo: 'Invalid video source. Please enter a video URL or select a video from Gallery.',
+      }));
+    };
+
+    // Reset input value so selecting the same file again still fires onChange
+    e.target.value = '';
   };
 
   const handleClearSourceVideo = () => {
+    if (sourceVideoUrl && sourceVideoUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(sourceVideoUrl);
+    }
     setSourceVideoUrl('');
     setSourceVideoFile(null);
     setSourceDuration(null);
+    setPreviewVideoError(false);
     setErrors((prev) => ({ ...prev, sourceVideo: '' }));
   };
 
@@ -699,11 +1177,13 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     setProductImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Check form validity (Source video <= 60s mandatory)
+  // Check form validity (Source video <= 60s mandatory, must be valid video source)
   const isFormValid = useMemo(() => {
     const isSourceVideoValid =
       Boolean(sourceVideoUrl) &&
       !errors.sourceVideo &&
+      !previewVideoError &&
+      !isImageUrl(sourceVideoUrl) &&
       (sourceDuration === null || sourceDuration <= 60);
 
     return (
@@ -714,11 +1194,11 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       Boolean(selectedVideoDuration) &&
       Boolean(aspectRatio)
     );
-  }, [sourceVideoUrl, errors.sourceVideo, sourceDuration, productImages, videoModel, selectedVideoDuration, aspectRatio]);
+  }, [sourceVideoUrl, errors.sourceVideo, previewVideoError, sourceDuration, productImages, videoModel, selectedVideoDuration, aspectRatio]);
 
   // Execute POST /clone-ad-analyze
   const handleAnalyze = async (overrideSessionId = null, isReanalyze = false) => {
-    if (!isFormValid || (isAnalyzing && !isReanalyze)) return;
+    if (!isFormValid || isImageUrl(sourceVideoUrl) || previewVideoError || errors.sourceVideo || (isAnalyzing && !isReanalyze)) return;
 
     try {
       setIsAnalyzing(true);
@@ -930,35 +1410,50 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
           )}
         </div>
 
-        {sourceType === 'youtube' ? (
-          <iframe
+        {previewVideoError ? (
+          <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 mb-3 shadow-inner">
+              <Video className="h-6 w-6 text-zinc-400" />
+            </div>
+            <p className="text-sm font-medium text-zinc-200 max-w-xs leading-relaxed">
+              Invalid video source.
+            </p>
+            <p className="text-xs text-zinc-400 max-w-xs mt-1.5 leading-normal">
+              Please enter a video URL or select a video from Gallery.
+            </p>
+          </div>
+        ) : sourceType === 'youtube' ? (
+          <YouTubePreviewPlayer
             key={youtubeId}
-            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&loop=1&playlist=${youtubeId}`}
-            title="YouTube Source Video"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="absolute inset-0 z-0 h-full w-full border-0 object-cover"
+            videoId={youtubeId}
+            onDurationChange={validateSourceDuration}
           />
         ) : sourceType === 'instagram' ? (
-          <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-auto">
+          resolvedPreviewUrl ? (
+            <video
+              key={resolvedPreviewUrl}
+              src={resolvedPreviewUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
+              className="absolute inset-0 z-0 h-full w-full object-cover"
+            />
+          ) : (
+            <InstagramPreviewPlayer embedUrl={instagramEmbedUrl} />
+          )
+        ) : sourceType === 'tiktok' ? (
+          <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none">
             <iframe
-              key={instagramEmbedUrl}
-              src={instagramEmbedUrl}
-              title="Instagram Source Video"
+              key={tiktokEmbedUrl}
+              src={tiktokEmbedUrl}
+              title="TikTok Source Video"
               allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
               allowFullScreen
-              className="h-[135%] w-[115%] -translate-y-6 border-0"
+              className="w-[140%] h-[140%] min-w-full min-h-full border-0 object-cover scale-110 pointer-events-none"
             />
           </div>
-        ) : sourceType === 'tiktok' ? (
-          <iframe
-            key={tiktokEmbedUrl}
-            src={tiktokEmbedUrl}
-            title="TikTok Source Video"
-            allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
-            allowFullScreen
-            className="absolute inset-0 z-0 h-full w-full border-0 object-cover"
-          />
         ) : sourceType === 'direct-video' ? (
           <video
             key={sourceVideoUrl}
@@ -968,6 +1463,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
             loop
             playsInline
             onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
+            onError={() => setPreviewVideoError(true)}
             className="absolute inset-0 z-0 h-full w-full object-cover"
           />
         ) : CLONE_YOUR_AD_DEMO_URL?.match(/\.(mp4|webm|mov)(\?.*)?$/i) ? (
@@ -1333,30 +1829,55 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                 onPaste={handlePasteVideoUrl}
                 className="flex items-center gap-3 rounded-4xl border border-black/10 bg-zinc-50 px-1 py-1 text-[10px] text-zinc-600 transition 2xl:py-2 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-[#afafaf]"
               >
-                <div className="flex flex-1 items-center justify-between">
-                  <input
-                    value={sourceVideoUrl}
-                    onChange={(e) => {
-                      setSourceVideoUrl(e.target.value);
-                      setSourceDuration(null);
-                      if (e.target.value) setErrors((prev) => ({ ...prev, sourceVideo: '' }));
-                    }}
-                    className="w-full rounded-lg bg-transparent px-3 text-xs text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:text-[#afafaf] dark:placeholder:text-[#afafaf]"
-                    placeholder="Paste video URL (YouTube, MP4, MOV)"
-                  />
-                  {sourceVideoUrl ? (
+                {sourceVideoFile ? (
+                  <div className="flex flex-1 items-center justify-between min-w-0 px-3 py-1">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                      <Video className="h-3.5 w-3.5 text-zinc-500 2xl:h-4 2xl:w-4 dark:text-[#909294] shrink-0" />
+                      <span
+                        className="truncate text-xs font-medium text-zinc-800 2xl:text-base dark:text-white"
+                        title={sourceVideoFile.name}
+                      >
+                        {sourceVideoFile.name}
+                      </span>
+                      {sourceDuration !== null && (
+                        <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold text-zinc-600 2xl:text-xs dark:bg-white/10 dark:text-zinc-300">
+                          {String(sourceDuration).padStart(2, '0')}s
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={handleClearSourceVideo}
-                      className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-white"
+                      className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-white shrink-0"
                       title="Clear source video"
+                      aria-label="Clear source video"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
-                  ) : (
-                    <LinkIcon className="h-3 w-3 text-zinc-500 2xl:h-4 2xl:w-4 dark:text-[#909294]" />
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-1 items-center justify-between min-w-0">
+                    <input
+                      value={sourceVideoUrl}
+                      onChange={handleUrlInputChange}
+                      className="w-full rounded-lg bg-transparent px-3 text-xs text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:text-[#afafaf] dark:placeholder:text-[#afafaf]"
+                      placeholder="Paste video URL (YouTube, MP4, MOV)"
+                    />
+                    {sourceVideoUrl ? (
+                      <button
+                        type="button"
+                        onClick={handleClearSourceVideo}
+                        className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-white shrink-0"
+                        title="Clear source video"
+                        aria-label="Clear source video"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    ) : (
+                      <LinkIcon className="h-3 w-3 text-zinc-500 2xl:h-4 2xl:w-4 dark:text-[#909294]" />
+                    )}
+                  </div>
+                )}
 
                 <label
                   htmlFor="source-video-file"
@@ -1514,6 +2035,8 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        min={minDuration}
+                        max={maxDuration}
                         value={isEditingDuration ? durationInputText : currentDurationNumber}
                         onFocus={() => {
                           setIsEditingDuration(true);

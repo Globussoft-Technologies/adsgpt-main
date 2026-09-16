@@ -600,11 +600,12 @@ export default function VideoCard({
   const handleRecreate = (e) => {
     e.stopPropagation();
 
-    const type = item?.inputs?.type || 'broll';
+    const type = item?.inputs?.type || item?.type || 'broll';
     let targetPage = 'b-roll';
     if (type === 'ugc') targetPage = 'ugc';
     else if (type === 'avatar') targetPage = 'avatar';
     else if (type === 'clone') targetPage = 'clone';
+    else if (type === 'clone_your_ad' || type === 'clone-ad' || type === 'clone_ad' || type === 'clone_video') targetPage = 'clone-ad';
     else if (type === 'ai_ads') targetPage = 'ai-ads';
 
     dispatch(setActiveAdStudioTab('adVideoNew'));

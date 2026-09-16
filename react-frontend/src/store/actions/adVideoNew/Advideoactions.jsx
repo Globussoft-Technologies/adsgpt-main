@@ -1084,3 +1084,22 @@ export const cloneAdGenerateAction = (payload) => async () => {
   }
 };
 
+export const resolveMediaAction = (url) => async () => {
+  try {
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/resolve-media`,
+      { url },
+      {
+        headers: {
+          Authorization: `Bearer ${getCookies()}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.warn('[resolveMediaAction] Failed to resolve media:', error.message);
+    throw error;
+  }
+};
+

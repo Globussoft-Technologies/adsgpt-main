@@ -89,6 +89,11 @@ router.post(
   requireBasePlan,
   videoController.cloneAdGenerate
 );
+router.post(
+  "/resolve-media",
+  authenticateJWT,
+  videoController.resolveMedia
+);
 
 // ── AI Ads sub-routes ─────────────────────────────────────────────────────────
 // List/fetch: use existing GET /video/all  and  GET /video/:id

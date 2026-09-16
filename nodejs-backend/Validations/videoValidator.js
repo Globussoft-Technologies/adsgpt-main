@@ -299,6 +299,9 @@ const cloneAdGenerateSchema = Joi.object({
   logoImageUrl: Joi.string().allow("", null).optional().default(null),
 }).unknown(true);
 
+const resolveMediaSchema = Joi.object({
+  url: Joi.string().uri().required(),
+}).unknown(true);
 
 module.exports = {
   generateVideoRequestSchema,
@@ -323,4 +326,5 @@ module.exports = {
   finalMergeSchema,
   cloneAdAnalyzeSchema,
   cloneAdGenerateSchema,
+  resolveMediaSchema,
 };
