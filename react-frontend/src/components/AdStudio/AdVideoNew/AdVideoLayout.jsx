@@ -1,5 +1,5 @@
 import { useSelector, useDispatch } from 'react-redux';
-import { ChevronLeft, PlayCircle, Library, Images, Video, PanelLeft } from 'lucide-react';
+import { ChevronLeft, PlayCircle, Library, Images, Video, PanelLeft, Loader } from 'lucide-react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -43,6 +43,7 @@ import ThemeToggle from '@/components/layout/header/ThemeToggle';
 import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
 import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
+import { getMySpaceImages } from '@/apis/image/imageApi';
 
 import DateRangeFilter from './DateRangeFilter';
 
@@ -235,6 +236,54 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
     mySpaceTab,
     videosAllowed,
   ]);
+
+  // Bharath 2026-09-16: My Space always opened on Images, which is an empty
+  // grid for anyone who has only ever made videos. The tab is now chosen from
+  // whether the account has any images at all.
+  //
+  // The check has to finish BEFORE either grid mounts, because the ask was
+  // explicitly "don't show any flashes of image tab" — deciding after
+  // MyAllImagesPage has already rendered its empty state is exactly the flash
+  // we are avoiding. So the tabs area holds a loader until `tabDecided`.
+  //
+  // Deliberately unfiltered — `source: 'all'`, no dates, no type: the question
+  // is "does this account own a single image", not "does anything match the
+  // filters sitting in the toolbar". `limit: 1` keeps it to one cheap row.
+  //
+  // Runs once per mount (the ref), so any tab the user picks afterwards — or
+  // that `exitRecreateToMySpace` picks — is never second-guessed.
+  const [tabDecided, setTabDecided] = useState(false);
+  const tabProbeRan = useRef(false);
+
+  useEffect(() => {
+    if (displayedActivePage !== 'myVideos' || tabProbeRan.current) return;
+    tabProbeRan.current = true;
+
+    // Nothing to switch TO (videos not licensed), or nothing to switch FROM
+    // (no image source at all — that case already renders its own message).
+    if (!videosAllowed || !availableImageSources.length) {
+      setTabDecided(true);
+      return;
+    }
+
+    let alive = true;
+    getMySpaceImages({ source: 'all', limit: 1 })
+      .then((res) => {
+        if (!alive) return;
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        if (!rows.length) dispatch(setMySpaceTab('videos'));
+      })
+      // A failed probe must not strand the user on a loader — fall through to
+      // the existing default (Images) rather than blocking the page on it.
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setTabDecided(true);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [availableImageSources.length, dispatch, displayedActivePage, videosAllowed]);
 
   useEffect(() => {
     if (activePage) {
@@ -448,8 +497,16 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                 My Space
               </h1>
 
-              {/* Tabs — visual style + position mirror Brand IQ's HeaderTabs */}
-              <div className="relative flex items-center gap-0 rounded-full border border-black/10 bg-white/80 p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)] backdrop-blur-md dark:border-transparent dark:bg-[#0D0D0D]">
+              {/* Tabs — visual style + position mirror Brand IQ's HeaderTabs.
+                  Kept in the layout but invisible until the probe has answered,
+                  so the selected pill cannot be seen jumping from Images to
+                  Videos; `invisible` rather than unmounting keeps the header
+                  from reflowing when it appears. */}
+              <div
+                className={`relative flex items-center gap-0 rounded-full border border-black/10 bg-white/80 p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)] backdrop-blur-md dark:border-transparent dark:bg-[#0D0D0D] ${
+                  tabDecided ? '' : 'invisible'
+                }`}
+              >
                 {availableMySpaceTabs.map(({ id, label, Icon }) => {
                   const isActive = mySpaceTab === id;
                   return (
@@ -528,7 +585,13 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
             </div>
           </div>
 
-          {mySpaceTab === 'images' && !availableImageSources.length ? (
+          {/* Holds the grid area until the image probe above has decided which
+              tab to open, so neither grid can flash before the answer. */}
+          {!tabDecided ? (
+            <div className="flex flex-1 items-center justify-center">
+              <Loader className="h-8 w-8 animate-spin opacity-60" />
+            </div>
+          ) : mySpaceTab === 'images' && !availableImageSources.length ? (
             <div className="flex flex-1 items-center justify-center px-6 text-center">
               <div>
                 <Library className="mx-auto h-8 w-8 text-zinc-500" />

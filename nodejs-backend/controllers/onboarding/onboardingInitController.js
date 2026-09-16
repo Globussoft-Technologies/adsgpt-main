@@ -1053,6 +1053,54 @@ exports.loadMoreTemplates = async (req, res) => {
 };
 
 /**
+ * POST /adsgpt/onboarding/sessions/:sessionId/templates/refresh
+ *
+ * Re-runs template matching from scratch. The workspace calls this every time
+ * it opens — including after a skip and return — because upstream's media
+ * links rotate and its match can improve, so a stored list goes stale.
+ *
+ * Sends `refresh=1` upstream (bypass its cache) and REPLACES the stored list
+ * when the run lands. The old list stays on screen until then rather than
+ * blanking the rail. Also clears the one-shot retry flag, so a refreshed run
+ * that errors gets its own retry.
+ */
+exports.refreshTemplates = async (req, res) => {
+  /*
+    #swagger.tags = ['Onboarding']
+    #swagger.summary = 'Re-run template recommendations for a session'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const userId = req.user?.user_id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { sessionId } = req.params;
+    const session = await findOwnedBySession(sessionId, userId);
+    if (!session) return res.status(404).json({ error: "Not found" });
+
+    // No brand context yet means nothing to match against; the chain fires
+    // templates itself once onboarding succeeds.
+    if (session.brand?.status !== "succeeded" && !session.brand?.result) {
+      return res.status(200).json({ accepted: false, reason: "brand_not_ready" });
+    }
+
+    await OnboardingSession.updateOne(
+      { sessionId },
+      { $set: { "templates.retry": {}, "templates.pagination.exhausted": false } }
+    );
+
+    startTemplateRun({ userId, sessionId, limit: 20, skip: 0, refresh: true })
+      .then((ok) => logger.debug("[onboarding] templates.refresh", { sessionId, stored: ok }))
+      .catch((e) => logger.error("[onboarding] templates.refresh failed", { sessionId, message: e.message }));
+
+    return res.status(202).json({ accepted: true });
+  } catch (error) {
+    logger.error("[onboarding] refreshTemplates failed", { message: error.message });
+    return res.status(500).json({ error: "Something went wrong. Please try again." });
+  }
+};
+
+/**
  * POST /adsgpt/onboarding/sessions/:sessionId/videos   { boardId }
  *
  * Renders ONE storyboard concept into a clip. Answers as soon as upstream has

@@ -1,33 +1,18 @@
-// templateTrigger — starts template matching upstream, then lets go.
+// templateTrigger — runs template matching upstream and stores the result.
 //
-// ── Why this is a trigger and not a bridge ───────────────────────────────────
-// Template recommendations are not a job. `GET /api/v1/onboarding/recommend-
-// templates` opens an SSE stream keyed only on `session_id` and issues no job
-// id at all, and the frames carry none either — `start` is `{session_id, kind}`
-// and nothing downstream of it has an id.
+// History: this once consumed the stream, then became "trigger and hang up,
+// take the result from the webhook". Staging showed the webhook arriving with
+// `result: null` for runs whose stream carried matches, so the stream is read
+// to completion again and is the writer of record; the webhook is a backup,
+// absorbed by the mirror's de-duplicating fold. See `startTemplateRun`.
 //
-// An earlier version of this file consumed that stream, minting a local AiJob
-// row so the run was trackable. That bought very little and cost a lot: the
-// stream had to stay open for the whole match, it died with every deploy, and
-// it made templates the one module whose result was written from a stream
-// instead of from the callback.
-//
-// So we do the simple thing. Open the request, confirm upstream accepted it,
-// and hang up. Upstream continues the work after the client disconnects
-// (confirmed with DS) and calls the webhook when it finishes. The result lands
-// in `session.templates` through exactly the same path every other module uses.
-//
-// Nothing is lost by not reading the frames. The stream's per-candidate events
-// were never rendered live — the workspace shows the finished list — so the
-// only thing they provided was a progress bar for a step the user is not
-// waiting on, since this runs behind the brand profile they are already reading.
-//
-// The callback arrives with `session_id` + `kind` and no `job_id`; see
-// `receiveSessionless` in controllers/Ai/jobWebhookController.js.
+// The callback arrives with `session_id` + `kind`; see `receiveSessionless` in
+// controllers/Ai/jobWebhookController.js.
 
 const axios = require("axios");
 const OnboardingSession = require("../../Module/onboarding/onboardingSession");
-const { markSectionStarted, mirrorJobResult } = require("./sessionMirror");
+const { markSectionStarted, mirrorJobResult, readSection } = require("./sessionMirror");
+const { resolveResultMedia } = require("./mediaUrls");
 const { createFlowLog } = require("../../utils/flowLog");
 
 // How long to wait for upstream to accept the request. Not how long the match
@@ -45,19 +30,13 @@ const active = new Set();
 
 const pageKey = ({ sessionId, kind, limit, skip }) => `${sessionId}:${kind}:${limit}:${skip}`;
 
-// The contract's own bounds: `limit` 1..20, `skip` 0..15. Sending anything
-// outside them is a 400 before the stream even opens, so the ceiling on how far
-// paging can go is upstream's, not ours.
-// Verified against TEMPLATE_RECOMMENDATIONS_API_CONTRACT: out-of-range is a
-// 400 BEFORE the stream opens, so these are hard ceilings, not preferences.
-//
-// They were 30 and 35, which contradicted the comment directly above them and
-// was live-reachable: `nextPage` widens `limit` by the overlap it cannot skip
-// past, so a session holding 30 templates asked for `limit=25` — outside the
-// contract, and a 400 rather than a page. Nothing had hit it yet only because
-// the first page asks for 20 and few sessions ever paged that far.
-const MAX_LIMIT = 20;
-const MAX_SKIP = 15;
+// The contract's bounds (TEMPLATE_RECOMMENDATIONS_API_CONTRACT (4)): query
+// `limit` 1..100, `skip` any non-negative integer. Out-of-range is a 400 before
+// the stream opens. The old 20/15 came from the earlier contract and capped the
+// rail at 20–35 items; verified on staging 2026-09-16 that limit=50 and skip=20
+// both answer. MAX_SKIP is our own guard, not upstream's.
+const MAX_LIMIT = 100;
+const MAX_SKIP = 500;
 
 /**
  * The window to ask for next, given how many are already stored.
@@ -124,13 +103,78 @@ function resolveBaseUrl() {
 }
 
 /**
- * Starts template matching for a session.
- *
- * Fire-and-forget by contract: never await this from a request handler. Resolves
- * to `true` when upstream accepted the request, `false` when it did not — there
- * is no id to return, because none exists.
+ * Parses an SSE body into `{event, data}` frames as chunks arrive.
+ * `data` is JSON-parsed when possible; a frame that is not JSON keeps the string.
  */
-async function startTemplateRun({ userId, sessionId, limit = 5, skip = 0, kind = "", threshold }) {
+function createSseParser(onFrame) {
+  let buffer = "";
+  return (chunk) => {
+    buffer += chunk.toString("utf8").replace(/\r\n/g, "\n");
+    let cut;
+    while ((cut = buffer.indexOf("\n\n")) !== -1) {
+      const block = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      let event = "message";
+      const data = [];
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+      }
+      if (!data.length) continue;
+      const raw = data.join("\n");
+      let parsed = raw;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        /* keep the string */
+      }
+      onFrame(event, parsed);
+    }
+  };
+}
+
+// Ceiling on the whole match, not just the accept. A live run finishes in
+// seconds; this only stops a hung upstream from holding a socket for ever.
+const STREAM_TIMEOUT_MS = 120_000;
+
+function emitTemplates(userId, sessionId, section) {
+  try {
+    if (!global.io || !userId) return;
+    // Same event + shape the webhook emits, so the client has one code path.
+    global.io.to(userId).emit("aiJobUpdate", {
+      session_id: sessionId,
+      kind: "template.recommend",
+      event: "done",
+      status: section?.status,
+      result: resolveResultMedia("template.recommend", section?.result),
+      error: section?.error || undefined,
+    });
+  } catch {
+    /* a socket failure must never fail the run */
+  }
+}
+
+/**
+ * Runs template matching for a session and stores the result.
+ *
+ * ── Why the stream is now read to the end ────────────────────────────────────
+ * This used to hang up as soon as upstream accepted and rely on the webhook for
+ * the result. In staging that callback arrived `succeeded` with `result: null`
+ * while the very same stream carried twenty templates — so the rail rendered
+ * empty for sessions that had matches. The stream is now the writer of the
+ * result; the webhook still lands and is absorbed by the mirror's de-duplicating
+ * fold, so it remains a backup if this process dies mid-run.
+ *
+ * Both corpora are requested (`video=true&image=true`) and stored as ONE list,
+ * each item tagged `media_type` — see `normalizeTemplateResult`.
+ *
+ * `refresh` adds upstream's `refresh=1` (bypass its 10-minute cache) and, on
+ * the first page, REPLACES the stored list: media links rotate between runs.
+ *
+ * Fire-and-forget from request handlers. Resolves `true` when a result (or an
+ * honest empty one) was stored, `false` otherwise.
+ */
+async function startTemplateRun({ userId, sessionId, limit = 5, skip = 0, kind = "", threshold, refresh = false }) {
   const baseUrl = resolveBaseUrl();
   if (!baseUrl || !userId || !sessionId) return false;
 
@@ -154,52 +198,83 @@ async function startTemplateRun({ userId, sessionId, limit = 5, skip = 0, kind =
     limit: String(page.limit),
     skip: String(page.skip),
     threshold: String(score),
+    video: "true",
+    image: "true",
   });
   if (kind) params.set("kind", kind);
+  if (refresh) params.set("refresh", "1");
   const url = `${baseUrl}/api/v1/onboarding/recommend-templates?${params}`;
 
   // Mark the section in flight before the call, so a reader can tell "matching
   // now" from "never asked" even if the request itself is slow to accept.
   await markSectionStarted(sessionId, "template.recommend", "");
 
-  // Record the page being asked for, in the same breath. The callback carries
-  // neither `limit` nor `skip`, so this is the only way the mirror can know
-  // which page it is folding in — and putting it on the document rather than in
-  // a Map means it survives a restart and works when the callback lands on a
-  // different instance.
+  // Record the page being asked for. The webhook carries neither `limit` nor
+  // `skip`, so the backup path can only know the page from the document.
   await OnboardingSession.updateOne(
     { sessionId },
     { $set: { "templates.pagination.skip": page.skip, "templates.pagination.limit": page.limit } }
   );
 
+  const controller = new AbortController();
+  const overall = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS);
+
   try {
-    log.ds("out", "recommend-templates", { ...page, threshold: score });
+    log.ds("out", "recommend-templates", { ...page, threshold: score, refresh });
 
     const response = await axios.get(url, {
       headers: { Accept: "text/event-stream" },
       responseType: "stream",
       timeout: ACCEPT_TIMEOUT_MS,
+      signal: controller.signal,
     });
 
-    // Accepted. Drop the connection without reading a byte of the body — the
-    // work continues upstream and reports back through the webhook.
-    response.data.destroy();
-    log.info("triggered", { kind: kind || "any", ...page, threshold: score });
+    const videos = [];
+    const images = [];
+    let done = null;
+    let streamError = null;
+
+    await new Promise((resolve, reject) => {
+      const feed = createSseParser((event, data) => {
+        if (event === "template" && data && typeof data === "object") videos.push(data);
+        else if (event === "image_template" && data && typeof data === "object") images.push(data);
+        else if (event === "done") done = data && typeof data === "object" ? data : {};
+        else if (event === "error") streamError = data?.error || String(data || "template matching failed");
+      });
+      response.data.on("data", feed);
+      response.data.on("end", resolve);
+      response.data.on("error", reject);
+    });
+
+    if (streamError || !done) {
+      throw new Error(streamError || "template stream ended without a done event");
+    }
+
+    const { session_id: _s, ...envelope } = done;
+    await mirrorJobResult(sessionId, "template.recommend", {
+      status: "succeeded",
+      result: { ...envelope, templates: videos, image_templates: images },
+      completedAt: new Date(),
+      requested: { ...page, replace: refresh && page.skip === 0 },
+    });
+
+    log.info("stored", { kind: kind || "any", ...page, videos: videos.length, images: images.length, refresh });
+    emitTemplates(userId, sessionId, await readSection(sessionId, "template.recommend"));
     return true;
   } catch (error) {
-    // Only the ACCEPT failed. Nothing is running upstream, so nothing will call
-    // back, and the section would sit at `queued` forever if we left it.
     const message = error?.response?.status
       ? `template matching was rejected (${error.response.status})`
       : error?.message || "template matching could not be started";
-    log.error("trigger.failed", { message });
+    log.error("run.failed", { message });
 
     await mirrorJobResult(sessionId, "template.recommend", {
       status: "failed",
       error: message,
     });
+    emitTemplates(userId, sessionId, await readSection(sessionId, "template.recommend"));
     return false;
   } finally {
+    clearTimeout(overall);
     active.delete(key);
   }
 }
@@ -210,5 +285,5 @@ module.exports = {
   nextPage,
   MAX_LIMIT,
   MAX_SKIP,
-  _internals: { active, resolveBaseUrl, pageKey },
+  _internals: { active, resolveBaseUrl, pageKey, createSseParser },
 };

@@ -118,6 +118,22 @@ export const loadMoreTemplates = async (sessionId) => {
 };
 
 /**
+ * Re-runs template matching for a session (video + image creatives).
+ *
+ * Called every time the workspace opens: upstream's media links rotate between
+ * runs, so a stored list goes stale. Answers `202 {accepted}`; the fresh list
+ * replaces the old one over the `aiJobUpdate` socket event.
+ */
+export const refreshTemplates = async (sessionId) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/onboarding/sessions/${encodeURIComponent(sessionId)}/templates/refresh`,
+    {},
+    { headers: { Authorization: `Bearer ${getCookies()}` } }
+  );
+  return data;
+};
+
+/**
  * Renders ONE storyboard concept into a video clip.
  *
  * One board per call, deliberately: the contract will render a whole session if

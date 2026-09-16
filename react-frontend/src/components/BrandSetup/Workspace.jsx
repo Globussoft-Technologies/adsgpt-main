@@ -1308,6 +1308,9 @@ function declaredAspect(template) {
   if (Number.isFinite(template.width) && Number.isFinite(template.height) && template.height > 0) {
     return template.width / template.height;
   }
+  // Image creatives carry their pixel size as `resolution`.
+  const res = template.resolution;
+  if (res && Number(res.width) > 0 && Number(res.height) > 0) return res.width / res.height;
   return null;
 }
 
@@ -1354,10 +1357,16 @@ function aspectOf(template) {
 const VIDEO_FILE = /\.(mp4|webm|ogv|mov|m4v|cmfv)$/i;
 
 function videoSources(template) {
+  // Image creatives share the rail but never play.
+  if (template.media_type === 'image') return [];
   const direct = String(template.source_url || '').split('?')[0];
-  return [template.preview_url, VIDEO_FILE.test(direct) ? template.source_url : null].filter(
-    Boolean
-  );
+  // `video_url` is the contract's durable playback link (retrieval service's
+  // own storage) and outranks the older cached/provenance fallbacks.
+  return [
+    template.video_url,
+    template.preview_url,
+    VIDEO_FILE.test(direct) ? template.source_url : null,
+  ].filter(Boolean);
 }
 
 /**
@@ -1437,7 +1446,13 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
   // moment the file's own metadata lands.
   const [aspect, setAspect] = useState(() => aspectOf(t));
 
-  const name = t.content_type || t.video_kind_label || 'Reference ad';
+  // Video matches and image creatives arrive in ONE list, told apart by
+  // `media_type` (set by Node from which upstream event carried the item).
+  const isImage = t.media_type === 'image';
+  const [imageFailed, setImageFailed] = useState(false);
+  const name = isImage
+    ? t.headline?.split('||')[0] || t.subcategory || 'Image ad'
+    : t.content_type || t.video_kind_label || 'Reference ad';
 
   // No `title` on the tile. A native tooltip fires on a delay, lands wherever
   // the pointer happens to be, and cannot be dismissed — so on a rail you scrub
@@ -1466,7 +1481,9 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
   // fit a 65px tile — tiles start at 138px now, so the reason expired.
   const tags = [
     ...(t.recommended ? [{ label: 'Recommended', accent: true }] : []),
-    ...(t.tone || []).map((tone) => ({ label: tone })),
+    ...(isImage ? t.tags || [t.subcategory, t.network].filter(Boolean) : t.tone || []).map(
+      (tone) => ({ label: tone })
+    ),
   ].slice(0, maxTags);
 
   // Best source first, with the next one taking over if it fails — see
@@ -1521,7 +1538,20 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
       )}
       style={{ aspectRatio: String(aspect), transition: 'aspect-ratio 180ms ease' }}
     >
-      {src ? (
+      {isImage && t.image_url && !imageFailed ? (
+        <img
+          key={t.image_url}
+          src={t.image_url}
+          alt={name}
+          loading="lazy"
+          onError={() => setImageFailed(true)}
+          onLoad={(e) => {
+            const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+            if (!declaredAspect(t) && w > 0 && h > 0) setAspect(w / h);
+          }}
+          className="h-full w-full object-cover"
+        />
+      ) : src ? (
         <video
           ref={video}
           // Keyed on the source so a fallback actually remounts the element.
@@ -2143,7 +2173,9 @@ const BRAND_PANEL_KEY = 'adsgpt.onboarding.brandPanelCollapsed';
 // It was 15 here — the `skip` ceiling alone — which is why the rail stopped
 // dead at twenty: Node was still willing to widen the window and reach the
 // tail, and the client had already stopped asking it to.
-const TEMPLATE_MAX_ITEMS = 35;
+// Raised 2026-09-16: the current contract allows `limit` up to 100 and any
+// `skip`, so Node's reach is now MAX_SKIP (500) + MAX_LIMIT (100).
+const TEMPLATE_MAX_ITEMS = 600;
 
 export default function Workspace({
   result = {},

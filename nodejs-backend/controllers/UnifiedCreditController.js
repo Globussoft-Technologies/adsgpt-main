@@ -452,6 +452,7 @@ class UnifiedCreditController {
         return { ok: false, reason: "RECEIPT_WRITE_FAILED" };
       }
 
+      this._broadcastCredits(userId);
       return { ok: true, split, frozen: amount };
     }
 
@@ -471,6 +472,9 @@ class UnifiedCreditController {
       logger.info(
         `[credits] settle OK key=${reservationKey} user=${deleted.user_id} amount=${deleted.amount}`,
       );
+      // The balance is unchanged by the delete, but `frozen_credits` is: the
+      // hold has become a real charge, and the UI shows the two separately.
+      this._broadcastCredits(deleted.user_id);
     } else {
       logger.warn(`[credits] settle NO_RECEIPT key=${reservationKey}`);
     }
@@ -501,6 +505,7 @@ class UnifiedCreditController {
         `refunded=${receipt.amount} ` +
         `split=R${receipt.split.fromRollover}/S${receipt.split.fromSub}/T${receipt.split.fromTopup}`,
     );
+    this._broadcastCredits(receipt.user_id);
     return { ok: true, refunded: receipt.amount, split: receipt.split };
   }
 
@@ -535,6 +540,7 @@ class UnifiedCreditController {
         `[credits] releasePartial OK key=${reservationKey} user=${receipt.user_id} ` +
           `charged=${used} refund=0 (full hold consumed)`,
       );
+      this._broadcastCredits(receipt.user_id);
       return { ok: true, refunded: 0, charged: used };
     }
 
@@ -556,6 +562,7 @@ class UnifiedCreditController {
         `charged=${used} refund=${refund} ` +
         `refundSplit=T${fromTopup}/S${fromSub}/R${fromRollover}`,
     );
+    this._broadcastCredits(receipt.user_id);
     return {
       ok: true,
       refunded: refund,
@@ -644,6 +651,54 @@ class UnifiedCreditController {
     return { swept: stale.length, refunded };
   }
 
+  /**
+   * Push this user's wallet to their open tabs.
+   *
+   * Before this existed, the `credits` socket event was emitted from exactly
+   * four hand-written places (imageController, videoController, socket connect,
+   * notifyUserSessionUpdate). Every other path that moved credits — AdFactory,
+   * onboarding, the assistant, every freeze/settle — moved them silently, so
+   * the browser's copy in `state.socket.credits` stayed at whatever it was on
+   * connect. The visible symptom was My Profile showing a stale balance until
+   * the user hard-refreshed.
+   *
+   * So the emit now lives at the one place all of those funnel through: the
+   * wallet itself. Every method below that changes a balance calls this after
+   * the write has landed.
+   *
+   * Deliberately fire-and-forget and swallowing its own errors: a socket that
+   * is down, or a `getCreditStatus` that throws, must never turn a successful
+   * charge into a failed request. Callers do not await it.
+   *
+   * Emits to both room spellings (`GPT-123` and `123`) for the same reason
+   * `notifyUserSessionUpdate` does — joins exist under both.
+   */
+  static _broadcastCredits(userId) {
+    if (!userId || !global.io) return;
+    Promise.resolve()
+      .then(async () => {
+        const status = await this.getCreditStatus(userId);
+        const raw = String(userId).trim();
+        const rooms = new Set([raw, raw.replace(/^GPT-/, "")]);
+        const payload = {
+          creditsUsed: status.used_credits,
+          totalCredits: status.total_credits,
+          remainingCredits: status.remaining_credits,
+          frozenCredits: status.frozen_credits,
+          settledCredits: status.settled_credits,
+          subscription: status.subscription,
+          rollover: status.rollover,
+          topup: status.topup,
+        };
+        for (const room of rooms) global.io.to(room).emit("credits", payload);
+      })
+      .catch((err) => {
+        logger.warn(
+          `[credits] broadcast failed for user=${userId}: ${err.message}`,
+        );
+      });
+  }
+
   /** Internal: undo a held split on a user. Safe to call with all-zero split. */
   static async _refundSplitToUser(userId, split) {
     if (!split) return;
@@ -724,6 +779,7 @@ class UnifiedCreditController {
         );
       }
 
+      this._broadcastCredits(userId);
       return await this.getCreditStatus(userId);
     } catch (error) {
       logger.error("Error deducting unified credits:", error);
@@ -890,6 +946,7 @@ class UnifiedCreditController {
         { $inc: { topup_credits_purchased: amount } },
         { new: true }
       );
+      this._broadcastCredits(userId);
       return updatedUser;
     } catch (error) {
       logger.error("Error adding top-up credits:", error);
@@ -934,6 +991,7 @@ class UnifiedCreditController {
       logger.info(
         `Credits initialized for user ${userId}: ${baseCredits} monthly credits (plan: ${planName})`
       );
+      this._broadcastCredits(userId);
       return updatedUser;
     } catch (error) {
       logger.error("Error initializing credits:", error);

@@ -71,11 +71,17 @@ function brandExtras(result) {
  * Returns the merged result plus the new cursor, or `null` when the incoming
  * page has nothing to fold in.
  */
-function mergeTemplatePage(previous, incoming, requested = {}) {
+function mergeTemplatePage(previous, rawIncoming, requested = {}) {
+  const incoming = normalizeTemplateResult(rawIncoming);
   const incomingList = Array.isArray(incoming?.templates) ? incoming.templates : null;
   if (!incomingList) return null;
 
-  const previousList = Array.isArray(previous?.templates) ? previous.templates : [];
+  // A refresh asks for a NEW match, and upstream's media links rotate between
+  // runs — folding would keep the stale link for every id already stored.
+  // So a refresh replaces the list outright; only "load more" pages fold.
+  const replace = Boolean(requested.replace);
+  const previousList =
+    !replace && Array.isArray(previous?.templates) ? previous.templates : [];
   const seen = new Set(previousList.map((t) => t?.template_id).filter(Boolean));
 
   const added = incomingList.filter((t) => {
@@ -92,25 +98,69 @@ function mergeTemplatePage(previous, incoming, requested = {}) {
   const templates = [...previousList, ...added];
   const limit = Number(requested.limit) || 0;
 
+  // One call pages BOTH corpora with the same `skip`/`limit`, so each is counted
+  // on its own. The cursor follows the deeper one, and the rail is exhausted
+  // only when NEITHER filled the page — a brand with no video matches must
+  // still be able to page through its images.
+  const isImage = (t) => t?.media_type === "image";
+  const countBy = (list) => {
+    const images = list.filter(isImage).length;
+    return { images, videos: list.length - images };
+  };
+  const held = countBy(templates);
+  const got = countBy(incomingList);
+
   return {
     result: {
       // The newest page's envelope wins for everything except the list itself —
       // `count`, `near_count` and `message` describe the most recent match, and
       // there is no meaningful way to add two of them together.
-      ...(previous || {}),
+      ...(replace ? {} : previous || {}),
       ...incoming,
       templates,
     },
     pagination: {
       skip: Number(requested.skip) || 0,
       limit,
-      loaded: templates.length,
+      loaded: Math.max(held.videos, held.images),
       // Fewer back than asked for means the corpus is out of candidates. The
       // `skip` ceiling is the contract's, and is enforced by the caller that
       // asks for the next page rather than here.
-      exhausted: limit > 0 && incomingList.length < limit,
+      exhausted: limit > 0 && got.videos < limit && got.images < limit,
     },
   };
+}
+
+/**
+ * One list for both corpora, each item tagged with `media_type`.
+ *
+ * Upstream reports video matches as `templates` and image creatives as
+ * `image_templates` (separate SSE events, separate keys on the callback). The
+ * workspace renders them in one rail, so they are stored together. Upstream
+ * does not send a type key today; if it ever does (`media_type` / `type`), that
+ * wins over the one inferred from which array the item came from.
+ *
+ * Image creatives have no `template_id`; `sha256` (else `image_url`) stands in,
+ * so de-duplication and React keys keep working.
+ */
+function normalizeTemplateResult(result) {
+  if (!result || typeof result !== "object") return result;
+  const hasVideos = Array.isArray(result.templates);
+  const hasImages = Array.isArray(result.image_templates);
+  if (!hasImages && !hasVideos) return result;
+
+  const tag = (t, fallback) => ({
+    ...t,
+    media_type: t?.media_type || (["image", "video"].includes(t?.type) ? t.type : fallback),
+  });
+
+  const videos = (result.templates || []).map((t) => tag(t, "video"));
+  const images = (result.image_templates || []).map((t) =>
+    tag({ ...t, template_id: t?.template_id || t?.sha256 || t?.image_url }, "image")
+  );
+
+  const { image_templates: _drop, ...rest } = result;
+  return { ...rest, templates: [...videos, ...images] };
 }
 
 /**
@@ -279,6 +329,11 @@ async function mirrorJobResult(sessionId, kind, patch = {}) {
     if (merged) {
       set[`${section}.result`] = merged.result;
       set[`${section}.pagination`] = merged.pagination;
+    } else {
+      // Not a recognisable page (e.g. a shape upstream added later). Writing
+      // it raw would REPLACE the stored list and blank the rail — which is
+      // exactly how an image-only callback used to erase the video templates.
+      delete set[`${section}.result`];
     }
   }
 
@@ -508,6 +563,7 @@ module.exports = {
   markBoardStarted,
   readSection,
   mergeTemplatePage,
+  normalizeTemplateResult,
   videoBoardWrites,
   videosResultFromBoards,
   deriveVideoStatus,

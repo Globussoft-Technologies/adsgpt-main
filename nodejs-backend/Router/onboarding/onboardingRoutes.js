@@ -75,6 +75,10 @@ router.patch("/sessions/:sessionId", ctrl.exitSession);
 // the page arrives by webhook and is folded into the stored list.
 router.post("/sessions/:sessionId/templates", ctrl.loadMoreTemplates);
 
+// Fresh match, replacing the stored list. The workspace calls it on every open
+// (media links rotate between runs).
+router.post("/sessions/:sessionId/templates/refresh", ctrl.refreshTemplates);
+
 // Module 4 — render one storyboard concept into a clip. One board per call:
 // the user renders concepts individually, and a batch job could not report
 // progress per tile. See services/onboarding/videoClient.js.

@@ -40,6 +40,7 @@ import {
   getOnboardingSession,
   getJobStatus,
   loadMoreTemplates,
+  refreshTemplates,
   generateVideo,
   buildVideoLoader,
   getOnboardingEligibility,
@@ -119,6 +120,20 @@ const hasReadyFrame = (result) =>
  * So the status comes from whichever is newer, and the RESULT is whichever one
  * actually has frames. Nothing that has been drawn is ever thrown away.
  */
+/**
+ * Re-runs template matching whenever an existing session is (re)opened —
+ * a reload, a resume, or coming back after a skip. Upstream's media links
+ * rotate, so the stored list is refreshed rather than trusted. Fire-and-forget:
+ * the new list arrives on the socket and replaces the old one in place.
+ * NOT called for a fresh run — Node's chain already fires templates then.
+ */
+const kickTemplateRefresh = (sessionId) => {
+  if (!sessionId) return;
+  refreshTemplates(sessionId).catch(() => {
+    // The stored list stays on screen; a failed refresh is not worth a banner.
+  });
+};
+
 const mergeRail = (session = {}, live = {}) => {
   if (!live.status) return session;
   const merged = { ...session, ...live };
@@ -264,6 +279,7 @@ const OnBoardHome = () => {
           if (cancelled) return;
           dispatch(runResumed({ ...stored, status: 'succeeded' }));
           dispatch(runResolved(context));
+          kickTemplateRefresh(stored.sessionId);
 
           // A remembered clip screen wins over the workspace. This is what
           // brings the user back where they were after the Facebook OAuth
@@ -643,6 +659,7 @@ const OnBoardHome = () => {
     dispatch(runResumed({ jobId, sessionId, status: 'succeeded' }));
     dispatch(runResolved(context));
     setSession(doc);
+    kickTemplateRefresh(sessionId);
 
     // The clip view is a phase, not a route, so a resume has to reconstruct it
     // rather than navigate to it. Hydrating first is what makes it land on a

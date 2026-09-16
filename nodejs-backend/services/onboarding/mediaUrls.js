@@ -144,7 +144,10 @@ function resolveVideoMedia(result) {
 }
 
 /** Template previews are service-relative in the same way frames are. */
-function resolveTemplateMedia(result) {
+function resolveTemplateMedia(rawResult) {
+  // Lazy: sessionMirror is heavier and this module is required from many places.
+  const { normalizeTemplateResult } = require("./sessionMirror");
+  const result = normalizeTemplateResult(rawResult);
   const templates = result?.templates;
   if (!Array.isArray(templates)) return result;
   const apiBase = (process.env.ONBOARDING_PYTHON_BASE_URL || "").replace(/\/+$/, "");
