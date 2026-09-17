@@ -10,7 +10,7 @@ import { getSocket } from '@/store/reducers/socket/socketSlice';
 import emitter from '@/utils/eventEmitter';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
-import { cloneAdAnalyzeAction, cloneAdGenerateAction, resolveMediaAction } from '@/store/actions/adVideoNew/Advideoactions';
+import { cloneAdAnalyzeAction, cloneAdGenerateAction, resolveMediaAction, getMediaProxyUrl } from '@/store/actions/adVideoNew/Advideoactions';
 import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
 import {
   AspectRatioPreview,
@@ -49,7 +49,7 @@ const isImageUrl = (url) => {
 // Helper function to extract Instagram embed URL from Instagram Reels/Posts/TV URLs
 const getInstagramEmbedUrl = (url) => {
   if (!url || typeof url !== 'string') return null;
-  const regExp = /(?:instagram\.com|instagr\.am)\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i;
+  const regExp = /(?:reel|reels|p|tv|share\/reel|share\/p)\/([A-Za-z0-9_-]+)/i;
   const match = url.trim().match(regExp);
   if (match && match[1]) {
     return `https://www.instagram.com/reel/${match[1]}/embed/`;
@@ -60,7 +60,45 @@ const getInstagramEmbedUrl = (url) => {
 // Helper function to check for valid Instagram Reel/Post/TV URLs
 const isInstagramUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
-  return Boolean(getInstagramEmbedUrl(url));
+  return /(?:instagram\.com|instagr\.am)/i.test(url.trim());
+};
+
+// Helper function to extract Facebook embed URL
+const getFacebookEmbedUrl = (url) => {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (/(?:facebook\.com|fb\.watch)/i.test(trimmed)) {
+    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(trimmed)}&show_text=false`;
+  }
+  return null;
+};
+
+// Helper function to extract LinkedIn embed URL
+const getLinkedInEmbedUrl = (url) => {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (/(?:linkedin\.com|lnkd\.in)/i.test(trimmed)) {
+    const activityMatch = trimmed.match(/activity-([0-9]+)/i) || trimmed.match(/urn:li:(?:ugcPost|activity):([0-9]+)/i);
+    if (activityMatch && activityMatch[1]) {
+      return `https://www.linkedin.com/embed/feed/update/urn:li:ugcPost:${activityMatch[1]}`;
+    }
+    return trimmed;
+  }
+  return null;
+};
+
+// Helper function to check for supported resolvable social video URLs
+const isResolvablePlatformUrl = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  return (
+    /(?:instagram\.com|instagr\.am)/i.test(trimmed) ||
+    /(?:facebook\.com|fb\.watch)/i.test(trimmed) ||
+    /tiktok\.com/i.test(trimmed) ||
+    /(?:twitter\.com|x\.com)/i.test(trimmed) ||
+    /pinterest\.com/i.test(trimmed) ||
+    /(?:linkedin\.com|lnkd\.in)/i.test(trimmed)
+  );
 };
 
 // Helper function to extract TikTok embed URL
@@ -255,6 +293,39 @@ const InstagramPreviewPlayer = ({ embedUrl }) => {
         onMouseDown={blockInteraction}
         onTouchStart={blockInteraction}
       />
+    </div>
+  );
+};
+
+// Dedicated Facebook video embed player
+const FacebookPreviewPlayer = ({ embedUrl }) => {
+  return (
+    <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none">
+      <iframe
+        key={embedUrl}
+        src={embedUrl}
+        title="Facebook Source Video"
+        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
+        allowFullScreen
+        className="w-[140%] h-[140%] min-w-full min-h-full border-0 object-cover scale-110 pointer-events-none"
+      />
+    </div>
+  );
+};
+
+// Dedicated LinkedIn video player card
+const LinkedInPreviewPlayer = () => {
+  return (
+    <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600/15 border border-blue-500/30 mb-3 shadow-inner">
+        <Video className="h-7 w-7 text-blue-400" />
+      </div>
+      <p className="text-sm font-semibold text-zinc-100">
+        LinkedIn Video Source
+      </p>
+      <p className="text-xs text-zinc-400 max-w-xs mt-1">
+        Source video linked & ready for AI analysis
+      </p>
     </div>
   );
 };
@@ -684,23 +755,35 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     }
   }, [aspectRatio, aspectRatioOptions, isAspectRatioLoading]);
 
-  // Detect YouTube URL vs Instagram Reel vs TikTok vs Direct Video URL vs Default Demo
+  // Detect YouTube URL vs Instagram Reel vs Facebook vs TikTok vs LinkedIn vs Direct Video URL vs Default Demo
   const youtubeId = useMemo(() => getYouTubeVideoId(sourceVideoUrl), [sourceVideoUrl]);
   const instagramEmbedUrl = useMemo(() => getInstagramEmbedUrl(sourceVideoUrl), [sourceVideoUrl]);
+  const facebookEmbedUrl = useMemo(() => getFacebookEmbedUrl(sourceVideoUrl), [sourceVideoUrl]);
   const tiktokEmbedUrl = useMemo(() => getTikTokEmbedUrl(sourceVideoUrl), [sourceVideoUrl]);
+  const linkedinEmbedUrl = useMemo(() => getLinkedInEmbedUrl(sourceVideoUrl), [sourceVideoUrl]);
   const isImage = useMemo(() => isImageUrl(sourceVideoUrl), [sourceVideoUrl]);
+
+  const isDirectVideo = useMemo(() => {
+    if (!sourceVideoUrl || isImage) return false;
+    return sourceVideoUrl.startsWith('blob:') || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(sourceVideoUrl);
+  }, [sourceVideoUrl, isImage]);
 
   const sourceType = useMemo(() => {
     if (!sourceVideoUrl || isImage) return 'default';
+    if (resolvedPreviewUrl) return 'resolved-stream';
+    if (isResolvingMedia) return 'resolving-platform';
     if (youtubeId) return 'youtube';
     if (instagramEmbedUrl) return 'instagram';
+    if (facebookEmbedUrl) return 'facebook';
     if (tiktokEmbedUrl) return 'tiktok';
-    return 'direct-video';
-  }, [youtubeId, instagramEmbedUrl, tiktokEmbedUrl, sourceVideoUrl, isImage]);
+    if (linkedinEmbedUrl) return 'linkedin';
+    if (isDirectVideo) return 'direct-video';
+    return 'default';
+  }, [resolvedPreviewUrl, isResolvingMedia, youtubeId, instagramEmbedUrl, facebookEmbedUrl, tiktokEmbedUrl, linkedinEmbedUrl, isDirectVideo, sourceVideoUrl, isImage]);
 
-  // Resolve Instagram URL to playable native MP4 stream URL for preview looping
+  // Resolve social platform URLs (Instagram, Facebook, TikTok, Twitter, Pinterest, LinkedIn) to playable native MP4 stream URL for preview looping
   useEffect(() => {
-    if (!sourceVideoUrl || isImage || !isInstagramUrl(sourceVideoUrl)) {
+    if (!sourceVideoUrl || isImage || !isResolvablePlatformUrl(sourceVideoUrl)) {
       setResolvedPreviewUrl(null);
       setIsResolvingMedia(false);
       return;
@@ -711,8 +794,25 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
     dispatch(resolveMediaAction(sourceVideoUrl))
       .then((res) => {
-        if (isMounted && res?.playableUrl) {
+        const isDirect =
+          res?.isDirectStream ||
+          Boolean(
+            res?.playableUrl &&
+              (res.playableUrl.includes('.mp4') ||
+                res.playableUrl.includes('video/mp4') ||
+                res.playableUrl.includes('fbcdn.net') ||
+                res.playableUrl.includes('cdninstagram.com') ||
+                res.playableUrl.includes('licdn.com') ||
+                res.playableUrl.includes('twimg.com') ||
+                res.playableUrl.includes('tiktokcdn.com') ||
+                res.playableUrl.includes('pinimg.com')) &&
+              !res.playableUrl.includes('/embed/')
+          );
+
+        if (isMounted && isDirect && res?.playableUrl) {
           setResolvedPreviewUrl(res.playableUrl);
+        } else if (isMounted) {
+          setResolvedPreviewUrl(null);
         }
       })
       .catch((err) => {
@@ -970,8 +1070,8 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       return;
     }
 
-    // Supported platform URLs (YouTube, Instagram, TikTok)
-    if (getYouTubeVideoId(url) || isInstagramUrl(url) || getTikTokEmbedUrl(url)) {
+    // Supported platform URLs (YouTube, Instagram, Facebook, TikTok, Twitter, Pinterest)
+    if (getYouTubeVideoId(url) || isResolvablePlatformUrl(url)) {
       setErrors((prev) => ({ ...prev, sourceVideo: '' }));
       setPreviewVideoError(false);
       return;
@@ -1137,7 +1237,18 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const handleProductImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (productImages.length >= 3) return;
+    if (productImages.length >= 3) {
+      setErrors((prev) => ({ ...prev, productImages: 'Maximum 3 images allowed.' }));
+      return;
+    }
+
+    if (!file.type || !file.type.startsWith('image/')) {
+      setErrors((prev) => ({
+        ...prev,
+        productImages: 'Invalid image source. Please select a valid image file.',
+      }));
+      return;
+    }
 
     const newImage = {
       file,
@@ -1148,28 +1259,70 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   };
 
   const handleAddProductUrl = (url) => {
-    if (!url || productImages.length >= 3) return;
-    setProductImages((prev) => [...prev, { file: null, preview: url }]);
-    setProductUrlInput('');
-    setErrors((prev) => ({ ...prev, productImages: '' }));
+    if (!url || typeof url !== 'string') return;
+    const trimmed = url.trim();
+    if (!trimmed) return;
+
+    if (productImages.length >= 3) {
+      setErrors((prev) => ({ ...prev, productImages: 'Maximum 3 images allowed.' }));
+      return;
+    }
+
+    // Reject obvious video / social platform / document / non-image links immediately
+    const isObviousNonImage =
+      /\.(mp4|webm|mov|m4v|avi|mkv|flv|wmv|pdf|html|php|asp|txt|doc|docx)(\?.*)?$/i.test(trimmed) ||
+      /(?:youtube\.com|youtu\.be|instagram\.com|facebook\.com|fb\.watch|tiktok\.com|twitter\.com|x\.com|vimeo\.com|dailymotion\.com|linkedin\.com|github\.com|medium\.com|dev\.to)/i.test(trimmed);
+
+    if (isObviousNonImage) {
+      setErrors((prev) => ({
+        ...prev,
+        productImages: 'Invalid image source. Please enter a valid image URL or upload an image.',
+      }));
+      return;
+    }
+
+    // Direct image extension or data / blob URL
+    if (isImageUrl(trimmed) || trimmed.startsWith('data:image/') || trimmed.startsWith('blob:')) {
+      setProductImages((prev) => [...prev, { file: null, preview: trimmed }]);
+      setProductUrlInput('');
+      setErrors((prev) => ({ ...prev, productImages: '' }));
+      return;
+    }
+
+    // Dynamic URL probe: verify with Image loader
+    const img = new Image();
+    img.onload = () => {
+      setProductImages((prev) => [...prev, { file: null, preview: trimmed }]);
+      setProductUrlInput('');
+      setErrors((prev) => ({ ...prev, productImages: '' }));
+    };
+    img.onerror = () => {
+      setErrors((prev) => ({
+        ...prev,
+        productImages: 'Invalid image source. Please enter a valid image URL or upload an image.',
+      }));
+    };
+    img.src = trimmed;
   };
 
   const handlePasteProductImage = (e) => {
     if (productImages.length >= 3) return;
-    const items = e.clipboardData.items;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        const file = items[i].getAsFile();
-        if (file) {
-          setProductImages((prev) => [...prev, { file, preview: URL.createObjectURL(file) }]);
-          setErrors((prev) => ({ ...prev, productImages: '' }));
-          return;
+    const items = e.clipboardData?.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            setProductImages((prev) => [...prev, { file, preview: URL.createObjectURL(file) }]);
+            setErrors((prev) => ({ ...prev, productImages: '' }));
+            return;
+          }
         }
       }
     }
-    const pastedText = e.clipboardData.getData('text');
-    if (pastedText && pastedText.startsWith('http')) {
-      handleAddProductUrl(pastedText);
+    const pastedText = e.clipboardData?.getData('text');
+    if (pastedText && pastedText.trim()) {
+      handleAddProductUrl(pastedText.trim());
     }
   };
 
@@ -1177,7 +1330,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     setProductImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Check form validity (Source video <= 60s mandatory, must be valid video source)
+  // Check form validity (Source video <= 60s mandatory, must be valid video source, Product images 1-3 valid)
   const isFormValid = useMemo(() => {
     const isSourceVideoValid =
       Boolean(sourceVideoUrl) &&
@@ -1186,19 +1339,39 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       !isImageUrl(sourceVideoUrl) &&
       (sourceDuration === null || sourceDuration <= 60);
 
-    return (
-      isSourceVideoValid &&
+    const isProductImagesValid =
       productImages.length >= 1 &&
       productImages.length <= 3 &&
+      !errors.productImages;
+
+    return (
+      isSourceVideoValid &&
+      isProductImagesValid &&
       Boolean(videoModel) &&
       Boolean(selectedVideoDuration) &&
       Boolean(aspectRatio)
     );
-  }, [sourceVideoUrl, errors.sourceVideo, previewVideoError, sourceDuration, productImages, videoModel, selectedVideoDuration, aspectRatio]);
+  }, [sourceVideoUrl, errors.sourceVideo, previewVideoError, sourceDuration, productImages, errors.productImages, videoModel, selectedVideoDuration, aspectRatio]);
 
   // Execute POST /clone-ad-analyze
   const handleAnalyze = async (overrideSessionId = null, isReanalyze = false) => {
-    if (!isFormValid || isImageUrl(sourceVideoUrl) || previewVideoError || errors.sourceVideo || (isAnalyzing && !isReanalyze)) return;
+    if (
+      !isFormValid ||
+      isImageUrl(sourceVideoUrl) ||
+      previewVideoError ||
+      errors.sourceVideo ||
+      errors.productImages ||
+      productImages.length < 1 ||
+      (isAnalyzing && !isReanalyze)
+    ) {
+      if (productImages.length < 1) {
+        setErrors((prev) => ({
+          ...prev,
+          productImages: 'Please provide at least 1 valid product image.',
+        }));
+      }
+      return;
+    }
 
     try {
       setIsAnalyzing(true);
@@ -1422,6 +1595,26 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               Please enter a video URL or select a video from Gallery.
             </p>
           </div>
+        ) : resolvedPreviewUrl ? (
+          <video
+            key={resolvedPreviewUrl}
+            src={resolvedPreviewUrl}
+            autoPlay
+            muted
+            loop
+            playsInline
+            referrerPolicy="no-referrer"
+            onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
+            onError={() => {
+              if (resolvedPreviewUrl && !resolvedPreviewUrl.includes('/proxy-media')) {
+                // Retry through streaming proxy if direct CDN blocked hotlinking/referer
+                setResolvedPreviewUrl(getMediaProxyUrl(resolvedPreviewUrl));
+              } else {
+                setResolvedPreviewUrl(null);
+              }
+            }}
+            className="absolute inset-0 z-0 h-full w-full object-cover"
+          />
         ) : sourceType === 'youtube' ? (
           <YouTubePreviewPlayer
             key={youtubeId}
@@ -1429,20 +1622,9 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
             onDurationChange={validateSourceDuration}
           />
         ) : sourceType === 'instagram' ? (
-          resolvedPreviewUrl ? (
-            <video
-              key={resolvedPreviewUrl}
-              src={resolvedPreviewUrl}
-              autoPlay
-              muted
-              loop
-              playsInline
-              onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
-              className="absolute inset-0 z-0 h-full w-full object-cover"
-            />
-          ) : (
-            <InstagramPreviewPlayer embedUrl={instagramEmbedUrl} />
-          )
+          <InstagramPreviewPlayer embedUrl={instagramEmbedUrl} />
+        ) : sourceType === 'facebook' ? (
+          <FacebookPreviewPlayer embedUrl={facebookEmbedUrl} />
         ) : sourceType === 'tiktok' ? (
           <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none">
             <iframe
@@ -1454,6 +1636,8 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               className="w-[140%] h-[140%] min-w-full min-h-full border-0 object-cover scale-110 pointer-events-none"
             />
           </div>
+        ) : sourceType === 'linkedin' ? (
+          <LinkedInPreviewPlayer embedUrl={linkedinEmbedUrl} />
         ) : sourceType === 'direct-video' ? (
           <video
             key={sourceVideoUrl}
@@ -1462,10 +1646,18 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
             muted
             loop
             playsInline
+            referrerPolicy="no-referrer"
             onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
             onError={() => setPreviewVideoError(true)}
             className="absolute inset-0 z-0 h-full w-full object-cover"
           />
+        ) : sourceType === 'resolving-platform' ? (
+          <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
+            <Loader2 className="h-8 w-8 text-amber-400 animate-spin mb-3" />
+            <p className="text-sm font-medium text-zinc-200">
+              Connecting video stream...
+            </p>
+          </div>
         ) : CLONE_YOUR_AD_DEMO_URL?.match(/\.(mp4|webm|mov)(\?.*)?$/i) ? (
           <video
             src={CLONE_YOUR_AD_DEMO_URL}
@@ -1960,7 +2152,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               </div>
 
               {errors.productImages && (
-                <span className="text-[12px] text-red-500">{errors.productImages}</span>
+                <span className="text-[12px] font-medium text-red-500">{errors.productImages}</span>
               )}
 
               {productImages.length > 0 && (

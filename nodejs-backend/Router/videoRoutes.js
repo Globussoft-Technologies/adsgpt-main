@@ -72,6 +72,7 @@ router.post(
   videoController.regenerateScript
 );
 router.get("/download-media", videoController.downloadMedia);
+router.get("/proxy-media", videoController.proxyMediaStream);
 router.post(
   "/download-media-zip",
   authenticateJWT,

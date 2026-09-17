@@ -272,7 +272,20 @@ const baseCloneAdInputs = {
   sourceVideoUrl: Joi.string().allow("", null).optional(),
   galleryVideoUrl: Joi.string().allow("", null).optional(),
   productImageUrls: Joi.array()
-    .items(Joi.string().trim().required())
+    .items(
+      Joi.string()
+        .trim()
+        .custom((value, helpers) => {
+          if (
+            /\.(mp4|webm|mov|m4v|avi|mkv|flv|wmv|pdf|html|php|asp)(\?.*)?$/i.test(value) ||
+            /(?:youtube\.com|youtu\.be|instagram\.com|facebook\.com|fb\.watch|tiktok\.com|twitter\.com|x\.com|vimeo\.com|dailymotion\.com|linkedin\.com)/i.test(value)
+          ) {
+            return helpers.message("Invalid image source. Please provide valid image URLs.");
+          }
+          return value;
+        })
+        .required()
+    )
     .min(1)
     .max(3)
     .required(),

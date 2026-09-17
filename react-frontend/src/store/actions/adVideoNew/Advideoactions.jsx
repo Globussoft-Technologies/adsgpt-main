@@ -1084,6 +1084,11 @@ export const cloneAdGenerateAction = (payload) => async () => {
   }
 };
 
+export const getMediaProxyUrl = (url) => {
+  if (!url) return '';
+  return `${BACKEND_HOST}/adsgpt/video/proxy-media?url=${encodeURIComponent(url)}`;
+};
+
 export const resolveMediaAction = (url) => async () => {
   try {
     const response = await axios.post(

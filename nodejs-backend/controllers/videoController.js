@@ -5068,22 +5068,14 @@ exports.resolveMedia = async (req, res) => {
     }
 
     const { url } = value;
-    const isInstagram = /(?:instagram\.com|instagr\.am)\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i.test(url);
+    const result = await mediaResolverService.resolveMediaUrl(url);
 
-    if (isInstagram) {
-      const result = await mediaResolverService.resolveInstagramVideoUrl(url);
-      return res.status(200).json({
-        success: true,
-        originalUrl: result.originalUrl,
-        playableUrl: result.playableUrl,
-      });
-    }
-
-    // Default passthrough if URL is already a direct video stream
     return res.status(200).json({
       success: true,
-      originalUrl: url,
-      playableUrl: url,
+      originalUrl: result.originalUrl,
+      playableUrl: result.playableUrl,
+      platform: result.platform,
+      isDirectStream: result.isDirectStream,
     });
   } catch (err) {
     logger.error(`resolveMedia error: ${err.message}`);
@@ -5091,6 +5083,46 @@ exports.resolveMedia = async (req, res) => {
       success: false,
       error: err.message || "Failed to resolve media URL",
     });
+  }
+};
+
+exports.proxyMediaStream = async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url || typeof url !== "string") {
+      return res.status(400).send("Missing url parameter");
+    }
+
+    const headers = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    };
+    if (req.headers.range) {
+      headers.range = req.headers.range;
+    }
+
+    const response = await axios({
+      method: "get",
+      url,
+      headers,
+      responseType: "stream",
+      timeout: 15000,
+    });
+
+    res.status(response.status);
+    if (response.headers["content-type"])
+      res.setHeader("content-type", response.headers["content-type"]);
+    if (response.headers["content-length"])
+      res.setHeader("content-length", response.headers["content-length"]);
+    if (response.headers["content-range"])
+      res.setHeader("content-range", response.headers["content-range"]);
+    if (response.headers["accept-ranges"])
+      res.setHeader("accept-ranges", response.headers["accept-ranges"]);
+
+    response.data.pipe(res);
+  } catch (err) {
+    logger.warn(`proxyMediaStream error: ${err.message}`);
+    return res.status(500).send("Failed to stream media");
   }
 };
 
