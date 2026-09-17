@@ -57,6 +57,11 @@ router.get("/sessions", ctrl.listSessions);
 // Replaces the localStorage guesswork the banner and the resume used to do.
 router.get("/eligibility", ctrl.getEligibility);
 
+// Coachmark tours: which ones this user has seen, and marking one seen. Per
+// user on UserProfile, so a tour does not replay on another device.
+router.get("/tours", ctrl.getTours);
+router.post("/tours/:tourKey/seen", ctrl.markTourSeen);
+
 // Skip from the very first screen, before any session exists. The session
 // PATCH below cannot record that (no id to address), so without this the
 // first-run redirect would bring the user straight back on the next login.

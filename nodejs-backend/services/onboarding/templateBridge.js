@@ -30,39 +30,24 @@ const active = new Set();
 
 const pageKey = ({ sessionId, kind, limit, skip }) => `${sessionId}:${kind}:${limit}:${skip}`;
 
-// The contract's bounds (TEMPLATE_RECOMMENDATIONS_API_CONTRACT (4)): query
-// `limit` 1..100, `skip` any non-negative integer. Out-of-range is a 400 before
-// the stream opens. The old 20/15 came from the earlier contract and capped the
-// rail at 20–35 items; verified on staging 2026-09-16 that limit=50 and skip=20
-// both answer. MAX_SKIP is our own guard, not upstream's.
+// Per-PAGE size bound from the contract (TEMPLATE_RECOMMENDATIONS_API_CONTRACT
+// (4)): query `limit` 1..100 — above that is a 400 before the stream opens.
+// There is deliberately NO cap on `skip` or on the total: the rail pages for as
+// long as upstream keeps returning full pages. The end is decided only by
+// upstream sending a short page (`pagination.exhausted`, set in sessionMirror).
 const MAX_LIMIT = 100;
-const MAX_SKIP = 500;
 
 /**
- * The window to ask for next, given how many are already stored.
+ * The window to ask for next: plain skip/limit.
  *
- * ── Why this is not just `skip = loaded` ─────────────────────────────────────
- * The contract allows `skip` 0..15 and `limit` 1..20, so the furthest item
- * anyone can address is the 35th — not the 20th, which is where the obvious
- * cursor stops dead: at twenty stored it would ask for `skip=20` and be
- * rejected with a 400 before the stream even opened.
- *
- * Past the ceiling the window is pinned to its highest legal start and WIDENED
- * instead, so it still reaches ground we have not covered. That re-requests
- * rows we already hold, which costs nothing — the mirror folds pages on
- * `template_id`, so the overlap is dropped on arrival and only the new tail is
- * kept.
- *
- * `exhausted` is the window having nowhere left to go: pinned at 15 and widened
- * to 20, it ends at 35, and once 35 are stored there is no legal request that
- * returns anything new.
+ * `skip` is how many are already stored, `limit` is the page size (clamped to
+ * the contract's per-page bound). `exhausted` is always false here — only
+ * upstream's answer can say the corpus has run out.
  */
 function nextPage(loaded = 0, want = 10) {
-  const held = Math.max(Number(loaded) || 0, 0);
-  const skip = Math.min(held, MAX_SKIP);
-  const overlap = held - skip;
-  const limit = Math.min(Math.max(Number(want) || 10, 1) + overlap, MAX_LIMIT);
-  return { skip, limit, exhausted: skip + limit <= held };
+  const skip = Math.max(Number(loaded) || 0, 0);
+  const limit = Math.min(Math.max(Number(want) || 10, 1), MAX_LIMIT);
+  return { skip, limit, exhausted: false };
 }
 
 // The score a candidate must clear to come back as `recommended: true`.
@@ -180,7 +165,7 @@ async function startTemplateRun({ userId, sessionId, limit = 5, skip = 0, kind =
 
   const page = {
     limit: Math.min(Math.max(Number(limit) || 5, 1), MAX_LIMIT),
-    skip: Math.min(Math.max(Number(skip) || 0, 0), MAX_SKIP),
+    skip: Math.max(Number(skip) || 0, 0),
   };
 
   const key = pageKey({ sessionId, kind, ...page });
@@ -284,6 +269,5 @@ module.exports = {
   startTemplateRun,
   nextPage,
   MAX_LIMIT,
-  MAX_SKIP,
   _internals: { active, resolveBaseUrl, pageKey, createSseParser },
 };

@@ -65,10 +65,12 @@ const { createFlowLog, newReqId } = require("../../utils/flowLog");
 // written and never needs syncing again.
 const TERMINAL_STATUSES = new Set(["succeeded", "failed", "cancelled"]);
 
-// One "load more" is one more page of the same size the automatic first pass
-// asks for, so the row grows by a predictable amount rather than in jumps.
-// Mirrors FIRST_TEMPLATE_PAGE in controllers/Ai/jobWebhookController.js.
-const DEFAULT_TEMPLATE_PAGE = 10;
+// Template page sizes (user decision 2026-09-17): the first load — automatic
+// run and every refresh — asks for 50; each "load more" asks for 20 more.
+// The same `limit`/`skip` applies to videos AND images in one call; both are
+// shown together. FIRST_TEMPLATE_PAGE in jobWebhookController.js mirrors 50.
+const FIRST_TEMPLATE_PAGE = 50;
+const DEFAULT_TEMPLATE_PAGE = 20;
 
 // Ownership is enforced by querying with BOTH the upstream id and userId, so
 // another user's session is indistinguishable from one that doesn't exist. A
@@ -907,6 +909,77 @@ exports.skipOnboarding = async (req, res) => {
   }
 };
 
+// The coachmark tours the frontend knows about. A closed list: the key becomes
+// part of a Mongo path, so anything else is rejected rather than written.
+const TOUR_KEYS = ["workspace", "clip"];
+
+/**
+ * GET /adsgpt/onboarding/tours
+ *
+ * Which onboarding tours this user has already been through, as
+ * `{ workspace: bool, clip: bool }`. Read once by `useTourSeen` to decide
+ * whether a tour auto-starts. A missing profile answers all-false.
+ */
+exports.getTours = async (req, res) => {
+  /*
+    #swagger.tags = ['Onboarding']
+    #swagger.summary = 'Which onboarding tours the user has seen'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const userId = req.user?.user_id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const profile = await UserProfile.findOne({ user_id: userId })
+      .select("onboarding_tours_seen")
+      .lean();
+    const seen = profile?.onboarding_tours_seen || {};
+
+    return res
+      .status(200)
+      .json(Object.fromEntries(TOUR_KEYS.map((key) => [key, Boolean(seen[key])])));
+  } catch (error) {
+    logger.error("[onboarding] getTours failed", { message: error.message });
+    return res.status(500).json({ error: "Something went wrong. Please try again." });
+  }
+};
+
+/**
+ * POST /adsgpt/onboarding/tours/:tourKey/seen
+ *
+ * Marks one tour as seen — called when the user finishes or closes it.
+ * Idempotent: the first timestamp is kept, so a replay does not move it.
+ */
+exports.markTourSeen = async (req, res) => {
+  /*
+    #swagger.tags = ['Onboarding']
+    #swagger.summary = 'Mark an onboarding tour as seen'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const userId = req.user?.user_id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { tourKey } = req.params;
+    if (!TOUR_KEYS.includes(tourKey)) {
+      return res.status(400).json({ error: `unknown tour: ${tourKey}` });
+    }
+
+    const path = `onboarding_tours_seen.${tourKey}`;
+    // Only set when still unset, so the stored date is the FIRST time seen.
+    await UserProfile.updateOne(
+      // `null` in a Mongo filter also matches a field that does not exist yet.
+      { user_id: userId, [path]: null },
+      { $set: { [path]: new Date() } }
+    );
+
+    return res.status(200).json({ ok: true, tour: tourKey, seen: true });
+  } catch (error) {
+    logger.error("[onboarding] markTourSeen failed", { message: error.message });
+    return res.status(500).json({ error: "Something went wrong. Please try again." });
+  }
+};
+
 // Media URL resolution moved to services/onboarding/mediaUrls.js so the socket
 // emit in the job webhook can produce the exact same shape this read does.
 /**
@@ -1028,14 +1101,9 @@ exports.loadMoreTemplates = async (req, res) => {
       return res.status(200).json({ accepted: false, reason: "exhausted", loaded });
     }
 
-    // The cursor, and the contract's reach — see `nextPage`. It answers
-    // `exhausted` when the widest legal window is entirely inside what we
-    // already hold, which is cheaper than calling upstream to be handed a page
-    // of pure duplicates.
-    const { skip, limit, exhausted } = nextPage(loaded, req.body?.limit || DEFAULT_TEMPLATE_PAGE);
-    if (exhausted) {
-      return res.status(200).json({ accepted: false, reason: "exhausted", loaded });
-    }
+    // Plain skip/limit — no total cap. Paging ends only when upstream returns a
+    // short page (`pagination.exhausted`, checked above).
+    const { skip, limit } = nextPage(loaded, req.body?.limit || DEFAULT_TEMPLATE_PAGE);
 
     // Never awaited: upstream holds the connection until it has accepted, and
     // the caller only needs to know we started.
@@ -1089,7 +1157,7 @@ exports.refreshTemplates = async (req, res) => {
       { $set: { "templates.retry": {}, "templates.pagination.exhausted": false } }
     );
 
-    startTemplateRun({ userId, sessionId, limit: 20, skip: 0, refresh: true })
+    startTemplateRun({ userId, sessionId, limit: FIRST_TEMPLATE_PAGE, skip: 0, refresh: true })
       .then((ok) => logger.debug("[onboarding] templates.refresh", { sessionId, stored: ok }))
       .catch((e) => logger.error("[onboarding] templates.refresh failed", { sessionId, message: e.message }));
 

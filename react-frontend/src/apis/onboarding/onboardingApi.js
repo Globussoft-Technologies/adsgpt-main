@@ -117,6 +117,24 @@ export const loadMoreTemplates = async (sessionId) => {
   return data;
 };
 
+/** Which coachmark tours this user has seen: `{ workspace: bool, clip: bool }`. */
+export const getOnboardingTours = async () => {
+  const { data } = await axios.get(`${BASE_URL}/onboarding/tours`, {
+    headers: { Authorization: `Bearer ${getCookies()}` },
+  });
+  return data;
+};
+
+/** Marks one coachmark tour ('workspace' | 'clip') as seen for this user. */
+export const markOnboardingTourSeen = async (tourKey) => {
+  const { data } = await axios.post(
+    `${BASE_URL}/onboarding/tours/${encodeURIComponent(tourKey)}/seen`,
+    {},
+    { headers: { Authorization: `Bearer ${getCookies()}` } }
+  );
+  return data;
+};
+
 /**
  * Re-runs template matching for a session (video + image creatives).
  *

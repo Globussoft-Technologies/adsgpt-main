@@ -42,7 +42,7 @@
  * The clip arriving at any moment abandons the sequence wherever it is.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Download, Megaphone } from 'lucide-react';
 import { handleDownload } from '@/utils/download';
 import CustomVideoPlayer from '../AdStudio/AdVideo/AdVideoChats/CustomVideoPlayer';
@@ -51,6 +51,7 @@ import { readPendingPostAd } from '../AdStudio/AdVideoNew/PostAdMySpace/postAdPe
 import { Header } from './Workspace';
 import { ClipSettleLoader, CLIP_LINES } from './FrameLoader';
 import RetryCountdownButton from './RetryCountdownButton';
+import OnboardingTour from './OnboardingTour';
 
 const SURF2 = '#232329';
 const LINE = 'rgba(255,255,255,0.09)';
@@ -392,7 +393,7 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
         className="flex w-[300px] shrink-0 flex-col gap-6 overflow-y-auto border-l p-5"
         style={{ background: CHROME, borderColor: LINE }}
       >
-        <div>
+        <div data-tour="send">
           <PanelLabel>Send it out</PanelLabel>
           {ready ? (
             <div className="mt-3 flex flex-col gap-2">
@@ -412,7 +413,7 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
           )}
         </div>
 
-        <div>
+        <div data-tour="versions">
           <PanelLabel>Versions</PanelLabel>
           <p className="mt-1 text-[11.5px] text-white/55">A new version never destroys this cut.</p>
           <div className="mt-3 flex flex-col gap-2">
@@ -444,7 +445,7 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
             `mt-auto` rather than a fixed position: on a short viewport it sits
             straight under Versions, and on a tall one it settles at the bottom
             instead of leaving a column of nothing. */}
-        <div className="mt-auto border-t pt-5" style={{ borderColor: LINE }}>
+        <div data-tour="concept" className="mt-auto border-t pt-5" style={{ borderColor: LINE }}>
           <PanelLabel>This concept</PanelLabel>
 
           <h2 className="mt-2.5 text-[14px] leading-snug font-semibold text-white">{title}</h2>
@@ -550,8 +551,36 @@ export default function ClipView({
   const angle = board?.angle || state.video?.angle || '';
   const ready = status === 'ready' && Boolean(src);
 
+  // First-visit tour, only once there is a clip to talk about. `relative` on
+  // the root below: the overlay is positioned against it.
+  const tourRootRef = useRef(null);
+  const tourSteps = [
+    {
+      // The player itself, not the whole stage it is centred in.
+      target: '[data-tour="clip-stage"] > *',
+      title: 'Your video is ready',
+      body: 'Play it here, scrub through it, or open it full screen.',
+    },
+    {
+      target: '[data-tour="send"]',
+      title: 'Send it out',
+      body: 'Download the MP4, or post it straight to your connected ad account.',
+    },
+    {
+      target: '[data-tour="versions"]',
+      title: 'Versions',
+      body: 'Every cut is kept. Making a new version never replaces this one.',
+    },
+    {
+      target: '[data-tour="concept"]',
+      pad: 0,
+      title: 'The idea behind it',
+      body: 'The concept, voiceover and camera move this clip was made from.',
+    },
+  ];
+
   return (
-    <div className="flex h-screen flex-col" style={{ background: '#0f0f0f' }}>
+    <div ref={tourRootRef} className="relative flex h-screen flex-col" style={{ background: '#0f0f0f' }}>
       {/* "Go to dashboard" once this clip is ready; "Skip for now" while it is
           still rendering (or failed), since nothing has been generated yet. */}
       <Header onStartOver={onStartOver} onFinish={onFinish} onSkip={onSkip} generated={ready} />
@@ -570,7 +599,7 @@ export default function ClipView({
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <div className="grid min-h-0 flex-1 place-items-center p-5">
+        <div data-tour="clip-stage" className="grid min-h-0 flex-1 place-items-center p-5">
           {ready ? (
             // The app's player, not a bare `<video>`: play, scrub, speed, PiP,
             // fullscreen and its own download, identical to every other clip in
@@ -620,6 +649,8 @@ export default function ClipView({
               : state.message || 'Rendering — this usually takes about a minute.'}
         </p>
       </footer>
+
+      <OnboardingTour tourKey="clip" rootRef={tourRootRef} steps={tourSteps} ready={ready} />
     </div>
   );
 }

@@ -44,6 +44,7 @@ import useOnboardingEligibility from '@/hooks/useOnboardingEligibility';
 import FreeAdBanner from './FreeAdBanner';
 import { FrameSettleLoader, FrameStatusLine, FRAME_LINES, useRotatingCopy } from './FrameLoader';
 import RetryCountdownButton from './RetryCountdownButton';
+import OnboardingTour from './OnboardingTour';
 
 /* ── tokens ───────────────────────────────────────────────────────────────────
    Named here rather than scattered through the markup, because every surface on
@@ -444,7 +445,7 @@ function useFitScale(deps) {
  * stretched the card to hold them. Capped at `calc(50% - 4px)` the pair adds up
  * to exactly the strip available, so the card's padding survives on both edges.
  */
-function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, framesExhausted, freeRenderSpent }) {
+function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, tourAnchor = false, framesExhausted, freeRenderSpent }) {
   const frames = (board.images || [])
     .filter((img) => img.status === 'ready' && img.src)
     .slice(0, 2);
@@ -454,6 +455,9 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
   // user to another screen to see whether the promise was kept breaks the one
   // comparison the card exists to support.
   const [watching, setWatching] = useState(false);
+  // Set once the clip has been closed, so the keyframes animate back in on
+  // return — but not on the card's first paint.
+  const [returned, setReturned] = useState(false);
 
   // ── Full voiceover, in place ─────────────────────────────────────────────
   // User decision 2026-09-15: one line collapsed; "See more" grows the text to
@@ -475,15 +479,33 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, f
   return (
     <article
       id={anchorId}
+      // The card the onboarding tour points at — chosen by Workspace, not
+      // simply the first one. See `tourBoard` there.
+      data-tour={tourAnchor ? 'concept' : undefined}
       className="flex h-full min-h-0 w-full min-w-0 flex-col gap-2.5 rounded-2xl border p-3"
       style={{ background: SURF, borderColor: LINE }}
     >
       {/* `overflow-visible` so the transition badge can sit over both frames.
           `flex-1 basis-0`: takes whatever the footer leaves, so it follows the
           voiceover's height animation frame by frame. */}
-      <div className="relative flex min-h-20 flex-1 basis-0 items-center justify-center overflow-visible">
+      <div
+        className={cn(
+          'relative flex min-h-20 flex-1 basis-0 items-center justify-center overflow-visible',
+          // Mirror of the clip's rise: the frames settle back in rather than
+          // popping into place the instant the player unmounts.
+          returned && !watching && 'animate-in fade-in zoom-in-95 duration-300 ease-out'
+        )}
+      >
         {watching && clipSrc ? (
-          <InlineClip src={clipSrc} board={board} onClose={() => setWatching(false)} onOpen={onOpen} />
+          <InlineClip
+            src={clipSrc}
+            board={board}
+            onClose={() => {
+              setReturned(true);
+              setWatching(false);
+            }}
+            onOpen={onOpen}
+          />
         ) : frames.length ? (
           <>
             <Frame frames={frames} index={0} />
@@ -586,6 +608,9 @@ function InlineClip({ src, board, onClose, onOpen }) {
   // The OAuth-return reopen stays in ClipView's SidePanel only: mounting that
   // effect on every card would open the modal once per card.
   const [postOpen, setPostOpen] = useState(false);
+  // Close plays the rise in reverse before unmounting. Unmounting on click was
+  // what made closing feel abrupt: opening animated, closing just vanished.
+  const [leaving, setLeaving] = useState(false);
   const title = board?.title || '';
   const postPayload = {
     url: src,
@@ -595,7 +620,18 @@ function InlineClip({ src, board, onClose, onOpen }) {
   };
 
   return (
-    <div className="absolute inset-0 animate-[clipRise_320ms_cubic-bezier(0.16,1,0.3,1)]">
+    <div
+      className={cn(
+        'absolute inset-0',
+        leaving
+          ? 'pointer-events-none animate-[clipFall_220ms_cubic-bezier(0.4,0,1,1)_forwards]'
+          : 'animate-[clipRise_320ms_cubic-bezier(0.16,1,0.3,1)]'
+      )}
+      // Only the exit animation hands control back; the rise ending must not.
+      onAnimationEnd={(e) => {
+        if (leaving && e.target === e.currentTarget) onClose();
+      }}
+    >
       {/* The app's own player, the same one the clip screen uses, filling the
           strip the keyframes were in. `ASPECT_FILL` rather than the portrait
           preset: locking the player to 9:16 in a landscape slot left the
@@ -636,7 +672,7 @@ function InlineClip({ src, board, onClose, onOpen }) {
         )}
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => setLeaving(true)}
           title="Back to the storyboard"
           className="grid h-7 w-7 place-items-center rounded-full border text-white/80 backdrop-blur-md transition hover:text-white"
           style={{ background: 'rgba(10,10,13,0.72)', borderColor: LINE_STRONG }}
@@ -653,6 +689,10 @@ function InlineClip({ src, board, onClose, onOpen }) {
         @keyframes clipRise {
           from { opacity: 0; transform: scale(0.92) }
           to   { opacity: 1; transform: none }
+        }
+        @keyframes clipFall {
+          from { opacity: 1; transform: none }
+          to   { opacity: 0; transform: scale(0.94) }
         }
       `}</style>
     </div>
@@ -737,6 +777,8 @@ function ConceptAction({ board, state, onGenerate, onWatch, onOpen, freeRenderSp
       // Disabled while the keyframes are still being drawn — same button, at
       // half strength, so the card does not change shape when they land.
       disabled={disabled}
+      // A disabled Generate is not something the tour should teach.
+      data-tour={disabled ? undefined : 'generate'}
       className={cn(
         'inline-flex shrink-0 items-center gap-2 self-end rounded-[7px] bg-[linear-gradient(180deg,#9176ff_0%,#7c5cff_46%,#6148c7_100%)] px-[11px] py-1.5 text-[12.5px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-1px_0_rgba(0,0,0,0.28),0_1px_0_rgba(0,0,0,0.5),0_4px_10px_-4px_rgba(0,0,0,0.75)] transition',
         disabled
@@ -1694,7 +1736,14 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
                   // own `overflow-hidden` reads as a rendering fault. An
                   // ellipsis reads as a word that did not fit.
                   className="min-w-0 shrink truncate rounded-sm px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap capitalize backdrop-blur-md"
-                  style={{ color, background: bg, border: `1px solid ${border}` }}
+                  // The tint is translucent, so on a white or green thumbnail it
+                  // vanished into the picture. A near-opaque dark base under the
+                  // tint keeps every chip legible on any frame.
+                  style={{
+                    color,
+                    background: `linear-gradient(${bg}, ${bg}), rgba(10,10,13,0.82)`,
+                    border: `1px solid ${border}`,
+                  }}
                 >
                   {label}
                 </span>
@@ -1928,6 +1977,7 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
 
   return (
     <section
+      data-tour="templates"
       className="absolute inset-x-0 bottom-0 z-[5] flex min-h-0 flex-col border-t shadow-[0_-20px_46px_rgba(0,0,0,0.5)]"
       style={{ height, background: SURF, borderColor: LINE }}
     >
@@ -2165,17 +2215,6 @@ const BRAND_PANEL_W = 296;
 const BRAND_RAIL_W = 56;
 const BRAND_PANEL_KEY = 'adsgpt.onboarding.brandPanelCollapsed';
 
-// The furthest item the template contract can address: `skip` tops out at 15
-// and `limit` at 20, so the highest legal window ends at the 35th. Past that
-// there is no next page, and the rail stops asking rather than asking and being
-// refused. Mirrors MAX_SKIP + MAX_LIMIT in services/onboarding/templateBridge.js.
-//
-// It was 15 here — the `skip` ceiling alone — which is why the rail stopped
-// dead at twenty: Node was still willing to widen the window and reach the
-// tail, and the client had already stopped asking it to.
-// Raised 2026-09-16: the current contract allows `limit` up to 100 and any
-// `skip`, so Node's reach is now MAX_SKIP (500) + MAX_LIMIT (100).
-const TEMPLATE_MAX_ITEMS = 600;
 
 export default function Workspace({
   result = {},
@@ -2301,8 +2340,8 @@ export default function Workspace({
   const canLoadMoreTemplates =
     Boolean(onLoadMoreTemplates) &&
     templateItems.length > 0 &&
-    !templatePaging.exhausted &&
-    (Number(templatePaging.loaded) || templateItems.length) < TEMPLATE_MAX_ITEMS;
+    // No item cap: keep paging until the server says upstream ran out.
+    !templatePaging.exhausted;
   // `context` is the merged brand profile; provenance (source_urls, citations)
   // sits one level up on the result beside it.
   const context = result.context || {};
@@ -2337,11 +2376,82 @@ export default function Workspace({
       return next;
     });
 
+  // ── First-visit tour ─────────────────────────────────────────────────────
+  // Waits for real content: pointing at skeleton cards explains nothing.
+  const tourRootRef = useRef(null);
+
+  // Which card the tour explains. Not blindly the first: that one may still be
+  // drawing its frames, have only one of two, or already be rendering / failed
+  // — and the tour would light up a loader or a disabled button, or describe
+  // two frames where there is one. Bug 2026-09-17.
+  //
+  // In on-screen order, prefer a card with both frames and an unstarted render,
+  // then one frame and unstarted. Frame counting mirrors ConceptCard.
+  const readyFrames = (b) =>
+    Math.min((b.images || []).filter((img) => img?.status === 'ready' && img?.src).length, 2);
+  const unstarted = (b) => !videosByBoard[b.id]?.status;
+  // Guarded: with no boards yet, orderWithLeadInMiddle returns `[undefined]`
+  // (it splices in a missing lead), which crashed the `.find`s below.
+  const ordered = boards.length ? orderWithLeadInMiddle(boards) : [];
+  // Sticky: once picked, keep the same card while it stays usable, so a frame
+  // landing on another card mid-tour does not move the spotlight's target.
+  const tourBoardId = useRef(null);
+  const kept = ordered.find(
+    (b) => b.id === tourBoardId.current && readyFrames(b) > 0 && unstarted(b)
+  );
+  const tourBoard =
+    kept ||
+    ordered.find((b) => readyFrames(b) === 2 && unstarted(b)) ||
+    ordered.find((b) => readyFrames(b) === 1 && unstarted(b)) ||
+    null;
+  tourBoardId.current = tourBoard?.id ?? null;
+  const tourFrames = tourBoard ? readyFrames(tourBoard) : 0;
+  // Also waits while the dock is dragged up: the user is browsing templates,
+  // and the dock covers the ideas the tour would point at. Bug 2026-09-17 —
+  // storyboards landed mid-browse and the spotlight lit up the dock and an
+  // empty patch where the hidden Generate button sat.
+  // Waits for a card worth pointing at, not merely for boards to exist — a
+  // failed or still-loading first board no longer starts the tour early.
+  const tourReady = Boolean(tourBoard) && !templatesPending && dockH <= DOCK_MIN_H;
+  // Replay can be pressed with the dock up; drop it so every target is visible.
+  const collapseDockForTour = useCallback(() => setDockH(DOCK_MIN_H), []);
+  const tourSteps = [
+    {
+      target: '[data-tour="brand"]',
+      pad: 0,
+      title: 'Your brand profile',
+      body: 'We pulled this from your website: industry, audience, products and colours. Every idea below is built on it.',
+    },
+    {
+      target: '[data-tour="concept"]',
+      title: 'Video ideas for your brand',
+      body:
+        tourFrames === 2
+          ? 'Each idea shows the first and last frame of the video, with the voiceover underneath.'
+          : 'Each idea previews a frame from the video, with the voiceover underneath.',
+    },
+    {
+      target: '[data-tour="concept"] [data-tour="generate"]',
+      title: 'Turn an idea into a video',
+      body: freeRenderSpent
+        ? 'Press Generate on the idea you like and we render the full clip.'
+        : 'Press Generate on the idea you like and we render the full clip. Your first one is free.',
+    },
+    {
+      target: '[data-tour="templates"]',
+      pad: 0,
+      title: 'Templates from your industry',
+      body: 'Ads already working for businesses like yours. Drag the bar up or press Expand all to see more.',
+    },
+  ];
+
   return (
     // `dark` is asserted here because this screen renders outside Layout, which
-    // is what normally carries it.
+    // is what normally carries it. `relative`: the tour overlay is positioned
+    // against this root.
     <div
-      className="dark flex h-screen w-full flex-col overflow-hidden text-white"
+      ref={tourRootRef}
+      className="dark relative flex h-screen w-full flex-col overflow-hidden text-white"
       style={{ background: BG, fontFamily: "'Public Sans', sans-serif" }}
     >
       {/* The same offer bar the rest of the app carries, but with no button.
@@ -2372,6 +2482,7 @@ export default function Workspace({
       >
         {/* ═══ the brand ═══ */}
         <aside
+          data-tour="brand"
           className="relative hidden min-h-0 flex-col overflow-hidden border-r lg:flex"
           style={{ background: CHROME, borderColor: LINE }}
         >
@@ -2537,6 +2648,7 @@ export default function Workspace({
                     <ConceptCard
                       key={board.id}
                       anchorId={i === 0 ? 'first-concept' : undefined}
+                      tourAnchor={board.id === tourBoard?.id}
                       board={board}
                       index={i + 1}
                       onGenerate={onGenerateVideo}
@@ -2574,6 +2686,8 @@ export default function Workspace({
           />
         </main>
       </div>
+
+      <OnboardingTour tourKey="workspace" rootRef={tourRootRef} steps={tourSteps} ready={tourReady} onStart={collapseDockForTour} />
     </div>
   );
 }

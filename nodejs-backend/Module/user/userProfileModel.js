@@ -79,6 +79,14 @@ const userProfileSchema = new mongoose.Schema(
     // spent the free render still sees the banner, and it takes them back into
     // the session they left rather than a new one.
     onboarding_skipped_at: { type: Date, default: null },
+    // When the user finished or closed each onboarding coachmark tour. Per
+    // user (not localStorage) so a tour seen on one device is not replayed on
+    // another. `null` = never seen → the tour auto-starts. Keys must match
+    // TOUR_KEYS in onboardingInitController.
+    onboarding_tours_seen: {
+      workspace: { type: Date, default: null },
+      clip: { type: Date, default: null },
+    },
 
     // === Billing Cycle ===
     billing_cycle_start: { type: Date, default: null },

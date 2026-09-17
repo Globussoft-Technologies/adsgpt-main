@@ -47,7 +47,8 @@ const { mirrorJobResult, readSection } = require("../../services/onboarding/sess
 // corpus match; naming a limit here means the storyboard's own pull can miss
 // this entry and compute its own. Worth confirming with DS — the cost is a
 // second match per session, not a wrong result.
-const FIRST_TEMPLATE_PAGE = 20;
+// 50 as of 2026-09-17 (user decision); load-more pages are 20 — see onboardingInitController.
+const FIRST_TEMPLATE_PAGE = 50;
 const OnboardingSession = require("../../Module/onboarding/onboardingSession");
 const logger = require("../../utils/logger");
 const { createFlowLog } = require("../../utils/flowLog");

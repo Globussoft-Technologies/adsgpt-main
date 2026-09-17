@@ -111,6 +111,8 @@ function mergeTemplatePage(previous, rawIncoming, requested = {}) {
   const got = countBy(incomingList);
 
   return {
+    // How many items this page actually contributed after de-duplication.
+    added: added.length,
     result: {
       // The newest page's envelope wins for everything except the list itself —
       // `count`, `near_count` and `message` describe the most recent match, and
@@ -126,7 +128,15 @@ function mergeTemplatePage(previous, rawIncoming, requested = {}) {
       // Fewer back than asked for means the corpus is out of candidates. The
       // `skip` ceiling is the contract's, and is enforced by the caller that
       // asks for the next page rather than here.
-      exhausted: limit > 0 && got.videos < limit && got.images < limit,
+      //
+      // Also exhausted when a "load more" page added NOTHING new. Upstream
+      // ignores `skip` for images (verified 2026-09-17: skip=20 returns the
+      // same images as skip=0), so a full-looking page can be all duplicates —
+      // and without this the rail kept asking forever, showing a loader that
+      // never produced a tile.
+      exhausted:
+        (limit > 0 && got.videos < limit && got.images < limit) ||
+        (!replace && previousList.length > 0 && added.length === 0),
     },
   };
 }
@@ -326,7 +336,12 @@ async function mirrorJobResult(sessionId, kind, patch = {}) {
     // the callback lands on a different instance from the one that triggered.
     const page = requested || previous?.templates?.pagination || {};
     const merged = mergeTemplatePage(previous?.templates?.result, result, page);
-    if (merged) {
+    if (merged && !requested && merged.added === 0) {
+      // The webhook backup replaying what the stream already stored. Nothing
+      // to add, and it must not recompute paging — it would read as "a page of
+      // duplicates" and end paging after the very first page.
+      delete set[`${section}.result`];
+    } else if (merged) {
       set[`${section}.result`] = merged.result;
       set[`${section}.pagination`] = merged.pagination;
     } else {

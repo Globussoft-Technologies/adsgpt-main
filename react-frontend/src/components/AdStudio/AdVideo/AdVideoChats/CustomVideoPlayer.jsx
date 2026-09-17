@@ -344,7 +344,12 @@ const CustomVideoPlayer = ({ src, aspect, autoPlay = false }) => {
                 </button>
 
                 {isDropdownOpen && (
-                  <div className="animate-in fade-in slide-in-from-bottom-2 absolute right-0 bottom-10 z-30 max-h-50 w-45 overflow-auto rounded-lg border border-gray-700 bg-[#222] text-sm shadow-xl 2xl:w-50">
+                  <div
+                    className="animate-in fade-in slide-in-from-bottom-2 absolute right-0 bottom-10 z-30 max-h-50 w-45 overflow-auto overscroll-contain rounded-lg border border-gray-700 bg-[#222] text-sm shadow-xl 2xl:w-50"
+                    // Thin dark scrollbar instead of the OS default (white track
+                    // with arrow buttons), which looked broken on the dark menu.
+                    style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.28) transparent' }}
+                  >
                     {activeMenu === 'main' && (
                       <div>
                         <button

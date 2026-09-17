@@ -49,6 +49,12 @@ export const IS_AI_ASSISTANT_ENABLED =
 //   import.meta.env.VITE_FEATURE_GOOGLE_AUTOMATION === 'true';
 export const IS_GOOGLE_AUTOMATION_ENABLED =
   import.meta.env.VITE_ENABLE_GOOGLE_POSTING === 'true';
+// Onboarding coachmark tours (Workspace + ClipView). Off unless
+// VITE_FEATURE_ONBOARDING_TOUR is the literal string `true` — when off, the
+// tour never mounts: no overlay, no replay pill, no /onboarding/tours calls.
+export const IS_ONBOARDING_TOUR_ENABLED =
+  import.meta.env.VITE_FEATURE_ONBOARDING_TOUR === 'true';
+
 // Meta Ads "Ads Chat" MCP chatbot — still in active development. Gated two
 // ways: this master switch (build-wide off switch), AND — separately — an
 // explicit email allowlist (see isAdsChatAllowedForEmail below) so that even
