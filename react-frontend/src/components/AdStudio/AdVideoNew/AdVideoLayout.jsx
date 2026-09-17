@@ -287,12 +287,9 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
       });
 
     return () => {
+      // The re-run (dep change or StrictMode) re-subscribes to the cached
+      // promise above, so it still reaches setTabDecided.
       alive = false;
-      // An in-flight probe cancelled by a dep change (cached profile being
-      // replaced by the fresh one after a refresh, or StrictMode's re-run)
-      // never calls setTabDecided — so let the re-run start a new probe,
-      // otherwise the loader below spins forever.
-      tabProbeRan.current = false;
     };
   }, [availableImageSources.length, dispatch, displayedActivePage, videosAllowed]);
 
