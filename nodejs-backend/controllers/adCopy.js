@@ -7,6 +7,7 @@ const logger = require("../utils/logger");
 const { updateAdCopyConversation } = require("./newHistory");
 const UnifiedCreditController = require("./UnifiedCreditController");
 const { trackBackendGA4Event } = require("../utils/ga4");
+const { apiUrl: adCreativeApiUrl } = require("../config/adCreativeApi");
 
 exports.redisGetSet = new Redis({
   host: process.env.HOST,
@@ -140,9 +141,9 @@ exports.sendAdCopyRequest = async (payload) => {
     source: 'adcopy_prompt',
     success: true,
   });
-  const apiUrl = process.env.ADCOPY_REQUEST_API;
+  const apiUrl = adCreativeApiUrl("ad_copy");
   try {
-    if (!apiUrl) throw new Error("ADCOPY_REQUEST_API env var is not set");
+    if (!apiUrl) throw new Error("AD_CREATIVE_API_BASE env var is not set");
     const response = await axios.post(apiUrl, payload, {
       responseType: "stream",
       headers: { Accept: "text/event-stream" },

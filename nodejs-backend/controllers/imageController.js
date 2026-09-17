@@ -14,6 +14,7 @@ const GeneratedMediaController = require("./generatedMedia.controller");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
 const { notifyUser } = require("../services/push/notifyUser");
 const { trackBackendGA4Event } = require("../utils/ga4");
+const { apiUrl: adCreativeApiUrl } = require("../config/adCreativeApi");
 
 // Format Joi validation errors into user-friendly messages
 const formatValidationError = (errorDetails) => {
@@ -411,16 +412,7 @@ exports.generateImage = async (req, res) => {
 
         
 
-        const typeToApiUrl = {
-            lifestyle: process.env.LIFESTYLE_IMAGE_PYTHON_API,
-            product_shot: process.env.PRODUCT_SHOT_IMAGE_PYTHON_API,
-            apps_saas: process.env.APPS_SAAS_IMAGE_PYTHON_API,
-            brand_awareness: process.env.BRAND_AWARENESS_IMAGE_PYTHON_API,
-            ai_ads: process.env.AI_ADS_IMAGE_PYTHON_API,
-            recreate_ads: process.env.RECREATE_ADS_IMAGE_PYTHON_API,
-        };
-
-        const targetApi = typeToApiUrl[value.type];
+        const targetApi = adCreativeApiUrl(value.type);
 
         if (targetApi) {
             try {

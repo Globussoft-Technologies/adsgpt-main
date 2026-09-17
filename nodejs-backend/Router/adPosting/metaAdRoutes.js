@@ -100,8 +100,7 @@ router.patch("/update-status", (req, res, next) => {
 });
 
 // Wizard V2 schema — drives the config-driven CreateCampaignWizardV2.jsx
-// renderer. Static data + the FEATURE_WIZARD_V2 flag state. No FB token
-// required.
+// renderer. Static data only — no FB token required.
 router.get("/wizard-schema", metaAdController.getWizardSchema);
 
 router.get("/get-pages", metaAdController.getPages);

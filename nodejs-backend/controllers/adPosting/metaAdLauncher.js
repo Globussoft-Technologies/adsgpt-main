@@ -3202,7 +3202,7 @@ class MetaAdLauncher {
     }
   }
 
-  // * 7b. GET the V2 wizard schema + FEATURE_WIZARD_V2 flag state.
+  // * 7b. GET the V2 wizard schema.
   // The schema describes every (objective × conversionLocation) cell the
   // V2 wizard supports. Frontend fetches this once at wizard mount and
   // renders entirely from the response — no client-side hardcoding of
@@ -3216,7 +3216,6 @@ class MetaAdLauncher {
     */
     try {
       const wizardSchema = require("../../config/wizardSchema");
-      const enabled = process.env.FEATURE_WIZARD_V2 === "true";
       // Server-resolved defaults the wizard uses to skip asking the user
       // for values that live in env. For App Promotion specifically: the
       // Meta application id comes from META_APP_PROMOTION_APP_ID (or the
@@ -3233,7 +3232,9 @@ class MetaAdLauncher {
       };
       return res.status(200).json({
         status: true,
-        enabled,
+        // V2 is fully cut over; kept in the payload because older frontend
+        // builds still gate the wizard on this field.
+        enabled: true,
         schema: wizardSchema.toJSON(),
         defaults,
       });

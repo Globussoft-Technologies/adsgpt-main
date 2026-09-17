@@ -29,6 +29,7 @@ const modelPricingConfig = require("../config/modelPricingConfig");
 const { notifyUser } = require("../services/push/notifyUser");
 const GeneratedMediaController = require("./generatedMedia.controller");
 const { trackBackendGA4Event } = require("../utils/ga4");
+const { apiUrl: adVideoApiUrl } = require("../config/adVideoApi");
 
 const getFileName = (extension) => `${Date.now()}${extension}`;
 
@@ -287,11 +288,11 @@ exports.generateVideo = async (req, res) => {
       };
 
       const typeToApiUrl = {
-        broll: process.env.BROLL_PYTHON_API,
-        ugc: process.env.UGC_PYTHON_API,
-        avatar: process.env.AVATAR_PYTHON_API,
+        broll: adVideoApiUrl("broll"),
+        ugc: adVideoApiUrl("ugc"),
+        avatar: adVideoApiUrl("avatar"),
         clone: process.env.CLONE_PYTHON_API,
-        ai_ads: process.env.AI_ADS_PYTHON_API,
+        ai_ads: adVideoApiUrl("ai_ads"),
       };
 
       const targetApi = typeToApiUrl[inputs.type];
@@ -1336,7 +1337,7 @@ exports.generateImageAndScript = async (req, res) => {
 
     // * Call Python API to generate image and script
     await axios.post(
-      process.env.AVATAR_IMAGE_SCRIPT_PYTHON_API,
+      adVideoApiUrl("avatar_image_script"),
       pythonPayload,
     );
 
@@ -1412,7 +1413,7 @@ exports.regenerateScript = async (req, res) => {
 
     // ✅ Call Python service
     const pythonResponse = await axios.post(
-      process.env.AVATAR_SCRIPT_PYTHON_API,
+      adVideoApiUrl("avatar_script"),
       payload,
     );
 
@@ -1695,7 +1696,7 @@ exports.generateAvatarVideo = async (req, res) => {
 
     try {
       const pythonResponse = await axios.post(
-        process.env.AVATAR_PYTHON_API,
+        adVideoApiUrl("avatar"),
         pythonPayload,
       );
 
@@ -1884,7 +1885,7 @@ exports.generateScene = async (req, res) => {
     // Step 1: Validate inputs via Python before creating any record
     let validateRes;
     try {
-      validateRes = await axios.post(process.env.AI_ADS_INPUT_VALIDATE_PYTHON_API, {
+      validateRes = await axios.post(adVideoApiUrl("ai_ads_validate"), {
         inputs: pythonInputs,
       });
     } catch (err) {
@@ -1914,7 +1915,7 @@ exports.generateScene = async (req, res) => {
     // Step 3: Fire-and-forget scene generation to Python
     const pythonPayload = { sessionId, userId, watermark: applyWatermark, inputs: pythonInputs, subscription: req.user?.userSubscriptionType };
     axios
-      .post(process.env.AI_ADS_GENERATE_SCENE_PYTHON_API, pythonPayload)
+      .post(adVideoApiUrl("ai_ads_generate_scene"), pythonPayload)
       .catch((err) => {
         const pythonError = err.response?.data?.error || err.message;
         console.error("Error sending generate-scene to Python:", pythonError);
@@ -2107,7 +2108,7 @@ exports.regenerateScene = async (req, res) => {
 
     // Fire-and-forget to Python
     axios
-      .post(process.env.AI_ADS_REGENERATE_SCENE_PYTHON_API, pythonPayload)
+      .post(adVideoApiUrl("ai_ads_regenerate_scene"), pythonPayload)
       .catch(async (err) => {
         const pythonError = err.response?.data?.error || err.message;
         console.error("Error sending regenerate-scene to Python:", pythonError);
@@ -2977,7 +2978,7 @@ exports.generateAiAdsVideo = async (req, res) => {
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
     const applyWatermark = plan === "8" ? true : (record.watermark ?? false);
     // Validate env before calling Python
-    if (!process.env.AI_ADS_PYTHON_API) {
+    if (!adVideoApiUrl("ai_ads")) {
       return res.status(500).json({
         success: false,
         error: "AI Ads Python API not configured",
@@ -3041,7 +3042,7 @@ exports.generateAiAdsVideo = async (req, res) => {
 
     // Fire-and-forget to Python
     axios
-      .post(process.env.AI_ADS_PYTHON_API, {
+      .post(adVideoApiUrl("ai_ads"), {
         sessionId,
         userId,
         watermark: applyWatermark,
@@ -3222,7 +3223,7 @@ exports.regenerateAiAdsVoice = async (req, res) => {
       record.pendingRegen = null;
     }
 
-    if (!process.env.AI_ADS_REGENERATE_VOICE_PYTHON_API) {
+    if (!adVideoApiUrl("ai_ads_regenerate_voice")) {
       return res.status(500).json({
         success: false,
         error: "AI Ads regenerate-voice Python API not configured",
@@ -3315,7 +3316,7 @@ exports.regenerateAiAdsVoice = async (req, res) => {
     await record.save(NO_TOUCH);
 
     try {
-      await axios.post(process.env.AI_ADS_REGENERATE_VOICE_PYTHON_API, {
+      await axios.post(adVideoApiUrl("ai_ads_regenerate_voice"), {
         sessionId,
         userId,
         watermark: applyWatermark,
@@ -3385,7 +3386,7 @@ exports.finalMergeAiAdsVoice = async (req, res) => {
   try {
     const { error, value } = finalMergeSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (error) return res.status(400).json({ success: false, error: error.details.map((detail) => detail.message).join(", ") });
-    if (!process.env.AI_ADS_FINAL_MERGE_PYTHON_API) {
+    if (!adVideoApiUrl("ai_ads_final_merge")) {
       return res.status(500).json({ success: false, error: "AI Ads final-merge Python API not configured" });
     }
 
@@ -3440,7 +3441,7 @@ exports.finalMergeAiAdsVoice = async (req, res) => {
 
     await VideoGeneration.findByIdAndUpdate(sessionId, { $set: { regenState: "processing" } }, NO_TOUCH);
     try {
-      await axios.post(process.env.AI_ADS_FINAL_MERGE_PYTHON_API, {
+      await axios.post(adVideoApiUrl("ai_ads_final_merge"), {
         sessionId, userId, watermark,
         subscription: req.body.subscription || { plan: "pro", credits: "100" },
         inputs,
@@ -3512,7 +3513,7 @@ exports.previewRegenerateScript = async (req, res) => {
       });
     }
 
-    if (!process.env.AI_ADS_PREVIEW_REGENERATE_SCRIPT_PYTHON_API) {
+    if (!adVideoApiUrl("ai_ads_preview_regenerate_script")) {
       return res.status(500).json({
         success: false,
         error: "AI Ads preview-regenerate-script Python API not configured",
@@ -3565,7 +3566,7 @@ exports.previewRegenerateScript = async (req, res) => {
     await record.save(NO_TOUCH);
 
     try {
-      await axios.post(process.env.AI_ADS_PREVIEW_REGENERATE_SCRIPT_PYTHON_API, {
+      await axios.post(adVideoApiUrl("ai_ads_preview_regenerate_script"), {
         sessionId,
         userId,
         watermark: applyWatermark,
@@ -3869,7 +3870,7 @@ exports.generateImageAndScriptClone = async (req, res) => {
 
     // * Call Python API to generate clone avatar video
     const pythonResponse = await axios.post(
-      process.env.CLONE_YOURSELF_IMAGE_SCRIPT_PYTHON_API,
+      adVideoApiUrl("clone_yourself_image_script"),
       pythonPayload,
     );
 
@@ -4071,7 +4072,7 @@ exports.regenerateScriptClone = async (req, res) => {
     };
 
     const pythonResponse = await axios.post(
-      process.env.CLONE_YOURSELF_SCRIPT_REGENERATION_PYTHON_API,
+      adVideoApiUrl("clone_yourself_script_regeneration"),
       payload,
     );
 
@@ -4253,7 +4254,7 @@ exports.generateCloneVideo = async (req, res) => {
 
     try {
       const pythonResponse = await axios.post(
-        process.env.CLONE_YOURSELF_GENERATION_PYTHON_API,
+        adVideoApiUrl("clone_yourself_generation"),
         pythonPayload
       );
       const pyData = pythonResponse.data;
@@ -4399,7 +4400,7 @@ exports.regenerateFrameClone = async (req, res) => {
     };
 
     const pythonResponse = await axios.post(
-      process.env.CLONE_YOURSELF_FRAME_REGENERATE_PYTHON_API,
+      adVideoApiUrl("clone_yourself_frame_regenerate"),
       pythonPayload,
     );
 
@@ -4565,7 +4566,7 @@ exports.cloneAdAnalyze = async (req, res) => {
       userId,
     };
 
-    const pythonUrl = process.env.CLONE_YOUR_AD_ANALYZE_PYTHON_API;
+    const pythonUrl = adVideoApiUrl("clone_your_ad_analyze");
 
     let pythonRes;
     try {
@@ -4849,7 +4850,7 @@ exports.cloneAdGenerate = async (req, res) => {
     };
 
     // Step 9: Call Python Generate API
-    const pythonUrl = process.env.CLONE_YOUR_AD_GENERATE_PYTHON_API;
+    const pythonUrl = adVideoApiUrl("clone_your_ad_generate");
 
     let pythonRes;
     try {

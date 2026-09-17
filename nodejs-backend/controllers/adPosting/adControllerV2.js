@@ -325,25 +325,6 @@ async function createAdV2(req, res) {
     }
     const { objective, conversionLocation, cell } = cellInfo;
 
-    // Production gate: posting ads to Leads campaigns needs the Meta
-    // `pages_manage_ads` permission (required to attach a
-    // lead_gen_form_id to a creative + read the leadgen_forms edge).
-    // The permission is under Meta review for the AdsGPT app — until it
-    // lands, reject Leads posts cleanly here, BEFORE any Meta call, so
-    // users get a readable explanation instead of a raw permission
-    // error. Flip `FEATURE_LEADS_POSTING=true` once the permission is
-    // granted; no code change needed.
-    const LEADS_POSTING_ENABLED =
-      process.env.FEATURE_LEADS_POSTING === "true";
-    if (!LEADS_POSTING_ENABLED && objective === "OUTCOME_LEADS") {
-      return res.status(400).json({
-        success: false,
-        error: "Lead campaigns aren't available yet",
-        details:
-          "We're getting Lead campaign support ready and it'll be enabled soon. For now, please pick a Traffic or App Promotion campaign to post your ads.",
-      });
-    }
-
     // Catalog (DPA) ads use template_data placeholders + a product_set
     // promoted_object — the Ad Factory's batch flow has no UI for either.
     // Reject upfront with a readable message rather than letting Joi fail

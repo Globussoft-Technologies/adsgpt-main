@@ -114,11 +114,6 @@ const registerCreditReservationSweepCron = () => {
 // immediately after boot, not only after the first token request.
 // -----------------------------------------------------------------------------
 const registerOAuthSigningKeyRotationCron = () => {
-    const enabled = String(process.env.OAUTH_ENABLED || 'true').toLowerCase() === 'true';
-    if (!enabled) {
-        console.log('[oauth-keyrot] disabled (OAUTH_ENABLED=false)');
-        return;
-    }
     const schedule = process.env.OAUTH_SIGNING_KEY_ROTATION_CRON || '0 3 * * *';
     const rotationDays = Math.max(
         1,
