@@ -250,14 +250,16 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   // is "does this account own a single image", not "does anything match the
   // filters sitting in the toolbar". `limit: 1` keeps it to one cheap row.
   //
-  // Runs once per mount (the ref), so any tab the user picks afterwards — or
-  // that `exitRecreateToMySpace` picks — is never second-guessed.
+  // Runs once per mount (the cached promise), so any tab the user picks
+  // afterwards — or that `exitRecreateToMySpace` picks — is never
+  // second-guessed. Caching the promise also lets React Strict Mode's second
+  // effect subscribe to the in-flight probe after the first effect is cleaned
+  // up, instead of leaving `tabDecided` false forever.
   const [tabDecided, setTabDecided] = useState(false);
-  const tabProbeRan = useRef(false);
+  const tabProbePromise = useRef(null);
 
   useEffect(() => {
-    if (displayedActivePage !== 'myVideos' || tabProbeRan.current) return;
-    tabProbeRan.current = true;
+    if (displayedActivePage !== 'myVideos') return;
 
     // Nothing to switch TO (videos not licensed), or nothing to switch FROM
     // (no image source at all — that case already renders its own message).
@@ -267,7 +269,11 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
     }
 
     let alive = true;
-    getMySpaceImages({ source: 'all', limit: 1 })
+    if (!tabProbePromise.current) {
+      tabProbePromise.current = getMySpaceImages({ source: 'all', limit: 1 });
+    }
+
+    tabProbePromise.current
       .then((res) => {
         if (!alive) return;
         const rows = Array.isArray(res?.data) ? res.data : [];
