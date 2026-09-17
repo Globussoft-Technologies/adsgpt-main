@@ -328,7 +328,7 @@ async function reconcileBillingCycles({ dryRun = true } = {}) {
   if (dryRun && stats.refilled > 0) {
     logger.warn(
       `[billing-reconcile] DRY RUN — ${stats.refilled} user(s) are owed a refill and ` +
-        `nothing was written. Set BILLING_RECONCILE_DRY_RUN=false to apply.`,
+        `nothing was written. Re-run with --apply to perform them.`,
     );
   }
 

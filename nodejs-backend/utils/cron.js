@@ -158,8 +158,9 @@ const registerOAuthSigningKeyRotationCron = () => {
 // remainder. This reconciles local billing cycles against aMember on a
 // schedule, closing that gap.
 //
-// Ships in dry-run so the first runs can be read in the logs before it is
-// allowed to move credits. Set BILLING_RECONCILE_DRY_RUN=false to apply.
+// The cron applies refills. `reconcileBillingCycles` still takes a dryRun
+// option — scripts/reconcileBillingCycles.js uses it to preview a run without
+// --apply — but the scheduled job always writes.
 // -----------------------------------------------------------------------------
 const registerBillingReconciliationCron = () => {
     const enabled =
@@ -172,8 +173,6 @@ const registerBillingReconciliationCron = () => {
     const DEFAULT_CRON = '0 2 * * *'; // 02:00 UTC daily
     const customCron = process.env.BILLING_RECONCILE_CRON;
     const schedule = customCron || DEFAULT_CRON;
-    const dryRun =
-        String(process.env.BILLING_RECONCILE_DRY_RUN || 'true').toLowerCase() !== 'false';
 
     if (!cron.validate(schedule)) {
         console.error(
@@ -184,7 +183,7 @@ const registerBillingReconciliationCron = () => {
 
     cron.schedule(schedule, exclusive('billing-reconcile', 30 * 60, async () => {
         try {
-            await reconcileBillingCycles({ dryRun });
+            await reconcileBillingCycles({ dryRun: false });
         } catch (err) {
             console.error('[billing-reconcile] run failed:', err.message);
         }
@@ -196,7 +195,7 @@ const registerBillingReconciliationCron = () => {
     console.log(
         `[billing-reconcile] scheduler registered: cron=${
             customCron ? 'custom (BILLING_RECONCILE_CRON)' : `default "${DEFAULT_CRON}"`
-        } dryRun=${dryRun}`,
+        }`,
     );
 };
 
