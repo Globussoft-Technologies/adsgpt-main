@@ -288,6 +288,11 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
 
     return () => {
       alive = false;
+      // An in-flight probe cancelled by a dep change (cached profile being
+      // replaced by the fresh one after a refresh, or StrictMode's re-run)
+      // never calls setTabDecided — so let the re-run start a new probe,
+      // otherwise the loader below spins forever.
+      tabProbeRan.current = false;
     };
   }, [availableImageSources.length, dispatch, displayedActivePage, videosAllowed]);
 
@@ -592,9 +597,15 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
           </div>
 
           {/* Holds the grid area until the image probe above has decided which
-              tab to open, so neither grid can flash before the answer. */}
+              tab to open, so neither grid can flash before the answer. Uses the
+              grids' own spinner in the same spot (not a flex-1 centred box), so
+              the hand-off to the grid's loader is seamless and nothing reflows. */}
+          {/* The grids are `h-full` scrollers; without this bounded box they
+              take 100% of the layout height *plus* the 64px header, the outer
+              container overflows and scrolls, and the My Space header slides up. */}
+          <div className="relative min-h-0 w-full flex-1">
           {!tabDecided ? (
-            <div className="flex flex-1 items-center justify-center">
+            <div className="mt-6 flex w-full items-center justify-center">
               <Loader className="h-8 w-8 animate-spin opacity-60" />
             </div>
           ) : mySpaceTab === 'images' && !availableImageSources.length ? (
@@ -624,6 +635,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
           ) : (
             <MyVideosPage videoType={videoType} startDate={startDate} endDate={endDate} />
           )}
+          </div>
         </>
       ) : (
         <>

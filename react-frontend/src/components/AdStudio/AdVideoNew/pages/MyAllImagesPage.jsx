@@ -1,5 +1,5 @@
 import Masonry from 'react-masonry-css';
-import { Download, Info } from 'lucide-react';
+import { Download, Info, Loader } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { getMySpaceImages } from '@/apis/image/imageApi';
@@ -799,7 +799,7 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
       )}
       {isLoading && (
         <div className="mt-6 flex w-full items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
+          <Loader className="h-8 w-8 animate-spin opacity-60" />
         </div>
       )}
 
