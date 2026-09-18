@@ -11,11 +11,13 @@ const mobileStorePlans = Object.freeze({
   // Temporary Google Play IDs. Replace these with the final Play Console
   // product IDs when they are available.
   android: Object.freeze([
-    { level: 1, productId: "io.adsgpt.app.subscription.scale", badge: null },
-    { level: 2, productId: "io.adsgpt.app.subscription.growth", badge: null },
-    { level: 3, productId: "io.adsgpt.app.subscription.creator", badge: "Most Popular" },
-    { level: 4, productId: "io.adsgpt.app.subscription.individual", badge: null },
-    { level: 5, productId: "io.adsgpt.app.subscription.starter", badge: null },
+    { level: 1, productId: "io.adsgpt.app.subscription.scale", basePlanId: "scale-monthly", badge: null },
+    { level: 2, productId: "io.adsgpt.app.subscription.growth", basePlanId: "growth-monthly", badge: null },
+    { level: 3, productId: "io.adsgpt.app.subscription.creator", basePlanId: "creator-monthly", badge: "Most Popular" },
+    { level: 4, productId: "io.adsgpt.app.subscription.individual", basePlanId: "individual-monthly", badge: null },
+    { level: 4, productId: "io.adsgpt.app.subscription.individual", basePlanId: "individual-annual", badge: null },
+    { level: 5, productId: "io.adsgpt.app.subscription.starter", basePlanId: "starter-monthly", badge: null },
+    { level: 5, productId: "io.adsgpt.app.subscription.starter", basePlanId: "starter-annual", badge: null },
   ]),
 });
 

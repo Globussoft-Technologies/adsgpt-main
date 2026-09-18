@@ -377,7 +377,7 @@ function getConfiguredProductCredit(product) {
 
 function getStorePlanDescriptor(storePlan, basePlanId = null) {
   const productId = String(storePlan?.productId || "").toLowerCase();
-  const basePlan = String(basePlanId || "").toLowerCase();
+  const basePlan = String(basePlanId || storePlan?.basePlanId || "").toLowerCase();
   const searchTokens = `${productId}-${basePlan}`.split(/[^a-z0-9]+/);
   
   const tier = ["scale", "growth", "creator", "individual", "starter"].find(
@@ -3240,6 +3240,7 @@ async function getMobilePlans(req, res) {
 
       return [{
         productId: storePlan.productId,
+        ...(storePlan.basePlanId ? { basePlanId: storePlan.basePlanId } : {}),
         amemberProductId: parseInt(product.product_id, 10),
         ...(reqPlatform === "ios"
           ? { appleProductId: storePlan.productId }
