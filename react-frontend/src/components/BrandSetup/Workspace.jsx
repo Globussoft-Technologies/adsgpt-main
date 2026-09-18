@@ -33,7 +33,7 @@
 // Everything else is real, straight from the run:
 //   Python SSE → Node bridge → socket `aiJobUpdate` → brandSetupSlice → here.
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import AdsGPTLogo from '@/assets/layouts/adsgpt-logo.webp';
@@ -1548,17 +1548,15 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
   // these two handlers are the whole of the interaction.
   const onEnter = () => {
     setHover(true);
+    // Belt and braces: if autoplay was refused (some browsers hold it until the
+    // page has been interacted with), a hover is that interaction.
     video.current?.play().catch(() => {});
   };
-  const onLeave = () => {
-    setHover(false);
-    setProgress(0);
-    const el = video.current;
-    if (el) {
-      el.pause();
-      el.currentTime = 0;
-    }
-  };
+  // Video tiles keep playing on leave — they autoplay, muted and looping, from
+  // the moment they load, so the rail reads as a wall of moving ads rather than
+  // stills that only come alive under the pointer. Only the YouTube embed is
+  // still hover-only: it is a third-party player per tile (see `showingVideo`).
+  const onLeave = () => setHover(false);
 
   return (
     // A div, not a link. The tile used to open the reference ad in a new tab,
@@ -1604,7 +1602,14 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
           muted
           loop
           playsInline
-          preload="metadata"
+          autoPlay
+          preload="auto"
+          // Autoplay usually starts it; this covers the cases where the
+          // attribute alone does not (a source swapped in after a failure, a
+          // tab that was hidden while the file loaded).
+          onCanPlay={(e) => {
+            if (e.currentTarget.paused) e.currentTarget.play().catch(() => {});
+          }}
           onError={() => setSrcIndex((i) => i + 1)}
           onLoadedMetadata={(e) => {
             const { videoWidth: w, videoHeight: h } = e.currentTarget;
@@ -1817,7 +1822,7 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
  * behind it need the same number to pad themselves with, or the last row of
  * cards would sit permanently under the dock with no way to scroll it clear.
  */
-function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, canLoadMore }) {
+function TemplateDock({ items, pending, failed, height, ceiling, onResize, onLoadMore, canLoadMore }) {
   const strip = useRef(null);
   const [box, setBox] = useState({ width: 0, height: 0 });
   const [atStart, setAtStart] = useState(true);
@@ -1879,9 +1884,11 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
     if (requestedAt.current === items.length) return;
 
     const THRESHOLD = 260;
-    const nearEnd = expanded
-      ? el.scrollTop >= el.scrollHeight - el.clientHeight - THRESHOLD
-      : el.scrollLeft >= el.scrollWidth - el.clientWidth - THRESHOLD;
+    // Vertical in both modes now that the grid is the same one either way.
+    // Collapsed, the grid already overflows the short band, so this is false
+    // and the dock stops topping up until it is opened — instead of pulling
+    // every page for a row the user cannot scroll.
+    const nearEnd = el.scrollTop >= el.scrollHeight - el.clientHeight - THRESHOLD;
 
     if (!nearEnd) return;
     requestedAt.current = items.length;
@@ -1919,8 +1926,16 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
     maybeLoadMore();
   }, [measureScroll, maybeLoadMore, items.length, expanded, box.width, box.height, height]);
 
+  // The handle and the button own the height outright: stop any wheel glide
+  // still running, or the two would pull against each other.
+  const stopGlide = () => {
+    cancelAnimationFrame(frame.current);
+    frame.current = 0;
+  };
+
   const startDrag = (e) => {
     e.preventDefault();
+    stopGlide();
     document.body.style.cursor = 'ns-resize';
     const onMove = (ev) => onResize(window.innerHeight - ev.clientY);
     const onUp = () => {
@@ -1934,7 +1949,72 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
 
   // Expand goes to the ceiling — the same height dragging stops at. The parent's
   // `resizeDock` clamps, so asking for "as tall as possible" lands exactly there.
-  const toggle = () => onResize(expanded ? DOCK_MIN_H : Number.MAX_SAFE_INTEGER);
+  // The button (and double-click) animates the dock's height; dragging does
+  // not, or the dock would lag behind the pointer.
+  const [animating, setAnimating] = useState(false);
+  const animTimer = useRef(0);
+  useEffect(() => () => clearTimeout(animTimer.current), []);
+  const toggle = () => {
+    stopGlide();
+    setAnimating(true);
+    clearTimeout(animTimer.current);
+    animTimer.current = setTimeout(() => setAnimating(false), DOCK_ANIM_MS + 50);
+    onResize(expanded ? DOCK_MIN_H : Number.MAX_SAFE_INTEGER);
+  };
+
+  // ── Wheel: grow the dock first, then scroll it ────────────────────────────
+  // Dragging the handle was the only way to open the dock, which is tedious.
+  // Now a wheel over the templates band spends its scroll on the dock's HEIGHT
+  // until the ceiling, and only then on the grid's own scroll — and scrolling
+  // back up past the top of the grid closes it again. `passive: false` because
+  // the page behind must not scroll while the dock is eating the gesture.
+  // A wheel is a burst of coarse steps (a mouse notch is ~100px, and some
+  // report whole lines), so applying deltas straight to the height stutters.
+  // Each wheel moves a TARGET instead, and a rAF loop eases the real height
+  // towards it — one smooth glide per gesture, and no animation in flight
+  // fighting the pointer the way a CSS transition would.
+  const section = useRef(null);
+  const heightRef = useRef(height);
+  heightRef.current = height;
+  const targetH = useRef(height);
+  const frame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  useEffect(() => {
+    const el = section.current;
+    if (!el) return undefined;
+
+    const step = () => {
+      const from = heightRef.current;
+      const to = targetH.current;
+      const diff = to - from;
+      if (Math.abs(diff) < 0.5) {
+        frame.current = 0;
+        onResize(to);
+        return;
+      }
+      onResize(from + diff * 0.22);
+      frame.current = requestAnimationFrame(step);
+    };
+
+    const onWheel = (e) => {
+      if (e.ctrlKey) return; // pinch-zoom
+      // deltaMode 1 = lines, 2 = pages.
+      const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? box.height || 400 : 1);
+      // Idle: the target is wherever the dock actually is. Mid-glide: keep
+      // adding to it, so a fast flick travels further than a single notch.
+      const base = frame.current ? targetH.current : heightRef.current;
+      const down = delta > 0;
+      const canGrow = down && base < ceiling - 1;
+      const canShrink = !down && base > DOCK_MIN_H && (strip.current?.scrollTop ?? 0) <= 0;
+      if (!canGrow && !canShrink) return; // the grid scrolls normally
+      targetH.current = Math.min(Math.max(base + delta, DOCK_MIN_H), ceiling);
+      e.preventDefault();
+      if (!frame.current) frame.current = requestAnimationFrame(step);
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [ceiling, onResize, box.height]);
 
   const scrollBy = (dir) =>
     strip.current?.scrollBy({
@@ -1960,26 +2040,88 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
   // this out for itself rather than being handed a width. Assuming one ratio for
   // everything here was putting two chips on portrait tiles far too narrow to
   // hold them, and they wrapped into a second row.
-  const slot = expanded
-    ? Math.round((box.width || 1100) / columnCount)
-    : Math.round(box.height || 130);
-  const columns = [];
-  if (expanded) {
-    for (let i = 0; i < columnCount; i += 1) columns.push({ items: [], weight: 0 });
-    items.forEach((t) => {
-      const shortest = columns.reduce((a, b) => (b.weight < a.weight ? b : a));
-      shortest.items.push(t);
-      shortest.weight += 1 / aspectOf(t);
-    });
-  }
+  // Collapsed now uses the SAME column width as expanded (user decision
+  // 2026-09-17, Higgsfield-style): tiles keep their full size and the strip
+  // crops them at the bottom edge, instead of shrinking each tile to fit the
+  // strip's height — which read as cramped.
+  const slot = Math.round((box.width || 1100) / columnCount);
 
-  const scrollable = !expanded && items.length > 0;
+  // ── Tile layout: one flat, keyed list, absolutely positioned ──────────────
+  // Expanded and collapsed used to render different parents (columns vs a
+  // row), so crossing DOCK_EXPANDED_AT remounted every tile and each <video>
+  // reloaded — a black flash on resize. Now every tile stays mounted under the
+  // same parent and only its transform changes, which also lets the switch
+  // animate. Order is preserved: expanded packs in list order, each tile into
+  // the currently shortest column (same rule as before); collapsed is a row.
+  const GAP_PX = 6;
+  const innerW = Math.max(0, (box.width || 1100) - 36); // strip's px-[18px]
+  const tileW = Math.max(1, Math.floor((innerW - GAP_PX * (columnCount - 1)) / columnCount));
+
+  // Real rendered heights, fed by a ResizeObserver on each wrapper. Before a
+  // tile has been measured its height is estimated from the payload's aspect.
+  const [heights, setHeights] = useState({});
+  const tileObserver = useRef(null);
+  useEffect(() => {
+    const ro = new ResizeObserver((entries) => {
+      setHeights((prev) => {
+        let next = prev;
+        entries.forEach((entry) => {
+          const id = entry.target.dataset.tileId;
+          const h = Math.round(entry.target.offsetHeight);
+          if (id && h > 0 && prev[id] !== h) {
+            if (next === prev) next = { ...prev };
+            next[id] = h;
+          }
+        });
+        return next;
+      });
+    });
+    tileObserver.current = ro;
+    return () => ro.disconnect();
+  }, []);
+  const observeTile = useCallback((el) => {
+    if (el) tileObserver.current?.observe(el);
+  }, []);
+
+  // ONE layout for both heights. The grid always spans the full width in
+  // `columnCount` equal columns, so it fills the band edge to edge and never
+  // leaves a half-cut tile hanging off the right (which is what the collapsed
+  // single row did once its horizontal scroll was taken away). Collapsed is
+  // simply the same grid cropped by the dock's height; dragging or expanding
+  // reveals more of it without moving a single tile.
+  const layout = useMemo(() => {
+    const pos = {};
+    const heightOf = (t) => heights[t.template_id] ?? Math.round(tileW / aspectOf(t));
+    const cols = Array.from({ length: columnCount }, () => 0);
+    items.forEach((t) => {
+      let c = 0;
+      for (let i = 1; i < cols.length; i += 1) if (cols[i] < cols[c]) c = i;
+      pos[t.template_id] = { x: c * (tileW + GAP_PX), y: cols[c] };
+      cols[c] += heightOf(t) + GAP_PX;
+    });
+    return { pos, width: innerW, height: Math.max(0, Math.max(...cols) - GAP_PX) };
+  }, [items, columnCount, tileW, innerW, heights]);
+
+  // HIDE-MARK — horizontal scroll on the collapsed strip (hidden 2026-09-17).
+  // The idea: collapsed, the dock is a single row of tiles the user scrolls
+  // sideways through — edge fades + left/right arrow buttons show there is
+  // more, and nearing the right end triggers load-more (see maybeLoadMore).
+  // Now the collapsed strip is a static preview: it clips at the edge and
+  // "Expand all" is the way to browse. Set to true to bring the scroll back.
+  const SHOW_HORIZONTAL_SCROLL = false;
+  const scrollable = SHOW_HORIZONTAL_SCROLL && !expanded && items.length > 0;
 
   return (
     <section
+      ref={section}
       data-tour="templates"
       className="absolute inset-x-0 bottom-0 z-[5] flex min-h-0 flex-col border-t shadow-[0_-20px_46px_rgba(0,0,0,0.5)]"
-      style={{ height, background: SURF, borderColor: LINE }}
+      style={{
+        height,
+        background: SURF,
+        borderColor: LINE,
+        transition: animating ? `height ${DOCK_ANIM_MS}ms cubic-bezier(.4,0,.2,1)` : 'none',
+      }}
     >
       {/* The resize handle. No `title`: the native tooltip appeared late, over
           the wrong spot, in OS styling. The handle explains itself instead —
@@ -2029,13 +2171,13 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
             tiles and not the gap under them. */}
         {scrollable && !atStart && (
           <div
-            className="pointer-events-none absolute top-0 bottom-3.5 left-0 z-[2] w-9"
+            className="pointer-events-none absolute top-0 bottom-0 left-0 z-[2] w-9"
             style={{ background: `linear-gradient(to right, ${SURF}, rgba(27,27,33,0))` }}
           />
         )}
         {scrollable && !atEnd && (
           <div
-            className="pointer-events-none absolute top-0 right-0 bottom-3.5 z-[2] w-[46px]"
+            className="pointer-events-none absolute top-0 right-0 bottom-0 z-[2] w-[46px]"
             style={{ background: `linear-gradient(to left, ${SURF}, rgba(27,27,33,0))` }}
           />
         )}
@@ -2046,54 +2188,55 @@ function TemplateDock({ items, pending, failed, height, onResize, onLoadMore, ca
           ref={strip}
           onScroll={onScroll}
           className={cn(
-            'no-scrollbar min-h-0 min-w-0 flex-1 scroll-smooth px-[18px] pt-0.5 pb-3.5',
-            expanded
-              // `flex-wrap content-start`: the columns stay on one line (they
-              // are `flex-1 basis-0`) and the load-more spinner, `basis-full`,
-              // wraps to its own row at the very end of the scroll.
-              ? 'flex flex-wrap content-start gap-1.5 overflow-x-hidden overflow-y-auto'
-              : 'flex items-start gap-2.5 overflow-x-auto overflow-y-hidden',
-            // A brand that matched five templates left them huddled against the
-            // left edge of a 1600px band, which reads as a layout that failed
-            // rather than a short list. Centred, a short row is composed.
-            // Only ever when the row FITS: `justify-center` on an overflowing
-            // scroller pushes the first items off the left edge, out of reach of
-            // both the scrollbar and the arrows.
-            !expanded && !overflowing && 'justify-center'
+            'no-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden px-[18px] pt-0.5',
+            // Same grid either way: expanded scrolls through it, collapsed
+            // crops it at the dock's edge (no bottom padding — the cut IS the
+            // look). HIDE-MARK — horizontal scroll: this used to be a
+            // sideways-scrolling row when collapsed.
+            expanded ? 'overflow-y-auto pb-3.5' : 'overflow-y-hidden pb-0'
           )}
         >
           {items.length ? (
-            expanded ? (
-              <>
-              {columns.map((column, i) => (
-                <div key={i} className="flex min-w-0 flex-1 basis-0 flex-col gap-1.5">
-                  {column.items.map((t) => (
-                    <TemplateTile key={t.template_id} template={t} expanded slot={slot} />
-                  ))}
-                </div>
-              ))}
-              {/* Load-more spinner, IN the scroll content: a full-width row
-                  after the grid, so it appears where scrolling ends rather than
-                  pinned over the tiles (user decision 2026-09-15). */}
+            <>
+              {/* ONE tree for both modes — see the layout note above. */}
+              <div className="relative" style={{ width: layout.width, height: layout.height }}>
+                {/* Not before the strip is measured: positions from the 1100px
+                    fallback would jump once the real width arrives. */}
+                {box.width > 0 && items.map((t) => {
+                  const p = layout.pos[t.template_id] || { x: 0, y: 0 };
+                  return (
+                    <div
+                      key={t.template_id}
+                      ref={observeTile}
+                      data-tile-id={t.template_id}
+                      className="absolute top-0 left-0"
+                      style={{
+                        width: tileW,
+                        transform: `translate3d(${p.x}px, ${p.y}px, 0)`,
+                        // No transform transition: tiles do not move between
+                        // the two heights any more, and animating the reflow
+                        // that follows a load or a window resize is what made
+                        // them slide in from the side.
+                        transition: 'none',
+                      }}
+                    >
+                      <TemplateTile template={t} expanded slot={tileW} />
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Load-more spinner, IN the scroll content: below the grid when
+                  expanded, at the end of the row when collapsed. */}
               {busy && canLoadMore && (
-                <div role="status" aria-label="Loading more templates" className="flex basis-full justify-center py-3">
+                <div
+                  role="status"
+                  aria-label="Loading more templates"
+                  className={expanded ? 'flex basis-full justify-center py-3' : 'grid h-full shrink-0 place-items-center px-4'}
+                >
                   <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[#38E1FF]" />
                 </div>
               )}
-              </>
-            ) : (
-              <>
-                {items.map((t) => (
-                  <TemplateTile key={t.template_id} template={t} slot={slot} />
-                ))}
-                {/* Collapsed row: same spinner at the end of the row. */}
-                {busy && canLoadMore && (
-                  <div role="status" aria-label="Loading more templates" className="grid h-full shrink-0 place-items-center px-4">
-                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[#38E1FF]" />
-                  </div>
-                )}
-              </>
-            )
+            </>
           ) : pending ? (
             [0, 1, 2, 3, 4, 5, 6].map((i) => (
               <div
@@ -2200,6 +2343,9 @@ const DOCK_MIN_H = 272;
 // strip flips into the masonry — at 340 a nudge on the handle changed the mode,
 // and it has to keep clearing the minimum or the same thing happens again.
 const DOCK_EXPANDED_AT = 420;
+// Duration of the dock's height animation (Expand/Collapse) and of tiles
+// gliding between the row and the masonry.
+const DOCK_ANIM_MS = 320;
 // What the storyboards reserve for the dock: its collapsed height plus the drag
 // handle. Fixed on purpose — see the note on the section that uses it.
 const DOCK_PAD = DOCK_MIN_H + 14;
@@ -2246,7 +2392,40 @@ export default function Workspace({
   const storyboards = session.storyboards || {};
   const templates = session.templates || {};
   const allBoards = storyboards.result?.storyboards || [];
-  const templateItems = templates.result?.templates || [];
+  // Sticky: the last list that actually had templates in it. A session resume
+  // kicks a template refresh, and while that runs the rail reads back `running`
+  // with no `result` yet — which emptied the dock for a split second and then
+  // filled it again. Holding the previous list until a new non-empty one lands
+  // means the refresh is invisible: tiles stay put (and keep playing) and are
+  // swapped only when there is something to swap in.
+  //
+  // Merged by `template_id`, not replaced: a refresh returns its own list, and
+  // swapping the array wholesale remounted every tile it had in common with the
+  // old one — each <video> reloading to black, which is the blink. Tiles
+  // already on screen keep their identity and their position; only genuinely
+  // new templates are appended.
+  const liveTemplateItems = templates.result?.templates || [];
+  const lastTemplateItems = useRef(liveTemplateItems);
+  if (liveTemplateItems.length) {
+    const prev = lastTemplateItems.current;
+    const live = new Map(liveTemplateItems.map((t) => [t.template_id, t]));
+    const kept = prev.filter((t) => live.has(t.template_id)).map((t) => live.get(t.template_id));
+    const keptIds = new Set(kept.map((t) => t.template_id));
+    const added = liveTemplateItems.filter((t) => !keptIds.has(t.template_id));
+    const merged = [...kept, ...added];
+    // Same ids in the same order: keep the old array so nothing downstream
+    // sees a "new" list and re-runs on it.
+    const unchanged =
+      merged.length === prev.length &&
+      merged.every((t, i) => t.template_id === prev[i]?.template_id);
+    lastTemplateItems.current = unchanged ? prev : merged;
+  }
+  // Never falls back to empty once tiles have been shown. A refresh's `done`
+  // arrives as `succeeded` with the result not folded in yet, so keying the
+  // empty state off the status flashed "no templates" for a frame. The empty
+  // state is for a session that has never had any — which is exactly a sticky
+  // list that is still empty.
+  const templateItems = lastTemplateItems.current;
 
   // Owned here because the storyboards behind the dock pad themselves with it.
   const [dockH, setDockH] = useState(DOCK_MIN_H);
@@ -2301,6 +2480,8 @@ export default function Workspace({
   const freeRenderSpent =
     renderStartedHere ||
     (!eligibilityLoading && Boolean(eligibility) && !eligibility.freeRenderAvailable);
+  // Whether that answer is actually in yet — see the offer bar below.
+  const freeRenderKnown = renderStartedHere || (!eligibilityLoading && Boolean(eligibility));
 
   // The brand panel sizes itself to its own content. Re-measured whenever the
   // context changes, because that is the only thing that changes its length.
@@ -2459,7 +2640,12 @@ export default function Workspace({
           button did nothing but scroll — an invitation to a place you are
           standing in. The line itself still earns its space: it is what tells
           the user the render they are about to start costs them nothing. */}
-      <FreeAdBanner available={!freeRenderSpent} />
+      {/* `!freeRenderSpent` alone was true WHILE the eligibility call was in
+          flight — "not known yet" rendered as "still owed" — so on every reload
+          the bar appeared for a frame and vanished for users who had already
+          spent theirs. The answer has to be in before the bar can claim
+          anything; a render started on this screen settles it without waiting. */}
+      <FreeAdBanner available={freeRenderKnown && !freeRenderSpent} />
       <Header
         onStartOver={onStartOver}
         onSkip={onSkip}
@@ -2680,6 +2866,7 @@ export default function Workspace({
             pending={templatesPending}
             failed={templates.status === 'failed'}
             height={dockH}
+            ceiling={dockCeiling()}
             onResize={resizeDock}
             onLoadMore={onLoadMoreTemplates}
             canLoadMore={canLoadMoreTemplates}

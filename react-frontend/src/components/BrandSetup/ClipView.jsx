@@ -573,7 +573,6 @@ export default function ClipView({
     },
     {
       target: '[data-tour="concept"]',
-      pad: 0,
       title: 'The idea behind it',
       body: 'The concept, voiceover and camera move this clip was made from.',
     },
@@ -585,20 +584,22 @@ export default function ClipView({
           still rendering (or failed), since nothing has been generated yet. */}
       <Header onStartOver={onStartOver} onFinish={onFinish} onSkip={onSkip} generated={ready} />
 
-      <div className="shrink-0 px-5 py-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-2 rounded text-xs font-medium text-white/60 transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#15DCFF]"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M19 12H5m6 6-6-6 6-6" />
-          </svg>
-          Back to Board
-        </button>
-      </div>
-
       <div className="flex min-h-0 flex-1">
+        {/* Back link lives in the stage column (not full width) so the side
+            panel runs flush from the header down, with no empty strip above it. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="shrink-0 px-5 py-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-2 rounded text-xs font-medium text-white/60 transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#15DCFF]"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M19 12H5m6 6-6-6 6-6" />
+            </svg>
+            Back to Board
+          </button>
+        </div>
         <div data-tour="clip-stage" className="grid min-h-0 flex-1 place-items-center p-5">
           {ready ? (
             // The app's player, not a bare `<video>`: play, scrub, speed, PiP,
@@ -623,6 +624,7 @@ export default function ClipView({
               )}
             </Frame>
           )}
+        </div>
         </div>
 
         <SidePanel
