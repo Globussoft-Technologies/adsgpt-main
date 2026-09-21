@@ -4579,7 +4579,7 @@ exports.cloneAdAnalyze = async (req, res) => {
         const errorMsg =
           pythonErr.response.data?.error ||
           pythonErr.response.data?.message ||
-          "Failed to start analysis with Python service";
+          "Something went wrong. Please try again in a moment.";
         return res.status(pythonErr.response.status || 400).json({
           success: false,
           error: errorMsg,
@@ -5080,7 +5080,7 @@ exports.resolveMedia = async (req, res) => {
     });
   } catch (err) {
     logger.error(`resolveMedia error: ${err.message}`);
-    return res.status(500).json({
+    return res.status(400).json({
       success: false,
       error: err.message || "Failed to resolve media URL",
     });

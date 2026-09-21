@@ -660,7 +660,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   ? 'scale-75 2xl:scale-100'
                   : 'h-fit scale-75 2xl:scale-100'
               } ${
-                activePage !== 'ugc'
+                activePage !== 'ugc' && activePage !== 'clone-ad'
                   ? 'rounded-[30px] border border-black/5 bg-white/70 shadow-[0_2px_12px_rgba(0,0,0,0.03)] backdrop-blur-md dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none'
                   : ''
               } ${
@@ -672,7 +672,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                       ? 'w-full max-w-4xl sm:min-w-[700px] 2xl:max-w-5xl'
                       : 'w-full max-w-2xl 2xl:max-w-4xl'
               } ${
-                activePage === 'ai-ads' && currentAIAdsStep === 'generation'
+                (activePage === 'ai-ads' && currentAIAdsStep === 'generation') || activePage === 'clone-ad'
                   ? ''
                   : 'overflow-hidden max-lg:overflow-y-auto'
               }`}

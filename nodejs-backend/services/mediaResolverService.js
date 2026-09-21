@@ -577,14 +577,9 @@ async function resolveMediaUrl(rawUrl) {
     }
   }
 
-  // 5. Graceful fallback: return embed URL immediately
-  logger.info(`[mediaResolverService] Falling back to embed/original URL for ${platform}`);
-  return {
-    originalUrl: trimmed,
-    playableUrl: targetEmbedUrl || trimmed,
-    platform,
-    isDirectStream: false,
-  };
+  // 5. If no video stream could be extracted from this URL, reject as invalid video source
+  logger.warn(`[mediaResolverService] No playable video stream found for ${platform} URL: ${trimmed}`);
+  throw new Error(`Invalid video source. No playable video found at this URL. Please provide a link to a video.`);
 }
 
 module.exports = {

@@ -1,6 +1,6 @@
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
 import UpgradeModal from '../UpgradeModal';
-import { CloudUpload, LinkIcon, Loader2, Video, X, Clock, AlertCircle, AlertTriangle, Sparkles, RotateCcw, ArrowRight, CheckCircle2, Cpu, Layers, Search, FileText, Minus, Plus } from 'lucide-react';
+import { CloudUpload, LinkIcon, Loader2, Video, X, Clock, AlertCircle, AlertTriangle, Sparkles, RotateCcw, ArrowRight, CheckCircle2, Cpu, Layers, Search, FileText, Minus, Plus, ChevronLeft } from 'lucide-react';
 import SparkleDark from '@/assets/layouts/prompt/sparkle-dark.svg';
 import TimerDarkLogo from '@/assets/layouts/prompt/advideo/timer.svg';
 import { useEffect, useMemo, useState, useRef } from 'react';
@@ -22,7 +22,9 @@ import { getFirstAvailableVideoModel, isVideoModelBlocked } from '@/utils/videoM
 
 import { uploadToS3, uploadUrlToS3, uploadVideoToS3 } from '@/utils/imageUpload';
 import getCookies from '@/utils/getCookies';
-import { setRecreateInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
+import { setRecreateInputs, setActivePage, setMySpaceTab } from '@/store/reducers/adStudio/adVideoNewSlice';
+import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
+import { estimateAdVideoCredits } from '@/utils/creditEstimator';
 
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
@@ -34,7 +36,7 @@ const CLONE_YOUR_AD_DEMO_URL =
 // Helper function to extract YouTube video ID from various YouTube URL formats
 const getYouTubeVideoId = (url) => {
   if (!url || typeof url !== 'string') return null;
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|&v=)([^#&?]*).*/;
   const match = url.trim().match(regExp);
   return match && match[2].length === 11 ? match[2] : null;
 };
@@ -227,7 +229,9 @@ const YouTubePreviewPlayer = ({ videoId, onDurationChange }) => {
         if (playerInstance && typeof playerInstance.destroy === 'function') {
           try {
             playerInstance.destroy();
-          } catch (e) {}
+          } catch (_e) {
+            // Ignored destroy error
+          }
         }
       };
     }
@@ -237,7 +241,9 @@ const YouTubePreviewPlayer = ({ videoId, onDurationChange }) => {
       if (playerInstance && typeof playerInstance.destroy === 'function') {
         try {
           playerInstance.destroy();
-        } catch (e) {}
+        } catch (_e) {
+          // Ignored destroy error
+        }
       }
     };
   }, [videoId]);
@@ -245,7 +251,7 @@ const YouTubePreviewPlayer = ({ videoId, onDurationChange }) => {
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none [&_iframe]:w-[140%] [&_iframe]:h-[140%] [&_iframe]:min-w-full [&_iframe]:min-h-full [&_iframe]:border-0 [&_iframe]:object-cover [&_iframe]:scale-110 [&_iframe]:pointer-events-none"
+      className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none [&_div]:w-full [&_div]:h-full [&_div]:flex [&_div]:items-center [&_div]:justify-center [&_iframe]:w-full [&_iframe]:aspect-video [&_iframe]:max-h-full [&_iframe]:border-0 [&_iframe]:object-contain [&_iframe]:pointer-events-none"
     />
   );
 };
@@ -506,9 +512,15 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const [errors, setErrors] = useState({});
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const { connected, userData } = useSelector((state) => state.socket);
+  const { connected, userData, credits } = useSelector((state) => state.socket);
+  const { modelCredits } = useSelector((state) => state.prompt || {});
   const { recreateInputs } = useSelector((state) => state.adVideoNew || {});
+  const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
   const dispatch = useDispatch();
+
+  useEffect(() => {
+    dispatch(fetchModelCreditsAction());
+  }, [dispatch]);
 
   // Handle Recreate flow from MySpace video cards
   useEffect(() => {
@@ -660,6 +672,30 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     return minDuration;
   }, [selectedVideoDuration, videoDuration, minDuration, maxDuration]);
 
+  const selectedModel = useMemo(
+    () => videoChatModels.find((model) => model.value === videoModel),
+    [videoChatModels, videoModel]
+  );
+
+  const creditsPerSecond = useMemo(() => {
+    if (selectedModel?.creditsPerSecond && Number.isFinite(Number(selectedModel.creditsPerSecond))) {
+      return Number(selectedModel.creditsPerSecond);
+    }
+    const modelStr = (videoModel || '').toLowerCase();
+    if (modelStr.includes('seedance')) return 6;
+    if (modelStr.includes('omni')) return 3;
+    return 3;
+  }, [selectedModel, videoModel]);
+
+  const requiredCredits = useMemo(() => {
+    const durationNum = currentDurationNumber || parseInt(selectedVideoDuration || videoDuration, 10) || 4;
+    return Math.ceil(creditsPerSecond * durationNum);
+  }, [creditsPerSecond, currentDurationNumber, selectedVideoDuration, videoDuration]);
+
+  const hasEnoughCredits = useMemo(() => {
+    return availableCredits >= requiredCredits;
+  }, [availableCredits, requiredCredits]);
+
   const [durationInputText, setDurationInputText] = useState('');
   const [isEditingDuration, setIsEditingDuration] = useState(false);
 
@@ -721,7 +757,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     // Snap to nearest configured duration if discrete options exist
     const closest = numericDurations.length > 0
       ? numericDurations.reduce((prev, curr) =>
-          Math.abs(curr - parsed) < Math.abs(prev - parsed) ? curr : prev
+        Math.abs(curr - parsed) < Math.abs(prev - parsed) ? curr : prev
         , minDuration)
       : parsed;
 
@@ -769,17 +805,13 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   }, [sourceVideoUrl, isImage]);
 
   const sourceType = useMemo(() => {
-    if (!sourceVideoUrl || isImage) return 'default';
+    if (!sourceVideoUrl || isImage || previewVideoError) return 'default';
     if (resolvedPreviewUrl) return 'resolved-stream';
     if (isResolvingMedia) return 'resolving-platform';
     if (youtubeId) return 'youtube';
-    if (instagramEmbedUrl) return 'instagram';
-    if (facebookEmbedUrl) return 'facebook';
-    if (tiktokEmbedUrl) return 'tiktok';
-    if (linkedinEmbedUrl) return 'linkedin';
     if (isDirectVideo) return 'direct-video';
     return 'default';
-  }, [resolvedPreviewUrl, isResolvingMedia, youtubeId, instagramEmbedUrl, facebookEmbedUrl, tiktokEmbedUrl, linkedinEmbedUrl, isDirectVideo, sourceVideoUrl, isImage]);
+  }, [resolvedPreviewUrl, isResolvingMedia, youtubeId, isDirectVideo, sourceVideoUrl, isImage, previewVideoError]);
 
   // Resolve social platform URLs (Instagram, Facebook, TikTok, Twitter, Pinterest, LinkedIn) to playable native MP4 stream URL for preview looping
   useEffect(() => {
@@ -791,32 +823,54 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
     let isMounted = true;
     setIsResolvingMedia(true);
+    setPreviewVideoError(false);
 
     dispatch(resolveMediaAction(sourceVideoUrl))
       .then((res) => {
         const isDirect =
-          res?.isDirectStream ||
+          res?.isDirectStream &&
           Boolean(
             res?.playableUrl &&
-              (res.playableUrl.includes('.mp4') ||
-                res.playableUrl.includes('video/mp4') ||
-                res.playableUrl.includes('fbcdn.net') ||
-                res.playableUrl.includes('cdninstagram.com') ||
-                res.playableUrl.includes('licdn.com') ||
-                res.playableUrl.includes('twimg.com') ||
-                res.playableUrl.includes('tiktokcdn.com') ||
-                res.playableUrl.includes('pinimg.com')) &&
-              !res.playableUrl.includes('/embed/')
+            (res.playableUrl.includes('.mp4') ||
+              res.playableUrl.includes('video/mp4') ||
+              res.playableUrl.includes('fbcdn.net') ||
+              res.playableUrl.includes('cdninstagram.com') ||
+              res.playableUrl.includes('licdn.com') ||
+              res.playableUrl.includes('twimg.com') ||
+              res.playableUrl.includes('tiktokcdn.com') ||
+              res.playableUrl.includes('pinimg.com')) &&
+            !res.playableUrl.includes('/embed/')
           );
 
-        if (isMounted && isDirect && res?.playableUrl) {
-          setResolvedPreviewUrl(res.playableUrl);
-        } else if (isMounted) {
-          setResolvedPreviewUrl(null);
+        if (isMounted) {
+          if (isDirect && res?.playableUrl) {
+            setResolvedPreviewUrl(res.playableUrl);
+            setPreviewVideoError(false);
+            setErrors((prev) => ({ ...prev, sourceVideo: '' }));
+          } else {
+            setResolvedPreviewUrl(null);
+            setPreviewVideoError(true);
+            setErrors((prev) => ({
+              ...prev,
+              sourceVideo: 'Invalid video source. The provided URL is not a video post or contains no playable video.',
+            }));
+          }
         }
       })
       .catch((err) => {
-        console.warn('[CloneYourAd] Failed to resolve media URL, fallback to embed:', err);
+        if (isMounted) {
+          console.warn('[CloneYourAd] Failed to resolve media URL:', err);
+          setResolvedPreviewUrl(null);
+          setPreviewVideoError(true);
+          const errorMsg =
+            err?.response?.data?.error ||
+            err?.message ||
+            'Invalid video source. Please enter a valid video URL or select a video from Gallery.';
+          setErrors((prev) => ({
+            ...prev,
+            sourceVideo: errorMsg,
+          }));
+        }
       })
       .finally(() => {
         if (isMounted) {
@@ -1235,33 +1289,57 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
   // Product Image handlers (Max 3)
   const handleProductImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (productImages.length >= 3) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const remainingSlots = 3 - productImages.length;
+    if (remainingSlots <= 0) {
       setErrors((prev) => ({ ...prev, productImages: 'Maximum 3 images allowed.' }));
+      e.target.value = '';
       return;
     }
 
-    if (!file.type || !file.type.startsWith('image/')) {
+    const validImageFiles = files.filter((f) => f.type && f.type.startsWith('image/'));
+    const invalidCount = files.length - validImageFiles.length;
+
+    if (validImageFiles.length === 0) {
       setErrors((prev) => ({
         ...prev,
-        productImages: 'Invalid image source. Please select a valid image file.',
+        productImages: 'Invalid image source. Please select valid image files.',
       }));
+      e.target.value = '';
       return;
     }
 
-    const newImage = {
+    const filesToAdd = validImageFiles.slice(0, remainingSlots);
+
+    if (validImageFiles.length > remainingSlots) {
+      setErrors((prev) => ({
+        ...prev,
+        productImages: `Only ${remainingSlots} image${remainingSlots > 1 ? 's' : ''} added. Maximum 3 images allowed in total.`,
+      }));
+    } else if (invalidCount > 0) {
+      setErrors((prev) => ({
+        ...prev,
+        productImages: 'Some non-image files were skipped.',
+      }));
+    } else {
+      setErrors((prev) => ({ ...prev, productImages: '' }));
+    }
+
+    const newImages = filesToAdd.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
-    };
-    setProductImages((prev) => [...prev, newImage]);
-    setErrors((prev) => ({ ...prev, productImages: '' }));
+    }));
+
+    setProductImages((prev) => [...prev, ...newImages]);
+    e.target.value = '';
   };
 
   const handleAddProductUrl = (url) => {
     if (!url || typeof url !== 'string') return;
-    const trimmed = url.trim();
-    if (!trimmed) return;
+    const cleanUrl = extractCleanUrl(url);
+    if (!cleanUrl) return;
 
     if (productImages.length >= 3) {
       setErrors((prev) => ({ ...prev, productImages: 'Maximum 3 images allowed.' }));
@@ -1270,8 +1348,8 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
     // Reject obvious video / social platform / document / non-image links immediately
     const isObviousNonImage =
-      /\.(mp4|webm|mov|m4v|avi|mkv|flv|wmv|pdf|html|php|asp|txt|doc|docx)(\?.*)?$/i.test(trimmed) ||
-      /(?:youtube\.com|youtu\.be|instagram\.com|facebook\.com|fb\.watch|tiktok\.com|twitter\.com|x\.com|vimeo\.com|dailymotion\.com|linkedin\.com|github\.com|medium\.com|dev\.to)/i.test(trimmed);
+      /\.(mp4|webm|mov|m4v|avi|mkv|flv|wmv|pdf|html|php|asp|txt|doc|docx)(\?.*)?$/i.test(cleanUrl) ||
+      /(?:youtube\.com|youtu\.be|instagram\.com|facebook\.com|fb\.watch|tiktok\.com|twitter\.com|x\.com|vimeo\.com|dailymotion\.com|linkedin\.com|github\.com|medium\.com|dev\.to|prnt\.sc)/i.test(cleanUrl);
 
     if (isObviousNonImage) {
       setErrors((prev) => ({
@@ -1282,8 +1360,8 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     }
 
     // Direct image extension or data / blob URL
-    if (isImageUrl(trimmed) || trimmed.startsWith('data:image/') || trimmed.startsWith('blob:')) {
-      setProductImages((prev) => [...prev, { file: null, preview: trimmed }]);
+    if (isImageUrl(cleanUrl) || cleanUrl.startsWith('data:image/') || cleanUrl.startsWith('blob:')) {
+      setProductImages((prev) => [...prev, { file: null, preview: cleanUrl }]);
       setProductUrlInput('');
       setErrors((prev) => ({ ...prev, productImages: '' }));
       return;
@@ -1292,7 +1370,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     // Dynamic URL probe: verify with Image loader
     const img = new Image();
     img.onload = () => {
-      setProductImages((prev) => [...prev, { file: null, preview: trimmed }]);
+      setProductImages((prev) => [...prev, { file: null, preview: cleanUrl }]);
       setProductUrlInput('');
       setErrors((prev) => ({ ...prev, productImages: '' }));
     };
@@ -1302,18 +1380,23 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
         productImages: 'Invalid image source. Please enter a valid image URL or upload an image.',
       }));
     };
-    img.src = trimmed;
+    img.src = cleanUrl;
   };
 
   const handlePasteProductImage = (e) => {
-    if (productImages.length >= 3) return;
+    if (productImages.length >= 3) {
+      setErrors((prev) => ({ ...prev, productImages: 'Maximum 3 images allowed.' }));
+      return;
+    }
     const items = e.clipboardData?.items;
     if (items) {
       for (let i = 0; i < items.length; i++) {
         if (items[i].type && items[i].type.indexOf('image') !== -1) {
           const file = items[i].getAsFile();
           if (file) {
+            e.preventDefault();
             setProductImages((prev) => [...prev, { file, preview: URL.createObjectURL(file) }]);
+            setProductUrlInput('');
             setErrors((prev) => ({ ...prev, productImages: '' }));
             return;
           }
@@ -1322,7 +1405,10 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     }
     const pastedText = e.clipboardData?.getData('text');
     if (pastedText && pastedText.trim()) {
-      handleAddProductUrl(pastedText.trim());
+      e.preventDefault(); // Prevent browser native concatenation / double paste
+      const cleanUrl = extractCleanUrl(pastedText);
+      setProductUrlInput(cleanUrl); // Replace with recent link
+      handleAddProductUrl(cleanUrl);
     }
   };
 
@@ -1330,7 +1416,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     setProductImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Check form validity (Source video <= 60s mandatory, must be valid video source, Product images 1-3 valid)
+  // Check form validity (Source video <= 60s mandatory, must be valid video source, Product images 1-3 valid, credits available)
   const isFormValid = useMemo(() => {
     const isSourceVideoValid =
       Boolean(sourceVideoUrl) &&
@@ -1341,26 +1427,28 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
     const isProductImagesValid =
       productImages.length >= 1 &&
-      productImages.length <= 3 &&
-      !errors.productImages;
+      productImages.length <= 3;
 
     return (
       isSourceVideoValid &&
       isProductImagesValid &&
       Boolean(videoModel) &&
       Boolean(selectedVideoDuration) &&
-      Boolean(aspectRatio)
+      Boolean(aspectRatio) &&
+      hasEnoughCredits
     );
-  }, [sourceVideoUrl, errors.sourceVideo, previewVideoError, sourceDuration, productImages, errors.productImages, videoModel, selectedVideoDuration, aspectRatio]);
+  }, [sourceVideoUrl, errors.sourceVideo, previewVideoError, sourceDuration, productImages, videoModel, selectedVideoDuration, aspectRatio, hasEnoughCredits]);
 
   // Execute POST /clone-ad-analyze
   const handleAnalyze = async (overrideSessionId = null, isReanalyze = false) => {
+    if (!hasEnoughCredits) {
+      return;
+    }
     if (
       !isFormValid ||
       isImageUrl(sourceVideoUrl) ||
       previewVideoError ||
       errors.sourceVideo ||
-      errors.productImages ||
       productImages.length < 1 ||
       (isAnalyzing && !isReanalyze)
     ) {
@@ -1514,6 +1602,24 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     setGenerateError(null);
   };
 
+  const handleGoBackToForm = () => {
+    if (timeoutTimerRef.current) {
+      clearTimeout(timeoutTimerRef.current);
+      timeoutTimerRef.current = null;
+    }
+    setAnalysisState('form');
+    setIsAnalyzing(false);
+    setAnalysisResult(null);
+    setAnalysisError(null);
+    setUserSafeError(null);
+    setAnalyzeProgress(0);
+    setAnalyzeStageText('');
+    setAnalysisCards([]);
+    setIsGenerating(false);
+    setGeneratedVideoUrl(null);
+    setGenerateError(null);
+  };
+
   const handleResetAnalysis = () => {
     handleTryAgain();
   };
@@ -1558,152 +1664,167 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   };
 
   return (
-    <div className="grid h-full min-h-0 lg:min-h-[560px] grid-cols-1 lg:grid-cols-2">
-      {/* Left side — Source Video Preview */}
-      <div className="relative flex min-h-[220px] max-h-[280px] lg:max-h-none lg:min-h-[560px] flex-col justify-between overflow-hidden rounded-t-xl lg:rounded-l-xl lg:rounded-tr-none lg:rounded-br-none bg-black shrink-0">
-        <div className="pointer-events-none z-20 m-3 lg:m-4 flex items-center justify-between">
-          <h1 className="ml-1 lg:ml-2 text-base lg:text-lg font-semibold text-white drop-shadow-lg 2xl:ml-4 2xl:text-2xl">
-            Create your Clone Your Ad
-          </h1>
+    <div className="relative flex flex-col w-full h-full">
+      {/* Outside Go Back button (only shown after analysis complete) */}
+      {(analysisState === 'success' || analysisResult) && (
+        <div className="mb-2 flex items-center">
+          <button
+            type="button"
+            onClick={handleGoBackToForm}
+            className="flex items-center gap-1.5 rounded-full bg-white/80 dark:bg-[#252525]/80 px-3.5 py-1.5 text-xs font-semibold text-zinc-800 dark:text-white shadow-xs border border-black/10 dark:border-white/10 backdrop-blur-md transition hover:bg-white dark:hover:bg-[#303030] active:scale-95 cursor-pointer"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span>Go back</span>
+          </button>
+        </div>
+      )}
 
-          {/* Duration Badge (Max 60 sec rule) */}
-          {sourceDuration !== null && (
-            <div
-              className={`pointer-events-auto flex items-center gap-1.5 rounded-full px-2.5 lg:px-3 py-1 text-[11px] lg:text-xs font-semibold backdrop-blur-md ${
-                sourceDuration > 60
-                  ? 'bg-red-500/90 text-white'
-                  : 'bg-black/60 text-white/90 border border-white/20'
-              }`}
-            >
-              <Clock className="h-3.5 w-3.5" />
+      {/* Main 2-column Card */}
+      <div className="grid h-full min-h-0 max-h-[90vh] lg:min-h-[560px] grid-cols-1 lg:grid-cols-2 overflow-hidden rounded-[30px] border border-black/5 dark:border-white/10 bg-white/70 dark:bg-[#303030]/50 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.03)] dark:shadow-none">
+        {/* Left side — Source Video Preview */}
+        <div className="relative flex min-h-[220px] max-h-[280px] lg:max-h-none lg:min-h-[560px] flex-col justify-between overflow-hidden rounded-t-[30px] lg:rounded-l-[30px] lg:rounded-tr-none lg:rounded-br-none bg-black shrink-0">
+          <div className="pointer-events-none z-20 m-3 lg:m-4 flex items-center justify-between">
+            <h1 className="ml-1 lg:ml-2 text-base lg:text-lg font-semibold text-white drop-shadow-lg 2xl:ml-4 2xl:text-2xl">
+              Create your Clone Ad
+            </h1>
+
+            {/* Duration Badge (Max 60 sec rule) */}
+            {sourceDuration !== null && (
+              <div
+                className={`pointer-events-auto flex items-center gap-1.5 rounded-full px-2.5 lg:px-3 py-1 text-[11px] lg:text-xs font-semibold backdrop-blur-md ${sourceDuration > 60
+                    ? 'bg-red-500/90 text-white'
+                    : 'bg-black/60 text-white/90 border border-white/20'
+                  }`}
+              >
+                <Clock className="h-3.5 w-3.5" />
+                <span>
+                  {formatDuration(sourceDuration)} / 60 sec
+                </span>
+              </div>
+            )}
+          </div>
+
+          {previewVideoError ? (
+            <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 mb-3 shadow-inner">
+                <Video className="h-6 w-6 text-zinc-400" />
+              </div>
+              <p className="text-sm font-medium text-zinc-200 max-w-xs leading-relaxed">
+                Invalid video source.
+              </p>
+              <p className="text-xs text-zinc-400 max-w-xs mt-1.5 leading-normal">
+                Please enter a video URL or select a video from Gallery.
+              </p>
+            </div>
+          ) : resolvedPreviewUrl ? (
+            <video
+              key={resolvedPreviewUrl}
+              src={resolvedPreviewUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              referrerPolicy="no-referrer"
+              onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
+              onError={() => {
+                if (resolvedPreviewUrl && !resolvedPreviewUrl.includes('/proxy-media')) {
+                  // Retry through streaming proxy if direct CDN blocked hotlinking/referer
+                  setResolvedPreviewUrl(getMediaProxyUrl(resolvedPreviewUrl));
+                } else {
+                  setResolvedPreviewUrl(null);
+                }
+              }}
+              className="absolute inset-0 z-0 h-full w-full object-contain bg-black"
+            />
+          ) : sourceType === 'youtube' ? (
+            <YouTubePreviewPlayer
+              key={youtubeId}
+              videoId={youtubeId}
+              onDurationChange={validateSourceDuration}
+            />
+          ) : sourceType === 'instagram' ? (
+            <InstagramPreviewPlayer embedUrl={instagramEmbedUrl} />
+          ) : sourceType === 'facebook' ? (
+            <FacebookPreviewPlayer embedUrl={facebookEmbedUrl} />
+          ) : sourceType === 'tiktok' ? (
+            <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none">
+              <iframe
+                key={tiktokEmbedUrl}
+                src={tiktokEmbedUrl}
+                title="TikTok Source Video"
+                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
+                allowFullScreen
+                className="w-full h-full border-0 object-contain pointer-events-none"
+              />
+            </div>
+          ) : sourceType === 'linkedin' ? (
+            <LinkedInPreviewPlayer embedUrl={linkedinEmbedUrl} />
+          ) : sourceType === 'direct-video' ? (
+            <video
+              key={sourceVideoUrl}
+              src={sourceVideoUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              referrerPolicy="no-referrer"
+              onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
+              onError={() => setPreviewVideoError(true)}
+              className="absolute inset-0 z-0 h-full w-full object-contain bg-black"
+            />
+          ) : sourceType === 'resolving-platform' ? (
+            <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
+              <Loader2 className="h-8 w-8 text-amber-400 animate-spin mb-3" />
+              <p className="text-sm font-medium text-zinc-200">
+                Connecting video stream...
+              </p>
+            </div>
+          ) : CLONE_YOUR_AD_DEMO_URL?.match(/\.(mp4|webm|mov)(\?.*)?$/i) ? (
+            <video
+              src={CLONE_YOUR_AD_DEMO_URL}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="absolute inset-0 z-0 h-full w-full object-contain bg-black"
+            />
+          ) : (
+            <img
+              src={CLONE_YOUR_AD_DEMO_URL}
+              alt="Clone Your Ad Demo Preview"
+              className="absolute inset-0 z-0 h-full w-full object-contain bg-black"
+            />
+          )}
+
+          {/* Error overlay if video exceeds 60 seconds */}
+          {sourceDuration > 60 && (
+            <div className="absolute inset-x-0 bottom-4 z-20 mx-4 flex items-center gap-2 rounded-xl bg-red-600/90 p-3 text-xs font-medium text-white shadow-lg backdrop-blur-md">
+              <AlertCircle className="h-5 w-5 shrink-0" />
               <span>
-                {formatDuration(sourceDuration)} / 60 sec
+                Video is too long ({formatDuration(sourceDuration)}). Please select a video that is 60 seconds or less.
               </span>
             </div>
           )}
+
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-black/40" />
         </div>
 
-        {previewVideoError ? (
-          <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 mb-3 shadow-inner">
-              <Video className="h-6 w-6 text-zinc-400" />
-            </div>
-            <p className="text-sm font-medium text-zinc-200 max-w-xs leading-relaxed">
-              Invalid video source.
-            </p>
-            <p className="text-xs text-zinc-400 max-w-xs mt-1.5 leading-normal">
-              Please enter a video URL or select a video from Gallery.
-            </p>
-          </div>
-        ) : resolvedPreviewUrl ? (
-          <video
-            key={resolvedPreviewUrl}
-            src={resolvedPreviewUrl}
-            autoPlay
-            muted
-            loop
-            playsInline
-            referrerPolicy="no-referrer"
-            onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
-            onError={() => {
-              if (resolvedPreviewUrl && !resolvedPreviewUrl.includes('/proxy-media')) {
-                // Retry through streaming proxy if direct CDN blocked hotlinking/referer
-                setResolvedPreviewUrl(getMediaProxyUrl(resolvedPreviewUrl));
-              } else {
-                setResolvedPreviewUrl(null);
-              }
-            }}
-            className="absolute inset-0 z-0 h-full w-full object-cover"
-          />
-        ) : sourceType === 'youtube' ? (
-          <YouTubePreviewPlayer
-            key={youtubeId}
-            videoId={youtubeId}
-            onDurationChange={validateSourceDuration}
-          />
-        ) : sourceType === 'instagram' ? (
-          <InstagramPreviewPlayer embedUrl={instagramEmbedUrl} />
-        ) : sourceType === 'facebook' ? (
-          <FacebookPreviewPlayer embedUrl={facebookEmbedUrl} />
-        ) : sourceType === 'tiktok' ? (
-          <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none">
-            <iframe
-              key={tiktokEmbedUrl}
-              src={tiktokEmbedUrl}
-              title="TikTok Source Video"
-              allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
-              allowFullScreen
-              className="w-[140%] h-[140%] min-w-full min-h-full border-0 object-cover scale-110 pointer-events-none"
-            />
-          </div>
-        ) : sourceType === 'linkedin' ? (
-          <LinkedInPreviewPlayer embedUrl={linkedinEmbedUrl} />
-        ) : sourceType === 'direct-video' ? (
-          <video
-            key={sourceVideoUrl}
-            src={sourceVideoUrl}
-            autoPlay
-            muted
-            loop
-            playsInline
-            referrerPolicy="no-referrer"
-            onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
-            onError={() => setPreviewVideoError(true)}
-            className="absolute inset-0 z-0 h-full w-full object-cover"
-          />
-        ) : sourceType === 'resolving-platform' ? (
-          <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
-            <Loader2 className="h-8 w-8 text-amber-400 animate-spin mb-3" />
-            <p className="text-sm font-medium text-zinc-200">
-              Connecting video stream...
-            </p>
-          </div>
-        ) : CLONE_YOUR_AD_DEMO_URL?.match(/\.(mp4|webm|mov)(\?.*)?$/i) ? (
-          <video
-            src={CLONE_YOUR_AD_DEMO_URL}
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="absolute inset-0 z-0 h-full w-full object-cover"
-          />
-        ) : (
-          <img
-            src={CLONE_YOUR_AD_DEMO_URL}
-            alt="Clone Your Ad Demo Preview"
-            className="absolute inset-0 z-0 h-full w-full object-cover"
-          />
-        )}
+        {/* Right side — Form / Processing / Result */}
+        <div className="relative flex flex-col gap-4 p-4 pb-6 lg:py-6 lg:pr-4 lg:pl-4 2xl:px-5 text-zinc-900 dark:text-white max-h-[88vh] lg:max-h-[85vh] overflow-y-auto">
+          <button
+            onClick={onClose}
+            type="button"
+            className="absolute top-3 right-3 sm:top-4 sm:right-4 z-[50] rounded-full p-1.5 sm:p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
+          >
+            <X className="h-4 w-4 2xl:h-6 2xl:w-6" />
+          </button>
 
-        {/* Error overlay if video exceeds 60 seconds */}
-        {sourceDuration > 60 && (
-          <div className="absolute inset-x-0 bottom-4 z-20 mx-4 flex items-center gap-2 rounded-xl bg-red-600/90 p-3 text-xs font-medium text-white shadow-lg backdrop-blur-md">
-            <AlertCircle className="h-5 w-5 shrink-0" />
-            <span>
-              Video is too long ({formatDuration(sourceDuration)}). Please select a video that is 60 seconds or less.
-            </span>
+          {/* Top title */}
+          <div className="flex flex-col gap-1">
+            <h2 className="mt-1 text-lg font-bold text-zinc-900 dark:text-white 2xl:text-xl">
+              Clone Your Ad
+            </h2>
           </div>
-        )}
-
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-black/40" />
-      </div>
-
-      {/* Right side — Form / Processing / Result */}
-      <div className="relative flex flex-col gap-4 p-4 pb-8 lg:py-6 lg:pr-4 lg:pl-4 2xl:px-5 text-zinc-900 dark:text-white">
-        <button
-          onClick={onClose}
-          type="button"
-          className="absolute top-3 right-3 sm:top-4 sm:right-4 z-[50] rounded-full p-1.5 sm:p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
-        >
-          <X className="h-4 w-4 2xl:h-6 2xl:w-6" />
-        </button>
-
-        {/* Top title */}
-        <div className="flex flex-col gap-1">
-          <h2 className="mt-1 text-lg font-bold text-zinc-900 dark:text-white 2xl:text-xl">
-            Clone Your Ad
-          </h2>
-        </div>
 
         {/* ── ANALYSIS RESULT STATE ─────────────────────────────────────── */}
         {analysisState === 'success' || analysisResult ? (
@@ -1784,7 +1905,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                 onChange={(e) => setEditableVisualDescription(e.target.value)}
                 rows={4}
                 placeholder="Analysis visual description summary..."
-                className="max-h-40 w-full resize-y rounded-xl border border-black/10 bg-zinc-50 p-3.5 text-xs leading-relaxed text-zinc-800 transition focus:border-[#15DCFF]/50 focus:outline-none focus:ring-1 focus:ring-[#15DCFF]/50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200"
+                className="max-h-36 w-full resize-none overflow-y-auto rounded-xl border border-black/10 bg-zinc-50 p-3.5 text-xs leading-relaxed text-zinc-800 transition focus:border-[#15DCFF]/50 focus:outline-none focus:ring-1 focus:ring-[#15DCFF]/50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200"
               />
             </div>
 
@@ -1807,17 +1928,48 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                 Re-analyze
               </button>
 
-              <button
-                type="button"
-                disabled={isGenerating}
-                onClick={handleGenerate}
-                className={`flex items-center gap-2 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-7 py-2.5 text-xs font-semibold text-white shadow-md transition hover:opacity-90 ${
-                  isGenerating ? 'cursor-not-allowed opacity-70' : ''
-                }`}
-              >
-                {isGenerating && <Loader2 className="h-4 w-4 animate-spin" />}
-                {isGenerating ? 'Generating Video...' : 'Generate →'}
-              </button>
+              {(() => {
+                const selectedModel = videoChatModels.find((model) => model.value === videoModel);
+                const hasEstimateInputs = Boolean(videoModel && selectedVideoDuration && selectedModel);
+                const est = hasEstimateInputs
+                  ? estimateAdVideoCredits({
+                    video_model: videoModel,
+                    video_duration: selectedVideoDuration,
+                    no_of_ads: 1,
+                    modelCredits,
+                    creditsPerSecond: selectedModel.creditsPerSecond,
+                  })
+                  : 0;
+                const enough = hasEstimateInputs && availableCredits >= est;
+                return (
+                  <div className="flex items-center gap-2">
+                    {hasEstimateInputs && enough ? (
+                      <ShadcnTooltip
+                        label={`Will use : ${est} credits, ${availableCredits - est} left after`}
+                      >
+                        <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-medium text-gray-500 dark:bg-white/20 dark:text-white/90">
+                          ~{est} credits
+                        </span>
+                      </ShadcnTooltip>
+                    ) : hasEstimateInputs ? (
+                      <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
+                        Not enough credits — need {est}, you have {availableCredits}
+                      </span>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      disabled={isGenerating || (hasEstimateInputs && !enough)}
+                      onClick={handleGenerate}
+                      className={`flex items-center gap-2 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-7 py-2.5 text-xs font-semibold text-white shadow-md transition hover:opacity-90 ${isGenerating || (hasEstimateInputs && !enough) ? 'cursor-not-allowed opacity-70' : ''
+                        }`}
+                    >
+                      {isGenerating && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {isGenerating ? 'Generating Video...' : 'Generate →'}
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         ) : analysisState === 'analyzing' || isAnalyzing ? (
@@ -1870,19 +2022,17 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                         position: 'absolute',
                         width: '100%',
                       }}
-                      className={`flex items-center justify-between rounded-xl border p-3.5 shadow-xl backdrop-blur-md transition-colors ${
-                        isActive
+                      className={`flex items-center justify-between rounded-xl border p-3.5 shadow-xl backdrop-blur-md transition-colors ${isActive
                           ? 'border-[#15DCFF]/40 bg-zinc-900/90 text-white shadow-[#15DCFF]/10 dark:bg-[#18181b]/95'
                           : 'border-zinc-800/80 bg-zinc-900/60 text-zinc-400 dark:bg-[#18181b]/60'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                            isActive
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isActive
                               ? 'bg-gradient-to-tr from-[#15DCFF] to-[#6b72f8] text-white shadow-md'
                               : 'bg-zinc-800 text-zinc-400'
-                          }`}
+                            }`}
                         >
                           <IconComp className="h-4 w-4" />
                         </div>
@@ -2108,10 +2258,16 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                 onPaste={handlePasteProductImage}
                 className="flex items-center gap-3 rounded-4xl border border-black/10 bg-zinc-50 px-1 py-1 text-[10px] text-zinc-600 transition 2xl:py-2 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-[#afafaf]"
               >
-                <div className="flex flex-1 items-center justify-between">
+                <div className="flex flex-1 items-center justify-between min-w-0">
                   <input
                     value={productUrlInput}
-                    onChange={(e) => setProductUrlInput(e.target.value)}
+                    onChange={(e) => {
+                      const clean = extractCleanUrl(e.target.value);
+                      setProductUrlInput(clean);
+                      if (!clean) {
+                        setErrors((prev) => ({ ...prev, productImages: '' }));
+                      }
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && productUrlInput) {
                         e.preventDefault();
@@ -2126,16 +2282,30 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                         : 'Paste product image URL & press Enter'
                     }
                   />
-                  <LinkIcon className="h-3 w-3 text-zinc-500 2xl:h-4 2xl:w-4 dark:text-[#909294]" />
+                  {productUrlInput ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProductUrlInput('');
+                        setErrors((prev) => ({ ...prev, productImages: '' }));
+                      }}
+                      className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-white shrink-0"
+                      title="Clear product URL"
+                      aria-label="Clear product URL"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : (
+                    <LinkIcon className="h-3 w-3 text-zinc-500 2xl:h-4 2xl:w-4 dark:text-[#909294]" />
+                  )}
                 </div>
 
                 <label
                   htmlFor="product-image-file"
-                  className={`flex items-center gap-1 rounded-4xl px-2.5 py-1.5 text-[10px] 2xl:gap-2 ${
-                    productImages.length >= 3
+                  className={`flex items-center gap-1 rounded-4xl px-2.5 py-1.5 text-[10px] 2xl:gap-2 ${productImages.length >= 3
                       ? 'cursor-not-allowed bg-zinc-200 text-zinc-400 dark:bg-[#404040] dark:text-zinc-500'
                       : 'cursor-pointer bg-zinc-200 text-zinc-800 hover:bg-zinc-300 dark:bg-[#606060] dark:text-white dark:hover:opacity-70'
-                  }`}
+                    }`}
                 >
                   <CloudUpload className="h-3 w-3 text-current 2xl:h-4 2xl:w-4" />
                   <span className="!text-[10px] whitespace-nowrap 2xl:!text-xs">Upload Image</span>
@@ -2146,6 +2316,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                   type="file"
                   className="hidden"
                   accept="image/*"
+                  multiple
                   disabled={productImages.length >= 3}
                   onChange={handleProductImageUpload}
                 />
@@ -2186,9 +2357,9 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
             </div>
 
             {/* 3. Model + Duration */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-              <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <label className="text-sm font-medium text-zinc-900 2xl:text-base dark:text-white">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 items-start">
+              <div className="flex min-w-0 flex-1 flex-col gap-2 justify-start">
+                <label className="text-sm font-medium text-zinc-900 2xl:text-base dark:text-white leading-tight">
                   Model <span className="text-red-500">*</span>
                 </label>
                 <CommonDropdown
@@ -2196,7 +2367,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                   label="AI Model"
                   icon={SparkleDark}
                   type="b-roll"
-                  className="w-full min-w-0 justify-between [&>div]:min-w-0 [&>div>span]:truncate"
+                  className="w-full min-w-0 justify-between !h-7.5 md:!h-8 2xl:!h-9 !py-0 px-3 2xl:px-4 [&>div]:min-w-0 [&>div>span]:truncate"
                   value={videoChatModels.find((o) => o.value === videoModel)}
                   onChange={(val) => {
                     setVideoModel(val);
@@ -2208,12 +2379,12 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                 )}
               </div>
 
-              <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <label className="text-sm font-medium text-zinc-900 2xl:text-base dark:text-white">
+              <div className="flex min-w-0 flex-1 flex-col gap-2 justify-start">
+                <label className="text-sm font-medium text-zinc-900 2xl:text-base dark:text-white leading-tight">
                   Duration <span className="text-red-500">*</span>
                 </label>
                 <div
-                  className="prompt_selection_button_no_gradient group relative flex h-6 w-full min-w-0 items-center justify-between gap-1 rounded-[50px] px-3 py-2 pr-2 text-[9px] shadow-none transition-all duration-200 ease-in hover:bg-slate-100 md:text-[11px] 2xl:h-8 2xl:px-4 2xl:pr-3 2xl:text-13 dark:border-none dark:bg-[#909294]/10 dark:text-[#f0f0f0]"
+                  className="prompt_selection_button_no_gradient group relative flex !h-7.5 md:!h-8 2xl:!h-9 w-full min-w-0 items-center justify-between gap-1 rounded-[50px] px-3 2xl:px-4 text-[9px] shadow-none transition-all duration-200 ease-in hover:bg-slate-100 md:text-[11px] 2xl:text-13 dark:border-none dark:bg-[#909294]/10 dark:text-[#f0f0f0]"
                 >
                   {/* Left: Duration icon + numeric input + unit */}
                   <div className="flex items-center gap-2 pr-1">
@@ -2298,19 +2469,17 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                         setAspectRatio(value);
                         setErrors((prev) => ({ ...prev, aspectRatio: '' }));
                       }}
-                      className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${
-                        isSelected
+                      className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs transition 2xl:text-sm ${isSelected
                           ? 'border-black/10 bg-black/5 font-semibold text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-white'
                           : 'border-black/10 bg-transparent text-gray-500 hover:text-gray-900 dark:border-white/5 dark:text-white/40 dark:hover:text-white'
-                      }`}
+                        }`}
                     >
                       <AspectRatioPreview
                         ratio={value}
-                        className={`h-4 w-4 ${
-                          isSelected
+                        className={`h-4 w-4 ${isSelected
                             ? 'text-gray-900 dark:text-white'
                             : 'text-gray-500 dark:text-white/40'
-                        }`}
+                          }`}
                       />
                       {label}
                     </button>
@@ -2342,7 +2511,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               </label>
               <textarea
                 rows={2}
-                className="w-full rounded-xl border border-black/10 bg-zinc-50 px-4 py-2 text-xs text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-sm dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
+                className="w-full resize-none rounded-xl border border-black/10 bg-zinc-50 px-4 py-2 text-xs text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-sm dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
                 placeholder="Provide additional details or instructions about the ad"
                 value={additionalInfo}
                 onChange={(e) => setAdditionalInfo(e.target.value)}
@@ -2351,22 +2520,42 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
             {/* 7. Analyze Button */}
             <div className="mt-2 flex flex-col items-end gap-2">
-              <button
-                type="button"
-                disabled={!isFormValid || isAnalyzing}
-                onClick={handleAnalyze}
-                className={`flex items-center gap-2 rounded-full px-8 py-3 text-sm font-semibold text-white transition-all 2xl:text-base dark:text-black ${
-                  isFormValid && !isAnalyzing
-                    ? 'cursor-pointer bg-gray-900 shadow-md hover:opacity-90 dark:bg-white'
-                    : 'cursor-not-allowed bg-gray-900/30 dark:bg-white/30'
-                }`}
-              >
-                {isAnalyzing && <Loader2 className="h-4 w-4 animate-spin" />}
-                {isAnalyzing ? 'Analyzing...' : 'Analyze'}
-              </button>
+              {!hasEnoughCredits ? (
+                <ShadcnTooltip
+                  label={`You need at least ${requiredCredits} credits to continue with this analysis. Please add more credits to your account.`}
+                  side="top"
+                  className="[&>p]:normal-case [&>p]:text-xs [&>p]:max-w-xs text-center"
+                >
+                  <div className="cursor-not-allowed">
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      className="pointer-events-none flex items-center gap-2 rounded-full px-8 py-3 text-sm font-semibold text-white/50 bg-gray-900/30 cursor-not-allowed transition-all 2xl:text-base dark:text-black/50 dark:bg-white/30"
+                    >
+                      Analyze
+                    </button>
+                  </div>
+                </ShadcnTooltip>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!isFormValid || isAnalyzing}
+                  onClick={handleAnalyze}
+                  className={`flex items-center gap-2 rounded-full px-8 py-3 text-sm font-semibold text-white transition-all 2xl:text-base dark:text-black ${
+                    isFormValid && !isAnalyzing
+                      ? 'cursor-pointer bg-gray-900 shadow-md hover:opacity-90 dark:bg-white'
+                      : 'cursor-not-allowed bg-gray-900/30 dark:bg-white/30'
+                  }`}
+                >
+                  {isAnalyzing && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isAnalyzing ? 'Analyzing...' : 'Analyze'}
+                </button>
+              )}
             </div>
           </>
         )}
+      </div>
       </div>
 
       <AnimatePresence>
