@@ -24,7 +24,8 @@ import { readPendingPostAd } from '../PostAdMySpace/postAdPersistence';
 
 // Match the conventional MyImagesPage grid exactly.
 const breakpointColumnsObj = {
-  default: 4,
+  default: 5,
+  1536: 4,
   1280: 3,
   1024: 3,
   700: 2,
@@ -200,9 +201,7 @@ export default function MyAssistantImagesPage() {
 
   return (
     <div
-      className="relative h-full w-full overflow-y-auto px-2 py-8 sm:px-6 2xl:py-10"
-      ref={containerRef}
-      onScroll={handleScroll}
+      className="relative flex h-full min-h-0 w-full flex-col px-2 pt-1.5"
     >
       {/* Floating Selection Bar */}
       {selectedImages.length > 0 && (
@@ -235,7 +234,7 @@ export default function MyAssistantImagesPage() {
       )}
 
       {/* Select All Toggle */}
-      <div className="mb-6 flex justify-end px-2">
+      <div className="mb-6 flex justify-end pr-[13px]">
         <button
           onClick={selectAll}
           className="group flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-black dark:hover:text-white"
@@ -269,6 +268,7 @@ export default function MyAssistantImagesPage() {
         </button>
       </div>
 
+      <div ref={containerRef} onScroll={handleScroll} className="my-space-grid-scroll min-h-0 flex-1 overflow-y-auto pb-8">
       <Masonry
         breakpointCols={breakpointColumnsObj}
         className="flex w-full gap-2"
@@ -305,6 +305,8 @@ export default function MyAssistantImagesPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
         </div>
       )}
+
+      </div>
 
       <PostAdMySpaceModal
         open={postAdState.open}

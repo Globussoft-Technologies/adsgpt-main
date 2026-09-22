@@ -989,16 +989,7 @@ html:not(.dark) .lm-sidebar-surface::before {
 
 /* Top shimmer accent bar — dark mode */
 .dark .lm-sidebar-surface::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #15dcff 0%, #5e66f5 55%, #8b5cf6 100%);
-  opacity: 0.50;
-  pointer-events: none;
-  z-index: 10;
+  display: none;
 }
 .lm-sidebar-surface .sidebar-nav-item {
   cursor: pointer;
@@ -1746,6 +1737,18 @@ html:not(.dark) .adfactory-campaign-status:hover {
   line-height: 1.2;
   letter-spacing: -0.025em;
   white-space: nowrap;
+}
+
+/* Restrained brand identity for the Ad Studio switcher: retain a soft tint
+   without reintroducing the previous colored outer glow. */
+.brand-switcher-subtle {
+  border-color: var(--brand-switcher-border);
+  background: var(--brand-switcher-bg);
+}
+
+.brand-switcher-subtle:hover {
+  border-color: var(--brand-switcher-border-hover);
+  background: var(--brand-switcher-bg-hover);
 }
 
 .dark .app-global-header-title {
@@ -4052,6 +4055,63 @@ html:not(.dark) .my-space-ui-layer .my-space-media-card::after {
   pointer-events: none;
   border: 1px solid var(--ws-border-strong);
   border-radius: inherit;
+}
+
+/* My Space owns an inner grid scroller, so the hidden shell must not reserve
+   a second scrollbar gutter along the viewport edge. */
+.app-main-scroll.my-space-main-shell {
+  scrollbar-gutter: auto;
+}
+
+/* My Space keeps its selection row fixed while only the masonry grid scrolls.
+   Extend the scroller through the shared 24px gutter so its thin track sits on
+   the application edge without shifting the cards themselves. */
+.my-space-grid-scroll {
+  margin-right: -24px;
+  padding-right: 26px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(113, 113, 122, 0.5) transparent;
+}
+
+/* Keep toolbar controls 13px farther from the edge than the media grid. */
+.my-space-header {
+  padding-right: 37px;
+  padding-left: 24px;
+}
+
+.my-space-grid-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.my-space-grid-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.my-space-grid-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(113, 113, 122, 0.5);
+}
+
+.my-space-grid-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(82, 82, 91, 0.72);
+}
+
+.my-space-grid-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.dark .my-space-grid-scroll {
+  scrollbar-color: rgba(161, 161, 170, 0.48) transparent;
+}
+
+.dark .my-space-grid-scroll::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 170, 0.48);
+}
+
+.dark .my-space-grid-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 212, 216, 0.68);
 }
 
 html:not(.dark) .my-space-ui-layer::before {

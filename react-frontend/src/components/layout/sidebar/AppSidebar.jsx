@@ -431,14 +431,14 @@ const AppSidebar = () => {
             </div>
           ) : (
             /* Collapsed — logo icon mark navigation to Ad Studio Ad Creative (Home button) */
-            <div className="relative flex h-[60px] 2xl:h-[74px] items-center justify-center">
+            <div className="relative flex h-[60px] 2xl:h-[62px] items-center justify-center">
               <Link
                 to="/adstudio"
                 onClick={handleLogoClick}
                 aria-label="Home - Ad Studio Ad Creative"
                 className="group relative flex h-12 w-12 items-center justify-center rounded-xl transition-transform hover:scale-105 active:scale-95 focus:outline-none cursor-pointer"
               >
-                <SidebarLogoMark className="sidebar-compact-logo-mark w-10 h-10 2xl:h-12 2xl:w-12 object-contain" />
+                <SidebarLogoMark className="sidebar-compact-logo-mark h-[43px] w-[43px] 2xl:h-[51px] 2xl:w-[51px] object-contain" />
               </Link>
             </div>
           )}

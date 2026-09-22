@@ -15,6 +15,17 @@ const CreativeFilterDropdown = ({
   const triggerSurfaceClass = isMediaToolbar
     ? 'adstudio-media-toolbar-select'
     : 'adstudio-creative-filter-trigger';
+  const contentSurfaceClass = isMediaToolbar
+    ? '!min-w-48 rounded-xl p-1.5 shadow-lg'
+    : 'min-w-fit';
+  const headingClass = isMediaToolbar
+    ? 'mb-1 border-b border-[var(--ws-border)] px-3 py-2 text-xs'
+    : 'text-10 px-2 py-1 2xl:py-2 2xl:text-xs';
+  const optionClass = isMediaToolbar
+    ? '!py-2.5 !pr-10 !pl-3 text-xs 2xl:text-xs'
+    : 'text-[10px] 2xl:text-xs';
+  const optionLabelClass = isMediaToolbar ? 'text-xs' : 'text-[9px] 2xl:text-xs';
+  const indicatorPositionClass = isMediaToolbar ? 'right-2.5' : 'right-1';
 
   // Find the selected option from options array
   const selectedOption = options.find((opt) => opt.value === value?.value);
@@ -36,9 +47,14 @@ const CreativeFilterDropdown = ({
           </span>
         </span>
       </SelectTrigger>
-      <SelectContent className={`mt-2 min-w-fit border border-[var(--ws-border)] bg-[var(--ws-surface-control)] text-zinc-800 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white ${contentClassName}`}>
+      <SelectContent
+        {...(isMediaToolbar
+          ? { align: 'end', sideOffset: 8, collisionPadding: 16 }
+          : {})}
+        className={`${isMediaToolbar ? '' : 'mt-2'} border border-[var(--ws-border)] bg-[var(--ws-surface-control)] text-zinc-800 backdrop-blur-[100px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-white ${contentSurfaceClass} ${contentClassName}`}
+      >
         {label && (
-          <div className="text-10 flex items-center justify-between px-2 py-1 font-normal tracking-wide text-[#636363] 2xl:py-2 2xl:text-xs dark:text-[#D9D9D9]">
+          <div className={`flex items-center justify-between font-normal tracking-wide text-[#636363] dark:text-[#D9D9D9] ${headingClass}`}>
             {label}
             {onClear && (
               <button
@@ -58,7 +74,7 @@ const CreativeFilterDropdown = ({
             <SelectItem
               key={optionValue}
               value={optionValue}
-              className={`group cursor-pointer text-[10px] text-zinc-800 2xl:text-xs hover:bg-[var(--ws-surface-header)] hover:text-zinc-900 focus:bg-[var(--ws-surface-header)] focus:text-zinc-900 data-highlighted:bg-[var(--ws-surface-header)] data-highlighted:text-zinc-900 [&_svg]:text-current! dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/50 dark:hover:text-white dark:focus:bg-[#0D0D0D]/50 dark:focus:text-white dark:data-highlighted:bg-[#0D0D0D]/50 dark:data-highlighted:text-white ${
+              className={`group cursor-pointer text-zinc-800 hover:bg-[var(--ws-surface-header)] hover:text-zinc-900 focus:bg-[var(--ws-surface-header)] focus:text-zinc-900 data-highlighted:bg-[var(--ws-surface-header)] data-highlighted:text-zinc-900 [&_svg]:text-current! dark:font-normal dark:text-[#AFAFAF] dark:hover:bg-[#0D0D0D]/50 dark:hover:text-white dark:focus:bg-[#0D0D0D]/50 dark:focus:text-white dark:data-highlighted:bg-[#0D0D0D]/50 dark:data-highlighted:text-white ${optionClass} ${
                 value?.value === optionValue
                   ? 'bg-[var(--ws-surface-header)] dark:bg-[#0D0D0D]/50'
                   : 'bg-transparent'
@@ -66,11 +82,11 @@ const CreativeFilterDropdown = ({
               >
               {Icon}
               <div className="flex w-full items-center justify-between">
-                <span className="text-[9px] text-inherit 2xl:text-xs">
+                <span className={`text-inherit ${optionLabelClass}`}>
                   {label}
                 </span>
                 <span
-                  className={`absolute right-1 flex h-4 w-4 items-center justify-center rounded-full border ${
+                  className={`absolute flex h-4 w-4 items-center justify-center rounded-full border ${indicatorPositionClass} ${
                     value?.value === optionValue
                       ? 'border-zinc-700 bg-zinc-700 dark:border-[#575757] dark:bg-[#575757]'
                       : 'border-zinc-400 dark:border-[#AFAFAF]'

@@ -10,7 +10,8 @@ import PostAdMySpaceModal from '../PostAdMySpace/PostAdMySpaceModal';
 import { readPendingPostAd } from '../PostAdMySpace/postAdPersistence';
 
 const breakpointColumnsObj = {
-  default: 4,
+  default: 5,
+  1536: 4,
   1280: 3,
   1024: 3,
   700: 2,
@@ -224,9 +225,7 @@ export default function MyImagesPage({ imageType = '', startDate = '', endDate =
 
   return (
     <div
-      className="relative h-full w-full overflow-y-auto px-2 py-8 sm:px-6 2xl:py-10"
-      ref={containerRef}
-      onScroll={handleScroll}
+      className="relative flex h-full min-h-0 w-full flex-col px-2 pt-1.5"
     >
       {/* Floating Selection Bar */}
       {selectedImages.length > 0 && (
@@ -259,7 +258,7 @@ export default function MyImagesPage({ imageType = '', startDate = '', endDate =
       )}
 
       {/* Select All Toggle */}
-      <div className="mb-6 flex justify-end px-2">
+      <div className="mb-6 flex justify-end pr-[13px]">
         <button
           onClick={selectAll}
           className="group flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-black dark:hover:text-white"
@@ -293,6 +292,7 @@ export default function MyImagesPage({ imageType = '', startDate = '', endDate =
         </button>
       </div>
 
+      <div ref={containerRef} onScroll={handleScroll} className="my-space-grid-scroll min-h-0 flex-1 overflow-y-auto pb-8">
       <Masonry
         breakpointCols={breakpointColumnsObj}
         className="flex w-full gap-2"
@@ -341,6 +341,8 @@ export default function MyImagesPage({ imageType = '', startDate = '', endDate =
       {/* AdLibrary's RecreateAdModal — opened from a `recreate_ads` image
           card. Form prefills from image.recreateInputs which ImageCard
           stashed before raising onOpenRecreateAdsModal. */}
+      </div>
+
       <RecreateAdModal
         open={recreateAdsState.open}
         onOpenChange={(open) => setRecreateAdsState((s) => ({ ...s, open }))}

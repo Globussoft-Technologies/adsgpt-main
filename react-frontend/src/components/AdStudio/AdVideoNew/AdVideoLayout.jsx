@@ -549,7 +549,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
       ) : displayedActivePage === 'myVideos' ? (
         <>
           {/* Header */}
-          <div className="app-global-header -mt-4 -mx-4 flex w-[calc(100%+2rem)] items-center justify-between text-gray-900 dark:text-white">
+          <div className="app-global-header my-space-header -mt-4 -mx-4 flex w-[calc(100%+2rem)] items-center justify-between text-gray-900 dark:text-white">
             <div className="left_header_container flex items-center">
               <SidebarTrigger
                 aria-label="Open navigation"
@@ -645,9 +645,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   would sit in the same top-right corner as this toolbar), so
                   a workspace member gets it here instead. No-ops for owners. */}
               <WorkspaceSwitcher />
-              <div className="ml-1.5 2xl:ml-3">
-                <ThemeToggle />
-              </div>
+              <ThemeToggle className="ml-1.5 2xl:ml-3" />
             </div>
           </div>
 

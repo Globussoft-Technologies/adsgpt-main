@@ -315,6 +315,7 @@ const BrandAvatar = ({
   isDark = false,
   className = '',
   size = 'md',
+  subtle = false,
 }) => {
   const initials = getBrandInitials(label);
   const rawColor = brandColor || getBrandColor(label);
@@ -356,10 +357,16 @@ const BrandAvatar = ({
       className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold select-none ${sizeClasses} text-white transition-transform duration-200 ${className}`}
       style={{
         background: `linear-gradient(135deg, ${resolvedColor} 0%, ${gradientDark} 100%)`,
-        boxShadow: isDark
-          ? `0 0 10px ${hexToRgba(resolvedColor, 0.5)}, inset 0 1px 0 rgba(255, 255, 255, 0.35)`
-          : `0 2px 7px ${hexToRgba(resolvedColor, 0.4)}, inset 0 1px 0 rgba(255, 255, 255, 0.25)`,
-        border: `1.5px solid ${isDark ? hexToRgba(resolvedColor, 0.85) : hexToRgba(resolvedColor, 0.55)}`,
+        boxShadow: subtle
+          ? isDark
+            ? '0 1px 2px rgba(0, 0, 0, 0.35)'
+            : '0 1px 2px rgba(36, 33, 29, 0.14)'
+          : isDark
+            ? `0 0 10px ${hexToRgba(resolvedColor, 0.5)}, inset 0 1px 0 rgba(255, 255, 255, 0.35)`
+            : `0 2px 7px ${hexToRgba(resolvedColor, 0.4)}, inset 0 1px 0 rgba(255, 255, 255, 0.25)`,
+        border: subtle
+          ? `1px solid ${isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(36, 33, 29, 0.14)'}`
+          : `1.5px solid ${isDark ? hexToRgba(resolvedColor, 0.85) : hexToRgba(resolvedColor, 0.55)}`,
       }}
       aria-hidden="true"
       title={label}
@@ -390,6 +397,7 @@ const BrandsDropdown = ({
   onManageBrands,
   compact = false,
   singleAvatar = false,
+  subtle = false,
 }) => {
   const reduxIsDark = useSelector((state) => state.theme?.isDarkMode);
   const isDark = Boolean(
@@ -472,18 +480,40 @@ const BrandsDropdown = ({
         <button
           type="button"
           aria-label={`Switch brand. Current brand: ${selectedLabel}`}
-          style={{
-            background: isDark
-              ? `linear-gradient(135deg, ${hexToRgba(activeColor, 0.35)} 0%, rgba(24, 28, 40, 0.96) 100%)`
-              : `linear-gradient(135deg, ${hexToRgba(activeColor, 0.16)} 0%, ${hexToRgba(activeColor, 0.05)} 100%)`,
-            borderColor: isDark
-              ? hexToRgba(activeColor, 0.7)
-              : hexToRgba(activeColor, 0.35),
-            boxShadow: isDark
-              ? `0 0 14px ${hexToRgba(activeColor, 0.32)}, 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.22)`
-              : `0 2px 10px ${hexToRgba(activeColor, 0.14)}, inset 0 1px 0 rgba(255, 255, 255, 0.7)`,
-          }}
-          className={`group inline-flex h-9 items-center gap-2 rounded-full border py-1 pl-1.5 pr-3 transition-all duration-200 hover:scale-[1.015] active:scale-[0.99] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 ${
+          style={subtle
+            ? {
+                '--brand-switcher-bg': isDark
+                  ? `linear-gradient(135deg, ${hexToRgba(activeColor, 0.14)} 0%, rgba(23, 23, 23, 0.94) 72%)`
+                  : `linear-gradient(135deg, ${hexToRgba(activeColor, 0.09)} 0%, #FCFAF7 72%)`,
+                '--brand-switcher-bg-hover': isDark
+                  ? `linear-gradient(135deg, ${hexToRgba(activeColor, 0.2)} 0%, rgba(28, 28, 28, 0.96) 72%)`
+                  : `linear-gradient(135deg, ${hexToRgba(activeColor, 0.14)} 0%, #F8F5F0 72%)`,
+                '--brand-switcher-border': isDark
+                  ? hexToRgba(activeColor, 0.24)
+                  : hexToRgba(activeColor, 0.2),
+                '--brand-switcher-border-hover': isDark
+                  ? hexToRgba(activeColor, 0.36)
+                  : hexToRgba(activeColor, 0.3),
+                boxShadow: isDark
+                  ? '0 1px 3px rgba(0, 0, 0, 0.32)'
+                  : '0 1px 3px rgba(80, 70, 58, 0.07)',
+              }
+            : {
+                background: isDark
+                  ? `linear-gradient(135deg, ${hexToRgba(activeColor, 0.35)} 0%, rgba(24, 28, 40, 0.96) 100%)`
+                  : `linear-gradient(135deg, ${hexToRgba(activeColor, 0.16)} 0%, ${hexToRgba(activeColor, 0.05)} 100%)`,
+                borderColor: isDark
+                  ? hexToRgba(activeColor, 0.7)
+                  : hexToRgba(activeColor, 0.35),
+                boxShadow: isDark
+                  ? `0 0 14px ${hexToRgba(activeColor, 0.32)}, 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.22)`
+                  : `0 2px 10px ${hexToRgba(activeColor, 0.14)}, inset 0 1px 0 rgba(255, 255, 255, 0.7)`,
+              }}
+          className={`group inline-flex h-9 items-center gap-2 rounded-full border py-1 pl-1.5 pr-3 transition-colors duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 ${
+            subtle
+              ? 'brand-switcher-subtle'
+              : 'transition-all hover:scale-[1.015] hover:shadow-sm'
+          } ${
             compact ? 'text-xs lg:text-[13px]' : 'text-sm'
           }`}
         >
@@ -498,6 +528,7 @@ const BrandsDropdown = ({
               isPrimary={true}
               isDark={isDark}
               size={compact ? 'sm' : 'md'}
+              subtle={subtle}
               className="z-30"
             />
 

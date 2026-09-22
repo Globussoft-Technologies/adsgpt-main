@@ -858,6 +858,7 @@ export default function TopHeader() {
               <BrandsDropdown
                 compact
                 singleAvatar
+                subtle
                 options={
                   Array.isArray(myBrands) && myBrands.length > 0
                     ? myBrands.map((b) => ({

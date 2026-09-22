@@ -21,7 +21,8 @@ import { useCanvaEdit } from '@/hooks/useCanvaEdit';
 import canvaIconLogo from '@/assets/layouts/Canva Icon logo_32x32.png';
 
 const breakpointColumnsObj = {
-  default: 4,
+  default: 5,
+  1536: 4,
   1280: 3,
   1024: 3,
   700: 2,
@@ -505,9 +506,7 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
 
   return (
     <div
-      className="relative h-full w-full overflow-y-auto px-2 py-8 sm:px-6 2xl:py-10"
-      ref={containerRef}
-      onScroll={handleScroll}
+      className="relative flex h-full min-h-0 w-full flex-col px-2 pt-1.5"
     >
       {/* Floating selection bar */}
       {selectedImages.length > 0 && (
@@ -537,7 +536,7 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
 
       {/* Select all */}
       {completedUrls.length > 0 && (
-        <div className="mb-6 flex justify-end px-2">
+        <div className="mb-6 flex justify-end pr-[13px]">
           <button
             onClick={selectAll}
             className="group flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-black dark:hover:text-white"
@@ -560,6 +559,7 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
         </div>
       )}
 
+      <div ref={containerRef} onScroll={handleScroll} className="my-space-grid-scroll min-h-0 flex-1 overflow-y-auto pb-8">
       <Masonry breakpointCols={breakpointColumnsObj} className="flex w-full gap-2" columnClassName="flex flex-col gap-2">
         {displayedItems
           // The backend occasionally returns rows with a null status
@@ -595,6 +595,8 @@ export default function MyAdFactoryImagesPage({ startDate = '', endDate = '' }) 
           Top-right pill now includes Edit Logo + Download. Clicking
           Edit Logo closes the lightbox and opens the logo editor for
           the source item. */}
+      </div>
+
       {fullscreenUrl && (
         <div
           onClick={closeFullscreen}

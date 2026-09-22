@@ -15,7 +15,8 @@ import { emitWhenConnected } from '@/utils/socketEmitter';
 import emitter from '@/utils/eventEmitter';
 
 const breakpointColumnsObj = {
-  default: 4,
+  default: 5,
+  1536: 4,
   1280: 3,
   1024: 3,
   700: 2,
@@ -679,9 +680,7 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
 
   return (
     <div
-      className="relative h-full w-full overflow-y-auto px-2 py-8 sm:px-6 2xl:py-10"
-      ref={containerRef}
-      onScroll={handleScroll}
+      className="relative flex h-full min-h-0 w-full flex-col px-2 pt-1.5"
     >
       {selectedImages.length > 0 && (
         <div className="animate-in fade-in zoom-in-95 slide-in-from-bottom-4 fixed bottom-12 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-full border border-black/10 bg-white/90 px-2 py-2 text-gray-900 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-all duration-500 dark:border-white/5 dark:bg-[#1a1a1a]/90 dark:text-white">
@@ -715,7 +714,7 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
       )}
 
       {completedImageUrls.length > 0 && (
-        <div className="mb-6 flex justify-end px-2">
+        <div className="mb-6 flex justify-end pr-[13px]">
           <button
             onClick={selectAll}
             className="group flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-black dark:hover:text-white"
@@ -750,6 +749,7 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
         </div>
       )}
 
+      <div ref={containerRef} onScroll={handleScroll} className="my-space-grid-scroll min-h-0 flex-1 overflow-y-auto pb-8">
       <Masonry
         breakpointCols={breakpointColumnsObj}
         className="flex w-full gap-2"
@@ -802,6 +802,8 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
           <Loader className="h-8 w-8 animate-spin opacity-60" />
         </div>
       )}
+
+      </div>
 
       <RecreateAdModal
         open={recreateAdsState.open}
