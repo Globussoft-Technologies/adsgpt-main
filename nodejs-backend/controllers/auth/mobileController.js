@@ -2069,8 +2069,11 @@ const verifyGooglePayment = async (req, res) => {
 
     let subscriptionState;
     try {
+      const googlePlaySA = process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+        ? JSON.parse(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)
+        : undefined;
       const auth = new google.auth.GoogleAuth({
-        keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        ...(googlePlaySA ? { credentials: googlePlaySA } : { keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS }),
         scopes: ["https://www.googleapis.com/auth/androidpublisher"],
       });
       const androidPublisher = google.androidpublisher({ version: 'v3', auth });
@@ -2080,7 +2083,12 @@ const verifyGooglePayment = async (req, res) => {
       });
       subscriptionState = response.data;
     } catch (e) {
-      console.error("[verifyGooglePayment] Google Developer API failed:", e.message);
+      console.error("[verifyGooglePayment] Google Developer API failed:", {
+        message: e.message,
+        status: e.response?.status,
+        data: e.response?.data,
+        errors: e.errors,
+      });
       return res.status(403).json({ ok: false, code: "STORE_PROOF_INVALID", error: "Invalid Google Play purchase token." });
     }
 
@@ -2758,8 +2766,11 @@ const handleGoogleWebhook = async (req, res) => {
 
       if (notificationType === 2) { // Renewed
         try {
+          const googlePlaySA2 = process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+            ? JSON.parse(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)
+            : undefined;
           const auth = new google.auth.GoogleAuth({
-            keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+            ...(googlePlaySA2 ? { credentials: googlePlaySA2 } : { keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS }),
             scopes: ["https://www.googleapis.com/auth/androidpublisher"],
           });
           const androidPublisher = google.androidpublisher({ version: 'v3', auth });
