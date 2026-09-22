@@ -216,17 +216,13 @@ const AdStudioPage = () => {
         )}
 
         {effectiveTabId === 'adCreativeNew' && (
-          <div
-            className={`adcopy_container w-full ${
-              adCreativeNewActivePage === 'home' ? 'max-h-[calc(100svh-200px)]' : ''
-            }`}
-          >
+          <div className="adcopy_container h-full w-full">
             <AdCreativeNewLayout />
           </div>
         )}
 
         {effectiveTabId === 'adLibrary' && (
-          <div className="adcopy_container h-full w-full">
+          <div className="adcopy_container max-h-[calc(100svh-73px)] w-full overflow-y-auto 2xl:max-h-[calc(100svh-112px)]">
             <AdLibraryPage source="brandCompetitors" />
           </div>
         )}
