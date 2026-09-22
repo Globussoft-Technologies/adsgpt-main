@@ -4837,6 +4837,7 @@ exports.cloneAdGenerate = async (req, res) => {
           productCategory: identificationObj.productCategory || "",
           visualDescription: identificationObj.visualDescription || "",
           isCompositeImage: Boolean(identificationObj.isCompositeImage),
+          imageType: identificationObj.imageType || "product",
         },
         targetDurationSeconds: targetDurationNum,
         aspectRatio: aspectRatioStr,
