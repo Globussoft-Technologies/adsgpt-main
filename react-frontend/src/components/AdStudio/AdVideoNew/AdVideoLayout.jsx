@@ -198,6 +198,21 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
     ['b-roll', 'ugc', 'avatar', 'clone', 'clone-ad', 'ai-ads'].includes(searchParams.get('page'))
   );
 
+  // Broader than `fromRecreate`, and used ONLY for the post-generate landing.
+  // VideoCard's Recreate sends the user to one of these pages, so arriving on
+  // one with a `?page=` hint means "this session started from a My Space card"
+  // and the user expects to be put back on /my-space to watch it render.
+  // `clone-ad` is deliberately excluded — its completion arrives on its own
+  // socket event (cloneAdGenerateReady), which does not refresh the My Space
+  // grid, so landing there would show a card that never updates.
+  //
+  // Kept separate from `fromRecreate` on purpose: `fromRecreate` also drives
+  // the BACK button, and widening it would let clone/avatar skip their
+  // "still generating, please wait" discard guards in handleBackNavigation.
+  const [fromRecreateForLanding] = useState(() =>
+    ['b-roll', 'ugc', 'avatar', 'clone', 'ai-ads'].includes(searchParams.get('page'))
+  );
+
   const exitRecreateToMySpace = () => {
     setSearchParams({}, { replace: true });
     dispatch(setRecreateInputs(null));
@@ -306,15 +321,35 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
     }
   }, [activePage]);
 
+  // `?page=` is a one-shot deep-link instruction, NOT a standing clamp.
+  //
+  // It used to depend on `activePage` and re-assert the hint whenever the two
+  // drifted apart. That broke recreate-then-generate: `handleGenerate` clears
+  // the query params (router state) and sets activePage to 'myVideos' (redux)
+  // in the same tick. Those are two different external stores, so if the redux
+  // update rendered before the URL change landed, this effect saw
+  // activePage='myVideos' with pageHint still 'b-roll' and shoved the user
+  // straight back onto the creation form. Recreate is the only entry point
+  // that sets `?page=`, which is why a plain AdStudio generate never hit it.
+  //
+  // Honouring each hint exactly once removes the tug-of-war: a deep link still
+  // opens its page, and nothing re-opens it behind a later navigation.
+  const honouredPageHintRef = useRef(null);
   useEffect(() => {
     if (libraryOnly) return;
     const pageHint = searchParams.get('page');
-    if (!pageHint || !pageConfig[pageHint]) return;
+    if (!pageHint || !pageConfig[pageHint]) {
+      // Params cleared — let a future link to the same page be honoured again.
+      honouredPageHintRef.current = null;
+      return;
+    }
+    if (honouredPageHintRef.current === pageHint) return;
+    honouredPageHintRef.current = pageHint;
     if (pageHint === 'ai-ads' && searchParams.get('id')) {
       dispatch(setAIAdsStep('generation'));
     }
-    if (activePage !== pageHint) dispatch(setActivePage(pageHint));
-  }, [activePage, dispatch, libraryOnly, searchParams]);
+    dispatch(setActivePage(pageHint));
+  }, [dispatch, libraryOnly, searchParams]);
 
   useEffect(() => {
     if (savedCount > 0 && activePage !== 'myVideos' && !pollingRef.current) {
@@ -454,6 +489,15 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
     dispatch(setActivePage('myVideos'));
     dispatch(incrementSavedCount());
     dispatch(fetchProcessingCount());
+
+    // Recreate started on /my-space, so finish there rather than leaving the
+    // user on /adstudio showing a My Space-shaped view under the wrong URL and
+    // the wrong sidebar highlight. Plain AdStudio generations are unaffected —
+    // they never carry a `?page=` hint, so this flag is false for them.
+    if (fromRecreateForLanding) {
+      dispatch(setRecreateInputs(null));
+      navigate('/my-space');
+    }
   };
 
   // useEffect(() => {
