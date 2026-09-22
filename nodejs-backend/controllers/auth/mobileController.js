@@ -2106,7 +2106,16 @@ const verifyGooglePayment = async (req, res) => {
       if (item.expiryTime) {
         expiresDate = new Date(item.expiryTime);
       }
-      if (item.offerDetails && item.offerDetails.offerTags && item.offerDetails.offerTags.includes("trial")) {
+      // Trial detection keys off the offer ID, not offerTags. offerTags are
+      // free-text labels typed per-offer in Play Console, so a missing or
+      // misspelled tag silently booked a free trial as a full-price initial
+      // purchase (granting the paid tier's credits). Every trial offer we
+      // publish is named "<tier>-free-trial" / "<tier>-annual-free-trial",
+      // which Play returns in offerDetails.offerId. offerTags is still honoured
+      // as a fallback for any offer tagged that way.
+      const offerId = String(item.offerDetails?.offerId || "");
+      const offerTags = item.offerDetails?.offerTags || [];
+      if (/free-?trial/i.test(offerId) || offerTags.some((tag) => /trial/i.test(String(tag)))) {
         isTrial = true;
       }
     }
