@@ -247,7 +247,7 @@ html:not(.dark) .prompt_selection_button_no_gradient {
   width: auto;
 }
 .my-masonry-grid_column {
-  padding-left: 20px;
+  padding-left: 8px;
   background-clip: padding-box;
 }
 @media (max-width: 635px) {
@@ -256,7 +256,7 @@ html:not(.dark) .prompt_selection_button_no_gradient {
   }
 }
 .my-masonry-grid_column > div {
-  margin-bottom: 20px;
+  margin-bottom: 8px;
 }
 
 /* Hide scrollbar of AdIinsights left masonry */
@@ -1728,14 +1728,75 @@ html:not(.dark) .adfactory-campaign-status:hover {
   box-shadow: none !important;
 }
 
+/* Shared application-header geometry. Route-specific controls stay owned by
+   their pages, while every authenticated workspace uses the Ad Studio chrome. */
+.app-global-header {
+  min-height: 58px;
+  padding: 6px 8px;
+  column-gap: 6px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.app-global-header-title {
+  color: #24211d;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+
+.dark .app-global-header-title {
+  color: #fff;
+}
+
+@media (min-width: 640px) {
+  .app-global-header {
+    min-height: 62px;
+    padding-right: 16px;
+    padding-left: 16px;
+    column-gap: 12px;
+  }
+
+  .app-global-header-title {
+    font-size: 20px;
+  }
+}
+
+@media (min-width: 768px) {
+  .app-global-header {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .app-global-header-title {
+    font-size: 24px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-global-header-title {
+    font-size: 26px;
+  }
+}
+
+@media (min-width: 1536px) {
+  .app-global-header-title {
+    font-size: 29px;
+  }
+}
+
 /* ── Hide scrollbars cleanly (matching dark mode) ─────────────────────── */
 html:not(.dark) .subtle-scroll,
-html:not(.dark) .flex.min-h-0.flex-1.flex-col.overflow-y-auto {
+html:not(.dark) .flex.min-h-0.flex-1.flex-col.overflow-y-auto:not(.app-main-scroll) {
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
 }
 html:not(.dark) .subtle-scroll::-webkit-scrollbar,
-html:not(.dark) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar {
+html:not(.dark)
+  .flex.min-h-0.flex-1.flex-col.overflow-y-auto:not(.app-main-scroll)::-webkit-scrollbar {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
@@ -2008,56 +2069,47 @@ html.profile-theme-changing::view-transition-new(root) {
   }
 }
 
-body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto {
+/* Keep the app shell width stable while navigating between routes and themes. */
+.app-main-scroll {
   scrollbar-gutter: stable;
-}
-
-html:not(.dark) body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto,
-html:not(.dark) .profile_container {
   scrollbar-width: thin !important;
-  scrollbar-color: rgba(0, 0, 0, 0.25) transparent !important;
   -ms-overflow-style: auto !important;
 }
 
-html:not(.dark) body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar,
-html:not(.dark) .profile_container::-webkit-scrollbar {
-  display: block !important;
-  width: 6px !important;
+html:not(.dark) .app-main-scroll {
+  scrollbar-color: rgba(15, 23, 42, 0.2) transparent !important;
 }
 
-html:not(.dark) body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar-thumb,
-html:not(.dark) .profile_container::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.25) !important;
+html.dark .app-main-scroll {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent !important;
+}
+
+.app-main-scroll::-webkit-scrollbar {
+  display: block !important;
+  width: 6px !important;
+  height: 6px !important;
+}
+
+.app-main-scroll::-webkit-scrollbar-thumb {
   border-radius: 9999px !important;
 }
 
-html:not(.dark) body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar-track,
-html:not(.dark) .profile_container::-webkit-scrollbar-track {
+html:not(.dark) .app-main-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(15, 23, 42, 0.2) !important;
+}
+
+html.dark .app-main-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.app-main-scroll::-webkit-scrollbar-track {
   background: transparent !important;
 }
 
-html.dark body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto,
-html.dark .profile_container {
-  scrollbar-width: thin !important;
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent !important;
-  -ms-overflow-style: auto !important;
-}
-
-html.dark body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar,
-html.dark .profile_container::-webkit-scrollbar {
-  display: block !important;
-  width: 6px !important;
-}
-
-html.dark body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar-thumb,
-html.dark .profile_container::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.24) !important;
-  border-radius: 9999px !important;
-}
-
-html.dark body:has(.profile_container) .flex.min-h-0.flex-1.flex-col.overflow-y-auto::-webkit-scrollbar-track,
-html.dark .profile_container::-webkit-scrollbar-track {
-  background: transparent !important;
+/* Prevent scroll chaining when hovering/scrolling over Ad Library filter cards */
+.ad-library-filter-card,
+.ad-library-date-card {
+  overscroll-behavior: contain !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2933,13 +2985,37 @@ html:not(.dark) .ad-library-search .ad-library-search-input:focus-visible {
 }
 
 html:not(.dark) .ad-library-search {
-  background: rgb(255 255 255 / 90%) !important;
-  border-color: var(--ws-border) !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
   box-shadow: none !important;
+  transition: border-color 0.2s ease !important;
+}
+
+html:not(.dark) .ad-library-search:hover {
+  border-color: rgba(0, 0, 0, 0.22) !important;
 }
 
 html:not(.dark) .ad-library-search:focus-within {
-  border-color: var(--ws-border-strong) !important;
+  border-color: rgba(0, 0, 0, 0.35) !important;
+}
+
+html.dark .ad-library-search {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  box-shadow: none !important;
+  transition: border-color 0.2s ease !important;
+}
+
+html.dark .ad-library-search:hover {
+  border-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+html.dark .ad-library-search:focus-within {
+  border-color: rgba(255, 255, 255, 0.45) !important;
 }
 
 /* URL + Add controls use one pill surface. The real input is deliberately

@@ -16,7 +16,7 @@ export default function AdLibraryPage({ source = 'explore' }) {
 
   if (usesBrandCompetitors) {
     return (
-      <div className="h-full w-full pl-4 md:pl-8 2xl:pl-10">
+      <div className="h-full w-full">
         <CompetitorsHome surface="adStudioLibrary" />
       </div>
     );

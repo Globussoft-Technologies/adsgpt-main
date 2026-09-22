@@ -177,7 +177,7 @@ const Layout = () => {
           <main className="relative flex h-svh min-w-0 flex-1 flex-col overflow-hidden">
             <TopHeader />
             <div
-              className={`flex dark:bg-inherit bg-[#F7F4EE] min-h-0 flex-1 flex-col ${
+              className={`app-main-scroll flex dark:bg-inherit bg-[#F7F4EE] min-h-0 flex-1 flex-col ${
                 location.pathname === '/adfactory' ? 'overflow-hidden' : 'overflow-y-auto'
               } p-4 pb-0!`}
             >
@@ -254,9 +254,13 @@ const Layout = () => {
               />
               <TopHeader />
               <div
-                className={`flex min-h-0 flex-1 flex-col ${
+                className={`app-main-scroll flex min-h-0 flex-1 flex-col ${
                   location.pathname === '/adfactory' ? 'overflow-hidden' : 'overflow-y-auto'
-                } p-4 pb-0! bg-transparent dark:bg-inherit`}
+                } ${
+                  location.pathname === '/adstudio' && activeAdStudioTabId === 'adLibrary'
+                    ? 'px-4 pt-1.5'
+                    : 'p-4'
+                } pb-0! bg-transparent dark:bg-inherit`}
               >
                 <Outlet />
               </div>

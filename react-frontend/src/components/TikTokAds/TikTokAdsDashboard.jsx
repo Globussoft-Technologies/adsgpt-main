@@ -1171,11 +1171,11 @@ const TikTokAdsDashboard = () => {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-auto p-6 pl-12 sm:pl-14 lg:p-6 text-gray-900 dark:text-white">
       {/* Header — title left, account + date pickers and theme toggle top-right (Meta-style) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DDD7CD] pb-3 dark:border-white/10">
+      <div className="app-global-header -mt-6 -mx-6 flex flex-wrap items-center justify-between">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs 2xl:h-12 2xl:w-12 dark:border-white/10 dark:bg-white">
-              <FaTiktok className="h-6 w-6 text-black 2xl:h-7 2xl:w-7" />
+            <div className="flex h-9.5 w-9.5 items-center justify-center rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs 2xl:h-10.5 2xl:w-10.5 dark:border-white/10 dark:bg-white">
+              <FaTiktok className="h-5.5 w-5.5 text-black 2xl:h-6 2xl:w-6" />
             </div>
             <AdsManagerModeSwitcher activeMode="manager" platform="TikTok" />
           </div>

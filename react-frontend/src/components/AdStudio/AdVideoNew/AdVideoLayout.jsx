@@ -492,7 +492,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
       ) : displayedActivePage === 'myVideos' ? (
         <>
           {/* Header */}
-          <div className="-mt-2.5 -mx-4 flex h-[64px] w-[calc(100%+2rem)] items-center justify-between gap-2 px-1 md:px-2.5 2xl:px-6 text-gray-900 dark:text-white">
+          <div className="app-global-header -mt-4 -mx-4 flex w-[calc(100%+2rem)] items-center justify-between text-gray-900 dark:text-white">
             <div className="left_header_container flex items-center">
               <SidebarTrigger
                 aria-label="Open navigation"
@@ -501,9 +501,10 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
               >
                 <PanelLeft className="h-5" aria-hidden="true" />
               </SidebarTrigger>
-              <h1 className="mr-4 text-lg font-semibold whitespace-nowrap text-[#24211D] md:text-xl lg:mr-4 2xl:mr-6 2xl:text-[30px] dark:text-white">
+              <h1 className="app-global-header-title">
                 My Space
               </h1>
+              <div className="mx-2 h-5 w-[1.5px] shrink-0 bg-zinc-300 sm:mx-3 sm:h-6 md:mx-4 dark:bg-zinc-700" />
 
               {/* Tabs — visual style + position mirror Brand IQ's HeaderTabs.
                   Kept in the layout but invisible until the probe has answered,
@@ -511,7 +512,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   Videos; `invisible` rather than unmounting keeps the header
                   from reflowing when it appears. */}
               <div
-                className={`relative flex items-center gap-0 rounded-full border border-black/10 bg-white/80 p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)] backdrop-blur-md dark:border-transparent dark:bg-[#0D0D0D] ${
+                className={`flex items-center gap-3 overflow-x-auto scroll-smooth pt-1 pb-2 select-none no-scrollbar sm:gap-4 md:gap-5 2xl:gap-6 ${
                   tabDecided ? '' : 'invisible'
                 }`}
               >
@@ -522,23 +523,23 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                       key={id}
                       type="button"
                       onClick={() => dispatch(setMySpaceTab(id))}
-                      className={`2xl:text-13 relative flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 2xl:px-4.5 2xl:py-2 ${
+                      className={`relative flex shrink-0 items-center justify-start py-1 text-xs font-medium whitespace-nowrap transition-colors select-none cursor-pointer sm:text-[13px] 2xl:text-[14.5px] ${
                         isActive
-                          ? 'text-zinc-900 font-bold dark:text-white'
-                          : 'text-zinc-600 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:text-white'
+                          ? 'font-semibold text-zinc-950 dark:text-white'
+                          : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white'
                       }`}
                     >
-                      <div className="flex items-center gap-1.5 2xl:gap-2">
-                        <Icon className={`h-3.5 w-3.5 2xl:h-4.5 2xl:w-4.5 ${isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-[#AFAFAF]'}`} />
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <Icon className={`h-3.5 w-3.5 shrink-0 transition-colors sm:h-4 sm:w-4 2xl:h-[18px] 2xl:w-[18px] ${isActive ? 'text-zinc-950 stroke-[2.2] dark:text-white' : 'text-zinc-400 stroke-[1.8] dark:text-zinc-400'}`} />
                         <span>{label}</span>
+                        {isActive && (
+                          <motion.div
+                            layoutId="mySpaceTabUnderline"
+                            className="absolute -bottom-1.5 right-0 left-0 h-[2px] rounded-full bg-zinc-950 dark:bg-white"
+                            transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                          />
+                        )}
                       </div>
-                      {isActive && (
-                        <motion.div
-                          layoutId="mySpaceTabBg"
-                          className="absolute inset-0 -z-10 rounded-full border border-black/5 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:border-none dark:bg-gradient-to-br dark:from-[#3C3C3C] dark:to-[#3C3C3C] dark:shadow-none"
-                          transition={{ type: 'spring', duration: 0.4 }}
-                        />
-                      )}
                     </button>
                   );
                 })}

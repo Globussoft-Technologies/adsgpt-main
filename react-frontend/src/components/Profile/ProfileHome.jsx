@@ -261,7 +261,7 @@ export default function ProfileHome() {
   };
 
   return (
-    <div className="profile_container flex items-start justify-center p-0 text-zinc-900 lg:p-6 dark:text-white">
+    <div className="flex items-start justify-center p-0 text-zinc-900 lg:p-6 dark:text-white">
       <div className="mx-auto flex w-full max-w-[43rem] flex-col gap-6 lg:max-w-6xl lg:gap-8 2xl:max-w-7xl">
         {/* Two-column area: Profile + Subscription (left), Integrations (right), Credits full width below */}
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8">

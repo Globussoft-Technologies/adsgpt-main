@@ -64,13 +64,12 @@ const MasonryResponsiveLayout = () => {
               <ResponsiveMasonry
                 columnsCountBreakPoints={{
                   0: 1,
-                  500: 2,
-                  750: 2,
-                  900: 3,
-                  1200: 4,
-                  1700: 4,
+                  480: 2,
+                  700: 3,
+                  960: 4,
+                  1200: 5,
                 }}
-                gutterBreakPoints={{ 0: '14px', 1280: '20px' }}
+                gutterBreakPoints={{ 0: '8px', 1280: '8px' }}
               >
                 <Masonry className="outline-none">
                   {exploreAds.map((item, i) => (

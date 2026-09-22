@@ -37,7 +37,7 @@ export default function ModeSwitch({ mode, onChange, disabled = false, busy = fa
     <div
       role="group"
       aria-label="Setup mode"
-      className="relative flex items-center gap-0 rounded-full border border-black/10 bg-white/80 p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)] backdrop-blur-md dark:border-transparent dark:bg-[#0D0D0D]"
+      className="flex items-center gap-3 overflow-x-auto scroll-smooth pt-1 pb-2 select-none no-scrollbar sm:gap-4 md:gap-5 2xl:gap-6"
     >
       {OPTIONS.map((opt) => {
         const active = current === opt.value;
@@ -49,31 +49,31 @@ export default function ModeSwitch({ mode, onChange, disabled = false, busy = fa
             aria-pressed={active}
             disabled={disabled || busy || active}
             onClick={() => onChange?.(opt.value)}
-            className={`2xl:text-13 relative flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-all duration-200 2xl:px-4.5 2xl:py-2 disabled:cursor-not-allowed ${
+            className={`relative flex shrink-0 items-center justify-start py-1 text-xs font-medium whitespace-nowrap transition-colors select-none disabled:cursor-not-allowed sm:text-[13px] 2xl:text-[14.5px] ${
               active
-                ? 'font-bold text-zinc-900 dark:text-white'
-                : 'text-zinc-600 hover:text-zinc-900 dark:text-[#AFAFAF] dark:hover:text-white disabled:opacity-45'
+                ? 'font-semibold text-zinc-950 dark:text-white'
+                : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white disabled:opacity-45'
             }`}
           >
-            <div className="flex items-center gap-1.5 2xl:gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               {Icon && (
                 <Icon
-                  className={`h-3.5 w-3.5 2xl:h-4.5 2xl:w-4.5 ${
+                  className={`h-3.5 w-3.5 shrink-0 transition-colors sm:h-4 sm:w-4 2xl:h-[18px] 2xl:w-[18px] ${
                     active
-                      ? 'text-zinc-900 dark:text-white'
-                      : 'text-zinc-500 dark:text-[#AFAFAF]'
+                      ? 'text-zinc-950 stroke-[2.2] dark:text-white'
+                      : 'text-zinc-400 stroke-[1.8] dark:text-zinc-400'
                   }`}
                 />
               )}
               <span>{opt.label}</span>
+              {active && (
+                <motion.div
+                  layoutId="adFactoryModeSwitchUnderline"
+                  className="absolute -bottom-1.5 right-0 left-0 h-[2px] rounded-full bg-zinc-950 dark:bg-white"
+                  transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                />
+              )}
             </div>
-            {active && (
-              <motion.div
-                layoutId="adFactoryModeSwitchTabBg"
-                className="absolute inset-0 -z-10 rounded-full border border-black/5 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:border-none dark:bg-gradient-to-br dark:from-[#3C3C3C] dark:to-[#3C3C3C] dark:shadow-none"
-                transition={{ type: 'spring', duration: 0.4 }}
-              />
-            )}
           </button>
         );
       })}

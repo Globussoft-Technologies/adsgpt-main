@@ -484,19 +484,21 @@ const CompetitorsHome = ({ surface = 'brandIq' }) => {
     return 'Custom';
   }, [dateFrom, dateTo, datePreset]);
 
-  // Masonry breakpoints
+  // Masonry breakpoints - smoothly responsive across all device sizes
   const columnCount = useMemo(() => {
-    if (width < 500) return 1;
-    if (width < 750) return 2;
-    if (width < 1100) return 3;
-    return 4;
+    if (width <= 540) return 1;
+    if (width <= 840) return 2;
+    if (width <= 1200) return 3;
+    if (width <= 1536) return 4;
+    return 5;
   }, [width]);
 
   const masonryBreakpoints = {
-    default: columnCount,
-    1100: 4,
-    750: 3,
-    500: 2,
+    default: 5,
+    1536: 4,
+    1200: 3,
+    840: 2,
+    540: 1,
   };
 
   // ─── PENDING STATE (discovery running) ─────────────────────────────────
@@ -531,33 +533,18 @@ const CompetitorsHome = ({ surface = 'brandIq' }) => {
   return (
     <div className="flex h-full flex-col">
       {/* Header Stats */}
-      <div className="mb-4 flex items-center justify-between px-1">
-        <div className="flex items-center gap-3">
-          {/* <h2 className="text-xl font-semibold text-white">
-            {totalCount} <span className="text-white/50">competitor ads</span>
-          </h2>
-          <span className="text-sm text-white/30">
-            across {filtersAvailable.platforms.length} platforms
-          </span> */}
-          {status === 'PENDING' && (
+      {status === 'PENDING' && (
+        <div className="mb-2 flex items-center justify-between px-1">
+          <div className="flex items-center gap-3">
             <span
               className={`flex items-center gap-1.5 rounded-full ${ADSGPT_BG_SOFT} px-3 py-1 text-xs ${ADSGPT_TEXT}`}
             >
               <Loader className="h-3 w-3 animate-spin" />
               Updating...
             </span>
-          )}
+          </div>
         </div>
-        {/* Refresh button — hidden for now; page switch already re-fetches from ES */}
-        {/* <button
-          onClick={handleRefresh}
-          disabled={refreshing || status === 'PENDING'}
-          className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70 transition-all hover:bg-white/10 hover:text-white disabled:opacity-50"
-        >
-          <RefreshCcw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </button> */}
-      </div>
+      )}
 
       {/* Filters Bar */}
       {!isAdStudioLibrary && (
@@ -742,16 +729,19 @@ const CompetitorsHome = ({ surface = 'brandIq' }) => {
       )}
 
       {/* Ads Grid */}
-      <div ref={gridContainerRef} className="flex-1 overflow-y-auto pb-20">
+      <div
+        ref={gridContainerRef}
+        className={`flex-1 ${isAdStudioLibrary ? 'overflow-visible pt-[4px] sm:pt-[6px]' : 'overflow-y-auto'} pb-6`}
+      >
         {(loading || status === null) && ads.length === 0 ? (
           <Masonry
             breakpointCols={masonryBreakpoints}
             className="my-masonry-grid outline-none"
             columnClassName="my-masonry-grid_column"
           >
-            {Array.from({ length: PAGE_SIZE }).map((_, index) => (
-              <div key={index} className="mb-4">
-                <CompetitorAdCardLoader />
+            {Array.from({ length: 15 }).map((_, index) => (
+              <div key={index} className="mb-2">
+                <CompetitorAdCardLoader index={index} />
               </div>
             ))}
           </Masonry>
@@ -763,7 +753,7 @@ const CompetitorsHome = ({ surface = 'brandIq' }) => {
               columnClassName="my-masonry-grid_column"
             >
               {ads.map((ad, index) => (
-                <div key={ad.adId || index} className="mb-4">
+                <div key={ad.adId || index} className="mb-2">
                   <CompetitorAdCard ad={ad} onClick={() => handleAdClick(ad)} />
                 </div>
               ))}

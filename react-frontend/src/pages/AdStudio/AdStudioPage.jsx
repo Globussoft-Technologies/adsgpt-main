@@ -226,7 +226,7 @@ const AdStudioPage = () => {
         )}
 
         {effectiveTabId === 'adLibrary' && (
-          <div className="adcopy_container max-h-[calc(100svh-73px)] w-full overflow-y-auto 2xl:max-h-[calc(100svh-112px)]">
+          <div className="adcopy_container h-full w-full">
             <AdLibraryPage source="brandCompetitors" />
           </div>
         )}

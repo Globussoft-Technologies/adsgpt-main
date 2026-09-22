@@ -27,6 +27,8 @@ import {
   MenuIcon,
   Save,
   X,
+  SquarePen,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
@@ -47,7 +49,7 @@ import { fetchSuggestions } from '@/store/actions/adStudio/adCopyActions';
 import { createNewSession } from '@/store/reducers/adStudio/adHistorySlice';
 import { Input } from '@/components/ui/input';
 import AddNewBrandDialog from '@/components/BrandIQ/Actions/AddNewBrandDialog';
-import BrandsDropdown from './BrandIQ/Competitors/BrandsDropdown';
+import BrandsDropdown, { getBrandColor } from './BrandIQ/Competitors/BrandsDropdown';
 import AllPlateformDropdown from './BrandIQ/Competitors/AllPlateformDropdown';
 import {
   resetAdCreativeSlice,
@@ -87,7 +89,7 @@ const SELECTED_BRAND_STORAGE_PREFIX = 'adsgpt:selectedBrand';
 // HIDE-MARK — intentionally-hidden header UI (Templates / Refresh buttons and
 // the global theme toggle). Named flag avoids a literal `false &&`
 // (no-constant-binary-expression); flip to re-enable.
-const SHOW_HIDDEN_HEADER_UI = true;
+const SHOW_HIDDEN_HEADER_UI = false;
 
 import AddNewBrand from '@/components/BrandIQ/Actions/AddNewBrand';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -100,25 +102,11 @@ import {
   setUiMode,
 } from '@/store/reducers/adFactoryBrief/adFactoryBriefSlice';
 const adStudioTabs = [
-  { id: 'adCopy', label: 'Ad Copy', icon: NotebookPen },
-  // HIDE-MARK — legacy Ad Creative tab. The new generator (id
-  // 'adCreativeNew') now takes this slot under the same "Ad Creative"
-  // label so users land in the new experience by default. Restore by
-  // un-commenting this entry and dropping the renamed entry below.
-  // { id: 'adCreative', label: 'Ad Creative', icon: Image },
-  { id: 'adCreativeNew', label: 'Ad Creative', icon: Images },
+  { id: 'adCopy', label: 'Ad Copy', icon: SquarePen },
+  { id: 'adCreativeNew', label: 'Ad Creative', icon: Image },
+  { id: 'adVideoNew', label: 'Ad Video', icon: Video },
+  { id: 'adLibrary', label: 'Ad Library', icon: Images },
 ];
-const adVideoTab = { id: 'adVideo', label: 'Ad Video', icon: Video };
-const adVideoNewTab = {
-  id: 'adVideoNew',
-  label: 'Ad Video',
-  icon: Video,
-};
-const adLibraryTab = {
-  id: 'adLibrary',
-  label: 'Ad Library',
-  icon: Image,
-};
 const brandIQTabs = [
   { id: 'myBrands', label: 'My Brands', icon: Zap },
   { id: 'competitors', label: 'Competitors', icon: Users },
@@ -247,22 +235,19 @@ export default function TopHeader() {
   );
   const { userData } = useSelector((state) => state.socket);
   const adFactoryUiMode = useSelector(selectAdFactoryUiMode);
-  // if (
-  //   userData?.featureObject?.['Ad Creative Video'] > 0 ||
-  //   Object.keys(userData?.userSubscriptionType || {})[0] === AUTO_GENERATED_PLAN_ID
-  // ) {
-  // adStudioTabs[2] = adVideoTab;
-  adStudioTabs[2] = adVideoNewTab;
-  adStudioTabs[3] = adLibraryTab;
-  // HIDE-MARK — the new Ad Creative tab is now defined inline in the
-  // static adStudioTabs array above (slot 1), so no runtime append is
-  // needed here. Restore alongside the legacy entry if reverting.
-  // adStudioTabs[3] = adCreativeNewTab;
-  // }
+  // HIDE-MARK — adStudioTabs is defined statically above
   const activeAdStudioTabId = useSelector((state) => state.adStudioTabs.activeAdStudioTabId);
   const { myBrands, activeBrandIQTabId, selectedCompetitorBrand, selectedCompetitorPlatform } =
     useSelector((state) => state.brandIQTabs);
   const dispatch = useDispatch();
+  const [cachedBrandSnapshot, setCachedBrandSnapshot] = useState(() => {
+    try {
+      const raw = localStorage.getItem('adsgpt:last_active_brand_snapshot');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
   const visibleAdStudioTabs = useMemo(
     () => adStudioTabs.filter((tab) => canUseWorkspaceFeature(adStudioTabFeatures[tab.id])),
     []
@@ -423,7 +408,7 @@ export default function TopHeader() {
   // Persist only the stable ID; the full, current brand object always comes
   // from myBrands so deleted or updated brands cannot leave stale Redux data.
   useEffect(() => {
-    if (!userData?.user_id || !Array.isArray(myBrands) || myBrands.length === 0) return;
+    if (!Array.isArray(myBrands) || myBrands.length === 0) return;
 
     const selectedBrandIsAvailable = myBrands.some(
       (brand) => brand.id === selectedCompetitorBrand?.id
@@ -432,8 +417,20 @@ export default function TopHeader() {
 
     let storedBrandId = '';
     try {
-      storedBrandId =
-        localStorage.getItem(`${SELECTED_BRAND_STORAGE_PREFIX}:${userData.user_id}`) || '';
+      if (userData?.user_id) {
+        storedBrandId =
+          localStorage.getItem(`${SELECTED_BRAND_STORAGE_PREFIX}:${userData.user_id}`) || '';
+      }
+      if (!storedBrandId) {
+        storedBrandId = localStorage.getItem('adsgpt:selectedBrandId') || '';
+      }
+      if (!storedBrandId) {
+        const raw = localStorage.getItem('adsgpt:last_active_brand_snapshot');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          storedBrandId = parsed?.value || '';
+        }
+      }
     } catch {
       // Storage may be unavailable in restricted browsing contexts.
     }
@@ -445,18 +442,45 @@ export default function TopHeader() {
   // Keep the selection refresh-safe for this user. Brand existence is checked
   // first so an obsolete/deleted ID is never written back to storage.
   useEffect(() => {
-    if (!userData?.user_id || !selectedCompetitorBrand?.id || !Array.isArray(myBrands)) return;
+    if (!selectedCompetitorBrand?.id || !Array.isArray(myBrands) || myBrands.length === 0) return;
     if (!myBrands.some((brand) => brand.id === selectedCompetitorBrand.id)) return;
 
     try {
-      localStorage.setItem(
-        `${SELECTED_BRAND_STORAGE_PREFIX}:${userData.user_id}`,
-        selectedCompetitorBrand.id
+      if (userData?.user_id) {
+        localStorage.setItem(
+          `${SELECTED_BRAND_STORAGE_PREFIX}:${userData.user_id}`,
+          selectedCompetitorBrand.id
+        );
+      }
+      localStorage.setItem('adsgpt:selectedBrandId', selectedCompetitorBrand.id);
+
+      const brandName = selectedCompetitorBrand.name || 'Unnamed';
+      const resolvedColor = getBrandColor(
+        brandName,
+        selectedCompetitorBrand.color ||
+          selectedCompetitorBrand.brandColors?.[0] ||
+          selectedCompetitorBrand.colors?.[0] ||
+          selectedCompetitorBrand.brandGuidelines?.colorPalette?.[0] ||
+          ''
       );
+
+      const snapshot = {
+        value: selectedCompetitorBrand.id,
+        label: brandName,
+        logoUrl:
+          selectedCompetitorBrand.logoUrls?.[0] ||
+          selectedCompetitorBrand.iconUrl ||
+          selectedCompetitorBrand.logoUrl ||
+          selectedCompetitorBrand.logo ||
+          '',
+        color: resolvedColor,
+      };
+      localStorage.setItem('adsgpt:last_active_brand_snapshot', JSON.stringify(snapshot));
+      setCachedBrandSnapshot(snapshot);
     } catch {
       // Redux selection still works when browser storage is unavailable.
     }
-  }, [myBrands, selectedCompetitorBrand?.id, userData?.user_id]);
+  }, [myBrands, selectedCompetitorBrand, userData?.user_id]);
 
   const isMySpaceView =
     currentRoute === '/my-space' ||
@@ -502,34 +526,43 @@ export default function TopHeader() {
     <>
       {currentRoute !== '/adfactory-demo' && !hideHeader && (
         <div
-          className={`lm-header-surface sticky top-0 z-50 flex h-[74px] w-full items-center justify-between gap-1 bg-transparent px-2 py-3 md:px-5 dark:bg-transparent dark:backdrop-blur-none ${activeAdStudioTabId === 'adCreative' && location.pathname === '/adstudio' && ''} `}
+          className="app-global-header lm-header-surface sticky top-0 z-50 flex w-full items-center justify-between dark:bg-transparent dark:backdrop-blur-none"
         >
-          <div className="left_header_container flex items-center">
+          <div className="left_header_container flex min-w-0 items-center gap-1 sm:gap-2">
             {renderMobileSidebarTrigger('mr-0 sm:mr-1.5')}
             {/* Left Title */}
             {currentRoute !== '/adfactory-demo' && (
-              <h1
-                className={`mr-4 ${headerName === 'Ad Studio' ? 'text-sm' : 'text-lg'} font-semibold whitespace-nowrap text-[#24211D] md:text-xl lg:mr-4 2xl:mr-6 2xl:text-[30px] dark:text-white`}
-              >
-                {headerName}
-              </h1>
+              <div className="flex shrink-0 items-center">
+                <h1
+                  className="app-global-header-title"
+                >
+                  {headerName}
+                </h1>
+                {(currentRoute === '/adstudio' ||
+                  currentRoute === '/adfactory' ||
+                  (currentRoute === '/brandiq' && visibleBrandIqTabs?.length > 0)) && (
+                  <div className="mx-2 sm:mx-3 md:mx-4 h-5 sm:h-6 w-[1.5px] shrink-0 bg-zinc-300 dark:bg-zinc-700" />
+                )}
+              </div>
             )}
             {currentRoute === '/adfactory' && IS_AD_FACTORY_V2 && (
-              <ModeSwitch
-                mode={adFactoryUiMode}
-                onChange={(next) => {
-                  if (next === adFactoryUiMode) return;
-                  dispatch(setUiMode({ uiMode: next }));
-                  const params = new URLSearchParams(location.search);
-                  params.delete('campaignId');
-                  params.delete('briefId');
-                  const search = params.toString();
-                  navigate(
-                    { pathname: '/adfactory', search: search ? `?${search}` : '' },
-                    { replace: true },
-                  );
-                }}
-              />
+              <div>
+                <ModeSwitch
+                  mode={adFactoryUiMode}
+                  onChange={(next) => {
+                    if (next === adFactoryUiMode) return;
+                    dispatch(setUiMode({ uiMode: next }));
+                    const params = new URLSearchParams(location.search);
+                    params.delete('campaignId');
+                    params.delete('briefId');
+                    const search = params.toString();
+                    navigate(
+                      { pathname: '/adfactory', search: search ? `?${search}` : '' },
+                      { replace: true },
+                    );
+                  }}
+                />
+              </div>
             )}
             {currentRoute === '/adstudio' && (
               <HeaderTabs
@@ -555,7 +588,7 @@ export default function TopHeader() {
 
           <div
             id="tour_filter_adcreatives_prompt"
-            className="right_header_mybrands relative flex scale-[0.9] items-center gap-2 sm:static sm:scale-100"
+            className="right_header_mybrands relative flex shrink-0 items-center gap-1.5 sm:gap-2"
           >
             <WorkspaceSwitcher />
             {/* AI Assistant — History + New Chat */}
@@ -563,19 +596,7 @@ export default function TopHeader() {
 
             {/* for AdStudio */}
             {currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (
-              <Button
-                variant="ghost"
-                onClick={handleNewChatClick}
-                className="backdrop-blur-100 relative flex h-8 items-center gap-2 rounded-full border border-black/10 bg-white/70 text-xs text-zinc-700 transition-colors hover:text-black has-[>svg]:px-4 2xl:h-9 2xl:px-5 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:text-white"
-              >
-                <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
-                <span>New Chat</span>
-              </Button>
-            )}
-            {currentRoute === '/adstudio' &&
-              activeAdStudioTabId === 'adCreative' &&
-              Array.isArray(creativeConversations) &&
-              creativeConversations.length > 0 && (
+              <>
                 <Button
                   variant="ghost"
                   onClick={handleNewChatClick}
@@ -584,6 +605,24 @@ export default function TopHeader() {
                   <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
                   <span>New Chat</span>
                 </Button>
+                <div className="mx-1.5 h-5 w-[1px] shrink-0 bg-black/15 dark:bg-white/20" />
+              </>
+            )}
+            {currentRoute === '/adstudio' &&
+              activeAdStudioTabId === 'adCreative' &&
+              Array.isArray(creativeConversations) &&
+              creativeConversations.length > 0 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    onClick={handleNewChatClick}
+                    className="backdrop-blur-100 relative flex h-8 items-center gap-2 rounded-full border border-black/10 bg-white/70 text-xs text-zinc-700 transition-colors hover:text-black has-[>svg]:px-4 2xl:h-9 2xl:px-5 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:text-white"
+                  >
+                    <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
+                    <span>New Chat</span>
+                  </Button>
+                  <div className="mx-1.5 h-5 w-[1px] shrink-0 bg-black/15 dark:bg-white/20" />
+                </>
               )}
             {currentRoute === '/adstudio' &&
               activeAdStudioTabId === 'adCreative' &&
@@ -617,7 +656,7 @@ export default function TopHeader() {
             </div> */}
 
                   {/* ! search field */}
-                  <div className="ad-library-search backdrop-blur-100 relative flex min-w-[150px] items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-zinc-600 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]">
+                  <div className="ad-library-search relative flex min-w-[150px] items-center gap-2 rounded-full px-3 py-1.5 text-zinc-600 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:text-[#AFAFAF]">
                     <div className="flex flex-shrink-0 items-center">
                       <Search
                         className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4"
@@ -634,40 +673,18 @@ export default function TopHeader() {
                       value={exploreCompetitor}
                       onChange={(e) => dispatch(setExploreCompetitor(e.target.value))}
                     />
-                    <div className="ml-2 flex space-x-1">
+                    <div className="flex shrink-0 items-center gap-1">
                       {!isMobile ? (
                         <>
-                          {['competitor', 'keyword'].map((type) => (
-                            <button
-                              key={type}
-                              className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-200 ${
-                                exploreSearchTerm === type
-                                  ? 'bg-zinc-200 text-zinc-900 dark:bg-[#2A2A2A] dark:text-white'
-                                  : 'text-zinc-500 dark:text-[#777777]'
-                              }`}
-                              onClick={() => {
-                                dispatch(setExploreSearchTerm(type));
-                                dispatch(setSkip(0));
-                                dispatch(fetchExploreAds());
-                              }}
-                            >
-                              {type === 'competitor' ? 'Competitor' : 'Keyword'}
-                            </button>
-                          ))}
-                        </>
-                      ) : (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <MenuIcon className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4" />
-                          </PopoverTrigger>
-                          <PopoverContent className="flex w-fit flex-col gap-2 overflow-hidden rounded-lg border border-white/10 bg-[#0D0D0D]/50 p-2 shadow-lg backdrop-blur-[50px] transition-all duration-150">
-                            {['competitor', 'keyword'].map((type) => (
+                          {['competitor', 'keyword'].map((type) => {
+                            const isActive = (exploreSearchTerm || 'competitor') === type;
+                            return (
                               <button
                                 key={type}
-                                className={`rounded-full px-2.5 py-0.5 text-xs transition-colors duration-200 ${
-                                  exploreSearchTerm === type
-                                    ? 'bg-[#2A2A2A] text-white'
-                                    : 'text-[#777777]'
+                                className={`rounded-full px-3 py-1 text-xs capitalize transition-colors duration-150 cursor-pointer ${
+                                  isActive
+                                    ? 'bg-[#E4E4E7] font-semibold text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100'
+                                    : 'text-zinc-500 hover:text-zinc-800 dark:text-[#888888] dark:hover:text-zinc-200 font-normal'
                                 }`}
                                 onClick={() => {
                                   dispatch(setExploreSearchTerm(type));
@@ -677,7 +694,35 @@ export default function TopHeader() {
                               >
                                 {type === 'competitor' ? 'Competitor' : 'Keyword'}
                               </button>
-                            ))}
+                            );
+                          })}
+                        </>
+                      ) : (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <MenuIcon className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4" />
+                          </PopoverTrigger>
+                          <PopoverContent className="flex w-fit flex-col gap-2 overflow-hidden rounded-lg border border-white/10 bg-[#0D0D0D]/50 p-2 shadow-lg backdrop-blur-[50px] transition-all duration-150">
+                            {['competitor', 'keyword'].map((type) => {
+                              const isActive = (exploreSearchTerm || 'competitor') === type;
+                              return (
+                                <button
+                                  key={type}
+                                  className={`rounded-full px-3 py-1 text-xs capitalize transition-colors duration-150 ${
+                                    isActive
+                                      ? 'bg-[#262626] text-white'
+                                      : 'text-[#888888] hover:text-white'
+                                  }`}
+                                  onClick={() => {
+                                    dispatch(setExploreSearchTerm(type));
+                                    dispatch(setSkip(0));
+                                    dispatch(fetchExploreAds());
+                                  }}
+                                >
+                                  {type === 'competitor' ? 'Competitor' : 'Keyword'}
+                                </button>
+                              );
+                            })}
                           </PopoverContent>
                         </Popover>
                       )}
@@ -698,24 +743,20 @@ export default function TopHeader() {
             {currentRoute === '/adstudio' && activeAdStudioTabId === 'adLibrary' && (
               <>
                 {/* Search field with Competitor and Keyword selector */}
-                <div className="ad-library-search backdrop-blur-100 relative flex h-9 min-w-[260px] max-w-[400px] items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 text-zinc-600 shadow-xs transition-colors md:min-w-[320px] 2xl:min-w-[390px] dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]">
+                <div className="ad-library-search relative flex h-9 min-w-0 flex-1 sm:flex-initial sm:min-w-[190px] md:min-w-[240px] lg:min-w-[300px] 2xl:min-w-[380px] max-w-[420px] items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3 py-1 text-zinc-700 backdrop-blur-md transition-all duration-200 dark:text-zinc-200">
                   <button
                     type="button"
                     aria-label="Search Ad Library"
                     onClick={submitAdLibrarySearch}
-                    className="flex shrink-0 items-center justify-center text-zinc-400 transition-colors hover:text-zinc-700 dark:text-[#AFAFAF] dark:hover:text-white"
+                    className="flex shrink-0 items-center justify-center text-zinc-400 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-white"
                   >
                     <Search className="h-4 w-4" />
                   </button>
                   <input
                     type="text"
-                    placeholder={
-                      adLibraryFilters?.searchType === 'keyword'
-                        ? 'Search by keyword...'
-                        : 'Search by competitor...'
-                    }
+                    placeholder="Search.."
                     aria-label="Search ads"
-                    className="ad-library-search-input min-w-0 flex-1 border-none bg-transparent text-xs text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-sm dark:text-[#D1D1D1] dark:placeholder:text-[#777777]"
+                    className="ad-library-search-input min-w-0 flex-1 border-none bg-transparent text-xs text-zinc-800 placeholder:text-zinc-400 focus:outline-none 2xl:text-sm dark:text-zinc-100 dark:placeholder:text-zinc-500"
                     value={adLibrarySearch}
                     maxLength={120}
                     onChange={(e) => setAdLibrarySearch(e.target.value)}
@@ -740,45 +781,19 @@ export default function TopHeader() {
                       <X className="h-3.5 w-3.5" />
                     </button>
                   )}
-                  <div className="ml-1 flex space-x-1">
+                  <div className="flex shrink-0 items-center gap-1">
                     {!isMobile ? (
                       <>
-                        {['competitor', 'keyword'].map((type) => (
-                          <button
-                            key={type}
-                            type="button"
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize transition-colors duration-200 ${
-                              adLibraryFilters?.searchType === type
-                                ? 'bg-zinc-200 text-zinc-900 dark:bg-[#2A2A2A] dark:text-white'
-                                : 'text-zinc-500 hover:text-zinc-800 dark:text-[#777777] dark:hover:text-white'
-                            }`}
-                            onClick={() => {
-                              dispatch(
-                                setAdLibraryFilters({
-                                  searchType: type,
-                                  searchQuery: adLibrarySearch.trim(),
-                                })
-                              );
-                            }}
-                          >
-                            {type === 'competitor' ? 'Competitor' : 'Keyword'}
-                          </button>
-                        ))}
-                      </>
-                    ) : (
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <MenuIcon className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4" />
-                        </PopoverTrigger>
-                        <PopoverContent className="flex w-fit flex-col gap-2 overflow-hidden rounded-lg border border-white/10 bg-[#0D0D0D]/50 p-2 shadow-lg backdrop-blur-[50px] transition-all duration-150">
-                          {['competitor', 'keyword'].map((type) => (
+                        {['competitor', 'keyword'].map((type) => {
+                          const isActive = (adLibraryFilters?.searchType || 'competitor') === type;
+                          return (
                             <button
                               key={type}
                               type="button"
-                              className={`rounded-full px-2.5 py-0.5 text-xs capitalize transition-colors duration-200 ${
-                                adLibraryFilters?.searchType === type
-                                  ? 'bg-[#2A2A2A] text-white'
-                                  : 'text-[#777777]'
+                              className={`rounded-full px-2 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs capitalize transition-colors duration-150 cursor-pointer ${
+                                isActive
+                                  ? 'bg-[#E4E4E7] font-semibold text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100'
+                                  : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white font-normal'
                               }`}
                               onClick={() => {
                                 dispatch(
@@ -791,7 +806,39 @@ export default function TopHeader() {
                             >
                               {type === 'competitor' ? 'Competitor' : 'Keyword'}
                             </button>
-                          ))}
+                          );
+                        })}
+                      </>
+                    ) : (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <MenuIcon className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4" />
+                        </PopoverTrigger>
+                        <PopoverContent className="flex w-fit flex-col gap-2 overflow-hidden rounded-lg border border-white/10 bg-[#0D0D0D]/50 p-2 shadow-lg backdrop-blur-[50px] transition-all duration-150">
+                          {['competitor', 'keyword'].map((type) => {
+                            const isActive = (adLibraryFilters?.searchType || 'competitor') === type;
+                            return (
+                              <button
+                                key={type}
+                                type="button"
+                                className={`rounded-full px-3 py-1 text-xs capitalize transition-colors duration-150 ${
+                                  isActive
+                                    ? 'bg-[#262626] text-white'
+                                    : 'text-[#888888] hover:text-white'
+                                }`}
+                                onClick={() => {
+                                  dispatch(
+                                    setAdLibraryFilters({
+                                      searchType: type,
+                                      searchQuery: adLibrarySearch.trim(),
+                                    })
+                                  );
+                                }}
+                              >
+                                {type === 'competitor' ? 'Competitor' : 'Keyword'}
+                              </button>
+                            );
+                          })}
                         </PopoverContent>
                       </Popover>
                     )}
@@ -799,7 +846,10 @@ export default function TopHeader() {
                 </div>
 
                 {/* Modern Platform Filter Dropdown */}
-                <AdLibraryFilterDropdown />
+                <AdLibraryFilterDropdown iconOnly />
+
+                {/* Vertical separator between filter button and brand switcher */}
+                <div className="mx-1.5 h-5 w-[1px] shrink-0 bg-black/15 dark:bg-white/20" />
               </>
             )}
 
@@ -807,14 +857,23 @@ export default function TopHeader() {
             {currentRoute === '/adstudio' && (
               <BrandsDropdown
                 compact
+                singleAvatar
                 options={
-                  Array.isArray(myBrands)
+                  Array.isArray(myBrands) && myBrands.length > 0
                     ? myBrands.map((b) => ({
                         value: b.id,
                         label: b.name || 'Unnamed',
-                        logoUrl: b.logoUrls?.[0] || b.logoUrl || b.logo || '',
+                        logoUrl: b.logoUrls?.[0] || b.iconUrl || b.logoUrl || b.logo || '',
+                        color:
+                          b.color ||
+                          b.brandColors?.[0] ||
+                          b.colors?.[0] ||
+                          b.brandGuidelines?.colorPalette?.[0] ||
+                          '',
                       }))
-                    : []
+                    : cachedBrandSnapshot
+                      ? [cachedBrandSnapshot]
+                      : []
                 }
                 value={
                   selectedCompetitorBrand
@@ -823,8 +882,15 @@ export default function TopHeader() {
                         label: selectedCompetitorBrand.name || 'Unnamed',
                         logoUrl:
                           selectedCompetitorBrand.logoUrls?.[0] ||
+                          selectedCompetitorBrand.iconUrl ||
                           selectedCompetitorBrand.logoUrl ||
                           selectedCompetitorBrand.logo ||
+                          '',
+                        color:
+                          selectedCompetitorBrand.color ||
+                          selectedCompetitorBrand.brandColors?.[0] ||
+                          selectedCompetitorBrand.colors?.[0] ||
+                          selectedCompetitorBrand.brandGuidelines?.colorPalette?.[0] ||
                           '',
                       }
                     : Array.isArray(myBrands) && myBrands[0]
@@ -833,11 +899,18 @@ export default function TopHeader() {
                           label: myBrands[0].name || 'Unnamed',
                           logoUrl:
                             myBrands[0].logoUrls?.[0] ||
+                            myBrands[0].iconUrl ||
                             myBrands[0].logoUrl ||
                             myBrands[0].logo ||
                             '',
+                          color:
+                            myBrands[0].color ||
+                            myBrands[0].brandColors?.[0] ||
+                            myBrands[0].colors?.[0] ||
+                            myBrands[0].brandGuidelines?.colorPalette?.[0] ||
+                            '',
                         }
-                      : null
+                      : cachedBrandSnapshot || null
                 }
                 label="Select brand"
                 onChange={(brandId) => {
@@ -879,14 +952,23 @@ export default function TopHeader() {
               <div className="flex items-center gap-2">
                 <BrandsDropdown
                   compact
+                  singleAvatar
                   options={
-                    Array.isArray(myBrands)
+                    Array.isArray(myBrands) && myBrands.length > 0
                       ? myBrands.map((b) => ({
                           value: b.id,
                           label: b.name || 'Unnamed',
-                          logoUrl: b.logoUrls?.[0] || b.logoUrl || b.logo || '',
+                          logoUrl: b.logoUrls?.[0] || b.iconUrl || b.logoUrl || b.logo || '',
+                          color:
+                            b.color ||
+                            b.brandColors?.[0] ||
+                            b.colors?.[0] ||
+                            b.brandGuidelines?.colorPalette?.[0] ||
+                            '',
                         }))
-                      : []
+                      : cachedBrandSnapshot
+                        ? [cachedBrandSnapshot]
+                        : []
                   }
                   value={
                     selectedCompetitorBrand
@@ -895,8 +977,15 @@ export default function TopHeader() {
                           label: selectedCompetitorBrand.name || 'Unnamed',
                           logoUrl:
                             selectedCompetitorBrand.logoUrls?.[0] ||
+                            selectedCompetitorBrand.iconUrl ||
                             selectedCompetitorBrand.logoUrl ||
                             selectedCompetitorBrand.logo ||
+                            '',
+                          color:
+                            selectedCompetitorBrand.color ||
+                            selectedCompetitorBrand.brandColors?.[0] ||
+                            selectedCompetitorBrand.colors?.[0] ||
+                            selectedCompetitorBrand.brandGuidelines?.colorPalette?.[0] ||
                             '',
                         }
                       : Array.isArray(myBrands) && myBrands[0]
@@ -905,11 +994,18 @@ export default function TopHeader() {
                             label: myBrands[0].name || 'Unnamed',
                             logoUrl:
                               myBrands[0].logoUrls?.[0] ||
+                              myBrands[0].iconUrl ||
                               myBrands[0].logoUrl ||
                               myBrands[0].logo ||
                               '',
+                            color:
+                              myBrands[0].color ||
+                              myBrands[0].brandColors?.[0] ||
+                              myBrands[0].colors?.[0] ||
+                              myBrands[0].brandGuidelines?.colorPalette?.[0] ||
+                              '',
                           }
-                        : null
+                        : cachedBrandSnapshot || null
                   }
                   onChange={(val) => {
                     const brand = Array.isArray(myBrands)
@@ -941,8 +1037,8 @@ export default function TopHeader() {
               </div>
             )}
 
-            {/* Theme toggle — inline header */}
-            {SHOW_HIDDEN_HEADER_UI && <ThemeToggle />}
+            {/* Theme toggle — inline header (hidden in Ad Studio to match clean reference header) */}
+            {SHOW_HIDDEN_HEADER_UI && currentRoute !== '/adstudio' && <ThemeToggle />}
           </div>
         </div>
       )}

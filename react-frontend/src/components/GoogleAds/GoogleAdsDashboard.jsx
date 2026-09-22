@@ -473,11 +473,11 @@ export default function GoogleAdsDashboard() {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-auto pl-12 pr-5 sm:pl-14 lg:px-5 pt-3 pb-6 2xl:px-7 2xl:pt-4 text-gray-900 dark:text-white">
       {/* Header — title left, account + date pickers and theme toggle top-right (TikTok-style) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DDD7CD] pb-2.5 dark:border-white/10">
+      <div className="app-global-header -mt-3 -mx-5 flex flex-wrap items-center justify-between sm:-ml-14 lg:-mx-5 2xl:-mt-4 2xl:-mx-7">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs 2xl:h-12 2xl:w-12 dark:border-white/10 dark:bg-white">
-              <SiGoogleads className="h-6.5 w-6.5 2xl:h-7.5 2xl:w-7.5" style={{ color: GOOGLE_BLUE }} />
+            <div className="flex h-9.5 w-9.5 items-center justify-center rounded-xl border border-[#DDD7CD] bg-[#FCFAF7] shadow-xs 2xl:h-10.5 2xl:w-10.5 dark:border-white/10 dark:bg-white">
+              <SiGoogleads className="h-5.5 w-5.5 2xl:h-6 2xl:w-6" style={{ color: GOOGLE_BLUE }} />
             </div>
             <AdsManagerModeSwitcher activeMode="manager" platform="Google" />
           </div>

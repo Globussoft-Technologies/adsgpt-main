@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Popover,
@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/popover';
 import {
   ListFilter,
+  SlidersHorizontal,
   ChevronDown,
   ChevronUp,
   ChevronRight,
@@ -109,7 +110,7 @@ const formatDisplayDate = (value) => {
   return `${day}/${month}/${year}`;
 };
 
-export default function AdLibraryFilterDropdown() {
+export default function AdLibraryFilterDropdown({ iconOnly = false }) {
   const dispatch = useDispatch();
   const filters = useSelector((state) => state.brandIQTabs.adLibraryFilters);
 
@@ -311,20 +312,156 @@ export default function AdLibraryFilterDropdown() {
     draftDatePreset === 'custom' &&
     (!draftDateFrom || !draftDateTo || draftDateFrom > draftDateTo);
 
-  const appliedFilterCount = useMemo(() => {
-    let count = 0;
-    const appliedPlatforms = filters?.platforms || [];
-    const everyPlatformApplied =
-      appliedPlatforms.length === ALL_PLATFORM_IDS.length &&
-      ALL_PLATFORM_IDS.every((id) => appliedPlatforms.includes(id));
-    if (appliedPlatforms.length > 0 && !everyPlatformApplied) count += 1;
-    if ((filters?.categoryIds?.length || 0) + (filters?.subCategoryIds?.length || 0) > 0) {
-      count += 1;
+  const appliedFilterBadge = useMemo(() => {
+    // When dropdown is open, track live draft selections; when closed, track applied filters
+    const currentPlatforms = isOpen
+      ? (Array.isArray(draftPlatforms) ? draftPlatforms : [])
+      : (Array.isArray(filters?.platforms) ? filters.platforms : []);
+    const currentCategoryIds = isOpen
+      ? (draftCategoryIds || [])
+      : (filters?.categoryIds || []);
+    const currentSubCategoryIds = isOpen
+      ? (draftSubCategoryIds || [])
+      : (filters?.subCategoryIds || []);
+    const currentDatePreset = isOpen
+      ? (draftDatePreset || 'all')
+      : (filters?.datePreset || 'all');
+    const currentSort = isOpen
+      ? (draftSort || 'newest')
+      : (filters?.sort || 'newest');
+
+    let otherCount = 0;
+    const totalCategories = currentCategoryIds.length + currentSubCategoryIds.length;
+    if (totalCategories > 0) otherCount += totalCategories;
+    if (currentDatePreset && currentDatePreset !== 'all') otherCount += 1;
+    if (currentSort && currentSort !== 'newest') otherCount += 1;
+
+    const isAllPlatforms =
+      currentPlatforms.length === ALL_PLATFORM_IDS.length &&
+      ALL_PLATFORM_IDS.every((id) => currentPlatforms.includes(id));
+
+    // When all platforms are selected, show 'All' (or total count if combined with other filters)
+    if (isAllPlatforms) {
+      if (otherCount === 0) {
+        return { show: true, text: 'All' };
+      }
+      return { show: true, text: ALL_PLATFORM_IDS.length + otherCount };
     }
-    if (filters?.datePreset && filters.datePreset !== 'all') count += 1;
-    if (filters?.sort && filters.sort !== 'newest') count += 1;
-    return count;
-  }, [filters]);
+
+    const platformCount = currentPlatforms.length;
+    const total = platformCount + otherCount;
+    if (total > 0) {
+      return { show: true, text: total };
+    }
+
+    return { show: false, text: '' };
+  }, [
+    isOpen,
+    draftPlatforms,
+    draftCategoryIds,
+    draftSubCategoryIds,
+    draftDatePreset,
+    draftSort,
+    filters,
+  ]);
+
+  const popoverContentRef = useRef(null);
+
+  // Restrict scroll behavior when mouse/pointer is on top of filter cards
+  useEffect(() => {
+    const el = popoverContentRef.current;
+    if (!el || !isOpen) return;
+
+    const handleWheel = (e) => {
+      let current = e.target;
+      let scrollable = null;
+
+      // Detect if target is inside an element that actually has scrollable content
+      while (current) {
+        if (current === el.parentElement) break;
+        const style = window.getComputedStyle(current);
+        const overflowY = style.overflowY;
+        const overflowX = style.overflowX;
+        const hasYScroll =
+          (overflowY === 'auto' || overflowY === 'scroll') &&
+          current.scrollHeight > current.clientHeight;
+        const hasXScroll =
+          (overflowX === 'auto' || overflowX === 'scroll') &&
+          current.scrollWidth > current.clientWidth;
+
+        if (hasYScroll || hasXScroll) {
+          scrollable = current;
+          break;
+        }
+        if (current === el) break;
+        current = current.parentElement;
+      }
+
+      if (scrollable) {
+        const { scrollTop, scrollHeight, clientHeight, scrollLeft, scrollWidth, clientWidth } =
+          scrollable;
+        const deltaY = e.deltaY;
+        const deltaX = e.deltaX;
+
+        const isScrollingDown = deltaY > 0;
+        const isScrollingUp = deltaY < 0;
+        const isScrollingRight = deltaX > 0;
+        const isScrollingLeft = deltaX < 0;
+
+        const atYBottom = Math.ceil(scrollTop + clientHeight) >= scrollHeight;
+        const atYTop = scrollTop <= 0;
+        const atXRight = Math.ceil(scrollLeft + clientWidth) >= scrollWidth;
+        const atXLeft = scrollLeft <= 0;
+
+        const canScrollY =
+          (isScrollingDown && !atYBottom) || (isScrollingUp && !atYTop);
+        const canScrollX =
+          (isScrollingRight && !atXRight) || (isScrollingLeft && !atXLeft);
+
+        // If at scroll boundary, prevent scroll chaining to the page behind it
+        if (!canScrollY && !canScrollX) {
+          e.preventDefault();
+        }
+        e.stopPropagation();
+      } else {
+        // Over any non-scrollable part of the filter card: prevent page scrolling completely
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      let current = e.target;
+      let scrollable = null;
+
+      while (current) {
+        if (current === el.parentElement) break;
+        const style = window.getComputedStyle(current);
+        const overflowY = style.overflowY;
+        if (
+          (overflowY === 'auto' || overflowY === 'scroll') &&
+          current.scrollHeight > current.clientHeight
+        ) {
+          scrollable = current;
+          break;
+        }
+        if (current === el) break;
+        current = current.parentElement;
+      }
+
+      if (!scrollable) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    el.addEventListener('touchmove', handleTouchMove, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+      el.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [isOpen, currentView, showDateMenu, platformSectionOpen]);
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -332,29 +469,55 @@ export default function AdLibraryFilterDropdown() {
         <button
           type="button"
           aria-label="Open Ad Library filters"
-          className={`flex h-8 items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3.5 py-1 text-xs font-medium text-zinc-800 shadow-xs transition-colors hover:bg-zinc-100 hover:text-zinc-950 2xl:h-9 2xl:px-4 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white ${
-            isOpen ? 'border-blue-500/60 dark:border-blue-500/60' : ''
-          }`}
+          className={
+            iconOnly
+              ? `relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/10 bg-transparent text-zinc-700 transition-all hover:bg-black/5 hover:text-zinc-950 dark:border-white/15 dark:bg-transparent dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white ${
+                  isOpen ? 'border-black/30 bg-black/5 dark:border-white/30 dark:bg-white/10' : ''
+                }`
+              : `group flex h-8 items-center gap-1.5 rounded-full border border-black/10 bg-transparent pl-2 pr-1.5 py-1 text-xs font-medium text-zinc-800 shadow-xs transition-colors hover:bg-black/5 hover:text-zinc-950 2xl:h-9 2xl:pl-2.5 2xl:pr-2 2xl:text-sm dark:border-white/20 dark:bg-transparent dark:text-[#AFAFAF] dark:hover:border-white/40 dark:hover:text-white ${
+                  isOpen ? 'border-[#5867EB]/60 bg-zinc-50 dark:border-[#5867EB]/60' : ''
+                }`
+          }
         >
-          <ListFilter className="h-3.5 w-3.5 text-zinc-600 dark:text-[#AFAFAF]" />
-          <span>Filters</span>
-          {appliedFilterCount > 0 && (
-            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[#5867EB] px-1 text-[10px] font-semibold text-white">
-              {appliedFilterCount}
-            </span>
+          {iconOnly ? (
+            <>
+              <SlidersHorizontal className="h-4 w-4 stroke-[1.8]" />
+              {appliedFilterBadge.show && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#5867EB] px-1 text-[8.5px] font-bold leading-none text-white shadow-2xs ring-1 ring-white dark:ring-[#18181b]">
+                  {appliedFilterBadge.text}
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="relative flex shrink-0 items-center justify-center">
+                <ListFilter className="h-3.5 w-3.5 text-zinc-700 transition-colors group-hover:text-zinc-950 dark:text-[#AFAFAF] dark:group-hover:text-white" />
+                {appliedFilterBadge.show && (
+                  <span className="absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#5867EB] px-1 text-[8.5px] font-bold leading-none text-white shadow-2xs ring-1 ring-white dark:ring-[#0D0D0D]">
+                    {appliedFilterBadge.text}
+                  </span>
+                )}
+              </div>
+
+              <span>Filters</span>
+
+              <ChevronDown
+                className={`h-3.5 w-3.5 shrink-0 text-zinc-500 transition-all duration-200 stroke-[2.2] group-hover:text-zinc-800 dark:text-white/50 dark:group-hover:text-white ${
+                  isOpen ? 'rotate-180 text-zinc-900 dark:text-white' : ''
+                }`}
+              />
+            </>
           )}
-          <ChevronDown
-            className={`h-3 w-3 text-zinc-500 transition-transform duration-200 dark:text-white/40 ${
-              isOpen ? 'rotate-180' : ''
-            }`}
-          />
         </button>
       </PopoverTrigger>
 
       <PopoverContent
+        ref={(node) => {
+          popoverContentRef.current = node;
+        }}
         align="end"
         sideOffset={8}
-        className="relative w-[324px] overflow-visible rounded-2xl border border-[#E5E0D8] bg-white/95 p-4 text-[#24211D] shadow-[0_16px_44px_rgba(36,33,29,0.14)] backdrop-blur-xl dark:border-white/10 dark:bg-[#18181b]/98 dark:text-white dark:shadow-[0_16px_50px_rgba(0,0,0,0.6)]"
+        className="ad-library-filter-card relative w-[324px] max-w-[calc(100vw-24px)] overscroll-contain overflow-visible rounded-2xl border border-[#E5E0D8] bg-white/95 p-4 text-[#24211D] shadow-[0_16px_44px_rgba(36,33,29,0.14)] backdrop-blur-xl dark:border-white/10 dark:bg-[#18181b]/98 dark:text-white dark:shadow-[0_16px_50px_rgba(0,0,0,0.6)]"
       >
         {currentView === 'categories' ? (
           /* Categories Sub-Panel */
@@ -401,7 +564,7 @@ export default function AdLibraryFilterDropdown() {
             </div>
 
             {/* Categories List */}
-            <div className="max-h-60 overflow-y-auto pr-1 space-y-1">
+            <div className="max-h-60 overflow-y-auto overscroll-contain pr-1 space-y-1">
               {filteredCategories.map((category) => {
                 const isChecked = draftCategoryIds.includes(category.id);
                 return (
@@ -629,7 +792,7 @@ export default function AdLibraryFilterDropdown() {
                   </button>
 
                   {showDateMenu && (
-                  <div className="ad-library-date-card absolute top-1/2 right-[calc(100%+28px)] z-50 w-[360px] max-w-[calc(100vw-2rem)] -translate-y-1/2 rounded-2xl border border-[#DDD7CD] bg-[#FCFBF8] p-3 shadow-[0_18px_50px_rgba(80,70,58,0.18)] max-lg:top-full max-lg:right-0 max-lg:mt-2 max-lg:translate-y-0 dark:border-white/10 dark:bg-[#1a1a1a] dark:shadow-[0_18px_55px_rgba(0,0,0,0.6)]">
+                  <div className="ad-library-date-card overscroll-contain absolute top-1/2 right-[calc(100%+28px)] z-50 w-[360px] max-w-[calc(100vw-2rem)] -translate-y-1/2 rounded-2xl border border-[#DDD7CD] bg-[#FCFBF8] p-3 shadow-[0_18px_50px_rgba(80,70,58,0.18)] max-lg:top-full max-lg:right-0 max-lg:mt-2 max-lg:translate-y-0 dark:border-white/10 dark:bg-[#1a1a1a] dark:shadow-[0_18px_55px_rgba(0,0,0,0.6)]">
                     <div className="mb-3 grid grid-cols-2 gap-2">
                       {DATE_OPTIONS.map((option) => (
                         <button
