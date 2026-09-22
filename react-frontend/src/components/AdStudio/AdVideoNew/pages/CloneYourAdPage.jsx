@@ -10,7 +10,15 @@ import { getSocket } from '@/store/reducers/socket/socketSlice';
 import emitter from '@/utils/eventEmitter';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
-import { cloneAdAnalyzeAction, cloneAdGenerateAction, resolveMediaAction, getMediaProxyUrl } from '@/store/actions/adVideoNew/Advideoactions';
+import { cloneAdAnalyzeAction, cloneAdGenerateAction } from '@/store/actions/adVideoNew/Advideoactions';
+import axios from 'axios';
+import {
+  LinkedInEmbed,
+  TikTokEmbed,
+  TwitterEmbed,
+  PinterestEmbed,
+  YouTubeEmbed,
+} from 'react-social-media-embed';
 import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
 import {
   AspectRatioPreview,
@@ -48,47 +56,6 @@ const isImageUrl = (url) => {
   return imageRegex.test(url.trim());
 };
 
-// Helper function to extract Instagram embed URL from Instagram Reels/Posts/TV URLs
-const getInstagramEmbedUrl = (url) => {
-  if (!url || typeof url !== 'string') return null;
-  const regExp = /(?:reel|reels|p|tv|share\/reel|share\/p)\/([A-Za-z0-9_-]+)/i;
-  const match = url.trim().match(regExp);
-  if (match && match[1]) {
-    return `https://www.instagram.com/reel/${match[1]}/embed/`;
-  }
-  return null;
-};
-
-// Helper function to check for valid Instagram Reel/Post/TV URLs
-const isInstagramUrl = (url) => {
-  if (!url || typeof url !== 'string') return false;
-  return /(?:instagram\.com|instagr\.am)/i.test(url.trim());
-};
-
-// Helper function to extract Facebook embed URL
-const getFacebookEmbedUrl = (url) => {
-  if (!url || typeof url !== 'string') return null;
-  const trimmed = url.trim();
-  if (/(?:facebook\.com|fb\.watch)/i.test(trimmed)) {
-    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(trimmed)}&show_text=false`;
-  }
-  return null;
-};
-
-// Helper function to extract LinkedIn embed URL
-const getLinkedInEmbedUrl = (url) => {
-  if (!url || typeof url !== 'string') return null;
-  const trimmed = url.trim();
-  if (/(?:linkedin\.com|lnkd\.in)/i.test(trimmed)) {
-    const activityMatch = trimmed.match(/activity-([0-9]+)/i) || trimmed.match(/urn:li:(?:ugcPost|activity):([0-9]+)/i);
-    if (activityMatch && activityMatch[1]) {
-      return `https://www.linkedin.com/embed/feed/update/urn:li:ugcPost:${activityMatch[1]}`;
-    }
-    return trimmed;
-  }
-  return null;
-};
-
 // Helper function to check for supported resolvable social video URLs
 const isResolvablePlatformUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
@@ -98,20 +65,10 @@ const isResolvablePlatformUrl = (url) => {
     /(?:facebook\.com|fb\.watch)/i.test(trimmed) ||
     /tiktok\.com/i.test(trimmed) ||
     /(?:twitter\.com|x\.com)/i.test(trimmed) ||
-    /pinterest\.com/i.test(trimmed) ||
-    /(?:linkedin\.com|lnkd\.in)/i.test(trimmed)
+    /(?:pinterest\.com|pin\.it)/i.test(trimmed) ||
+    /(?:linkedin\.com|lnkd\.in)/i.test(trimmed) ||
+    /vimeo\.com/i.test(trimmed)
   );
-};
-
-// Helper function to extract TikTok embed URL
-const getTikTokEmbedUrl = (url) => {
-  if (!url || typeof url !== 'string') return null;
-  const regExp = /tiktok\.com\/@[^/]+\/video\/(\d+)/i;
-  const match = url.trim().match(regExp);
-  if (match && match[1]) {
-    return `https://www.tiktok.com/player/v1/${match[1]}?autoplay=1&loop=1`;
-  }
-  return null;
 };
 
 // Helper function to sanitize and extract single clean URL if concatenated
@@ -256,82 +213,308 @@ const YouTubePreviewPlayer = ({ videoId, onDurationChange }) => {
   );
 };
 
-// Dedicated Instagram Reel player with interaction shielding, navigation protection, and in-app replay control
-const InstagramPreviewPlayer = ({ embedUrl }) => {
-  const [reloadKey, setReloadKey] = useState(0);
 
-  const blockInteraction = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
 
-  const handleReplay = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setReloadKey((prev) => prev + 1);
-  };
+// Dedicated Meta Instagram oEmbed Player via AdsGPT backend proxy (https://developers.facebook.com/documentation/instagram-platform/oembed)
+const InstagramMetaEmbed = ({ url }) => {
+  const [embedHtml, setEmbedHtml] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const containerRef = useRef(null);
 
-  return (
-    <div className="absolute inset-0 z-0 flex items-start justify-center overflow-hidden bg-black select-none">
-      {/* Scaled and top-anchored Instagram Reel player */}
-      <iframe
-        key={`${embedUrl}-${reloadKey}`}
-        src={embedUrl}
-        title="Instagram Source Video"
-        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-        allowFullScreen
-        sandbox="allow-scripts allow-same-origin allow-presentation"
-        className="w-[240%] h-[390%] min-w-full border-0 object-cover -translate-y-24 translate-x-4 scale-[1.75] origin-top pointer-events-auto"
-      />
+  useEffect(() => {
+    if (!url) return;
 
-      {/* Top interaction guard: Blocks any clicks on the author profile header, audio title, or View profile */}
-      <div
-        className="absolute top-0 inset-x-0 h-16 z-20 pointer-events-auto cursor-default"
-        onClick={blockInteraction}
-        onMouseDown={blockInteraction}
-        onTouchStart={blockInteraction}
-      />
+    let isMounted = true;
+    const controller = new AbortController();
 
-      {/* Bottom interaction & visual guard: Completely hides and blocks clicks on more on Instagram, likes, and comments */}
-      <div
-        className="absolute bottom-0 inset-x-0 h-14 bg-gradient-to-t from-black via-black/90 to-transparent z-20 pointer-events-auto cursor-default"
-        onClick={blockInteraction}
-        onMouseDown={blockInteraction}
-        onTouchStart={blockInteraction}
-      />
-    </div>
-  );
-};
+    setIsLoading(true);
+    setHasError(false);
+    setEmbedHtml(null);
 
-// Dedicated Facebook video embed player
-const FacebookPreviewPlayer = ({ embedUrl }) => {
-  return (
-    <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none">
-      <iframe
-        key={embedUrl}
-        src={embedUrl}
-        title="Facebook Source Video"
-        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
-        allowFullScreen
-        className="w-[140%] h-[140%] min-w-full min-h-full border-0 object-cover scale-110 pointer-events-none"
-      />
-    </div>
-  );
-};
+    const fetchOEmbed = async () => {
+      try {
+        const host = import.meta.env.VITE_SOCKET_URL || '';
+        const token = getCookies('token');
+        const endpoint = `${host}/adsgpt/video/instagram-oembed`;
 
-// Dedicated LinkedIn video player card
-const LinkedInPreviewPlayer = () => {
-  return (
-    <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600/15 border border-blue-500/30 mb-3 shadow-inner">
-        <Video className="h-7 w-7 text-blue-400" />
+        const res = await axios.post(
+          endpoint,
+          { url: url.trim() },
+          {
+            headers: {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            signal: controller.signal,
+          }
+        );
+
+        const data = res.data?.data;
+        if (!data || !data.html) {
+          throw new Error('No embed HTML returned');
+        }
+
+        if (isMounted) {
+          setEmbedHtml(data.html);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        if (axios.isCancel(err) || err.name === 'AbortError' || err.name === 'CanceledError') return;
+        console.warn('[InstagramMetaEmbed] oEmbed fetch error:', err);
+        if (isMounted) {
+          setHasError(true);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchOEmbed();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [url]);
+
+  // Handle Instagram embed.js script loading and process() call
+  useEffect(() => {
+    if (!embedHtml || !containerRef.current) return;
+
+    let isCancelled = false;
+
+    const processInstagramEmbed = () => {
+      if (isCancelled) return;
+      if (window.instgrm && window.instgrm.Embeds && typeof window.instgrm.Embeds.process === 'function') {
+        window.instgrm.Embeds.process(containerRef.current);
+      }
+    };
+
+    if (window.instgrm?.Embeds?.process) {
+      processInstagramEmbed();
+    } else {
+      if (!window._instgrmScriptLoading) {
+        window._instgrmScriptLoading = true;
+        const script = document.createElement('script');
+        script.id = 'instagram-embed-script';
+        script.src = 'https://www.instagram.com/embed.js';
+        script.async = true;
+        script.onload = () => {
+          processInstagramEmbed();
+        };
+        document.body.appendChild(script);
+      } else {
+        const checkInterval = setInterval(() => {
+          if (window.instgrm?.Embeds?.process) {
+            clearInterval(checkInterval);
+            processInstagramEmbed();
+          }
+        }, 100);
+        return () => {
+          isCancelled = true;
+          clearInterval(checkInterval);
+        };
+      }
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [embedHtml]);
+
+  if (hasError) {
+    return (
+      <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 mb-3 shadow-inner">
+          <Video className="h-6 w-6 text-zinc-400" />
+        </div>
+        <p className="text-sm font-semibold text-zinc-200 max-w-xs leading-relaxed">
+          Unable to preview this Instagram video
+        </p>
+        <p className="text-xs text-zinc-400 max-w-xs mt-1.5 leading-normal">
+          We couldn't load the Instagram preview. Please check the URL or try another video.
+        </p>
       </div>
-      <p className="text-sm font-semibold text-zinc-100">
-        LinkedIn Video Source
-      </p>
-      <p className="text-xs text-zinc-400 max-w-xs mt-1">
-        Source video linked & ready for AI analysis
-      </p>
+    );
+  }
+
+  return (
+    <div className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center">
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center gap-2.5 text-zinc-400">
+          <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
+          <span className="text-xs font-medium text-zinc-300">Loading Instagram preview...</span>
+        </div>
+      )}
+      {embedHtml && (
+        <div
+          ref={containerRef}
+          className={`w-full flex justify-center ${isLoading ? 'hidden' : ''}`}
+          dangerouslySetInnerHTML={{ __html: embedHtml }}
+        />
+      )}
+    </div>
+  );
+};
+
+// Dedicated Meta Facebook Embedded Video Player via AdsGPT backend proxy (https://developers.facebook.com/docs/plugins/embedded-video-player/)
+const FacebookMetaEmbed = ({ url }) => {
+  const [embedHtml, setEmbedHtml] = useState(null);
+  const [embedUrl, setEmbedUrl] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!url) return;
+
+    let isMounted = true;
+    const controller = new AbortController();
+
+    setIsLoading(true);
+    setHasError(false);
+    setEmbedHtml(null);
+    setEmbedUrl(null);
+
+    const fetchFacebookEmbed = async () => {
+      try {
+        const host = import.meta.env.VITE_SOCKET_URL || '';
+        const token = getCookies('token');
+        const endpoint = `${host}/adsgpt/video/facebook-embed`;
+
+        const res = await axios.post(
+          endpoint,
+          { url: url.trim() },
+          {
+            headers: {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            signal: controller.signal,
+          }
+        );
+
+        const data = res.data?.data;
+        if (!data || (!data.embedUrl && !data.html)) {
+          throw new Error('No Facebook embed returned');
+        }
+
+        if (isMounted) {
+          setEmbedUrl(data.embedUrl);
+          setEmbedHtml(data.html);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        if (axios.isCancel(err) || err.name === 'AbortError' || err.name === 'CanceledError') return;
+        console.warn('[FacebookMetaEmbed] embed fetch error:', err);
+        if (isMounted) {
+          setHasError(true);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchFacebookEmbed();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [url]);
+
+  // Handle Facebook JavaScript SDK script loading & XFBML parse() call
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    let isCancelled = false;
+
+    const processFacebookEmbed = () => {
+      if (isCancelled) return;
+      if (window.FB && window.FB.XFBML && typeof window.FB.XFBML.parse === 'function') {
+        try {
+          window.FB.XFBML.parse(containerRef.current);
+        } catch (e) {
+          console.warn('[FacebookMetaEmbed] XFBML parse notice:', e);
+        }
+      }
+    };
+
+    if (window.FB?.XFBML?.parse) {
+      processFacebookEmbed();
+    } else {
+      if (!window._fbScriptLoading) {
+        window._fbScriptLoading = true;
+        if (!document.getElementById('fb-root')) {
+          const fbRoot = document.createElement('div');
+          fbRoot.id = 'fb-root';
+          document.body.prepend(fbRoot);
+        }
+        const script = document.createElement('script');
+        script.id = 'facebook-jssdk';
+        script.src = 'https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v20.0';
+        script.async = true;
+        script.defer = true;
+        script.crossOrigin = 'anonymous';
+        script.onload = () => {
+          processFacebookEmbed();
+        };
+        document.body.appendChild(script);
+      } else {
+        const checkInterval = setInterval(() => {
+          if (window.FB?.XFBML?.parse) {
+            clearInterval(checkInterval);
+            processFacebookEmbed();
+          }
+        }, 100);
+        return () => {
+          isCancelled = true;
+          clearInterval(checkInterval);
+        };
+      }
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [embedUrl, embedHtml]);
+
+  if (hasError) {
+    return (
+      <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 mb-3 shadow-inner">
+          <Video className="h-6 w-6 text-zinc-400" />
+        </div>
+        <p className="text-sm font-semibold text-zinc-200 max-w-xs leading-relaxed">
+          Unable to preview this Facebook video
+        </p>
+        <p className="text-xs text-zinc-400 max-w-xs mt-1.5 leading-normal">
+          We couldn't load the Facebook preview. Please check the URL or try another video.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center"
+    >
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center gap-2.5 text-zinc-400">
+          <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
+          <span className="text-xs font-medium text-zinc-300">Loading Facebook preview...</span>
+        </div>
+      )}
+      {embedUrl && (
+        <iframe
+          src={embedUrl}
+          title="Facebook Video Player"
+          className={`w-full h-full border-0 ${isLoading ? 'hidden' : ''}`}
+          style={{ border: 'none', overflow: 'hidden', minHeight: '320px' }}
+          scrolling="no"
+          frameBorder="0"
+          allowFullScreen={true}
+          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+        />
+      )}
     </div>
   );
 };
@@ -381,8 +564,6 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const [sourceVideoUrl, setSourceVideoUrl] = useState('');
   const [sourceDuration, setSourceDuration] = useState(null); // Isolated source video length in seconds
   const [previewVideoError, setPreviewVideoError] = useState(false);
-  const [resolvedPreviewUrl, setResolvedPreviewUrl] = useState(null);
-  const [isResolvingMedia, setIsResolvingMedia] = useState(false);
   const [productImages, setProductImages] = useState([]);
   const [productUrlInput, setProductUrlInput] = useState('');
   const [videoModel, setVideoModel] = useState('');
@@ -523,96 +704,124 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   }, [dispatch]);
 
   // Handle Recreate flow from MySpace video cards
-  useEffect(() => {
-    if (!recreateInputs) return;
+  const handleRecreate = (inputs) => {
+    if (!inputs) return;
 
     const isCloneAd =
-      recreateInputs.type === 'clone_your_ad' ||
-      recreateInputs.type === 'clone-ad' ||
-      recreateInputs.type === 'clone_ad' ||
-      recreateInputs.type === 'clone_video' ||
-      Boolean(recreateInputs.sourceVideoUrl || recreateInputs.galleryVideoUrl);
+      inputs.type === 'clone_your_ad' ||
+      inputs.type === 'clone-ad' ||
+      inputs.type === 'clone_ad' ||
+      inputs.type === 'clone_video' ||
+      Boolean(inputs.sourceVideoUrl || inputs.galleryVideoUrl || inputs.videoSample);
 
     if (!isCloneAd) return;
 
+    const s3Base = import.meta.env.VITE_S3_BASE_URL || '';
+    const resolveMedia = (u) => {
+      if (!u || typeof u !== 'string') return '';
+      if (/^(https?:)?\/\//i.test(u) || u.startsWith('blob:') || u.startsWith('data:')) return u;
+      const base = String(s3Base).replace(/\/$/, '');
+      return base ? `${base}/${u.replace(/^\/+/, '')}` : u;
+    };
+
     const srcUrl =
-      recreateInputs.sourceVideoUrl ||
-      recreateInputs.galleryVideoUrl ||
-      recreateInputs.videoSample ||
+      inputs.sourceVideoUrl ||
+      inputs.galleryVideoUrl ||
+      inputs.videoSample ||
       '';
 
     if (srcUrl) {
-      setSourceVideoUrl(srcUrl);
+      const resolvedSrc = resolveMedia(srcUrl);
+      setSourceVideoUrl(resolvedSrc);
       setPreviewVideoError(false);
+      setErrors((prev) => ({ ...prev, sourceVideo: '' }));
     }
 
     const rawImgs =
-      recreateInputs.productImageUrls ||
-      recreateInputs.images ||
-      recreateInputs.productImages ||
+      inputs.productImageUrls ||
+      inputs.images ||
+      inputs.productImages ||
+      (inputs.image ? [inputs.image] : []) ||
+      (inputs.imageUrl ? [inputs.imageUrl] : []) ||
       [];
 
     if (Array.isArray(rawImgs) && rawImgs.length > 0) {
       setProductImages(
         rawImgs.slice(0, 3).map((img) => {
-          if (typeof img === 'string') return { file: null, preview: img };
+          if (typeof img === 'string') {
+            return { file: null, preview: resolveMedia(img) };
+          }
           return {
             file: img.file || null,
-            preview: img.preview || img.url || img.imageUrl || '',
+            preview: resolveMedia(img.preview || img.url || img.imageUrl || ''),
           };
         })
       );
+      setErrors((prev) => ({ ...prev, productImages: '' }));
     }
 
-    if (recreateInputs.model) {
-      setVideoModel(recreateInputs.model);
+    if (inputs.model) {
+      setVideoModel(inputs.model);
     }
 
-    if (recreateInputs.duration) {
-      const rawDur = String(recreateInputs.duration);
-      const durStr = rawDur.endsWith('s') ? rawDur : `${rawDur}s`;
+    if (inputs.duration || inputs.targetDurationSeconds) {
+      const rawDur = String(inputs.duration || inputs.targetDurationSeconds);
+      const durNum = parseInt(rawDur, 10) || 4;
+      const durStr = `${durNum}s`;
       setVideoDuration(durStr);
-      setDurationInputText(String(parseInt(durStr, 10) || 4));
+      setDurationInputText(String(durNum));
+      setErrors((prev) => ({ ...prev, videoDuration: '' }));
     }
 
-    if (recreateInputs.aspectRatio) {
-      setAspectRatio(recreateInputs.aspectRatio);
+    if (inputs.aspectRatio) {
+      setAspectRatio(inputs.aspectRatio);
     }
 
     const bName =
-      recreateInputs.brandName ||
-      recreateInputs.productBrandName ||
-      recreateInputs.identification?.productBrandName ||
+      inputs.brandName ||
+      inputs.productBrandName ||
+      inputs.identification?.productBrandName ||
       '';
     if (bName) {
       setBrandName(bName);
     }
 
     const uPrompt =
-      recreateInputs.userPrompt ||
-      recreateInputs.additionalInstructions ||
-      recreateInputs.instructions ||
+      inputs.userPrompt ||
+      inputs.additionalInstructions ||
+      inputs.instructions ||
       '';
     if (uPrompt) {
       setAdditionalInfo(uPrompt);
     }
 
     const visualDesc =
-      recreateInputs.visualDescription ||
-      recreateInputs.identification?.visualDescription ||
+      inputs.visualDescription ||
+      inputs.identification?.visualDescription ||
       '';
     if (visualDesc) {
       setEditableVisualDescription(visualDesc);
-      setAnalysisResult({
-        visualDescription: visualDesc,
-        productBrandName: bName,
-        ...(recreateInputs.identification || {}),
-      });
-      setAnalysisState('success');
-      setAnalyzeProgress(100);
     }
 
+    setAnalysisState('form');
+    setAnalysisResult(null);
+    setAnalysisSessionId(null);
+    setIsAnalyzing(false);
+    setAnalyzeProgress(0);
+    setAnalysisCards([]);
+
     dispatch(setRecreateInputs(null));
+  };
+
+  useEffect(() => {
+    if (recreateInputs) {
+      handleRecreate(recreateInputs);
+    }
+
+    emitter.on('recreate-video', handleRecreate);
+    return () => {
+      emitter.off('recreate-video', handleRecreate);
+    };
   }, [recreateInputs, dispatch]);
 
   const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('clone_video');
@@ -791,12 +1000,8 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     }
   }, [aspectRatio, aspectRatioOptions, isAspectRatioLoading]);
 
-  // Detect YouTube URL vs Instagram Reel vs Facebook vs TikTok vs LinkedIn vs Direct Video URL vs Default Demo
+  // Detect social platforms directly on frontend using react-social-media-embed
   const youtubeId = useMemo(() => getYouTubeVideoId(sourceVideoUrl), [sourceVideoUrl]);
-  const instagramEmbedUrl = useMemo(() => getInstagramEmbedUrl(sourceVideoUrl), [sourceVideoUrl]);
-  const facebookEmbedUrl = useMemo(() => getFacebookEmbedUrl(sourceVideoUrl), [sourceVideoUrl]);
-  const tiktokEmbedUrl = useMemo(() => getTikTokEmbedUrl(sourceVideoUrl), [sourceVideoUrl]);
-  const linkedinEmbedUrl = useMemo(() => getLinkedInEmbedUrl(sourceVideoUrl), [sourceVideoUrl]);
   const isImage = useMemo(() => isImageUrl(sourceVideoUrl), [sourceVideoUrl]);
 
   const isDirectVideo = useMemo(() => {
@@ -804,84 +1009,25 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     return sourceVideoUrl.startsWith('blob:') || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(sourceVideoUrl);
   }, [sourceVideoUrl, isImage]);
 
+  const isInstagram = useMemo(() => Boolean(sourceVideoUrl && !isImage && /(?:instagram\.com|instagr\.am)/i.test(sourceVideoUrl.trim())), [sourceVideoUrl, isImage]);
+  const isLinkedIn = useMemo(() => Boolean(sourceVideoUrl && !isImage && /(?:linkedin\.com|lnkd\.in)/i.test(sourceVideoUrl.trim())), [sourceVideoUrl, isImage]);
+  const isTikTok = useMemo(() => Boolean(sourceVideoUrl && !isImage && /tiktok\.com/i.test(sourceVideoUrl.trim())), [sourceVideoUrl, isImage]);
+  const isFacebook = useMemo(() => Boolean(sourceVideoUrl && !isImage && /(?:facebook\.com|fb\.watch)/i.test(sourceVideoUrl.trim())), [sourceVideoUrl, isImage]);
+  const isTwitter = useMemo(() => Boolean(sourceVideoUrl && !isImage && /(?:twitter\.com|x\.com)/i.test(sourceVideoUrl.trim())), [sourceVideoUrl, isImage]);
+  const isPinterest = useMemo(() => Boolean(sourceVideoUrl && !isImage && /(?:pinterest\.com|pin\.it)/i.test(sourceVideoUrl.trim())), [sourceVideoUrl, isImage]);
+
   const sourceType = useMemo(() => {
     if (!sourceVideoUrl || isImage || previewVideoError) return 'default';
-    if (resolvedPreviewUrl) return 'resolved-stream';
-    if (isResolvingMedia) return 'resolving-platform';
-    if (youtubeId) return 'youtube';
     if (isDirectVideo) return 'direct-video';
+    if (youtubeId) return 'youtube';
+    if (isInstagram) return 'instagram';
+    if (isLinkedIn) return 'linkedin';
+    if (isTikTok) return 'tiktok';
+    if (isFacebook) return 'facebook';
+    if (isTwitter) return 'twitter';
+    if (isPinterest) return 'pinterest';
     return 'default';
-  }, [resolvedPreviewUrl, isResolvingMedia, youtubeId, isDirectVideo, sourceVideoUrl, isImage, previewVideoError]);
-
-  // Resolve social platform URLs (Instagram, Facebook, TikTok, Twitter, Pinterest, LinkedIn) to playable native MP4 stream URL for preview looping
-  useEffect(() => {
-    if (!sourceVideoUrl || isImage || !isResolvablePlatformUrl(sourceVideoUrl)) {
-      setResolvedPreviewUrl(null);
-      setIsResolvingMedia(false);
-      return;
-    }
-
-    let isMounted = true;
-    setIsResolvingMedia(true);
-    setPreviewVideoError(false);
-
-    dispatch(resolveMediaAction(sourceVideoUrl))
-      .then((res) => {
-        const isDirect =
-          res?.isDirectStream &&
-          Boolean(
-            res?.playableUrl &&
-            (res.playableUrl.includes('.mp4') ||
-              res.playableUrl.includes('video/mp4') ||
-              res.playableUrl.includes('fbcdn.net') ||
-              res.playableUrl.includes('cdninstagram.com') ||
-              res.playableUrl.includes('licdn.com') ||
-              res.playableUrl.includes('twimg.com') ||
-              res.playableUrl.includes('tiktokcdn.com') ||
-              res.playableUrl.includes('pinimg.com')) &&
-            !res.playableUrl.includes('/embed/')
-          );
-
-        if (isMounted) {
-          if (isDirect && res?.playableUrl) {
-            setResolvedPreviewUrl(res.playableUrl);
-            setPreviewVideoError(false);
-            setErrors((prev) => ({ ...prev, sourceVideo: '' }));
-          } else {
-            setResolvedPreviewUrl(null);
-            setPreviewVideoError(true);
-            setErrors((prev) => ({
-              ...prev,
-              sourceVideo: 'Invalid video source. The provided URL is not a video post or contains no playable video.',
-            }));
-          }
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          console.warn('[CloneYourAd] Failed to resolve media URL:', err);
-          setResolvedPreviewUrl(null);
-          setPreviewVideoError(true);
-          const errorMsg =
-            err?.response?.data?.error ||
-            err?.message ||
-            'Invalid video source. Please enter a valid video URL or select a video from Gallery.';
-          setErrors((prev) => ({
-            ...prev,
-            sourceVideo: errorMsg,
-          }));
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsResolvingMedia(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [sourceVideoUrl, isImage, dispatch]);
+  }, [sourceVideoUrl, isImage, previewVideoError, isDirectVideo, youtubeId, isInstagram, isLinkedIn, isTikTok, isFacebook, isTwitter, isPinterest]);
 
   useEffect(() => {
     dispatch(fetchModelCreditsAction());
@@ -1685,7 +1831,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
         <div className="relative flex min-h-[220px] max-h-[280px] lg:max-h-none lg:min-h-[560px] flex-col justify-between overflow-hidden rounded-t-[30px] lg:rounded-l-[30px] lg:rounded-tr-none lg:rounded-br-none bg-black shrink-0">
           <div className="pointer-events-none z-20 m-3 lg:m-4 flex items-center justify-between">
             <h1 className="ml-1 lg:ml-2 text-base lg:text-lg font-semibold text-white drop-shadow-lg 2xl:ml-4 2xl:text-2xl">
-              Create your Clone Ad
+              Re Create your Ad
             </h1>
 
             {/* Duration Badge (Max 60 sec rule) */}
@@ -1709,56 +1855,13 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 mb-3 shadow-inner">
                 <Video className="h-6 w-6 text-zinc-400" />
               </div>
-              <p className="text-sm font-medium text-zinc-200 max-w-xs leading-relaxed">
-                Invalid video source.
+              <p className="text-sm font-semibold text-zinc-200 max-w-xs leading-relaxed">
+                Unable to preview this video
               </p>
               <p className="text-xs text-zinc-400 max-w-xs mt-1.5 leading-normal">
-                Please enter a video URL or select a video from Gallery.
+                We couldn't load a preview for this video. Please try another URL or upload the video directly.
               </p>
             </div>
-          ) : resolvedPreviewUrl ? (
-            <video
-              key={resolvedPreviewUrl}
-              src={resolvedPreviewUrl}
-              autoPlay
-              muted
-              loop
-              playsInline
-              referrerPolicy="no-referrer"
-              onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
-              onError={() => {
-                if (resolvedPreviewUrl && !resolvedPreviewUrl.includes('/proxy-media')) {
-                  // Retry through streaming proxy if direct CDN blocked hotlinking/referer
-                  setResolvedPreviewUrl(getMediaProxyUrl(resolvedPreviewUrl));
-                } else {
-                  setResolvedPreviewUrl(null);
-                }
-              }}
-              className="absolute inset-0 z-0 h-full w-full object-contain bg-black"
-            />
-          ) : sourceType === 'youtube' ? (
-            <YouTubePreviewPlayer
-              key={youtubeId}
-              videoId={youtubeId}
-              onDurationChange={validateSourceDuration}
-            />
-          ) : sourceType === 'instagram' ? (
-            <InstagramPreviewPlayer embedUrl={instagramEmbedUrl} />
-          ) : sourceType === 'facebook' ? (
-            <FacebookPreviewPlayer embedUrl={facebookEmbedUrl} />
-          ) : sourceType === 'tiktok' ? (
-            <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none">
-              <iframe
-                key={tiktokEmbedUrl}
-                src={tiktokEmbedUrl}
-                title="TikTok Source Video"
-                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
-                allowFullScreen
-                className="w-full h-full border-0 object-contain pointer-events-none"
-              />
-            </div>
-          ) : sourceType === 'linkedin' ? (
-            <LinkedInPreviewPlayer embedUrl={linkedinEmbedUrl} />
           ) : sourceType === 'direct-video' ? (
             <video
               key={sourceVideoUrl}
@@ -1772,12 +1875,37 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               onError={() => setPreviewVideoError(true)}
               className="absolute inset-0 z-0 h-full w-full object-contain bg-black"
             />
-          ) : sourceType === 'resolving-platform' ? (
-            <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center bg-zinc-950">
-              <Loader2 className="h-8 w-8 text-amber-400 animate-spin mb-3" />
-              <p className="text-sm font-medium text-zinc-200">
-                Connecting video stream...
-              </p>
+          ) : sourceType === 'youtube' ? (
+            <YouTubePreviewPlayer
+              key={youtubeId}
+              videoId={youtubeId}
+              onDurationChange={validateSourceDuration}
+            />
+          ) : sourceType === 'instagram' ? (
+            <InstagramMetaEmbed
+              key={sourceVideoUrl}
+              url={sourceVideoUrl}
+            />
+          ) : sourceType === 'linkedin' ? (
+            <div className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center">
+              <LinkedInEmbed key={sourceVideoUrl} url={sourceVideoUrl} width="100%" />
+            </div>
+          ) : sourceType === 'tiktok' ? (
+            <div className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center">
+              <TikTokEmbed key={sourceVideoUrl} url={sourceVideoUrl} width="100%" />
+            </div>
+          ) : sourceType === 'facebook' ? (
+            <FacebookMetaEmbed
+              key={sourceVideoUrl}
+              url={sourceVideoUrl}
+            />
+          ) : sourceType === 'twitter' ? (
+            <div className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center">
+              <TwitterEmbed key={sourceVideoUrl} url={sourceVideoUrl} width="100%" />
+            </div>
+          ) : sourceType === 'pinterest' ? (
+            <div className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center">
+              <PinterestEmbed key={sourceVideoUrl} url={sourceVideoUrl} width="100%" />
             </div>
           ) : CLONE_YOUR_AD_DEMO_URL?.match(/\.(mp4|webm|mov)(\?.*)?$/i) ? (
             <video
@@ -1791,7 +1919,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
           ) : (
             <img
               src={CLONE_YOUR_AD_DEMO_URL}
-              alt="Clone Your Ad Demo Preview"
+              alt="Re Create Ad Demo Preview"
               className="absolute inset-0 z-0 h-full w-full object-contain bg-black"
             />
           )}
@@ -1822,7 +1950,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
           {/* Top title */}
           <div className="flex flex-col gap-1">
             <h2 className="mt-1 text-lg font-bold text-zinc-900 dark:text-white 2xl:text-xl">
-              Clone Your Ad
+              Re Create Ad
             </h2>
           </div>
 
@@ -1863,7 +1991,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
             {generatedVideoUrl && (
               <div className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-white/10 dark:bg-white/5">
                 <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Generated Clone Ad Video
+                  Generated Re Create Ad Video
                 </span>
                 <video
                   src={generatedVideoUrl}

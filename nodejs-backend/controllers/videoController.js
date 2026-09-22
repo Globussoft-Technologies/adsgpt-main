@@ -5075,14 +5075,18 @@ exports.resolveMedia = async (req, res) => {
       success: true,
       originalUrl: result.originalUrl,
       playableUrl: result.playableUrl,
+      embedHtml: result.embedHtml,
+      iframeUrl: result.iframeUrl,
       platform: result.platform,
       isDirectStream: result.isDirectStream,
+      type: result.type,
+      meta: result.meta,
     });
   } catch (err) {
     logger.error(`resolveMedia error: ${err.message}`);
     return res.status(400).json({
       success: false,
-      error: err.message || "Failed to resolve media URL",
+      error: err.message || "Unable to preview this video. We couldn't load a preview for this video. Please try another URL or upload the video directly.",
     });
   }
 };
@@ -5124,6 +5128,144 @@ exports.proxyMediaStream = async (req, res) => {
   } catch (err) {
     logger.warn(`proxyMediaStream error: ${err.message}`);
     return res.status(500).send("Failed to stream media");
+  }
+};
+
+exports.getInstagramOEmbed = async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== "string") {
+      return res.status(400).json({ status: false, error: "Valid Instagram URL is required" });
+    }
+
+    const trimmedUrl = url.trim();
+    if (!/(?:instagram\.com|instagr\.am)/i.test(trimmedUrl)) {
+      return res.status(400).json({ status: false, error: "URL must be an Instagram URL" });
+    }
+
+    // Call Meta's official instagram_oembed Graph API endpoint
+    try {
+      const metaEndpoint = `https://graph.facebook.com/v26.0/instagram_oembed?url=${encodeURIComponent(trimmedUrl)}&omitscript=true`;
+      const response = await axios.get(metaEndpoint, {
+        timeout: 5000,
+        headers: { Accept: "application/json" },
+      });
+
+      if (response.data && response.data.html) {
+        return res.status(200).json({
+          status: true,
+          data: {
+            version: response.data.version || "1.0",
+            provider_name: response.data.provider_name || "Instagram",
+            provider_url: response.data.provider_url || "https://www.instagram.com",
+            type: response.data.type || "rich",
+            width: response.data.width,
+            height: response.data.height,
+            title: response.data.title,
+            author_name: response.data.author_name,
+            author_url: response.data.author_url,
+            thumbnail_url: response.data.thumbnail_url,
+            html: response.data.html,
+          },
+        });
+      }
+    } catch (graphErr) {
+      logger.warn(`[InstagramOEmbed] Graph API notice: ${graphErr.message}`);
+    }
+
+    // Official Meta Instagram oEmbed standard blockquote fallback for embed.js
+    // Reference: https://developers.facebook.com/documentation/instagram-platform/oembed
+    const cleanUrl = trimmedUrl.split("?")[0].replace(/\/$/, "");
+    const fallbackHtml = `<blockquote class="instagram-media" data-instgrm-captioned data-instgrm-permalink="${cleanUrl}/" data-instgrm-version="14" style="background:#000; border:0; border-radius:12px; margin: 1px; max-width:540px; min-width:326px; padding:0; width:100%;"><div style="padding:16px;"><a href="${cleanUrl}/" style="background:#000; line-height:0; padding:0 0; text-align:center; text-decoration:none; width:100%;" target="_blank">Instagram post</a></div></blockquote>`;
+
+    return res.status(200).json({
+      status: true,
+      data: {
+        version: "1.0",
+        provider_name: "Instagram",
+        provider_url: "https://www.instagram.com",
+        type: "rich",
+        html: fallbackHtml,
+      },
+    });
+  } catch (error) {
+    logger.warn(`[InstagramOEmbed] Request failed: ${error.message}`);
+    return res.status(500).json({
+      status: false,
+      error: "Unable to load Instagram embed",
+    });
+  }
+};
+
+exports.getFacebookEmbed = async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== "string") {
+      return res.status(400).json({ status: false, error: "Valid Facebook video URL is required" });
+    }
+
+    const trimmedUrl = url.trim();
+    if (!/(?:facebook\.com|fb\.watch)/i.test(trimmedUrl)) {
+      return res.status(400).json({ status: false, error: "URL must be a Facebook URL" });
+    }
+
+    const encodedHref = encodeURIComponent(trimmedUrl);
+    const embedUrl = `https://www.facebook.com/plugins/video.php?href=${encodedHref}&show_text=false&width=auto&t=0`;
+    const standardIframeHtml = `<iframe src="${embedUrl}" width="100%" height="100%" style="border:none;overflow:hidden;min-height:320px;" scrolling="no" frameborder="0" allowfullscreen="true" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"></iframe>`;
+
+    // Try Meta Graph API oembed_video endpoint first (same as Instagram oEmbed)
+    try {
+      const metaEndpoint = `https://graph.facebook.com/v26.0/oembed_video?url=${encodedHref}&omitscript=true`;
+      const response = await axios.get(metaEndpoint, {
+        timeout: 5000,
+        headers: { Accept: "application/json" },
+      });
+
+      if (response.data && response.data.html) {
+        return res.status(200).json({
+          status: true,
+          data: {
+            version: response.data.version || "1.0",
+            provider_name: response.data.provider_name || "Facebook",
+            provider_url: response.data.provider_url || "https://www.facebook.com",
+            type: response.data.type || "video",
+            width: response.data.width,
+            height: response.data.height,
+            title: response.data.title,
+            author_name: response.data.author_name,
+            author_url: response.data.author_url,
+            html: response.data.html,
+            embedUrl,
+            originalUrl: trimmedUrl,
+            platform: "facebook",
+          },
+        });
+      }
+    } catch (_graphErr) {
+      // If Graph API requires app token or rate-limits, proceed with official Facebook Embedded Video Player plugin
+    }
+
+    // Official Meta Facebook Embedded Video Player fallback
+    // Reference: https://developers.facebook.com/docs/plugins/embedded-video-player/
+    return res.status(200).json({
+      status: true,
+      data: {
+        version: "1.0",
+        provider_name: "Facebook",
+        provider_url: "https://www.facebook.com",
+        platform: "facebook",
+        originalUrl: trimmedUrl,
+        embedUrl,
+        html: standardIframeHtml,
+        type: "video",
+      },
+    });
+  } catch (error) {
+    logger.warn(`[FacebookEmbed] Request failed: ${error.message}`);
+    return res.status(500).json({
+      status: false,
+      error: "Unable to load Facebook embed",
+    });
   }
 };
 

@@ -637,9 +637,7 @@ export default function VideoCard({
       dispatch(setAvatarStep('config'));
     }
     navigate(`/adstudio?page=${targetPage}`);
-    if (type === 'ugc' || type === 'broll') {
-      setTimeout(() => emitter.emit('recreate-video', item.inputs), 100);
-    }
+    setTimeout(() => emitter.emit('recreate-video', item.inputs), 100);
   };
 
   // Hide the card entirely while a clone/avatar job is still generating its

@@ -313,7 +313,7 @@ const cloneAdGenerateSchema = Joi.object({
 }).unknown(true);
 
 const resolveMediaSchema = Joi.object({
-  url: Joi.string().uri().required(),
+  url: Joi.string().trim().min(5).required(),
 }).unknown(true);
 
 module.exports = {

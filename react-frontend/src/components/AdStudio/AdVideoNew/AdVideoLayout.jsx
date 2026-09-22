@@ -70,7 +70,7 @@ const pageConfig = {
     component: CloneYourselfPage,
   },
   'clone-ad': {
-    title: 'Clone Your Ad',
+    title: 'Re Create Ad',
     component: CloneYourAdPage,
   },
   myVideos: {
@@ -117,7 +117,7 @@ const selectVideoType = [
   },
   {
     value: 'clone_ad',
-    label: 'Clone Your Ad',
+    label: 'Re Create Ad',
   },
   {
     // Clips rendered from an onboarding storyboard concept. They are produced by
@@ -195,21 +195,28 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   // Recreate may clear its query parameters while the form is mounting, so
   // remember its origin rather than deciding later from the current URL.
   const [fromRecreate] = useState(() =>
-    ['b-roll', 'ugc', 'avatar'].includes(searchParams.get('page'))
+    ['b-roll', 'ugc', 'avatar', 'clone', 'clone-ad', 'ai-ads'].includes(searchParams.get('page'))
   );
 
   const exitRecreateToMySpace = () => {
-    if (!fromRecreate) {
-      dispatch(setActivePage('home'));
-      return;
-    }
-
+    setSearchParams({}, { replace: true });
     dispatch(setRecreateInputs(null));
     dispatch(setImageAndScript(null));
     dispatch(setAvatarStep('options'));
+    dispatch(setCloneStep('upload'));
     dispatch(setMySpaceTab('videos'));
     dispatch(setActivePage('myVideos'));
     navigate('/my-space');
+  };
+
+  const exitToAdVideoHome = () => {
+    setSearchParams({}, { replace: true });
+    dispatch(setRecreateInputs(null));
+    dispatch(setImageAndScript(null));
+    dispatch(setAvatarStep('options'));
+    dispatch(setCloneStep('upload'));
+    dispatch(setActivePage('home'));
+    navigate('/adstudio');
   };
 
   const displayedActivePage = libraryOnly ? 'myVideos' : activePage;
@@ -328,6 +335,11 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   }, [savedCount, activePage, dispatch]);
 
   const handleBackNavigation = () => {
+    if (activePage === 'clone-ad') {
+      exitToAdVideoHome();
+      return;
+    }
+
     if (fromRecreate) {
       exitRecreateToMySpace();
       return;
@@ -409,6 +421,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
       dispatch(setAiAdsSceneData(null));
       dispatch(setAIAdsStep('selection'));
     }
+    setSearchParams({}, { replace: true });
     dispatch(setAvatarStep('options'));
     dispatch(setCloneStep('upload'));
     dispatch(setActivePage('home'));
@@ -682,7 +695,13 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                 <PageComponent
                   pageVideo={pageVideo}
                   handleGenerate={handleGenerate}
-                  onClose={exitRecreateToMySpace}
+                  onClose={
+                    activePage === 'clone-ad'
+                      ? exitToAdVideoHome
+                      : fromRecreate
+                        ? exitRecreateToMySpace
+                        : exitToAdVideoHome
+                  }
                   videoType={videoType}
                 />
               )}

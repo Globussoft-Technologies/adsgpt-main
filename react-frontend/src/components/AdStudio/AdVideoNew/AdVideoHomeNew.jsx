@@ -31,7 +31,7 @@ const cards = [
     type: 'b-roll',
   },
   {
-    title: 'CLONE YOUR AD',
+    title: 'RE CREATE AD',
     desc: 'Create a new ad from an existing video',
     img: 'https://dqv0cqkoy5oj7.cloudfront.net/marketing_studio_video_preset/4dcc2a50-47de-46a1-b7e6-d5bd378bb5d1-91841e48382ec5af.mp4',
     gif: 'https://dqv0cqkoy5oj7.cloudfront.net/marketing_studio_video_preset/4dcc2a50-47de-46a1-b7e6-d5bd378bb5d1-91841e48382ec5af.mp4',

@@ -95,6 +95,16 @@ router.post(
   authenticateJWT,
   videoController.resolveMedia
 );
+router.post(
+  "/instagram-oembed",
+  authenticateJWT,
+  videoController.getInstagramOEmbed
+);
+router.post(
+  "/facebook-embed",
+  authenticateJWT,
+  videoController.getFacebookEmbed
+);
 
 // ── AI Ads sub-routes ─────────────────────────────────────────────────────────
 // List/fetch: use existing GET /video/all  and  GET /video/:id
