@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // ----------------------------------------------------------------------------
@@ -59,9 +59,38 @@ export default function BriefList({ briefs = [], loading = false, onOpen, onDele
 
   if (loading && briefs.length === 0) {
     return (
-      <div className="flex justify-center py-8">
-        <Loader2 className="h-4 w-4 animate-spin text-[#9CA3AF] dark:text-[#8B939E]" />
-      </div>
+      <section
+        className="flex min-h-0 w-full flex-1 flex-col"
+        aria-busy="true"
+        aria-label="Loading briefs"
+      >
+        <h3 className={`mb-4 shrink-0 text-center ${SECTION}`}>Your briefs</h3>
+
+        <div className="adfactory-brief-grid-scroll min-h-0 flex-1 overflow-hidden">
+          <ul
+            aria-hidden="true"
+            className="mx-auto grid w-full max-w-[1400px] list-none grid-cols-1 content-start gap-3 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+          >
+            {Array.from({ length: 10 }, (_, index) => (
+              <li key={index}>
+                <div
+                  className={`flex min-h-[122px] flex-col gap-2.5 p-4 ${CARD}`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <span className="size-7 shrink-0 animate-pulse rounded-md bg-[var(--ws-surface-hover)] dark:bg-[#242424]" />
+                    <span className="h-3.5 w-2/5 animate-pulse rounded bg-[var(--ws-surface-hover)] dark:bg-[#242424]" />
+                  </span>
+                  <span className="h-3 w-3/5 animate-pulse rounded bg-[var(--ws-surface-hover)] dark:bg-[#242424]" />
+                  <span className="mt-auto flex items-center gap-2 pt-1">
+                    <span className="h-5 w-12 animate-pulse rounded-md bg-[var(--ws-surface-hover)] dark:bg-[#242424]" />
+                    <span className="h-3 w-16 animate-pulse rounded bg-[var(--ws-surface-hover)] dark:bg-[#242424]" />
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
     );
   }
 
@@ -70,8 +99,8 @@ export default function BriefList({ briefs = [], loading = false, onOpen, onDele
   if (briefs.length === 0) return null;
 
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 pb-4">
-      <h3 className={`mb-4 text-center ${SECTION}`}>Your briefs</h3>
+    <section className="flex min-h-0 w-full flex-1 flex-col">
+      <h3 className={`mb-4 shrink-0 text-center ${SECTION}`}>Your briefs</h3>
 
       {/* `list-none` and `m-0` finally do something. App.css styles every `ul`
           with `list-style-type: disc; margin-left: 34px` and was UNLAYERED,
@@ -84,15 +113,16 @@ export default function BriefList({ briefs = [], loading = false, onOpen, onDele
           the row. With auto-fit + 1fr, one brief became a single card spanning
           the full width under a centred hero; now a partial row sits under the
           hero instead of hugging the left edge. */}
-      <motion.ul
-        {...M.stagger()}
-        className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(230px,266px))] justify-center gap-3 p-0"
-      >
-        {briefs.map((b) => {
-          const status = STATUS[b.status] || STATUS.draft;
-          const label = b.brand?.name || hostOf(b.source?.url) || 'Untitled brief';
-          return (
-            <motion.li key={b._id} {...M.staggerItem}>
+      <div className="adfactory-brief-grid-scroll min-h-0 flex-1 overflow-y-auto">
+        <motion.ul
+          {...M.stagger()}
+          className="mx-auto grid w-full max-w-[1400px] list-none grid-cols-1 content-start gap-3 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+        >
+          {briefs.map((b) => {
+            const status = STATUS[b.status] || STATUS.draft;
+            const label = b.brand?.name || hostOf(b.source?.url) || 'Untitled brief';
+            return (
+              <motion.li key={b._id} {...M.staggerItem}>
               {/* The card is the button. A row of small targets inside a
                   clickable row makes it ambiguous what opens what. */}
               <div
@@ -147,10 +177,11 @@ export default function BriefList({ briefs = [], loading = false, onOpen, onDele
                   </button>
                 )}
               </div>
-            </motion.li>
-          );
-        })}
-      </motion.ul>
+              </motion.li>
+            );
+          })}
+        </motion.ul>
+      </div>
     </section>
   );
 }

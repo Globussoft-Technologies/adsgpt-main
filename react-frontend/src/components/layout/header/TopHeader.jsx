@@ -40,6 +40,7 @@ import {
   setSelectedCompetitorBrand,
   setSelectedCompetitorPlatform,
   setAdLibraryFilters,
+  setMyBrandsSearch,
 } from '@/store/reducers/brandIQ/brandIQTabsSlice';
 import AdLibraryFilterDropdown from './AdStudio/AdLibrary/AdLibraryFilterDropdown';
 import { Button } from '@/components/ui/button';
@@ -237,8 +238,13 @@ export default function TopHeader() {
   const adFactoryUiMode = useSelector(selectAdFactoryUiMode);
   // HIDE-MARK — adStudioTabs is defined statically above
   const activeAdStudioTabId = useSelector((state) => state.adStudioTabs.activeAdStudioTabId);
-  const { myBrands, activeBrandIQTabId, selectedCompetitorBrand, selectedCompetitorPlatform } =
-    useSelector((state) => state.brandIQTabs);
+  const {
+    myBrands,
+    myBrandsSearch,
+    activeBrandIQTabId,
+    selectedCompetitorBrand,
+    selectedCompetitorPlatform,
+  } = useSelector((state) => state.brandIQTabs);
   const dispatch = useDispatch();
   const [cachedBrandSnapshot, setCachedBrandSnapshot] = useState(() => {
     try {
@@ -526,7 +532,7 @@ export default function TopHeader() {
     <>
       {currentRoute !== '/adfactory-demo' && !hideHeader && (
         <div
-          className="app-global-header lm-header-surface sticky top-0 z-50 flex w-full items-center justify-between dark:bg-transparent dark:backdrop-blur-none"
+          className="app-global-header app-top-header lm-header-surface sticky top-0 z-50 flex w-full items-center justify-between dark:bg-transparent dark:backdrop-blur-none"
         >
           <div className="left_header_container flex min-w-0 items-center gap-1 sm:gap-2">
             {renderMobileSidebarTrigger('mr-0 sm:mr-1.5')}
@@ -931,7 +937,35 @@ export default function TopHeader() {
             {currentRoute === '/brandiq' && activeBrandIQTabId === 'myBrands' && (
               <>
                 {Array.isArray(myBrands) && myBrands?.length > 0 && (
-                  <AddNewBrand fromComponent="topheader" />
+                  <>
+                    <div className="ad-library-search relative flex h-9 w-[150px] items-center gap-2 rounded-full px-3 text-zinc-700 backdrop-blur-md transition-all duration-200 sm:w-[190px] md:w-[240px] lg:w-[300px] 2xl:w-[340px] dark:text-zinc-200">
+                      <Search className="h-4 w-4 shrink-0 text-zinc-400" aria-hidden="true" />
+                      <input
+                        type="text"
+                        inputMode="search"
+                        value={myBrandsSearch}
+                        maxLength={80}
+                        placeholder="Search your brands..."
+                        aria-label="Search your brands"
+                        className="ad-library-search-input min-w-0 flex-1 border-none bg-transparent text-xs text-zinc-800 placeholder:text-zinc-400 focus:outline-none 2xl:text-sm dark:text-zinc-100 dark:placeholder:text-zinc-500"
+                        onChange={(event) => dispatch(setMyBrandsSearch(event.target.value))}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') dispatch(setMyBrandsSearch(''));
+                        }}
+                      />
+                      {myBrandsSearch && (
+                        <button
+                          type="button"
+                          aria-label="Clear brand search"
+                          onClick={() => dispatch(setMyBrandsSearch(''))}
+                          className="flex shrink-0 items-center justify-center text-zinc-400 transition-colors hover:text-zinc-700 dark:hover:text-white"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <AddNewBrand fromComponent="topheader" />
+                  </>
                 )}
                 {/* HIDE-MARK: BrandIQ Refresh button hidden because it has no action wired. */}
                 {/*
@@ -954,6 +988,7 @@ export default function TopHeader() {
                 <BrandsDropdown
                   compact
                   singleAvatar
+                  subtle
                   options={
                     Array.isArray(myBrands) && myBrands.length > 0
                       ? myBrands.map((b) => ({

@@ -210,7 +210,7 @@ const NoCompaignScreen = () => {
 
   return (
     <>
-      <div className="brands_new_container relative z-10 flex w-full flex-col sm:p-6">
+      <div className="brands_new_container relative z-10 flex w-full flex-col sm:pt-[9px] sm:pr-[39px] sm:pb-6 sm:pl-6">
         {!loading && campaignsList?.length > 0 && (
           <div id="new_campaign_button" className="mb-4 flex shrink-0 justify-end">
             <div className="group w-fit rounded-full bg-gradient-to-b from-black/15 to-black/5 p-[1px] dark:from-white/40 dark:to-white/10">

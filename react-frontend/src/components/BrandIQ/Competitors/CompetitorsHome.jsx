@@ -531,7 +531,7 @@ const CompetitorsHome = ({ surface = 'brandIq' }) => {
   // Note: FAILED & EMPTY are rendered inline inside the content area (below the
   // filter bar) so the user can always switch platform / adjust filters.
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col pt-2.5">
       {/* Header Stats */}
       {status === 'PENDING' && (
         <div className="mb-2 flex items-center justify-between px-1">
@@ -548,7 +548,7 @@ const CompetitorsHome = ({ surface = 'brandIq' }) => {
 
       {/* Filters Bar */}
       {!isAdStudioLibrary && (
-        <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="mb-6 flex flex-wrap items-center gap-3 pr-2 sm:pr-4 md:pr-[50px]">
         {/* Platform Pills */}
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium tracking-wide text-gray-500 uppercase dark:text-white/40">
@@ -731,7 +731,7 @@ const CompetitorsHome = ({ surface = 'brandIq' }) => {
       {/* Ads Grid */}
       <div
         ref={gridContainerRef}
-        className={`flex-1 ${isAdStudioLibrary ? 'overflow-visible pt-[4px] sm:pt-[6px]' : 'overflow-y-auto'} pb-6`}
+        className={`min-h-0 flex-1 overflow-y-auto ${isAdStudioLibrary ? 'ad-library-grid-scroll pt-[4px] sm:pt-[6px]' : 'brandiq-competitors-grid-scroll'} pb-6`}
       >
         {(loading || status === null) && ads.length === 0 ? (
           <Masonry

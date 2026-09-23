@@ -117,9 +117,8 @@ const Layout = () => {
     GA4Events.sessionStarted();
 
     const targetTab = (activeAdStudioTabId || '').replace('New', '');
-    const targetPath = location.pathname === '/adstudio' && targetTab
-      ? `/adstudio/${targetTab}`
-      : location.pathname;
+    const targetPath =
+      location.pathname === '/adstudio' && targetTab ? `/adstudio/${targetTab}` : location.pathname;
 
     if (lastTrackedGa4Path.current !== targetPath) {
       trackGA4PageView(targetPath);
@@ -132,7 +131,10 @@ const Layout = () => {
     if (prevPage.current && userData?.user_id) {
       trackEvent({ type: 'page_view', page: prevPage.current, time_spent: timeSpent });
     }
-    const normalizedPath = location.pathname.replace(/^\/landing-page-analyzer\/[^/]+/, '/landing-page-analyzer');
+    const normalizedPath = location.pathname.replace(
+      /^\/landing-page-analyzer\/[^/]+/,
+      '/landing-page-analyzer'
+    );
     prevPage.current = normalizedPath;
     pageEnterTime.current = now;
   }, [location, userData, activeAdStudioTabId]);
@@ -177,11 +179,20 @@ const Layout = () => {
           <main className="relative flex h-svh min-w-0 flex-1 flex-col overflow-hidden">
             <TopHeader />
             <div
-              className={`app-main-scroll ${location.pathname === '/my-space' ? 'my-space-main-shell' : ''} flex dark:bg-inherit bg-[#F7F4EE] min-h-0 flex-1 flex-col ${
-                location.pathname === '/adfactory' || location.pathname === '/my-space'
+              className={`app-main-scroll ${location.pathname === '/my-space' ? 'my-space-main-shell' : ''} ${location.pathname === '/adfactory' ? 'adfactory-main-shell' : ''} ${location.pathname === '/adstudio' && activeAdStudioTabId === 'adLibrary' ? 'ad-library-main-shell' : ''} flex min-h-0 flex-1 flex-col bg-[#F7F4EE] dark:bg-inherit ${
+                location.pathname === '/adfactory' ||
+                location.pathname === '/my-space' ||
+                location.pathname === '/profile' ||
+                (location.pathname === '/adstudio' && activeAdStudioTabId === 'adLibrary')
                   ? 'overflow-hidden'
                   : 'overflow-y-auto'
-              } px-4 ${location.pathname === '/my-space' ? 'pt-4' : 'pt-0!'} pb-0!`}
+              } ${
+                location.pathname === '/adfactory' ||
+                location.pathname === '/profile' ||
+                (location.pathname === '/adstudio' && activeAdStudioTabId === 'adLibrary')
+                  ? 'pr-0 pl-4'
+                  : 'px-4'
+              } ${location.pathname === '/my-space' ? 'pt-4' : 'pt-0!'} pb-0!`}
             >
               <Outlet />
             </div>
@@ -206,20 +217,19 @@ const Layout = () => {
     '/autopilot/meta',
   ].includes(location.pathname);
 
-  const lightAmbientClassName =
-    usesAdsOperationsAmbient
-      ? 'light-ambient-ui-layer ads-manager-ui-layer'
-      : location.pathname === '/brandiq'
-        ? 'light-ambient-ui-layer brandiq-ui-layer'
-        : location.pathname === '/adstudio'
-          ? 'light-ambient-ui-layer adstudio-ui-layer'
-          : location.pathname === '/workspace/members'
-            ? 'light-ambient-ui-layer workspace-ui-layer'
-            : location.pathname === '/my-space'
-              ? 'light-ambient-ui-layer my-space-ui-layer'
-              : location.pathname === '/profile'
-                ? 'light-ambient-ui-layer account-ui-layer'
-                : undefined;
+  const lightAmbientClassName = usesAdsOperationsAmbient
+    ? 'light-ambient-ui-layer ads-manager-ui-layer'
+    : location.pathname === '/brandiq'
+      ? 'light-ambient-ui-layer brandiq-ui-layer'
+      : location.pathname === '/adstudio'
+        ? 'light-ambient-ui-layer adstudio-ui-layer'
+        : location.pathname === '/workspace/members'
+          ? 'light-ambient-ui-layer workspace-ui-layer'
+          : location.pathname === '/my-space'
+            ? 'light-ambient-ui-layer my-space-ui-layer'
+            : location.pathname === '/profile'
+              ? 'light-ambient-ui-layer account-ui-layer'
+              : undefined;
 
   return (
     <div className="layout_container text-foreground relative flex bg-[#F7F4EE] dark:bg-transparent">
@@ -256,19 +266,27 @@ const Layout = () => {
               />
               <TopHeader />
               <div
-                className={`app-main-scroll ${location.pathname === '/my-space' ? 'my-space-main-shell' : ''} flex min-h-0 flex-1 flex-col ${
+                className={`app-main-scroll ${location.pathname === '/my-space' ? 'my-space-main-shell' : ''} ${location.pathname === '/adfactory' ? 'adfactory-main-shell' : ''} ${location.pathname === '/brandiq' ? 'brandiq-main-shell' : ''} ${location.pathname === '/adstudio' && activeAdStudioTabId === 'adLibrary' ? 'ad-library-main-shell' : ''} flex min-h-0 flex-1 flex-col ${
                   location.pathname === '/adfactory' ||
                   location.pathname === '/my-space' ||
-                  (location.pathname === '/adstudio' && activeAdStudioTabId !== 'adLibrary')
+                  location.pathname === '/adstudio' ||
+                  location.pathname === '/brandiq' ||
+                  location.pathname === '/profile'
                     ? 'overflow-hidden'
                     : 'overflow-y-auto'
                 } ${
-                  location.pathname === '/adstudio' && activeAdStudioTabId === 'adLibrary'
-                    ? 'px-4 pt-1.5'
-                    : location.pathname === '/my-space'
-                      ? 'px-4 pt-4'
-                    : 'px-4 pt-0!'
-                } pb-0! bg-transparent dark:bg-inherit`}
+                  location.pathname === '/adfactory'
+                    ? 'pt-0! pr-0 pl-4'
+                    : location.pathname === '/brandiq'
+                      ? 'pt-0! pr-0 pl-4'
+                      : location.pathname === '/adstudio' && activeAdStudioTabId === 'adLibrary'
+                        ? 'pt-1.5 pr-0 pl-4'
+                        : location.pathname === '/my-space'
+                          ? 'px-4 pt-4'
+                          : location.pathname === '/profile'
+                            ? 'pt-0! pr-0 pl-4'
+                            : 'px-4 pt-0!'
+                } bg-transparent pb-0! dark:bg-inherit`}
               >
                 <Outlet />
               </div>

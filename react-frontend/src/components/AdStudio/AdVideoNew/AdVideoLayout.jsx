@@ -615,7 +615,6 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   triggerClassName="adstudio-media-toolbar-control"
                 />
               )}
-              <DateRangeFilter onDateChange={handleDateChange} onClear={handleClearDates} />
               {mySpaceTab === 'videos' ? (
                 <CreativeFilterDropdown
                   options={selectVideoType}
@@ -629,7 +628,9 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   onClear={() => setVideoType('')}
                   triggerClassName="adstudio-media-toolbar-control"
                 />
-              ) : imageSource === 'adCreative' ? (
+              ) : null}
+              <DateRangeFilter onDateChange={handleDateChange} onClear={handleClearDates} />
+              {mySpaceTab === 'images' && imageSource === 'adCreative' ? (
                 // The image-type filter only applies to the AdCreative gallery;
                 // the AdFactory API doesn't support it, so it's hidden there.
                 <CreativeFilterDropdown

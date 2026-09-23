@@ -1154,7 +1154,11 @@ export default function AdFactoryV2Page() {
   // No header here: the page title comes from TopHeader and the mode switch is
   // owned by AdFactoryPage, so both modes share exactly one of each.
   return (
-    <div className="adfactory-v2-surface relative isolate flex h-full w-full flex-col gap-3 overflow-y-auto bg-[var(--ws-bg)] pt-0 pb-8 text-[var(--ws-text-primary)] dark:bg-[#0f0f0f] dark:text-[#F4F4F5]">
+    <div
+      className={`adfactory-v2-scroll adfactory-v2-surface relative isolate flex h-full min-h-0 w-full flex-col gap-3 bg-[var(--ws-bg)] pt-0 text-[var(--ws-text-primary)] dark:bg-[#0f0f0f] dark:text-[#F4F4F5] ${
+        step === STEP.SOURCE ? 'overflow-hidden pb-0' : 'overflow-y-auto pb-8'
+      }`}
+    >
       {/* Sticky, not just first-in-flow: the delete that raises this lives in
           the brief list far down the page, and a notice pinned to the top of
           the scroll container would be off-screen exactly when it is raised. */}
@@ -1189,15 +1193,20 @@ export default function AdFactoryV2Page() {
 
       {/* ── 1 ── */}
       {step === STEP.SOURCE && (
-        <>
-          <SourceInput onSubmitUrl={handleUrl} onPickBrand={handleBrand} busy={loading} />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <SourceInput
+            onSubmitUrl={handleUrl}
+            onPickBrand={handleBrand}
+            busy={loading}
+            compact={briefsLoading || briefs.length > 0}
+          />
           <BriefList
             briefs={briefs}
             loading={briefsLoading}
             onOpen={handleOpenBrief}
             onDelete={handleDeleteBrief}
           />
-        </>
+        </div>
       )}
 
       {/* ── 2 ── */}

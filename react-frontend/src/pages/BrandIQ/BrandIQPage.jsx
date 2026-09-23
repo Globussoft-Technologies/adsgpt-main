@@ -24,7 +24,7 @@ const BrandIQPage = () => {
   }, [dispatch, navigate, userData?.user_id]);
 
   return (
-    <div className="brand_iq_container max-h-[calc(100svh-80px)] flex-1 overflow-y-auto px-4 md:px-8 2xl:max-h-[calc(100svh-112px)] 2xl:px-10">
+    <div className="brand_iq_container flex h-full min-h-0 flex-1 overflow-hidden">
       <BrandIQHome />
     </div>
   );

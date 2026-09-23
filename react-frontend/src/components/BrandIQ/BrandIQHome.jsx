@@ -24,11 +24,15 @@ const BrandIQHome = () => {
   }, [activeBrandIQTabId, dispatch, effectiveTabId]);
 
   return (
-    <div className="flex w-full flex-1 flex-col">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
       {/* Show Visible Cards Here */}
       {effectiveTabId === 'myBrands' && <MyBrandsHome />}
       {effectiveTabId === 'Gallery' && <Gallery />}
-      {effectiveTabId === 'competitors' && <CompetitorsHome />}
+      {effectiveTabId === 'competitors' && (
+        <div className="h-full min-h-0 pl-4 md:pl-8 2xl:pl-10">
+          <CompetitorsHome />
+        </div>
+      )}
     </div>
   );
 };

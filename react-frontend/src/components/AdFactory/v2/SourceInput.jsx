@@ -34,7 +34,7 @@ const looksLikeUrl = (value) => {
   }
 };
 
-export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) {
+export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false, compact = false }) {
   const reduce = useReducedMotion();
   const [url, setUrl] = useState('');
   const [touched, setTouched] = useState(false);
@@ -65,12 +65,13 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
   };
 
   return (
-    // min-h + shrink-0 rather than flex-1: this sits in an overflow-y-auto
-    // flex column, where a flex-1 child has flex-basis 0 and is allowed to
-    // shrink below its own content — which clipped the headline off the top as
-    // soon as the briefs list appeared underneath. A minimum height keeps the
-    // empty first-run screen feeling centred without ever squeezing.
-    <div className="relative flex min-h-[58vh] w-full shrink-0 flex-col items-center justify-center px-4 py-10 text-center">
+    // Keep the empty first-run screen centred. Once history exists, let content
+    // determine the height so the saved brands and brief grid read as one flow.
+    <div
+      className={`relative flex w-full shrink-0 flex-col items-center justify-center px-4 text-center ${
+        compact ? 'pt-10 pb-6' : 'min-h-[58vh] py-10'
+      }`}
+    >
       {/* No glow of its own: the page mounts AdFactoryBgEffect, the same
           backdrop Full control uses. A second, differently-coloured glow layered
           under this hero fought with it and made Quick setup look like a
@@ -138,7 +139,7 @@ export default function SourceInput({ onSubmitUrl, onPickBrand, busy = false }) 
         )}
 
         {savedBrands.length > 0 && (
-          <div className="mt-10 flex w-full max-w-xl flex-col items-center gap-3">
+          <div className="mt-6 flex w-full max-w-xl flex-col items-center gap-3">
             <span className={LABEL}>or start from a saved brand</span>
             <div className="flex flex-wrap justify-center gap-2">
               {savedBrands.map((brand) => (

@@ -21,9 +21,79 @@ const getPersistedTab = () => {
   }
 };
 
+export const AD_LIBRARY_FILTERS_STORAGE_KEY = 'adLibraryFilters';
+const AD_LIBRARY_PLATFORM_IDS = [
+  'facebook',
+  'instagram',
+  'youtube',
+  'linkedin',
+  'gdn',
+  'pinterest',
+  'reddit',
+];
+
+const createDefaultAdLibraryFilters = () => ({
+  platforms: ['facebook', 'instagram'],
+  categoryIds: [],
+  subCategoryIds: [],
+  datePreset: 'all',
+  dateFrom: '',
+  dateTo: '',
+  sort: 'newest',
+  searchQuery: '',
+  searchType: 'competitor',
+});
+
+const normalizeAdLibraryFilters = (storedFilters) => {
+  const defaults = createDefaultAdLibraryFilters();
+
+  if (!storedFilters || typeof storedFilters !== 'object' || Array.isArray(storedFilters)) {
+    return defaults;
+  }
+
+  return {
+    ...defaults,
+    platforms: Array.isArray(storedFilters.platforms)
+      ? [...new Set(storedFilters.platforms.filter((id) => AD_LIBRARY_PLATFORM_IDS.includes(id)))]
+      : defaults.platforms,
+    categoryIds: Array.isArray(storedFilters.categoryIds) ? storedFilters.categoryIds : [],
+    subCategoryIds: Array.isArray(storedFilters.subCategoryIds)
+      ? storedFilters.subCategoryIds
+      : [],
+    datePreset:
+      typeof storedFilters.datePreset === 'string' ? storedFilters.datePreset : defaults.datePreset,
+    dateFrom: typeof storedFilters.dateFrom === 'string' ? storedFilters.dateFrom : '',
+    dateTo: typeof storedFilters.dateTo === 'string' ? storedFilters.dateTo : '',
+    sort: storedFilters.sort === 'oldest' ? 'oldest' : 'newest',
+    searchQuery: typeof storedFilters.searchQuery === 'string' ? storedFilters.searchQuery : '',
+    searchType: storedFilters.searchType === 'keyword' ? 'keyword' : 'competitor',
+  };
+};
+
+const getPersistedAdLibraryFilters = () => {
+  const defaults = createDefaultAdLibraryFilters();
+
+  try {
+    return normalizeAdLibraryFilters(
+      JSON.parse(localStorage.getItem(AD_LIBRARY_FILTERS_STORAGE_KEY))
+    );
+  } catch {
+    return defaults;
+  }
+};
+
+const persistAdLibraryFilters = (filters) => {
+  try {
+    localStorage.setItem(AD_LIBRARY_FILTERS_STORAGE_KEY, JSON.stringify(filters));
+  } catch {
+    /* Redux state remains the fallback when tab storage is unavailable. */
+  }
+};
+
 const initialState = {
   activeBrandIQTabId: getPersistedTab(),
   myBrands: [],
+  myBrandsSearch: '',
   myGallery: [],
   getSession: [],
   getSessionLoading: false,
@@ -41,21 +111,7 @@ const initialState = {
   competitorAdsError: null,
   selectedCompetitorBrand: null,
   selectedCompetitorPlatform: null,
-  adLibraryFilters: {
-    platforms: [
-      'facebook',
-      'instagram',
-      'gdn',
-    ],
-    categoryIds: [],
-    subCategoryIds: [],
-    datePreset: 'all',
-    dateFrom: '',
-    dateTo: '',
-    sort: 'newest',
-    searchQuery: '',
-    searchType: 'competitor',
-  },
+  adLibraryFilters: getPersistedAdLibraryFilters(),
 };
 
 const brandIQTabsSlice = createSlice({
@@ -72,6 +128,9 @@ const brandIQTabsSlice = createSlice({
     },
     setBrandIQLoading: (state, action) => {
       state.loading = action.payload;
+    },
+    setMyBrandsSearch: (state, action) => {
+      state.myBrandsSearch = action.payload;
     },
     setBrandIQError: (state, action) => {
       state.error = action.payload;
@@ -102,6 +161,10 @@ const brandIQTabsSlice = createSlice({
         ...state.adLibraryFilters,
         ...action.payload,
       };
+      persistAdLibraryFilters(state.adLibraryFilters);
+    },
+    hydrateAdLibraryFilters: (state, action) => {
+      state.adLibraryFilters = normalizeAdLibraryFilters(action.payload);
     },
     resetAdLibraryFilters: (state) => {
       state.adLibraryFilters = {
@@ -115,6 +178,7 @@ const brandIQTabsSlice = createSlice({
         searchQuery: '',
         searchType: 'competitor',
       };
+      persistAdLibraryFilters(state.adLibraryFilters);
     },
   },
   extraReducers: (builder) => {
@@ -235,6 +299,7 @@ const brandIQTabsSlice = createSlice({
 export const {
   setActiveBrandIQTab,
   setBrandIQLoading,
+  setMyBrandsSearch,
   setBrandIQError,
   setGetSessionError,
   setCompetitorAds,
@@ -243,6 +308,7 @@ export const {
   setSelectedCompetitorBrand,
   setSelectedCompetitorPlatform,
   setAdLibraryFilters,
+  hydrateAdLibraryFilters,
   resetAdLibraryFilters,
 } = brandIQTabsSlice.actions;
 export default brandIQTabsSlice.reducer;

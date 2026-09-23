@@ -1730,6 +1730,12 @@ html:not(.dark) .adfactory-campaign-status:hover {
   box-shadow: none;
 }
 
+/* Only the shell-owned header receives the visible viewport offset. Page-owned
+   headers may use negative margins to cancel their route container padding. */
+.app-top-header {
+  margin-top: 5px;
+}
+
 .app-global-header-title {
   color: #24211d;
   font-size: 18px;
@@ -4063,54 +4069,149 @@ html:not(.dark) .my-space-ui-layer .my-space-media-card::after {
   scrollbar-gutter: auto;
 }
 
+/* Ad Library owns an inner grid scroller like My Space, so its outer shell
+   must not reserve a second scrollbar gutter. */
+.app-main-scroll.ad-library-main-shell {
+  scrollbar-gutter: auto;
+}
+
+/* Quick Setup owns its page scroller, so the hidden route shell must not
+   reserve a second gutter between that scrollbar and the viewport edge. */
+.app-main-scroll.adfactory-main-shell {
+  scrollbar-gutter: auto;
+}
+
 /* My Space keeps its selection row fixed while only the masonry grid scrolls.
    Extend the scroller through the shared 24px gutter so its thin track sits on
    the application edge without shifting the cards themselves. */
 .my-space-grid-scroll {
   margin-right: -24px;
   padding-right: 26px;
+}
+
+/* The Ad Library shell reaches the viewport edge. Keep the former card gutter
+   inside the grid so the visible scrollbar is not pushed into a clipped area. */
+.ad-library-grid-scroll {
+  padding-right: 18px;
+}
+
+/* Keep the brief-grid scrollbar visually edge-aligned without crowding the
+   viewport border. The card grid remains centred independently inside it. */
+.adfactory-brief-grid-scroll {
+  margin-right: 3px;
+}
+
+.brandiq-my-brands-grid-scroll {
+  margin-right: 3px;
+}
+
+/* Keep the Competitors card gutter inside its scrollport so the scrollbar can
+   remain flush with the viewport edge while card alignment stays unchanged. */
+.brandiq-competitors-grid-scroll {
+  padding-right: 16px;
+}
+
+@media (min-width: 768px) {
+  .brandiq-competitors-grid-scroll {
+    padding-right: 32px;
+  }
+}
+
+@media (min-width: 1536px) {
+  .brandiq-competitors-grid-scroll {
+    padding-right: 40px;
+  }
+}
+
+.my-space-grid-scroll,
+.ad-library-grid-scroll,
+.adfactory-v2-scroll,
+.adfactory-brief-grid-scroll,
+.brandiq-my-brands-grid-scroll,
+.brandiq-competitors-grid-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(113, 113, 122, 0.5) transparent;
 }
 
 /* Keep toolbar controls 13px farther from the edge than the media grid. */
 .my-space-header {
+  margin-top: -11px;
   padding-right: 37px;
   padding-left: 24px;
 }
 
-.my-space-grid-scroll::-webkit-scrollbar {
+.my-space-grid-scroll::-webkit-scrollbar,
+.ad-library-grid-scroll::-webkit-scrollbar,
+.adfactory-v2-scroll::-webkit-scrollbar,
+.adfactory-brief-grid-scroll::-webkit-scrollbar,
+.brandiq-my-brands-grid-scroll::-webkit-scrollbar,
+.brandiq-competitors-grid-scroll::-webkit-scrollbar {
   width: 5px;
 }
 
-.my-space-grid-scroll::-webkit-scrollbar-track {
+.my-space-grid-scroll::-webkit-scrollbar-track,
+.ad-library-grid-scroll::-webkit-scrollbar-track,
+.adfactory-v2-scroll::-webkit-scrollbar-track,
+.adfactory-brief-grid-scroll::-webkit-scrollbar-track,
+.brandiq-my-brands-grid-scroll::-webkit-scrollbar-track,
+.brandiq-competitors-grid-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.my-space-grid-scroll::-webkit-scrollbar-thumb {
+.my-space-grid-scroll::-webkit-scrollbar-thumb,
+.ad-library-grid-scroll::-webkit-scrollbar-thumb,
+.adfactory-v2-scroll::-webkit-scrollbar-thumb,
+.adfactory-brief-grid-scroll::-webkit-scrollbar-thumb,
+.brandiq-my-brands-grid-scroll::-webkit-scrollbar-thumb,
+.brandiq-competitors-grid-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(113, 113, 122, 0.5);
 }
 
-.my-space-grid-scroll::-webkit-scrollbar-thumb:hover {
+.my-space-grid-scroll::-webkit-scrollbar-thumb:hover,
+.ad-library-grid-scroll::-webkit-scrollbar-thumb:hover,
+.adfactory-v2-scroll::-webkit-scrollbar-thumb:hover,
+.adfactory-brief-grid-scroll::-webkit-scrollbar-thumb:hover,
+.brandiq-my-brands-grid-scroll::-webkit-scrollbar-thumb:hover,
+.brandiq-competitors-grid-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(82, 82, 91, 0.72);
 }
 
-.my-space-grid-scroll::-webkit-scrollbar-button {
+.my-space-grid-scroll::-webkit-scrollbar-button,
+.ad-library-grid-scroll::-webkit-scrollbar-button,
+.adfactory-v2-scroll::-webkit-scrollbar-button,
+.adfactory-brief-grid-scroll::-webkit-scrollbar-button,
+.brandiq-my-brands-grid-scroll::-webkit-scrollbar-button,
+.brandiq-competitors-grid-scroll::-webkit-scrollbar-button {
   display: none;
   width: 0;
   height: 0;
 }
 
-.dark .my-space-grid-scroll {
+.dark .my-space-grid-scroll,
+.dark .ad-library-grid-scroll,
+.dark .adfactory-v2-scroll,
+.dark .adfactory-brief-grid-scroll,
+.dark .brandiq-my-brands-grid-scroll,
+.dark .brandiq-competitors-grid-scroll {
   scrollbar-color: rgba(161, 161, 170, 0.48) transparent;
 }
 
-.dark .my-space-grid-scroll::-webkit-scrollbar-thumb {
+.dark .my-space-grid-scroll::-webkit-scrollbar-thumb,
+.dark .ad-library-grid-scroll::-webkit-scrollbar-thumb,
+.dark .adfactory-v2-scroll::-webkit-scrollbar-thumb,
+.dark .adfactory-brief-grid-scroll::-webkit-scrollbar-thumb,
+.dark .brandiq-my-brands-grid-scroll::-webkit-scrollbar-thumb,
+.dark .brandiq-competitors-grid-scroll::-webkit-scrollbar-thumb {
   background: rgba(161, 161, 170, 0.48);
 }
 
-.dark .my-space-grid-scroll::-webkit-scrollbar-thumb:hover {
+.dark .my-space-grid-scroll::-webkit-scrollbar-thumb:hover,
+.dark .ad-library-grid-scroll::-webkit-scrollbar-thumb:hover,
+.dark .adfactory-v2-scroll::-webkit-scrollbar-thumb:hover,
+.dark .adfactory-brief-grid-scroll::-webkit-scrollbar-thumb:hover,
+.dark .brandiq-my-brands-grid-scroll::-webkit-scrollbar-thumb:hover,
+.dark .brandiq-competitors-grid-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(212, 212, 216, 0.68);
 }
 

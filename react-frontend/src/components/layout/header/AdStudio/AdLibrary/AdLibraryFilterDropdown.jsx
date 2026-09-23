@@ -33,6 +33,8 @@ import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 import {
+  AD_LIBRARY_FILTERS_STORAGE_KEY,
+  hydrateAdLibraryFilters,
   setAdLibraryFilters,
   resetAdLibraryFilters,
 } from '@/store/reducers/brandIQ/brandIQTabsSlice';
@@ -141,6 +143,23 @@ export default function AdLibraryFilterDropdown({ iconOnly = false }) {
   const [calendarPreset, setCalendarPreset] = useState('all');
   const [calendarFrom, setCalendarFrom] = useState('');
   const [calendarTo, setCalendarTo] = useState('');
+
+  // Keep Ad Library filters aligned across open tabs. The browser only emits
+  // this event in the other tabs, so hydrating Redux here cannot create a loop.
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key !== AD_LIBRARY_FILTERS_STORAGE_KEY || !event.newValue) return;
+
+      try {
+        dispatch(hydrateAdLibraryFilters(JSON.parse(event.newValue)));
+      } catch {
+        /* Ignore malformed external storage updates and keep current filters. */
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [dispatch]);
 
   // Sync draft states whenever popover opens
   useEffect(() => {

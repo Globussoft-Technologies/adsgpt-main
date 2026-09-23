@@ -1478,7 +1478,7 @@ const AddNewBrand = ({ fromComponent, brandData, setEditingBrand, toast }) => {
         {/* Only show the trigger button if no brandData is provided */}
         {!brandData &&
           (fromComponent === 'topheader' ? (
-            <button className="text-10 group relative flex items-center justify-center rounded-full border border-[#DDD7CD] bg-[#FCFAF7] p-[0.5px] px-5 py-1.5 text-[#24211D] shadow-xs hover:bg-[#EAE5DC] 2xl:py-2 2xl:text-sm dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF] dark:hover:text-white">
+            <button className="text-10 group relative flex items-center justify-center rounded-full border border-[#D8D2C8]/80 bg-transparent p-[0.5px] px-5 py-1.5 text-[#24211D] transition-colors hover:border-[#C9C1B5] hover:bg-white/25 2xl:py-2 2xl:text-sm dark:border-white/15 dark:bg-transparent dark:text-[#AFAFAF] dark:hover:border-white/25 dark:hover:bg-white/5 dark:hover:text-white">
               <span className="flex items-center gap-1.5 rounded-full">
                 <Plus className="!h-3.5 !w-3.5 text-[#02C8C4] 2xl:h-5 2xl:w-5" />
                 <span className="bg-gradient-to-t from-[#0c9fbd] to-[#5057d6] bg-clip-text font-semibold text-transparent dark:from-[#15DCFF] dark:to-[#6b72f8]">
