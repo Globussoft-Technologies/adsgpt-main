@@ -9,8 +9,7 @@ import {
   AdCreativeTemplateMasonry,
 } from './components/AdCreativeTemplateGallery';
 
-const SCROLL_THRESHOLD = 120; // ~2 scroll steps distance in px
-const MAX_DRAWER_PULL = 340; // maximum upward pull in px for draggable drawer
+const MAX_DRAWER_PULL = 370; // maximum upward pull in px for draggable drawer
 
 export default function AdCreativeNewHome({ onSelectCategory }) {
   const { userData } = useSelector((state) => state.socket);
@@ -25,15 +24,16 @@ export default function AdCreativeNewHome({ onSelectCategory }) {
 
   const dragStartRef = useRef({ startY: 0, startDrawerY: 0, hasMoved: false });
 
-  // Handle single continuous page scroll
+  // Handle continuous page scroll so the drawer slides up slowly
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
     setScrollTop(containerRef.current.scrollTop);
   }, []);
 
-  // Compute normalized bounded progress [0, 1] for card compression over first ~2 scrolls
-  const effectiveOffset = scrollTop + drawerY;
-  const progress = Math.min(Math.max(effectiveOffset / SCROLL_THRESHOLD, 0), 1);
+  const effectiveDrawerY = Math.min(
+    MAX_DRAWER_PULL,
+    Math.max(0, drawerY + scrollTop)
+  );
 
   // Pointer drag events for the drawer handle (Mouse, Touch, Pen)
   const handlePointerDown = (e) => {
@@ -89,9 +89,12 @@ export default function AdCreativeNewHome({ onSelectCategory }) {
   };
 
   const handleToggleDrawer = () => {
-    if (isExpanded || drawerY > 0) {
+    if (effectiveDrawerY > 50) {
       setDrawerY(0);
       setIsExpanded(false);
+      if (containerRef.current) {
+        containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } else {
       setDrawerY(MAX_DRAWER_PULL);
       setIsExpanded(true);
@@ -119,11 +122,11 @@ export default function AdCreativeNewHome({ onSelectCategory }) {
           <div
             className="w-full flex flex-col items-center overflow-hidden"
             style={{
-              marginTop: `-${drawerY + progress * 18}px`,
-              opacity: Math.max(1 - (drawerY / MAX_DRAWER_PULL) * 0.95, 0),
+              marginTop: `-${effectiveDrawerY}px`,
+              opacity: Math.max(1 - (effectiveDrawerY / MAX_DRAWER_PULL) * 1.05, 0),
               transition: isDragging
                 ? 'none'
-                : 'margin-top 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease-out',
+                : 'margin-top 0.15s ease-out, opacity 0.2s ease-out',
             }}
           >
             {/* Dynamic Greeting Hero Area: "Hello, {userName}" */}
@@ -131,11 +134,6 @@ export default function AdCreativeNewHome({ onSelectCategory }) {
               variants={containerFadeUpVariants}
               initial="hidden"
               animate="visible"
-              style={{
-                transform: `scale(${1 - progress * 0.08})`,
-                transformOrigin: 'center top',
-                transition: 'transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
-              }}
               className="flex w-full flex-col items-center justify-center px-4 text-center select-none shrink-0"
             >
               <motion.h1
@@ -149,10 +147,6 @@ export default function AdCreativeNewHome({ onSelectCategory }) {
               <motion.p
                 variants={fadeUpVariants}
                 custom={1}
-                style={{
-                  transform: `translateY(${-progress * 9}px)`,
-                  transition: 'transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
-                }}
                 className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 max-w-xl leading-relaxed mt-0.5"
               >
                 Create scroll-stopping Image ads with AI that understands your business.
@@ -162,7 +156,6 @@ export default function AdCreativeNewHome({ onSelectCategory }) {
             {/* Five Module Cards Row */}
             <div className="relative w-full pt-1.5 sm:pt-2 pb-[3.4px] shrink-0">
               <AdCreativeModuleCards
-                progress={progress}
                 onSelectCategory={onSelectCategory}
               />
             </div>
@@ -182,7 +175,7 @@ export default function AdCreativeNewHome({ onSelectCategory }) {
                   handleToggleDrawer();
                 }
               }}
-              isExpanded={isExpanded || drawerY > 0}
+              isExpanded={effectiveDrawerY > 50}
               className="my-0.5"
             />
 
@@ -191,7 +184,7 @@ export default function AdCreativeNewHome({ onSelectCategory }) {
               <AdCreativeTemplateHeader
                 activeCategory={activeCategory}
                 setActiveCategory={setActiveCategory}
-                isExpanded={isExpanded || drawerY > 0}
+                isExpanded={effectiveDrawerY > MAX_DRAWER_PULL * 0.5}
                 onToggleExpand={handleToggleDrawer}
               />
             </div>

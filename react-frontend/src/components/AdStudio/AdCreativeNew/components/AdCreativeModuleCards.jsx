@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import CreateCardButton from '@/components/AdStudio/CreateCardButton';
 
 const MODULES = [
@@ -40,156 +40,55 @@ const MODULES = [
 ];
 
 export default function AdCreativeModuleCards({
-  progress = 0,
   onSelectCategory,
   className = '',
 }) {
-  const [hoveredIdx, setHoveredIdx] = useState(null);
-
-  // Progressive compression & layering calculations
-  // Progress is clamped [0, 1]
-  const p = Math.min(Math.max(progress, 0), 1);
-  const isLayered = p > 0.45;
-
   return (
     <div
-      className={`relative w-full max-w-[1320px] mx-auto px-2 sm:px-4 transition-transform duration-200 ease-out select-none ${className}`}
-      style={{
-        transform: `translateY(${-p * 18}px)`,
-      }}
+      className={`relative w-full max-w-[1340px] mx-auto px-2 sm:px-4 select-none ${className}`}
     >
-      <div className="flex items-center justify-center w-full min-h-[285px] 2xl:min-h-[315px]">
-        {MODULES.map((mod, idx) => {
-          // Card hierarchy heights:
-          // Center (idx 2): base 280px -> 295px
-          // Medium (idx 1, 3): base 280px -> 264px
-          // Outer (idx 0, 4): base 280px -> 242px
-          let targetHeight = 280;
-          let zIndex = 10;
-          let overlapX = 0; // horizontal offset in px due to compression
+      <div className="flex items-center justify-center gap-3 sm:gap-3.5 2xl:gap-4 w-full">
+        {MODULES.map((mod) => (
+          <div
+            key={mod.key}
+            id={`tour_ad-creative-module_${mod.key}`}
+            onClick={() => onSelectCategory?.(mod.key)}
+            className="group relative flex-1 min-w-[140px] max-w-[245px] h-[275px] sm:h-[280px] 2xl:h-[305px] cursor-pointer overflow-hidden rounded-xl 2xl:rounded-2xl bg-[#141416] text-white shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+          >
+            {/* Default Thumbnail */}
+            <img
+              src={mod.defaultImage}
+              alt={mod.title}
+              className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300 group-hover:opacity-0"
+            />
 
-          if (idx === 2) {
-            // Center (PRODUCT SHOT)
-            targetHeight = 280 + p * 16; // 280 -> 296
-            zIndex = 30;
-            overlapX = 0;
-          } else if (idx === 1) {
-            // Card 2 (Lifestyle Ad)
-            targetHeight = 280 - p * 16; // 280 -> 264
-            zIndex = 20;
-            overlapX = p * 42; // shifts right towards center
-          } else if (idx === 3) {
-            // Card 4 (Apps / SaaS)
-            targetHeight = 280 - p * 16; // 280 -> 264
-            zIndex = 20;
-            overlapX = -p * 42; // shifts left towards center
-          } else if (idx === 0) {
-            // Card 1 (AI Creatives)
-            targetHeight = 280 - p * 38; // 280 -> 242
-            zIndex = 10;
-            overlapX = p * 78; // shifts right towards center
-          } else if (idx === 4) {
-            // Card 5 (Brand Awareness)
-            targetHeight = 280 - p * 38; // 280 -> 242
-            zIndex = 10;
-            overlapX = -p * 78; // shifts left towards center
-          }
+            {/* Hover Animated Thumbnail / GIF */}
+            <img
+              src={mod.hoverImage}
+              alt={`${mod.title}-preview`}
+              className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+            />
 
-          // Hover expansions when layered
-          let hoverShiftX = 0;
-          let hoverScale = 1;
-          let activeZ = zIndex;
+            {/* Original Dark Gradient Overlay */}
+            <div className="absolute inset-0 bg-[linear-gradient(0deg,#0f0f0f_10.93%,rgba(15,15,15,0)_84.92%)]" />
 
-          if (isLayered && hoveredIdx !== null) {
-            if (hoveredIdx === idx) {
-              hoverScale = 1.025;
-              activeZ = 40;
-            }
-
-            // When hovering Card 2 (idx 1):
-            // Card 2 lifts, Card 1 (idx 0) gains a little visible space to the left
-            if (hoveredIdx === 1) {
-              if (idx === 0) {
-                hoverShiftX = -26; // move Card 1 left
-                activeZ = 15;
-              }
-            }
-
-            // When hovering Card 4 (idx 3):
-            // Card 4 lifts, Card 5 (idx 4) gains a little visible space to the right
-            if (hoveredIdx === 3) {
-              if (idx === 4) {
-                hoverShiftX = 26; // move Card 5 right
-                activeZ = 15;
-              }
-            }
-
-            // When hovering Card 1 (idx 0): shifts slightly left for emphasis
-            if (hoveredIdx === 0 && idx === 0) {
-              hoverShiftX = -12;
-            }
-
-            // When hovering Card 5 (idx 4): shifts slightly right for emphasis
-            if (hoveredIdx === 4 && idx === 4) {
-              hoverShiftX = 12;
-            }
-          }
-
-          // Margin gaps: initial 14px, reduces down to ~0px or negative with overlapX
-          const marginInline = Math.max(7 - p * 7, 0);
-
-          return (
-            <div
-              key={mod.key}
-              id={`tour_ad-creative-module_${mod.key}`}
-              onMouseEnter={() => setHoveredIdx(idx)}
-              onMouseLeave={() => setHoveredIdx(null)}
-              onClick={() => onSelectCategory?.(mod.key)}
-              style={{
-                height: `${targetHeight}px`,
-                zIndex: activeZ,
-                marginInline: `${marginInline}px`,
-                transform: `translateX(${overlapX + hoverShiftX}px) scale(${hoverScale})`,
-                transition:
-                  'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.25s ease-out, margin 0.25s ease-out, box-shadow 0.3s ease',
-              }}
-              className="group relative flex-1 min-w-[150px] max-w-[245px] cursor-pointer overflow-hidden rounded-xl 2xl:rounded-2xl bg-[#141416] text-white shadow-md transition-all duration-300"
-            >
-              {/* Default Thumbnail */}
-              <img
-                src={mod.defaultImage}
-                alt={mod.title}
-                className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300 group-hover:opacity-0"
-              />
-
-              {/* Hover Animated Thumbnail / GIF */}
-              <img
-                src={mod.hoverImage}
-                alt={`${mod.title}-preview`}
-                className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-              />
-
-              {/* Original Dark Gradient Overlay */}
-              <div className="absolute inset-0 bg-[linear-gradient(0deg,#0f0f0f_10.93%,rgba(15,15,15,0)_84.92%)]" />
-
-              {/* Card Content & Action Button */}
-              <div className="absolute right-0 bottom-3.5 left-2 sm:left-3.5 flex items-end justify-between transition duration-300 group-hover:-translate-y-1 sm:right-2">
-                <div className="pr-1.5">
-                  <h3 className="text-sm sm:text-base font-bold text-white tracking-wide leading-snug">
-                    {mod.title}
-                  </h3>
-                  {mod.subtitle && (
-                    <p className="text-[10px] sm:text-xs text-white/90 leading-tight mt-0.5 line-clamp-2">
-                      {mod.subtitle}
-                    </p>
-                  )}
-                </div>
-
-                <CreateCardButton />
+            {/* Card Content & Action Button */}
+            <div className="absolute right-0 bottom-3.5 left-2 sm:left-3.5 flex items-end justify-between transition duration-300 group-hover:-translate-y-1 sm:right-2">
+              <div className="pr-1.5">
+                <h3 className="text-sm sm:text-base font-bold text-white tracking-wide leading-snug">
+                  {mod.title}
+                </h3>
+                {mod.subtitle && (
+                  <p className="text-[10px] sm:text-xs text-white/90 leading-tight mt-0.5 line-clamp-2">
+                    {mod.subtitle}
+                  </p>
+                )}
               </div>
+
+              <CreateCardButton />
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </div>
   );

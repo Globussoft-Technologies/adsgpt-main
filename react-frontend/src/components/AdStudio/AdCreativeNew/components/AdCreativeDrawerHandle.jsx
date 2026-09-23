@@ -20,7 +20,7 @@ export default function AdCreativeDrawerHandle({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       onClick={onClick}
-      className={`group relative flex w-full shrink-0 items-center justify-center pt-0 pb-[8.5px] transition-all select-none touch-none z-50 ${
+      className={`group relative flex w-full shrink-0 items-center justify-center py-[8.5px] transition-all select-none touch-none z-50 ${
         isDragging ? 'cursor-grabbing' : 'cursor-grab'
       } ${className}`}
     >
