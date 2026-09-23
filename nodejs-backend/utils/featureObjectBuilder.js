@@ -35,10 +35,11 @@ async function buildFeatureObject(userId, userObj = null) {
         const productMeta = await fetchProductMeta(effectivePlanId);
         if (productMeta) {
           planName = productMeta.title || planName;
-          if (typeof productMeta.topPlan === "boolean") {
-            topPlan = productMeta.topPlan;
-          }
-          if (productMeta.firstPrice === 0) {
+
+          // A plan is PAID if firstPrice > 0.
+          if (typeof productMeta.firstPrice === "number" && productMeta.firstPrice > 0) {
+            topPlan = true;
+          } else if (productMeta.firstPrice === 0) {
             isFreePlan = true;
           }
         }
@@ -46,7 +47,9 @@ async function buildFeatureObject(userId, userObj = null) {
 
       const trialPlanId = process.env.TRIAL_PLAN_ID;
       if (trialPlanId && String(effectivePlanId) === String(trialPlanId)) {
+        // Trial plan is always treated as free regardless of price fields
         isFreePlan = true;
+        topPlan = false;
       }
 
       const createdFrom = (

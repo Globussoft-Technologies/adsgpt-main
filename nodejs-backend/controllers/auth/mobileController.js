@@ -640,25 +640,18 @@ async function postAmemberInvoice({
   payload.append("nested[access][0][begin_date]", beginDateStr);
   payload.append("nested[access][0][expire_date]", expireDateStr);
 
-  const res = await axios.post(`${baseUrl}/invoices`, payload.toString(), {
+  console.log(`[postAmemberInvoice] Sending POST to ${baseUrl}/invoices with payload:`, payload.toString());
+  const resReq = await axios.post(`${baseUrl}/invoices`, payload.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
+  console.log(`[postAmemberInvoice] aMember API Response:`, JSON.stringify(resReq.data, null, 2));
 
-  // Explicitly grant product access in aMember /access table
-  try {
-    const accessPayload = new URLSearchParams({
-      _key: apiKey,
-      user_id: String(amemberUserId),
-      product_id: String(matchedProduct.amember_product_id),
-      begin_date: beginDateStr,
-      expire_date: expireDateStr,
-    });
-    await axios.post(`${baseUrl}/access`, accessPayload.toString(), {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    });
-  } catch (accessErr) {
-    console.error("[postAmemberInvoice] aMember access post warning:", accessErr.message);
-  }
+  // Access is granted by the `nested[access][0]` block on the invoice POST
+  // above, which links the row to the invoice so aMember can expire and
+  // refund it with the invoice. A second bare POST /access here created an
+  // unlinked duplicate row on every purchase (and activateAmemberUserStatus
+  // added a third), leaving three access rows per purchase — which in turn
+  // made plan resolution pick whichever row came back first.
 
   // Update user status to Active (1) in aMember
   try {
@@ -682,22 +675,9 @@ async function activateAmemberUserStatus({
   purchasedAt,
   expiresAt,
 }) {
-  try {
-    const beginDateStr = formatDateForAmember(purchasedAt);
-    const expireDateStr = formatDateForAmember(expiresAt);
-    const accessPayload = new URLSearchParams({
-      _key: apiKey,
-      user_id: String(amemberUserId),
-      product_id: String(matchedProduct.amember_product_id),
-      begin_date: beginDateStr,
-      expire_date: expireDateStr,
-    });
-    await axios.post(`${baseUrl}/access`, accessPayload.toString(), {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    });
-  } catch (accessErr) {
-    console.warn("[activateAmemberUserStatus] Access post info:", accessErr.message);
-  }
+  // No access POST here: postAmemberInvoice already granted access via the
+  // invoice's nested[access] block. This function only flips the aMember user
+  // status to active.
 
   try {
     const userParams = new URLSearchParams({
@@ -2059,6 +2039,9 @@ const verifyGooglePayment = async (req, res) => {
     }
   */
   try {
+    console.log(`\n\n=== [verifyGooglePayment] START ===`);
+    console.log(`[verifyGooglePayment] Raw req.body:`, JSON.stringify(req.body, null, 2));
+    
     const { productId, purchaseToken, packageName } = req.body;
     const rawUserId = req.user?.user_id || req.user?.amember_user_id;
     const amemberUserId = String(rawUserId).replace(/^GPT-/, "");
@@ -2066,6 +2049,7 @@ const verifyGooglePayment = async (req, res) => {
     if (!productId || !purchaseToken) {
       return res.status(400).json({ ok: false, code: "STORE_PROOF_INVALID", error: "productId and purchaseToken are required." });
     }
+    console.log(`[verifyGooglePayment] Init for user: ${amemberUserId}, productId: ${productId}, basePlanId (if any): ${req.body.basePlanId}`);
 
     let subscriptionState;
     try {
@@ -2082,6 +2066,7 @@ const verifyGooglePayment = async (req, res) => {
         token: purchaseToken,
       });
       subscriptionState = response.data;
+      console.log(`[verifyGooglePayment] Google API response for token ${purchaseToken.substring(0, 10)}...:`, JSON.stringify(subscriptionState, null, 2));
     } catch (e) {
       console.error("[verifyGooglePayment] Google Developer API failed:", {
         message: e.message,
@@ -2120,14 +2105,11 @@ const verifyGooglePayment = async (req, res) => {
       }
     }
 
-    if (isTrial) {
-      amount = 0.00;
-    }
-
     const canonicalTxId = purchaseToken;
     let existingTx = await MobileStoreTransaction.findOne({ canonical_transaction_id: canonicalTxId });
     // If this transaction ID was already processed (by any user), reject it
     if (existingTx) {
+      console.warn(`[verifyGooglePayment] Tx ${canonicalTxId} already processed.`);
       return res.status(409).json({
         ok: false,
         code: "TRANSACTION_ALREADY_USED",
@@ -2135,12 +2117,24 @@ const verifyGooglePayment = async (req, res) => {
       });
     }
 
+    console.log(`[verifyGooglePayment] Resolving product... isTrial: ${isTrial}, basePlanId: ${basePlanId}`);
     const matchedProduct = isTrial
       ? await matchAmemberFreeTrialProduct()
       : await matchAmemberProduct(productId, basePlanId);
 
+    console.log(`[verifyGooglePayment] Matched aMember Product:`, JSON.stringify(matchedProduct, null, 2));
+
+    // Use actual aMember product price for paid plans
+    if (!isTrial && matchedProduct?.amemberProduct?.first_price) {
+      amount = Number(matchedProduct.amemberProduct.first_price) || 0.00;
+    } else {
+      amount = 0.00;
+    }
+
+    console.log(`[verifyGooglePayment] Calculated invoice amount: ${amount}`);
+
     try {
-      await postAmemberInvoice({
+      const invoicePayload = {
         amemberUserId,
         canonicalTransactionId: canonicalTxId,
         platform: "android",
@@ -2150,7 +2144,9 @@ const verifyGooglePayment = async (req, res) => {
         currency: "USD",
         purchasedAt: now,
         expiresAt: expiresDate,
-      });
+      };
+      console.log(`[verifyGooglePayment] Calling postAmemberInvoice with:`, JSON.stringify(invoicePayload, null, 2));
+      await postAmemberInvoice(invoicePayload);
     } catch (invoiceErr) {
       const detail = invoiceErr.response?.data?.error || invoiceErr.response?.data?.message || invoiceErr.message;
       console.error("[verifyGooglePayment] aMember invoice failed:", detail);
@@ -2743,6 +2739,9 @@ const handleAppleWebhook = async (req, res) => {
 
 const handleGoogleWebhook = async (req, res) => {
   try {
+    console.log(`\n\n=== [handleGoogleWebhook] START ===`);
+    console.log(`[handleGoogleWebhook] Raw req.body:`, JSON.stringify(req.body, null, 2));
+
     const secretToken = process.env.GOOGLE_PUBSUB_SECRET_TOKEN;
     if (secretToken && req.query.token !== secretToken) {
       return res.status(401).json({ ok: false, error: "Unauthorized webhook." });
@@ -2758,6 +2757,7 @@ const handleGoogleWebhook = async (req, res) => {
     let decodedData = {};
     try {
       decodedData = JSON.parse(Buffer.from(message.data, "base64").toString("utf-8"));
+      console.log(`[handleGoogleWebhook] Decoded Webhook Payload:`, JSON.stringify(decodedData, null, 2));
     } catch (e) { }
 
     await MobileStoreWebhookEvent.create({
@@ -2772,8 +2772,16 @@ const handleGoogleWebhook = async (req, res) => {
     if (subNotification) {
       const purchaseToken = subNotification.purchaseToken;
       const notificationType = subNotification.notificationType;
+      console.log(`[handleGoogleWebhook] Processing subscription notificationType: ${notificationType}`);
 
-      if (notificationType === 2) { // Renewed
+      // Types that indicate an active, billable subscription (new, renewed, or recovered):
+      // 1 = SUBSCRIPTION_RECOVERED  (recovered from account hold)
+      // 2 = SUBSCRIPTION_RENEWED    (renewal OR trial-to-paid conversion)
+      // 4 = SUBSCRIPTION_PURCHASED  (brand-new purchase — fallback if client verify failed)
+      // 7 = SUBSCRIPTION_RESTARTED  (user reactivated after cancellation)
+      const isActivationType = [1, 2, 4, 7].includes(notificationType);
+
+      if (isActivationType) {
         try {
           const googlePlaySA2 = process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
             ? JSON.parse(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)
@@ -2789,43 +2797,77 @@ const handleGoogleWebhook = async (req, res) => {
             token: purchaseToken,
           });
           const subscriptionState = response.data;
+          console.log(`[handleGoogleWebhook] Google API state for token:`, JSON.stringify(subscriptionState, null, 2));
 
           let expiresDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // fallback
           let basePlanId = null;
+          let isTrial = false;
+
           if (subscriptionState.lineItems && subscriptionState.lineItems.length > 0) {
             const item = subscriptionState.lineItems[0];
-            if (item.offerDetails && item.offerDetails.basePlanId) {
+            if (item.offerDetails?.basePlanId) {
               basePlanId = item.offerDetails.basePlanId;
             }
             if (item.expiryTime) {
               expiresDate = new Date(item.expiryTime);
             }
+            // Detect if this webhook event is still for a trial period
+            const offerId = String(item.offerDetails?.offerId || "");
+            const offerTags = item.offerDetails?.offerTags || [];
+            if (/free-?trial/i.test(offerId) || offerTags.some((tag) => /trial/i.test(String(tag)))) {
+              isTrial = true;
+            }
           }
 
           await MobileStoreTransaction.updateMany(
             { original_transaction_id: purchaseToken },
-            { $set: { event_type: "renewal", amember_sync_pending: false, expires_at: expiresDate, "meta.base_plan_id": basePlanId || "" } }
+            {
+              $set: {
+                event_type: isTrial ? "free_trial" : (notificationType === 4 ? "initial_purchase" : "renewal"),
+                amember_sync_pending: false,
+                expires_at: expiresDate,
+                "meta.base_plan_id": basePlanId || "",
+              }
+            }
           );
 
           const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken });
           if (existingTx && existingTx.amember_user_id) {
             const resolvedBasePlanId = basePlanId || existingTx.meta?.base_plan_id;
-            const matchedProduct = await matchAmemberProduct(existingTx.store_product_id, resolvedBasePlanId);
-            const renewalAmount = existingTx.amount;
-            await postAmemberInvoice({
+            console.log(`[handleGoogleWebhook] Resolving product... isTrial: ${isTrial}, resolvedBasePlanId: ${resolvedBasePlanId}`);
+            
+            const matchedProduct = isTrial
+              ? await matchAmemberFreeTrialProduct()
+              : await matchAmemberProduct(existingTx.store_product_id, resolvedBasePlanId);
+            
+            console.log(`[handleGoogleWebhook] Matched aMember Product:`, JSON.stringify(matchedProduct, null, 2));
+
+            // Use matched product's actual price for paid renewals — do NOT reuse
+            // existingTx.amount which may be 0 if this was originally a free trial.
+            let invoiceAmount = 0.00;
+            if (!isTrial && matchedProduct?.amemberProduct?.first_price) {
+              invoiceAmount = Number(matchedProduct.amemberProduct.first_price) || 0.00;
+            }
+            console.log(`[handleGoogleWebhook] Calculated invoiceAmount: ${invoiceAmount}`);
+
+            const invoicePayload = {
               amemberUserId: existingTx.amember_user_id,
               canonicalTransactionId: purchaseToken,
               platform: "android",
               storeProductId: existingTx.store_product_id,
               matchedProduct,
-              amount: renewalAmount,
+              amount: invoiceAmount,
               currency: existingTx.currency || "USD",
               purchasedAt: new Date(),
               expiresAt: expiresDate,
-            });
+            };
+            console.log(`[handleGoogleWebhook] Calling postAmemberInvoice with:`, JSON.stringify(invoicePayload, null, 2));
+            await postAmemberInvoice(invoicePayload);
+          } else {
+            console.warn(`[handleGoogleWebhook] Could not find amember_user_id for purchaseToken: ${purchaseToken.substring(0, 10)}...`);
           }
         } catch (err) {
-          console.error("[handleGoogleWebhook] Failed to process renewal via Developer API:", err.message);
+          console.error(`[handleGoogleWebhook] Failed to process notificationType=${notificationType} via Developer API:`, err.message);
           await MobileStoreTransaction.updateMany(
             { original_transaction_id: purchaseToken },
             { $set: { event_type: "renewal", amember_sync_pending: true } }
