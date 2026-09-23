@@ -666,7 +666,7 @@ async function postAmemberInvoice({
     console.error("[postAmemberInvoice] aMember user status update warning:", userErr.message);
   }
 
-  return res.data;
+  return resReq.data;
 }
 
 async function activateAmemberUserStatus({
@@ -735,6 +735,21 @@ const MobileSignup = async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ ok: false, code: "INVALID_INPUT", error: "Email and password are required." });
     }
+    
+    // Strict Password Validation (at least 6 characters)
+    if (password.length < 6) {
+      return res.status(400).json({ ok: false, code: "INVALID_PASSWORD", error: "Password must be at least 6 characters long." });
+    }
+
+    // Strict Name Validation (letters, spaces, and hyphens only)
+    const nameRegex = /^[a-zA-Z\s\-]+$/;
+    if (firstName && !nameRegex.test(firstName.trim())) {
+      return res.status(400).json({ ok: false, code: "INVALID_FIRST_NAME", error: "First name can only contain letters, spaces, and hyphens." });
+    }
+    if (lastName && !nameRegex.test(lastName.trim())) {
+      return res.status(400).json({ ok: false, code: "INVALID_LAST_NAME", error: "Last name can only contain letters, spaces, and hyphens." });
+    }
+
     let cleanPhoneNumber = "";
     if (phoneNumber !== undefined && phoneNumber !== null && String(phoneNumber).trim() !== "") {
       cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
@@ -744,6 +759,11 @@ const MobileSignup = async (req, res) => {
     }
 
     const cleanEmail = email.toLowerCase().trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ ok: false, code: "INVALID_EMAIL", error: "Please provide a valid email address." });
+    }
+    
     const cleanLogin = cleanEmail;
 
     const { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email: cleanEmail });
@@ -913,11 +933,16 @@ const GoogleSignup = async (req, res) => {
     if (decoded.email && bodyEmail && decoded.email.toLowerCase() !== bodyEmail.toLowerCase()) {
       return res.status(400).json({ ok: false, code: "EMAIL_MISMATCH", error: "The provided email does not match the authenticated account." });
     }
-    const email = (decoded.email || bodyEmail) ? (decoded.email || bodyEmail).toLowerCase() : null;
+    const email = (decoded.email || bodyEmail) ? (decoded.email || bodyEmail).toLowerCase().trim() : null;
     const firebaseUid = decoded.uid;
 
     if (!email) {
       return res.status(400).json({ ok: false, code: "INVALID_GOOGLE_TOKEN", error: "Google account must have a verified email address." });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ ok: false, code: "INVALID_EMAIL", error: "Please provide a valid email address." });
     }
 
     const derivedFirstName = firstName || "";
@@ -1100,8 +1125,17 @@ const GoogleLogin = async (req, res) => {
     if (decoded.email && bodyEmail && decoded.email.toLowerCase() !== bodyEmail.toLowerCase()) {
       return res.status(400).json({ ok: false, code: "EMAIL_MISMATCH", error: "The provided email does not match the authenticated account." });
     }
-    const email = (decoded.email || bodyEmail) ? (decoded.email || bodyEmail).toLowerCase() : null;
+    const email = (decoded.email || bodyEmail) ? (decoded.email || bodyEmail).toLowerCase().trim() : null;
     const firebaseUid = decoded.uid;
+
+    if (!email) {
+      return res.status(400).json({ ok: false, code: "INVALID_APPLE_TOKEN", error: "Apple account must provide an email address." });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ ok: false, code: "INVALID_EMAIL", error: "Please provide a valid email address." });
+    }
 
     let { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
     if (!mongoProfile && !amemberUser) {
@@ -3919,10 +3953,24 @@ const v2UpdateOnboardingProfile = async (req, res) => {
         error: "firstName is required.", code: "INVALID_INPUT",
       });
     }
+    const nameRegex = /^[a-zA-Z\s\-]+$/;
+    if (!nameRegex.test(firstName.trim())) {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "First name can only contain letters, spaces, and hyphens.", code: "INVALID_FIRST_NAME",
+      });
+    }
+
     if (!lastName || typeof lastName !== "string" || !lastName.trim()) {
       return res.status(400).json({
         success: false, statusCode: 400,
         error: "lastName is required.", code: "INVALID_INPUT",
+      });
+    }
+    if (!nameRegex.test(lastName.trim())) {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "Last name can only contain letters, spaces, and hyphens.", code: "INVALID_LAST_NAME",
       });
     }
     let cleanPhone = "";
