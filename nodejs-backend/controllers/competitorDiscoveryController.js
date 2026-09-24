@@ -195,6 +195,7 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
     search = '',
     searchType = 'competitor',
     brandCategory = '',
+    brandName = '',
   } = opts;
 
   const keywordTerms = keywords.map(k => k.term);
@@ -218,12 +219,13 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
   }
 
   const normalizedBrandCategory = String(brandCategory || '').trim();
+  const normalizedBrandName = String(brandName || '').trim();
 
   // Keep the three selected-brand discovery sources independent. The search
   // service combines them as competitor OR keyword OR category/industry.
   const allSearchTerms = [...new Set([...competitorNames, ...keywordTerms])];
 
-  if (allSearchTerms.length === 0 && !normalizedBrandCategory) {
+  if (allSearchTerms.length === 0 && !normalizedBrandCategory && !normalizedBrandName) {
     return { ads: [], total: 0, hasMore: false };
   }
 
@@ -248,6 +250,7 @@ async function fetchAdsFromPas(keywords, competitors = [], authHeader = null, op
           searchType,
         }),
         ...(normalizedBrandCategory && { brandCategory: normalizedBrandCategory }),
+        ...(normalizedBrandName && { brandName: normalizedBrandName }),
       },
     );
 
@@ -346,6 +349,7 @@ async function getCompetitorAds(req, res) {
     const keywords = brand.keywords || [];
     const competitors = brand.competitors || [];
     const brandCategory = brand.category || '';
+    const brandName = brand.brandName || '';
     const job = brand.discoveryJob || {};
     const stale = isStalePending(job);
 
@@ -421,6 +425,7 @@ async function getCompetitorAds(req, res) {
         search,
         searchType,
         brandCategory,
+        brandName,
       }
     );
 

@@ -36,6 +36,8 @@ const PLATFORM_CONFIGS = {
     fallbackImage: 'facebook_ad_variants.image_url_original',
     imageExistsFields: ['new_nas_image_url', 'facebook_ad_variants.image_url_original'],
     validImageFields: ['new_nas_image_url'],
+    additionalImageFields: ['Thumbnail', 'othermedia'],
+    usePowerAdspyMediaFilter: true,
     popularity: 'facebook_ad.popularity.current',
     categoryName: 'facebook.category',
     subCategoryName: 'facebook.subCategory',
@@ -281,11 +283,12 @@ function isValidMediaUrl(url) {
   // Reject URLs that are just a domain with no path (e.g. "https://ytimg.com/")
   if (trimmed.replace(/^https?:\/\//, '').replace(/\/$/, '').indexOf('/') === -1) return false;
   // Reject relative paths that aren't known NAS patterns
-  // Only /pas-dev/stream/, /stream/, /pas-dev/, /PowerAdspy/ are valid local paths
+  // Only known PAS/NAS roots are valid local paths.
   if (trimmed.startsWith('/') &&
       !trimmed.startsWith('/pas-dev/') &&
       !trimmed.startsWith('/stream/') &&
-      !trimmed.startsWith('/PowerAdspy/')) {
+      !trimmed.startsWith('/PowerAdspy/') &&
+      !trimmed.startsWith('/PowerAdspy-Dev/')) {
     return false;
   }
   return true;
@@ -383,6 +386,11 @@ function transformMediaUrl(url) {
     return `${mediaBase}${cleanPath}`;
   }
 
+  if (url.startsWith('/PowerAdspy-Dev/') || url.startsWith('PowerAdspy-Dev/')) {
+    const cleanPath = url.replace(/^\/?PowerAdspy-Dev/i, '');
+    return `${mediaBase}${cleanPath}`;
+  }
+
   // /PowerAdspy/n2/... or /PowerAdspy/insta/... paths
   if (url.startsWith('/PowerAdspy/') || url.startsWith('PowerAdspy/')) {
     // Strip /PowerAdspy with optional /n2, /n3 etc.
@@ -444,20 +452,25 @@ function flattenAd(ad, platform, config, docId = null) {
         'image_url',
         'image_url_original',
         'ad_image_or_video',
+        ...(config.additionalImageFields || []),
         config.imageUrl,
         config.fallbackImage,
       ].filter(Boolean);
       for (const field of candidateFields) {
-        const candidate = getNested(ad, field);
-        if (
-          isValidMediaUrl(candidate) &&
-          !isVideoFileUrl(candidate) &&
-          !isPlaceholderImage(candidate) &&
-          !isBlockedCdnUrl(candidate)
-        ) {
-          mediaUrl = candidate;
-          break;
+        const value = getNested(ad, field);
+        const candidates = Array.isArray(value) ? value : [value];
+        for (const candidate of candidates) {
+          if (
+            isValidMediaUrl(candidate) &&
+            !isVideoFileUrl(candidate) &&
+            !isPlaceholderImage(candidate) &&
+            !isBlockedCdnUrl(candidate)
+          ) {
+            mediaUrl = candidate;
+            break;
+          }
         }
+        if (mediaUrl) break;
       }
     }
     
@@ -472,6 +485,7 @@ function flattenAd(ad, platform, config, docId = null) {
       'image_url',
       'image_url_original',
       'ad_image_or_video',
+      ...(config.additionalImageFields || []),
     ].filter((field, index, fields) =>
       field && !skippedSourceFields.has(field) && fields.indexOf(field) === index
     );
@@ -622,36 +636,99 @@ function advertiserIsCompetitor(advertiser, competitorNormSet, competitorNames) 
   return false;
 }
 
-function buildContentDiscoveryClauses(keywordQuery, brandCategory, keywordFields, categoryFields) {
+function buildContentDiscoveryClauses(
+  keywordTerms,
+  brandName,
+  brandCategory,
+  keywordFields,
+  categoryFields,
+) {
   const clauses = [];
+  const contentContextClauses = [];
 
-  if (keywordQuery) {
-    clauses.push({
+  if (brandName) {
+    contentContextClauses.push({
       multi_match: {
-        query: keywordQuery,
+        query: brandName,
         fields: keywordFields,
-        type: 'best_fields',
-        operator: 'or',
-        boost: 2.0,
-        _name: 'keyword_match',
+        type: 'phrase',
+        boost: 8.0,
+        _name: 'brand_name_match',
       },
     });
   }
 
-  if (brandCategory && categoryFields.length > 0) {
-    clauses.push({
+  const normalizedKeywordTerms = [...new Set(
+    (Array.isArray(keywordTerms) ? keywordTerms : [])
+      .map((term) => String(term || '').trim())
+      .filter(Boolean),
+  )];
+  normalizedKeywordTerms.forEach((term, index) => {
+    contentContextClauses.push({
       multi_match: {
-        query: brandCategory,
-        fields: categoryFields,
-        type: 'best_fields',
-        operator: 'and',
-        boost: 1.0,
+        query: term,
+        fields: keywordFields,
+        type: 'phrase',
+        boost: 2.0,
+        _name: `keyword_match_${index}`,
+      },
+    });
+  });
+
+  clauses.push(...contentContextClauses);
+
+  if (brandCategory && categoryFields.length > 0 && contentContextClauses.length > 0) {
+    clauses.push({
+      bool: {
+        must: [
+          {
+            multi_match: {
+              query: brandCategory,
+              fields: categoryFields,
+              type: 'phrase',
+              boost: 1.0,
+            },
+          },
+          {
+            bool: {
+              should: contentContextClauses,
+              minimum_should_match: 1,
+            },
+          },
+        ],
         _name: 'category_industry_match',
       },
     });
   }
 
   return clauses;
+}
+
+function resolvePlatformsToSearch(platform) {
+  const requestedPlatforms = Array.isArray(platform)
+    ? platform
+    : typeof platform === 'string' && platform !== 'all'
+      ? platform.split(',')
+      : [];
+
+  return requestedPlatforms.length > 0
+    ? [...new Set(requestedPlatforms.map((value) => String(value).trim()).filter(Boolean))]
+    : Object.keys(PLATFORM_CONFIGS);
+}
+
+function buildSortClauses(config, sortBy, sortOrder) {
+  const sort = sortBy === 'relevance'
+    ? [
+        { _score: { order: sortOrder } },
+        { [config.lastSeen]: { order: 'desc' } },
+      ]
+    : [{ [config.lastSeen]: { order: sortOrder } }];
+
+  if (config.adIdField) {
+    sort.push({ [config.adIdField]: { order: 'desc', unmapped_type: 'keyword' } });
+  }
+
+  return sort;
 }
 
 // ── Main search function ────────────────────────────────────────────────
@@ -671,18 +748,12 @@ exports.searchAdsByKeywords = async (
   const hasCompetitors = Array.isArray(competitors) && competitors.length > 0;
   const hasBrandCategory =
     typeof filters.brandCategory === 'string' && filters.brandCategory.trim().length > 0;
-  if (!hasKeywords && !hasCompetitors && !hasBrandCategory) {
+  const hasBrandName = typeof filters.brandName === 'string' && filters.brandName.trim().length > 0;
+  if (!hasKeywords && !hasCompetitors && !hasBrandCategory && !hasBrandName) {
     return { ads: [], total: 0, hasMore: false };
   }
 
-  const requestedPlatforms = Array.isArray(platform)
-    ? platform
-    : typeof platform === 'string' && platform !== 'all'
-      ? platform.split(',')
-      : [];
-  const platformsToSearch = requestedPlatforms.length > 0
-    ? [...new Set(requestedPlatforms.map((value) => String(value).trim()).filter(Boolean))]
-    : Object.keys(PLATFORM_CONFIGS);
+  const platformsToSearch = resolvePlatformsToSearch(platform);
 
   // Search each platform's index in PARALLEL, each paginated independently
   // at the ES level. Works whether platforms share a cluster
@@ -736,16 +807,14 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     const keywordQuery = keywords.join(' ');
     const competitorNames = competitors.filter(c => c && typeof c === 'string');
     const brandCategory = String(filters.brandCategory || '').trim();
+    const brandName = String(filters.brandName || '').trim();
     const isGoogle = config.postOwnerIsKeyword === true;
     const keywordFields = (config.keywordFields || [
       config.adTitle,
       config.adText,
       config.newsfeedDescription,
     ]).filter(Boolean);
-    const categoryFields = [...new Set([
-      ...(config.categoryFields || []),
-      ...keywordFields,
-    ].filter(Boolean))];
+    const categoryFields = [...new Set((config.categoryFields || []).filter(Boolean))];
 
     // ── Build optimized ES query ──────────────────────────────────────────
     // Structure:
@@ -778,25 +847,12 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
         });
       } else {
         // FB / IG / YT: post_owner is text → analyzed match
-        // Split single-word vs multi-word for precision
-        const singleWord = competitorNames.filter(c => !c.includes(' '));
-        const multiWord = competitorNames.filter(c => c.includes(' '));
+        // Keep every name as its own phrase; combining names into one analyzed
+        // OR query lets generic tokens such as "Hotel" match unrelated owners.
+        const multiWord = competitorNames;
 
         // Single-word competitors: use match (catches variations like Nike → nike)
-        if (singleWord.length > 0) {
-          competitorMatchClauses.push({
-            match: {
-              [config.postOwner]: {
-                query: singleWord.join(' '),
-                operator: 'or',
-                boost: 5.0
-              }
-            }
-          });
-        }
-
-        // Multi-word competitors: use match_phrase for exact phrase matching
-        // e.g., "Under Armour" only matches the full phrase, not just "Armour"
+        // Phrase matching applies to both single-word and multi-word names.
         multiWord.forEach(name => {
           competitorMatchClauses.push({
             match_phrase: {
@@ -828,7 +884,8 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     // ── 2. Keyword matching (boosts score, NOT required) ───────────────────
     discoveryMatchClauses.push(
       ...buildContentDiscoveryClauses(
-        keywordQuery,
+        keywords,
+        brandName,
         brandCategory,
         keywordFields,
         categoryFields,
@@ -890,14 +947,65 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     // paths, and placeholders — so we stop fetching docs flattenAd would only
     // drop (e.g. FB: ~18k candidates → ~4.7k valid). flattenAd still runs its
     // own validation as a safety net.
-    const validImageFields = config.validImageFields || config.imageExistsFields || [];
-    const imageShould = [];
-    for (const field of validImageFields) {
-      imageShould.push({ match: { [field]: 'poweradspy' } });
-      imageShould.push({ match: { [field]: 'stream' } });
-    }
-    if (imageShould.length > 0) {
-      filterClauses.push({ bool: { should: imageShould, minimum_should_match: 1 } });
+    if (config.usePowerAdspyMediaFilter) {
+      filterClauses.push({
+        bool: {
+          should: [
+            {
+              bool: {
+                filter: [
+                  { term: { [`${config.adType}.keyword`]: 'IMAGE' } },
+                  { exists: { field: 'new_nas_image_url' } },
+                ],
+                must_not: [
+                  { wildcard: { 'new_nas_image_url.keyword': { value: '*DefaultImage*' } } },
+                ],
+              },
+            },
+            {
+              bool: {
+                filter: [
+                  { term: { [`${config.adType}.keyword`]: 'VIDEO' } },
+                  { exists: { field: 'Thumbnail' } },
+                ],
+                must_not: [
+                  { wildcard: { 'Thumbnail.keyword': { value: '*DefaultImage*' } } },
+                ],
+              },
+            },
+            {
+              bool: {
+                filter: [
+                  {
+                    bool: {
+                      should: [
+                        { exists: { field: 'new_nas_image_url' } },
+                        { exists: { field: 'othermedia' } },
+                      ],
+                      minimum_should_match: 1,
+                    },
+                  },
+                ],
+                must_not: [
+                  { wildcard: { 'new_nas_image_url.keyword': { value: '*DefaultImage*' } } },
+                  { wildcard: { 'othermedia.keyword': { value: '*DefaultImage*' } } },
+                ],
+              },
+            },
+          ],
+          minimum_should_match: 1,
+        },
+      });
+    } else {
+      const validImageFields = config.validImageFields || config.imageExistsFields || [];
+      const imageShould = [];
+      for (const field of validImageFields) {
+        imageShould.push({ match: { [field]: 'poweradspy' } });
+        imageShould.push({ match: { [field]: 'stream' } });
+      }
+      if (imageShould.length > 0) {
+        filterClauses.push({ bool: { should: imageShould, minimum_should_match: 1 } });
+      }
     }
 
     // Category / subcategory filter — category_id is a `text` field, so use
@@ -950,13 +1058,7 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     // competitor is currently running, not just newly-created ones. This drives
     // from/size pagination order. All returned ads already match a competitor
     // (must clause). `relevance` mode (not used by the UI today) keeps score-first.
-    const sort = [];
-    if (sortBy === 'relevance') {
-      sort.push({ _score: { order: sortOrder } });
-      sort.push({ [config.lastSeen]: { order: 'desc' } });
-    } else {
-      sort.push({ [config.lastSeen]: { order: sortOrder } });
-    }
+    const sort = buildSortClauses(config, sortBy, sortOrder);
 
     // ── _source filter: only fetch fields we actually need ────────────────
     const _source = [
@@ -978,6 +1080,7 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
       config.subCategoryName,
       config.categoryId,
       config.subCategoryId,
+      ...(config.additionalImageFields || []),
       'new_nas_image_url',
       'thumbnail',
       'nas_video_url',
@@ -1046,7 +1149,9 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
         // name (loose ES match otherwise leaks "Sony" → "Sony LIV").
         const matchedQueries = new Set(hit.matched_queries || []);
         const matchedByKeywordOrCategory =
-          matchedQueries.has('keyword_match') ||
+          [...matchedQueries].some((name) =>
+            name === 'brand_name_match' || name.startsWith('keyword_match_')
+          ) ||
           matchedQueries.has('category_industry_match');
         if (
           competitorNames.length > 0 &&
@@ -1083,4 +1188,6 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
 exports.__test = {
   PLATFORM_CONFIGS,
   buildContentDiscoveryClauses,
+  resolvePlatformsToSearch,
+  buildSortClauses,
 };
