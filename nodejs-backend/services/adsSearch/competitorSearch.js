@@ -13,6 +13,21 @@ const PLATFORM_CONFIGS = {
     adTitle: 'facebook_ad_variants.title',
     adText: 'facebook_ad_variants.text',
     newsfeedDescription: 'facebook_ad_variants.newsfeed_description',
+    keywordFields: [
+      'facebook_ad_variants.title',
+      'facebook_ad_variants.text',
+      'facebook_ad_variants.newsfeed_description',
+      'facebook_ad_variants.title_exactly',
+      'facebook_ad_variants.text_exactly',
+      'facebook_ad_variants.newsfeed_description_exactly',
+      'facebook_translation.ad_text',
+      'facebook_translation.news_feed_description',
+      'facebook_translation.ad_title',
+      'facebook_translations.ar.title',
+      'facebook_translations.ar.text',
+      'facebook_translations.ar.newsfeed_description',
+    ],
+    categoryFields: ['facebook.category', 'facebook.subCategory'],
     firstSeen: 'facebook_ad.post_date',
     lastSeen: 'facebook_ad.last_seen',
     adType: 'facebook_ad.type',
@@ -35,6 +50,21 @@ const PLATFORM_CONFIGS = {
     adTitle: 'instagram_ad_variants.title',
     adText: 'instagram_ad_variants.text',
     newsfeedDescription: 'instagram_ad_variants.newsfeed_description',
+    keywordFields: [
+      'instagram_ad_variants.title',
+      'instagram_ad_variants.text',
+      'instagram_ad_variants.newsfeed_description',
+      'instagram_ad_variants.title_exactly',
+      'instagram_ad_variants.text_exactly',
+      'instagram_ad_variants.newsfeed_description_exactly',
+      'instagram_translation.ad_text',
+      'instagram_translation.news_feed_description',
+      'instagram_translation.ad_title',
+      'instagram_translations.ar.title',
+      'instagram_translations.ar.text',
+      'instagram_translations.ar.newsfeed_description',
+    ],
+    categoryFields: ['instagram.category', 'instagram.subCategory'],
     firstSeen: 'instagram_ad.post_date',
     lastSeen: 'instagram_ad.last_seen',
     adType: 'instagram_ad.type',
@@ -58,6 +88,8 @@ const PLATFORM_CONFIGS = {
     adTitle: 'ad_title',
     adText: 'ad_text',
     newsfeedDescription: 'newsfeed_description',
+    keywordFields: ['ad_title', 'ad_text', 'newsfeed_description'],
+    categoryFields: ['category', 'subCategory'],
     firstSeen: 'first_seen',
     lastSeen: 'last_seen',
     adType: 'ad_type',
@@ -113,6 +145,8 @@ const PLATFORM_CONFIGS = {
     adTitle: 'ad_title',
     adText: 'ad_text',
     newsfeedDescription: 'newsfeed_description',
+    keywordFields: ['ad_title', 'ad_text', 'newsfeed_description'],
+    categoryFields: ['category', 'subCategory', 'industry'],
     firstSeen: 'first_seen',
     lastSeen: 'last_seen',
     adType: 'ad_type',
@@ -142,6 +176,15 @@ const PLATFORM_CONFIGS = {
     adTitle: 'gdn_ad_variants.title',
     adText: 'gdn_ad_variants.text',
     newsfeedDescription: 'gdn_ad_variants.newsfeed_description',
+    keywordFields: [
+      'gdn_ad_variants.title',
+      'gdn_ad_variants.text',
+      'gdn_ad_variants.newsfeed_description',
+      'gdn_ad_variants.title_exactly',
+      'gdn_ad_variants.text_exactly',
+      'gdn_ad_variants.newsfeed_description_exactly',
+    ],
+    categoryFields: ['category', 'subCategory', 'industry'],
     firstSeen: 'gdn_ad.post_date',
     lastSeen: 'gdn_ad.last_seen',
     adType: 'gdn_ad.type',
@@ -165,6 +208,12 @@ const PLATFORM_CONFIGS = {
     adTitle: 'pinterest_ad_variants.title',
     adText: 'pinterest_ad_variants.text',
     newsfeedDescription: 'pinterest_ad_variants.newsfeed_description',
+    keywordFields: [
+      'pinterest_ad_variants.title',
+      'pinterest_ad_variants.text',
+      'pinterest_ad_variants.newsfeed_description',
+    ],
+    categoryFields: ['pinterest.category', 'pinterest.subCategory'],
     firstSeen: 'pinterest_ad.post_date',
     lastSeen: 'pinterest_ad.last_seen',
     adType: 'pinterest_ad.type',
@@ -187,6 +236,12 @@ const PLATFORM_CONFIGS = {
     adTitle: 'reddit_ad_variants.title',
     adText: 'reddit_ad_variants.text',
     newsfeedDescription: 'reddit_ad_variants.newsfeed_description',
+    keywordFields: [
+      'reddit_ad_variants.title',
+      'reddit_ad_variants.text',
+      'reddit_ad_variants.newsfeed_description',
+    ],
+    categoryFields: ['reddit.category', 'reddit.subCategory'],
     firstSeen: 'reddit_ad.post_date',
     lastSeen: 'reddit_ad.last_seen',
     adType: 'reddit_ad.type',
@@ -567,6 +622,38 @@ function advertiserIsCompetitor(advertiser, competitorNormSet, competitorNames) 
   return false;
 }
 
+function buildContentDiscoveryClauses(keywordQuery, brandCategory, keywordFields, categoryFields) {
+  const clauses = [];
+
+  if (keywordQuery) {
+    clauses.push({
+      multi_match: {
+        query: keywordQuery,
+        fields: keywordFields,
+        type: 'best_fields',
+        operator: 'or',
+        boost: 2.0,
+        _name: 'keyword_match',
+      },
+    });
+  }
+
+  if (brandCategory && categoryFields.length > 0) {
+    clauses.push({
+      multi_match: {
+        query: brandCategory,
+        fields: categoryFields,
+        type: 'best_fields',
+        operator: 'and',
+        boost: 1.0,
+        _name: 'category_industry_match',
+      },
+    });
+  }
+
+  return clauses;
+}
+
 // ── Main search function ────────────────────────────────────────────────
 
 exports.searchAdsByKeywords = async (
@@ -579,10 +666,12 @@ exports.searchAdsByKeywords = async (
   sortOrder = 'desc',
   filters = {}
 ) => {
-  // With Query 3, we need at least one of: keywords OR competitors
+  // A selected-brand feed needs at least one discovery source.
   const hasKeywords = Array.isArray(keywords) && keywords.length > 0;
   const hasCompetitors = Array.isArray(competitors) && competitors.length > 0;
-  if (!hasKeywords && !hasCompetitors) {
+  const hasBrandCategory =
+    typeof filters.brandCategory === 'string' && filters.brandCategory.trim().length > 0;
+  if (!hasKeywords && !hasCompetitors && !hasBrandCategory) {
     return { ads: [], total: 0, hasMore: false };
   }
 
@@ -646,7 +735,17 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     const from = (page - 1) * limit;
     const keywordQuery = keywords.join(' ');
     const competitorNames = competitors.filter(c => c && typeof c === 'string');
+    const brandCategory = String(filters.brandCategory || '').trim();
     const isGoogle = config.postOwnerIsKeyword === true;
+    const keywordFields = (config.keywordFields || [
+      config.adTitle,
+      config.adText,
+      config.newsfeedDescription,
+    ]).filter(Boolean);
+    const categoryFields = [...new Set([
+      ...(config.categoryFields || []),
+      ...keywordFields,
+    ].filter(Boolean))];
 
     // ── Build optimized ES query ──────────────────────────────────────────
     // Structure:
@@ -658,7 +757,7 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     // we use match_phrase for precision to avoid partial word matches.
 
     const mustClauses = [];
-    const shouldClauses = [];
+    const discoveryMatchClauses = [];
 
     // ── 1. Competitor matching (REQUIRED) ──────────────────────────────────
     if (competitorNames.length > 0) {
@@ -716,29 +815,32 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
       // "Dell Vostro Laptop"), which appeared for every brand. A competitor ad
       // = an ad whose ADVERTISER (post_owner) is the competitor.
 
-      // Competitor must match on the advertiser (post_owner)
-      mustClauses.push({
+      // Competitors match only on advertiser/post-owner identity.
+      discoveryMatchClauses.push({
         bool: {
           should: competitorMatchClauses,
-          minimum_should_match: 1
+          minimum_should_match: 1,
+          _name: 'competitor_match',
         }
       });
     }
 
     // ── 2. Keyword matching (boosts score, NOT required) ───────────────────
-    if (keywordQuery) {
-      shouldClauses.push({
-        multi_match: {
-          query: keywordQuery,
-          fields: [
-            config.adTitle,
-            config.adText,
-            config.newsfeedDescription
-          ].filter(Boolean),
-          type: 'best_fields',
-          operator: 'or',
-          boost: 2.0
-        }
+    discoveryMatchClauses.push(
+      ...buildContentDiscoveryClauses(
+        keywordQuery,
+        brandCategory,
+        keywordFields,
+        categoryFields,
+      ),
+    );
+
+    if (discoveryMatchClauses.length > 0) {
+      mustClauses.push({
+        bool: {
+          should: discoveryMatchClauses,
+          minimum_should_match: 1,
+        },
       });
     }
 
@@ -750,11 +852,7 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
       mustClauses.push({
         multi_match: {
           query: userSearchQuery,
-          fields: [
-            config.adTitle,
-            config.adText,
-            config.newsfeedDescription,
-          ].filter(Boolean),
+          fields: keywordFields,
           type: 'best_fields',
           operator: 'and',
         },
@@ -840,7 +938,6 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     const query = {
       bool: {
         must: mustClauses,
-        should: shouldClauses,
         filter: filterClauses
       }
     };
@@ -947,8 +1044,13 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
 
         // Strict gate: drop ads whose advertiser isn't EXACTLY a competitor
         // name (loose ES match otherwise leaks "Sony" → "Sony LIV").
+        const matchedQueries = new Set(hit.matched_queries || []);
+        const matchedByKeywordOrCategory =
+          matchedQueries.has('keyword_match') ||
+          matchedQueries.has('category_industry_match');
         if (
           competitorNames.length > 0 &&
+          !matchedByKeywordOrCategory &&
           !advertiserIsCompetitor(flatAd.postOwner, competitorNormSet, competitorNames)
         ) {
           continue;
@@ -977,3 +1079,8 @@ async function searchSinglePlatform(keywords = [], competitors = [], config, pla
     return { ads: [], total: 0, rawCount: 0 };
   }
 }
+
+exports.__test = {
+  PLATFORM_CONFIGS,
+  buildContentDiscoveryClauses,
+};
