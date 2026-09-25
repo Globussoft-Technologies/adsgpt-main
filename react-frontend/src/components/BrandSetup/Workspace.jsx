@@ -1131,6 +1131,20 @@ function Frame({ frames, index }) {
   const viewed = frames[viewIndex] || img;
   const canStep = frames.length > 1;
 
+  /* Has the FULL-SIZE picture actually arrived?
+     The `<figure>` has no size of its own — all of it comes from the `<img>`
+     inside. So until that image paints, the figure is ~0 tall and the caption,
+     the close button and the step arrow are all that render: a dimmed screen
+     with three controls floating on it and no picture, which reads as a broken
+     app. It happens two ways — a moment's decode while stepping between the
+     frames (the `key` below remounts the image every time), and permanently
+     when a frame URL 404s or its signed link has expired.
+     Tracked against the src rather than as a bare flag, so stepping to the
+     other frame is "loading" again from the first render — a plain `useState`
+     reset in an effect would show the previous frame's "ready" for one paint. */
+  const [load, setLoad] = useState({ src: '', status: 'loading' });
+  const status = load.src === viewed.src ? load.status : 'loading';
+
   const openAt = () => {
     setViewIndex(index);
     setOpen(true);
@@ -1183,14 +1197,65 @@ function Frame({ frames, index }) {
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           >
-            <figure className="relative max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
+            <figure
+              className={cn(
+                'relative flex items-center justify-center',
+                // A STANDING BOX, but only while there is no picture to hug.
+                // Once the image is up the figure goes back to being sized by
+                // it exactly as before, so the happy path is unchanged: the
+                // border still hugs the frame rather than a fixed rectangle.
+                // 9:16 of 70vh is the shape every keyframe comes back in
+                // (293x512), so the placeholder is the size of the thing it is
+                // standing in for.
+                status !== 'ready' &&
+                  'h-[70vh] w-[39vh] max-w-[88vw] rounded-xl border border-white/15 bg-[#0e0e11] shadow-[0_40px_120px_-20px_rgba(0,0,0,0.95)]'
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* The same settling-tiles loader the keyframes use while they are
+                  being generated, so waiting for a frame to DOWNLOAD looks like
+                  waiting for one to arrive rather than like a different bug. */}
+              {status === 'loading' && (
+                // Its own clipping layer rather than `overflow-hidden` on the
+                // figure: the close button hangs OUTSIDE the box by design
+                // (`-top-3 -right-3`), and clipping the figure would cut off
+                // the one control that gets you out of here.
+                <div className="absolute inset-0 overflow-hidden rounded-xl">
+                  <FrameSettleLoader seed={viewIndex * 2} />
+                </div>
+              )}
+              {status === 'error' && (
+                // Said plainly: there is nothing the user can do about it from
+                // in here, and pretending to load for ever is worse than
+                // admitting it.
+                <div className="absolute inset-0 grid place-items-center px-6 text-center">
+                  <div className="space-y-1">
+                    <p className="text-[13px] font-medium text-white/75">
+                      This frame couldn&apos;t be loaded
+                    </p>
+                    <p className="text-[12px] text-white/45">
+                      {canStep
+                        ? 'Try the other frame, or close and open it again.'
+                        : 'Close and open it again.'}
+                    </p>
+                  </div>
+                </div>
+              )}
               <img
                 // Keyed so stepping between the two actually swaps the picture
                 // rather than leaving the old one until the new file decodes.
                 key={viewed.src}
                 src={viewed.src}
                 alt={FRAME_LABELS[viewIndex]}
-                className="max-h-[88vh] max-w-[88vw] rounded-xl border border-white/15 object-contain shadow-[0_40px_120px_-20px_rgba(0,0,0,0.95)]"
+                onLoad={() => setLoad({ src: viewed.src, status: 'ready' })}
+                onError={() => setLoad({ src: viewed.src, status: 'error' })}
+                className={cn(
+                  'max-h-[88vh] max-w-[88vw] rounded-xl border border-white/15 object-contain shadow-[0_40px_120px_-20px_rgba(0,0,0,0.95)]',
+                  // `hidden` rather than unmounted: a display:none image still
+                  // downloads, so this is what is waiting to load. Unmounting
+                  // it would mean nothing ever fetched and `onLoad` never fired.
+                  status !== 'ready' && 'hidden'
+                )}
               />
               <figcaption className="absolute right-3 bottom-3 rounded bg-black/65 px-2 py-1 text-[10px] tracking-[0.08em] text-white/70 uppercase backdrop-blur-sm">
                 {FRAME_LABELS[viewIndex]}

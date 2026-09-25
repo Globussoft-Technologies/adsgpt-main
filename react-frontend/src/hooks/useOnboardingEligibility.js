@@ -73,14 +73,28 @@ export default function useOnboardingEligibility({ enabled = true } = {}) {
     resumeSessionId: state?.resumeSessionId || '',
     /**
      * A user who has never engaged with onboarding at all, and still has
-     * budget to spend there. The first-run redirect's whole condition.
+     * something to spend there. The first-run redirect's whole condition.
      *
-     * All four parts matter. `completed` and `skipped` are both "they have
-     * answered the question" — sending either back in is the app arguing with
-     * a decision the user already made. An exhausted allowance means there is
-     * nothing left to offer. And a `resumeSessionId` means they have a run in
-     * progress, which the banner handles: pushing them into it unasked is a
-     * different, pushier product.
+     * Every part matters. `enrolled === false` is an account that predates
+     * onboarding and was never offered it. `completed` and `skipped` are both
+     * "they have answered the question" — sending either back in is the app
+     * arguing with a decision the user already made. Nothing left to spend
+     * means nothing left to offer. And a `resumeSessionId` means they have a
+     * run in progress, which the banner handles: pushing them into it unasked
+     * is a different, pushier product.
+     *
+     * It reads `generationLeft`, NOT `allowanceRemaining`, and that is the
+     * whole point of the field. `allowanceRemaining` is zero for every
+     * free-plan user by design — they hold no onboarding budget because they
+     * already got 35 real credits at signup — so keying the redirect on it
+     * meant a brand-new free signup was never taken to onboarding at all and
+     * landed on /adstudio, able to find the wizard only by noticing the offer
+     * bar. `generationLeft` is the server's answer to "has this user got
+     * anything to spend here", whichever purse it comes out of.
+     *
+     * Note the asymmetry this keeps: for a paid user `generationLeft` IS the
+     * allowance, so an exhausted allowance still means no redirect, exactly as
+     * before. Only the free-plan case changes.
      *
      * False while loading, so a slow eligibility call cannot bounce someone
      * who turns out to be an existing user.
@@ -88,7 +102,8 @@ export default function useOnboardingEligibility({ enabled = true } = {}) {
     shouldStartOnboarding:
       !loading &&
       Boolean(state) &&
-      Number(state.allowanceRemaining) > 0 &&
+      state.enrolled !== false &&
+      Number(state.generationLeft) > 0 &&
       !state.onboardingCompleted &&
       !state.onboardingSkipped &&
       !state.resumeSessionId,
