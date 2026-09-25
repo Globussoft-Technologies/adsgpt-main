@@ -504,8 +504,14 @@ const OnBoardHome = () => {
         // A render in flight is its own reason to keep reading. It is the
         // slowest thing on this screen — the better part of a minute — and the
         // socket that normally reports it does not survive a deploy.
-        const clipsPending = Object.values(doc?.videos?.boards || {}).some(
-          (b) => b?.status === 'running'
+        // BOTH board-keyed sections, for the same reason the hydration above
+        // folds both: a recreate renders exactly like a storyboard clip and is
+        // just as slow, but it lives in its own section server-side. Reading
+        // only `videos` meant a lone recreate — every other rail already
+        // finished — counted as nothing pending, so the poll stopped while the
+        // render it was waiting for was still going.
+        const clipsPending = [doc?.videos?.boards, doc?.recreates?.boards].some((boards) =>
+          Object.values(boards || {}).some((b) => b?.status === 'running')
         );
 
         keepPolling = (sectionsPending || framesPending || clipsPending) && Date.now() < deadline;
@@ -819,12 +825,22 @@ const OnBoardHome = () => {
     // The clip view is a phase, not a route, so a resume has to reconstruct it
     // rather than navigate to it. Hydrating first is what makes it land on a
     // finished clip rather than an empty spinner.
-    if (view === 'clip' && doc?.videos) {
-      dispatch(videosHydrated(doc.videos));
+    if (view === 'clip' && (doc?.videos || doc?.recreates)) {
+      // Both sections, and in this order so neither can be missed. The poll
+      // folds both into one `byBoard`; a resume that folded only `videos` left
+      // a reloaded RECREATE with no entry at all — the screen opened on a board
+      // the store had never heard of and sat on a spinner that nothing would
+      // ever finish, because the only record of that render was in the section
+      // this line skipped.
+      if (doc?.videos) dispatch(videosHydrated(doc.videos));
+      if (doc?.recreates) dispatch(videosHydrated(doc.recreates));
       // Whichever concept actually has a clip. Failing that, any board a render
       // was ever started for; failing that, the first concept — so the screen
       // still opens and shows its own state rather than silently doing nothing.
-      const attempted = Object.entries(doc.videos.boards || {});
+      const attempted = [
+        ...Object.entries(doc.videos?.boards || {}),
+        ...Object.entries(doc.recreates?.boards || {}),
+      ];
       const withClip = attempted.find(([, entry]) => entry?.status === 'succeeded');
       const boardId =
         // The server said which board the user was on. It knows better than any

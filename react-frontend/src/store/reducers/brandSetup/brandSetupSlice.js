@@ -580,7 +580,17 @@ const brandSetupSlice = createSlice({
         // viewer — the durable upload may not have landed and the local copy
         // may have expired. Saying "ready" would show a player with nothing in
         // it.
-        const playable = clip?.video?.playable ?? Boolean(clip?.video?.src);
+        //
+        // The clip ALREADY IN THE STORE counts, and has to: the socket delivers
+        // a finished render seconds before any read does, and this runs on
+        // every poll. Judging only the server's copy meant that any hydration
+        // that could not pair a clip to this board — for whatever reason —
+        // knocked a clip the user was already watching back to `running`, again
+        // and again, with no way out but a reload. Nothing here should be able
+        // to un-finish a render that is on screen and playing.
+        const playable =
+          clip?.video?.playable ??
+          Boolean(clip?.video?.src || existing?.video?.video?.src);
 
         state.videos.byBoard[boardId] = {
           ...(existing || blankBoard()),

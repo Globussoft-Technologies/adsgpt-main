@@ -307,13 +307,29 @@ function videoBoardWrites(incomingResult, previousBoards = {}, meta = {}) {
  * Boards that were STARTED but produced nothing are left out: `videos` is the
  * list of clips, and a tile that is still rendering or failed is described by
  * `videos.boards`, which the client gets alongside it.
+ *
+ * EVERY CLIP IS STAMPED WITH THE KEY IT IS FILED UNDER, and that is the whole
+ * contract this list carries: the `board_id` you read here is the id you look
+ * the board up by in `boards`, for both sections.
+ *
+ * It has to be said explicitly because for a recreate the two diverge. A
+ * storyboard's key IS upstream's `board_id` — DS echoes back the id the user
+ * picked — so stamping changes nothing there. A recreate is filed under
+ * `recreate:<templateId>` while DS mints a fresh uuid per render and puts THAT
+ * in the clip, so the clip went out addressed by an id that appears nowhere in
+ * `boards`. The client pairs the two by id (`videosHydrated`), found no clip
+ * for the board, read that as "no playable link yet" and pinned a finished
+ * render at `running` — for ever, on every poll, with the URL sitting in the
+ * database the whole time.
  */
 function videosResultFromBoards(boards) {
-  const entries = Object.values(boards || {})
-    .filter((b) => b && b.video)
+  const entries = Object.entries(boards || {})
+    .filter(([, b]) => b && b.video)
     // Oldest first, so tiles do not reshuffle as later clips land.
-    .sort((a, b) => new Date(a.updatedAt || 0) - new Date(b.updatedAt || 0));
-  return { videos: entries.map((b) => b.video) };
+    .sort(([, a], [, b]) => new Date(a.updatedAt || 0) - new Date(b.updatedAt || 0));
+  // Only the ADDRESS is rewritten. `video.video.board_id` is left alone: that
+  // is DS's own record of its render and not ours to restate.
+  return { videos: entries.map(([key, b]) => ({ ...b.video, board_id: key })) };
 }
 
 /**

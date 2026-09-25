@@ -167,6 +167,45 @@ test("no boards at all is an empty list, not a crash", () => {
   assert.deepEqual(videosResultFromBoards({}), { videos: [] });
 });
 
+// The bug this pins: a RECREATE is filed under `recreate:<templateId>` while DS
+// mints its own uuid per render and puts that in the clip. The clip therefore
+// went out addressed by an id that appears nowhere in `boards`, the client could
+// not pair the two, and read the missing clip as "no playable link yet" — which
+// pinned a finished render at `running` for ever, with its URL in the database
+// the whole time.
+test("a clip is addressed by the key it is filed under, not by DS's render id", () => {
+  const boards = {
+    "recreate:tpl-1": {
+      status: "succeeded",
+      updatedAt: new Date(1),
+      video: {
+        board_id: "dd5b750c-a-uuid-DS-minted",
+        video: { status: "ready", url: "https://cdn/1.mp4", board_id: "dd5b750c-a-uuid-DS-minted" },
+      },
+    },
+  };
+  assert.deepEqual(ids(boards), ["recreate:tpl-1"]);
+});
+
+test("stamping the key leaves DS's own record of its render alone", () => {
+  const boards = {
+    "recreate:tpl-1": {
+      status: "succeeded",
+      updatedAt: new Date(1),
+      video: { board_id: "ds-uuid", video: { status: "ready", board_id: "ds-uuid" } },
+    },
+  };
+  // Only the ADDRESS is rewritten — the clip inside still says what DS said.
+  assert.equal(videosResultFromBoards(boards).videos[0].video.board_id, "ds-uuid");
+});
+
+test("a storyboard is unaffected — its key already IS upstream's board_id", () => {
+  const boards = {
+    a: { status: "succeeded", updatedAt: new Date(1), video: { board_id: "a", duration_s: 8 } },
+  };
+  assert.deepEqual(videosResultFromBoards(boards).videos, [{ board_id: "a", duration_s: 8 }]);
+});
+
 console.log("\nderiveVideoStatus\n");
 
 test("nothing started is idle", () => {
