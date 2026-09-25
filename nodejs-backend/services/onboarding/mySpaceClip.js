@@ -6,8 +6,11 @@
 // product is concerned — it cannot be found, filtered, downloaded or posted
 // from the place a user goes to find their work.
 //
-// So a clip that reaches `ready` is also written as a `VideoGeneration` row with
-// `inputs.type: "storyboard"`, which is what the new My Space filter reads.
+// So a clip that reaches `ready` is also written as a `VideoGeneration` row
+// whose `inputs.type` is what the My Space filter reads — `storyboard` for a
+// clip rendered from a written concept, `template_recreate` for one rebuilt
+// from a template the user picked. See `ORIGINS` below for everything that
+// differs between the two.
 //
 // ── Why the durable URL and nothing else ────────────────────────────────────
 // The contract gives two links. `local_url` is the storyboard service's own copy
@@ -26,6 +29,7 @@ const VideoGeneration = require("../../Module/videoGeneration/videoModel");
 const GeneratedMedia = require("../../Module/generatedMedia/generated.media");
 const OnboardingSession = require("../../Module/onboarding/onboardingSession");
 const { createFlowLog } = require("../../utils/flowLog");
+const { asClipBoard } = require("./templateAdResult");
 
 /**
  * Files one clip.
@@ -37,6 +41,42 @@ const { createFlowLog } = require("../../utils/flowLog");
  * webhook that reports the render, or upstream will retry a render that
  * succeeded.
  */
+/* ── The two flows that land here ───────────────────────────────────────────
+   Both produce a finished 9:16 clip on a durable DS link, both are filed by
+   the code below without a branch — but they differ in four small facts, and
+   every one of them was wrong for recreates before this table existed:
+
+     · `videoType`     what the library calls it (and filters on)
+     · `mediaSource`   which ledger bucket the admin panel reads it under
+     · `section`       which OnboardingSession section holds its billing
+     · `boardKey`      how that section is keyed — see `recordUsage`
+
+   Keeping them in one table rather than as `isRecreate ? … : …` at four call
+   sites is the point: adding a third flow later is one row, and a half-added
+   one is visible rather than scattered.                                     */
+const ORIGINS = Object.freeze({
+  "video.generate": {
+    videoType: "storyboard",
+    mediaSource: "onboarding",
+    section: "videos",
+    fallbackPrompt: "",
+    boardKey: (board) => board.board_id,
+  },
+  "video.from_template": {
+    videoType: "template_recreate",
+    // ONE ledger source for everything onboarding does. `onboarding_recreate`
+    // used to be its own bucket, which split one user's onboarding spend across
+    // two rows in the admin panel for no reason anyone reading it would guess.
+    // What the render WAS is already recorded, in `videoType`.
+    mediaSource: "onboarding",
+    section: "recreates",
+    fallbackPrompt: "Recreated from a reference template",
+    // `recreate:<templateId>` — the key `templateAdClient` held the credits
+    // under. DS's own `board_id` is a per-render uuid and means nothing here.
+    boardKey: (board) => `recreate:${board.template_id || ""}`,
+  },
+});
+
 // Clips being filed right now, by `userId|url`. The webhook and the SSE bridge
 // deliver the same terminal result within milliseconds of each other, and the
 // dedupe below is a read followed by a write — two deliveries racing through it
@@ -44,7 +84,11 @@ const { createFlowLog } = require("../../utils/flowLog");
 // in-flight set closes that window; a later redelivery is caught by the read.
 const inFlight = new Set();
 
-async function fileClip({ userId, sessionId, board, log }) {
+async function fileClip({ userId, sessionId, board: rawBoard, origin, log }) {
+  // A recreate's `videos[]` entry IS the clip, not a wrapper around one — see
+  // `asClipBoard`. Reading `board.video` on it returned undefined, so every
+  // video recreate was silently skipped here and never reached the library.
+  const board = asClipBoard(rawBoard);
   const clip = board?.video;
   if (!clip || clip.status !== "ready") return null;
 
@@ -60,13 +104,13 @@ async function fileClip({ userId, sessionId, board, log }) {
   if (inFlight.has(lockKey)) return null;
   inFlight.add(lockKey);
   try {
-    return await fileClipOnce({ userId, board, clip, url, log });
+    return await fileClipOnce({ userId, board, clip, url, origin, log });
   } finally {
     inFlight.delete(lockKey);
   }
 }
 
-async function fileClipOnce({ userId, board, clip, url, log }) {
+async function fileClipOnce({ userId, board, clip, url, origin, log }) {
 
   // The dedupe key. The webhook is at-least-once and the same terminal payload
   // arrives from the SSE bridge as well, so this runs more than once per clip
@@ -85,7 +129,14 @@ async function fileClipOnce({ userId, board, clip, url, log }) {
     userId,
     status: "completed",
     inputs: {
-      type: "storyboard",
+      // Which onboarding flow produced this clip. Both arrive finished from the
+      // same service and are filed by the same code, but they are different
+      // things in the library — one is a concept the user wrote, the other is a
+      // template they picked — and My Space filters on exactly this field.
+      //
+      // Must be a value the schema's enum allows, or the create throws inside
+      // the best-effort catch below and the library silently stays empty.
+      type: origin.videoType,
       // Both of these are `required` on the schema, and BOTH were getting past
       // review because nothing here validated until Mongoose did: every filing
       // threw "inputs.numberOfVideos is required", was caught as best-effort,
@@ -103,7 +154,10 @@ async function fileClipOnce({ userId, board, clip, url, log }) {
       // What the concept was, in the user's own words. My Space shows this when
       // it has nothing better, and "The Morning Radiance" is a great deal more
       // use in a library than a row with no label.
-      userPrompt: board.title || board.angle || "",
+      // What the concept was, in the user's own words — a recreate has no
+      // title of its own, so it falls back to something a library row can
+      // actually be read as.
+      userPrompt: board.title || board.angle || origin.fallbackPrompt,
     },
     results: [
       {
@@ -135,12 +189,17 @@ async function fileClipOnce({ userId, board, clip, url, log }) {
  *
  * Deduped on the media path, the same way the library row is.
  */
-async function recordUsage({ userId, sessionId, board, log }) {
+async function recordUsage({ userId, sessionId, board: rawBoard, origin, log }) {
+  // Same normalisation as `fileClip` — and for the same reason.
+  const board = asClipBoard(rawBoard);
   const clip = board?.video;
   const url = String(clip?.url || "").trim();
   if (!userId || !url) return null;
 
-  const existing = await GeneratedMedia.findOne({ userId, source: "onboarding", "video.url": url })
+  // Deduped on the URL alone. It was `source` + url, which stopped matching
+  // the moment the source was unified — and a dedupe that misses writes a
+  // second ledger row for one render.
+  const existing = await GeneratedMedia.findOne({ userId, "video.url": url })
     .select("_id")
     .lean();
   if (existing) return existing._id;
@@ -158,27 +217,41 @@ async function recordUsage({ userId, sessionId, board, log }) {
   // profile flag was already claimed — would be counted as the first and
   // labelled Free in the admin panel. Two sources of truth about money, one of
   // them guessing.
+  // WHICH BOARD KEY. A storyboard clip is keyed by the board the user picked,
+  // and DS echoes that id straight back, so `board.board_id` is the key. A
+  // recreate is keyed by the TEMPLATE (`recreate:<templateId>` — see
+  // `templateAdClient.recreateBoardKey`) while DS mints its own uuid for the
+  // render, so `board_id` is not a key that exists on the session at all.
+  // Looking in the wrong place does not error, it just finds nothing — and a
+  // render with no billing record is reported to the admin panel as neither
+  // free nor charged.
+  const boardKey = origin.boardKey(board);
   const session = await OnboardingSession.findOne({ sessionId })
-    .select(`videos.boards.${board.board_id}.billing`)
+    .select(`${origin.section}.boards.${boardKey}.billing`)
     .lean();
-  const billing = session?.videos?.boards?.[board.board_id]?.billing;
+  const billing = session?.[origin.section]?.boards?.[boardKey]?.billing;
 
   // No billing record at all means this clip predates billing, or was filed by
   // a path that never charged. Not free — "we did not give this away" is the
   // safe thing to assert about money we cannot account for, and the admin shows
   // it as "—" rather than claiming either way.
   const isFree = billing?.free === true;
+  // The two halves of the price. `amount` is the wallet's share and
+  // `allowanceSpent` the budget's; a split render has both.
+  const fromAllowance = Number(billing?.allowanceSpent) || 0;
+  const fromWallet = isFree ? 0 : Number(billing?.amount) || 0;
 
   const row = await GeneratedMedia.create({
     userId,
     type: "video",
     model: clip.model || "unknown",
-    source: "onboarding",
+    source: origin.mediaSource,
     free: isFree,
     // What the render actually cost the user, as settled by `renderBilling`.
     // Zero on a free render, and zero on one we have no billing record for —
     // which `free: false` is what keeps distinguishable.
-    credit_deduction: isFree ? 0 : Number(billing?.amount) || 0,
+    credit_deduction: fromWallet,
+    allowance_deduction: fromAllowance,
     // Upstream does not report what the render cost it, and inventing a number
     // here would put fiction into the one place the cost is supposed to be real.
     cost: 0,
@@ -198,9 +271,13 @@ async function recordUsage({ userId, sessionId, board, log }) {
  * per job today — the product renders concepts individually — but the payload
  * is an array and a session-wide render would arrive the same way.
  */
-async function fileSessionClips({ userId, sessionId, result }) {
+async function fileSessionClips({ userId, sessionId, result, kind = "video.generate" }) {
   const videos = Array.isArray(result?.videos) ? result.videos : [];
   if (!userId || !videos.length) return 0;
+
+  // An unknown kind files as a storyboard rather than not at all: a clip the
+  // user paid for belongs in their library even if we mislabel it.
+  const origin = ORIGINS[kind] || ORIGINS["video.generate"];
 
   const log = createFlowLog("myspace.clip", { session: sessionId, user: userId });
 
@@ -211,13 +288,27 @@ async function fileSessionClips({ userId, sessionId, result }) {
       // write, and two clips racing through it could both find nothing and both
       // insert. One at a time costs milliseconds and removes the question.
       // eslint-disable-next-line no-await-in-loop
-      const id = await fileClip({ userId, sessionId, board, log });
+      // `template_id` rides on the result, not on each take, so it is folded
+      // into the board here — `recordUsage` needs it to find the credit hold.
+      const id = await fileClip({
+        userId,
+        sessionId,
+        board: { ...board, template_id: board.template_id || result?.template_id || "" },
+        origin,
+        log,
+      });
       if (id) filed += 1;
       // Separate try/catch would be noise: both writes are best-effort and the
       // caller already treats any throw here as "the library copy did not
       // happen", which is exactly what it means.
       // eslint-disable-next-line no-await-in-loop
-      await recordUsage({ userId, sessionId, board, log });
+      await recordUsage({
+        userId,
+        sessionId,
+        board: { ...board, template_id: board.template_id || result?.template_id || "" },
+        origin,
+        log,
+      });
     } catch (error) {
       log.error("file.failed", { board: board?.board_id, message: error.message });
     }
@@ -226,4 +317,4 @@ async function fileSessionClips({ userId, sessionId, result }) {
   return filed;
 }
 
-module.exports = { fileSessionClips, _internals: { fileClip, recordUsage } };
+module.exports = { fileSessionClips, _internals: { fileClip, recordUsage, ORIGINS } };

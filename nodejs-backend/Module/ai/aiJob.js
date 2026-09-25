@@ -42,6 +42,12 @@ const JOB_KINDS = [
   // mirror folds them by `board_id` instead of replacing, exactly as templates
   // fold by `template_id`.
   "video.generate",
+
+  // Recreate — an ad built from a chosen reference template, one per press of
+  // the sheet's Recreate button. DS names these kinds on its own `done` event
+  // (TEMPLATE_AD_GENERATION_API_CONTRACT), so they are its spelling, not ours.
+  "image.from_template",
+  "video.from_template",
 ];
 
 const TERMINAL_STATUSES = new Set(["succeeded", "failed", "cancelled"]);

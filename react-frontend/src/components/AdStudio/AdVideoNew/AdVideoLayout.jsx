@@ -126,10 +126,22 @@ const selectVideoType = [
     value: 'storyboard',
     label: 'Storyboard',
   },
+  {
+    // Clips rebuilt from a template the user picked during onboarding. Filed
+    // by the same code as Storyboard above, under its own type so the two stay
+    // tellable apart in the library — see services/onboarding/mySpaceClip.js.
+    value: 'template_recreate',
+    label: 'Template Recreate',
+  },
 ];
 
 const selectImageType = [
   { value: 'ai_ads', label: 'AI Creatives' },
+  // Images rebuilt from an onboarding template. They list under the AdCreative
+  // SOURCE (that is where `mySpaceImagesService` puts everything in the
+  // ImageGeneration collection), so the type filter is the only way to pick
+  // them out. Deliberately not `recreate_ads`, which is AdLibrary's own.
+  { value: 'template_recreate', label: 'Template Recreate' },
   { value: 'lifestyle', label: 'Lifestyle' },
   { value: 'product_shot', label: 'Product Shot' },
   { value: 'apps_saas', label: 'Apps & SaaS' },

@@ -235,15 +235,29 @@ function applyVideoEvent(board, msg) {
       // The terminal frame is a reconciliation, not the first news — the clip
       // normally arrived on `board_video` seconds earlier. It matters for the
       // case where it did not.
-      const clip = (msg.result?.videos || []).find((v) => v.board_id) || null;
-      if (msg.status === 'succeeded' && clip?.video?.status === 'ready') {
+      //
+      // `videos[]` does not hold the same thing on every route: a storyboard
+      // entry WRAPS a clip, a recreate entry IS one. Normalised here so the
+      // read below works for both (the server does the same thing in
+      // `templateAdResult.asClipBoard`).
+      const raw = (msg.result?.videos || []).find((v) => v?.board_id) || null;
+      const clip = raw && !raw.video && (raw.url || raw.status)
+        ? { board_id: raw.board_id, video: raw }
+        : raw;
+
+      if (msg.status === 'succeeded') {
         // Never let an unresolved terminal frame overwrite a clip that already
         // plays. Without a usable link it stays `running` — the poll finishes it.
-        if (playableSrc(clip.video)) {
+        if (clip?.video?.status === 'ready' && playableSrc(clip.video)) {
           board.status = 'ready';
           board.video = { ...clip, video: { ...clip.video, src: playableSrc(clip.video) } };
           board.percent = 100;
         }
+        // A SUCCEEDED job with nothing to show here is not a failure, and must
+        // not be drawn as one. An image recreate's result carries no `videos[]`
+        // at all — it arrives on its own `board_video` a moment later — so this
+        // branch used to flash the failure screen for a frame before the ad
+        // appeared. The board simply stays as it is until that lands.
       } else if (board.status !== 'ready') {
         board.status = 'failed';
         board.error = msg.error || clip?.video?.error || 'The render did not finish.';
@@ -580,6 +594,19 @@ const brandSetupSlice = createSlice({
           // A render that started before this tab existed still needs a clock
           // for the loading sequence to run against.
           startedAt: existing?.startedAt || Date.now(),
+          // WHEN THE SERVER LAST TOUCHED THIS BOARD, carried through so the
+          // clip strip can put the renders in the order they were actually
+          // made. `startedAt` cannot do it: on a reload every hydrated board
+          // gets `Date.now()` within the same millisecond, so the strip came
+          // back in whatever order the map happened to iterate in.
+          // `createdAt` first: it is stamped once, when the render starts, and
+          // never rewritten — so a card does not jump position the moment its
+          // render finishes. `updatedAt` is the fallback for boards written
+          // before that field existed.
+          serverAt:
+            new Date(entry?.createdAt || entry?.updatedAt || 0).getTime() ||
+            existing?.serverAt ||
+            0,
         };
         if (entry?.jobId) state.videos.jobToBoard[entry.jobId] = boardId;
       }

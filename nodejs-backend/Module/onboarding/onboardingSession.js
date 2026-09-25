@@ -209,9 +209,24 @@ const SECTION_BY_KIND = Object.freeze({
   "storyboard.regenerate": "storyboards",
   "storyboard.images.generate": "storyboards",
   "video.generate": "videos",
+
+  // Recreate — an ad built from a reference template. Its own section, NOT
+  // `videos`: every section-level derivation there (`videosResultFromBoards`,
+  // `deriveVideoStatus`) walks `Object.values(boards)`, so a recreate sharing
+  // that map would put an image into the session's list of CLIPS and let a
+  // running recreate report the storyboard module as running. The per-card
+  // lookups never collided; the section-level ones always would have.
+  "image.from_template": "recreates",
+  "video.from_template": "recreates",
 });
 
-const MODULE_SECTIONS = Object.freeze(["brand", "templates", "storyboards", "videos"]);
+const MODULE_SECTIONS = Object.freeze([
+  "brand",
+  "templates",
+  "storyboards",
+  "videos",
+  "recreates",
+]);
 
 const onboardingSessionSchema = new mongoose.Schema(
   {
@@ -278,6 +293,12 @@ const onboardingSessionSchema = new mongoose.Schema(
     templates: { type: moduleSectionSchema, default: () => ({}) },
     storyboards: { type: moduleSectionSchema, default: () => ({}) },
     videos: { type: moduleSectionSchema, default: () => ({}) },
+
+    // Ads built from a reference template. Same shape as `videos` — one entry
+    // per render under `boards`, keyed by the TEMPLATE it was built from — but
+    // its own section, so the two never derive each other's status or leak into
+    // each other's result list.
+    recreates: { type: moduleSectionSchema, default: () => ({}) },
 
     // ── Denormalised for the list view ───────────────────────────────────
     // Copied out of `brand.result` when it lands. "Show me my sessions" must

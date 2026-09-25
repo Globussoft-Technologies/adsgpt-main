@@ -49,7 +49,20 @@ const imageSchema = new mongoose.Schema(
             // =========================
             type: {
                 type: String,
-                enum: ["lifestyle", "product_shot", "apps_saas", "brand_awareness", "ai_ads", "recreate_ads"],
+                // `recreate_ads` is AdLibrary's recreate — an ad rebuilt from a competitor
+            // ad the user picked in the library. `template_recreate` is onboarding's —
+            // an ad built from a REFERENCE TEMPLATE. Two different flows, two different
+            // forms, two different places they can be re-opened from, so they do not
+            // share a type however similar the word is.
+            enum: [
+                "lifestyle",
+                "product_shot",
+                "apps_saas",
+                "brand_awareness",
+                "ai_creatives",
+                "recreate_ads",
+                "template_recreate",
+            ],
                 required: true,
             },
 

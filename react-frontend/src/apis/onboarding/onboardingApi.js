@@ -117,6 +117,84 @@ export const loadMoreTemplates = async (sessionId) => {
   return data;
 };
 
+/**
+ * Reference templates ranked against ONE template — the recreate sheet's rail.
+ *
+ * Not a session call: the anchor id IS the query, so this works for any template
+ * the user can see. Node flattens upstream's ranked shape into the same tile
+ * shape the dock already renders, so the caller has one shape to know about.
+ *
+ * Throws on a real failure (the caller falls back to the session's own
+ * templates); an empty `templates` array is a legitimate answer, not an error.
+ */
+export const getSimilarTemplates = async (
+  templateId,
+  { limit = 8, skip = 0, searchId = '', kind = '' } = {}
+) => {
+  const { data } = await axios.get(
+    `${BASE_URL}/onboarding/templates/${encodeURIComponent(templateId)}/similar`,
+    {
+      // `search_id` freezes upstream's ranking across pages, so page 2 is the
+      // next eight rather than a fresh re-rank that mostly repeats page 1.
+      params: {
+        limit,
+        skip,
+        // The template's own media_type. Without it the server has to infer the
+        // corpus from how the id LOOKS, which is a guess about a format nobody
+        // promised us.
+        ...(kind ? { kind } : {}),
+        ...(searchId ? { search_id: searchId } : {}),
+      },
+      headers: { Authorization: `Bearer ${getCookies()}` },
+    }
+  );
+  return {
+    templates: Array.isArray(data?.templates) ? data.templates : [],
+    // `has_more` is upstream's own end-of-list answer. Guessing from a short
+    // page is wrong here: a page can be short because a filter dropped rows.
+    hasMore: Boolean(data?.has_more),
+    nextSkip: Number.isFinite(Number(data?.next_skip)) ? Number(data.next_skip) : null,
+    searchId: data?.search_id || '',
+  };
+};
+
+/**
+ * Recreate — generate a new ad from a chosen reference template.
+ *
+ * Multipart, because the product image is a `File` and the upstream contract
+ * needs it as a URL: Node stores it and sends the link. The image is REQUIRED —
+ * the template lends composition and style, and the upload is what the ad is
+ * actually OF.
+ *
+ * Answers `202 { jobId, credits }`. The render itself is a job; watch it on the
+ * socket the workspace already listens to.
+ *
+ * Throws with the server's status intact, so the caller can tell 402 (not
+ * enough credits) from 403 (no plan) from 404 (this deployment has never been
+ * shown that template) — three different things to say to a user.
+ */
+export const recreateFromTemplate = async (
+  sessionId,
+  templateId,
+  { file, instruction, kind, maxWalletCredits }
+) => {
+  const form = new FormData();
+  form.append('product', file);
+  if (instruction) form.append('instruction', instruction);
+  form.append('kind', kind === 'image' ? 'image' : 'video');
+  // See `generateVideo` — the wallet figure the split confirmation quoted.
+  if (maxWalletCredits != null) form.append('maxWalletCredits', String(maxWalletCredits));
+
+  const { data } = await axios.post(
+    `${BASE_URL}/onboarding/sessions/${encodeURIComponent(sessionId)}/templates/${encodeURIComponent(templateId)}/recreate`,
+    form,
+    {
+      headers: { Authorization: `Bearer ${getCookies()}` },
+    }
+  );
+  return data;
+};
+
 /** Which coachmark tours this user has seen: `{ workspace: bool, clip: bool }`. */
 export const getOnboardingTours = async () => {
   const { data } = await axios.get(`${BASE_URL}/onboarding/tours`, {
@@ -164,10 +242,18 @@ export const refreshTemplates = async (sessionId) => {
  * `already_running` when this board is mid-render, `already_rendered` when it
  * has a clip already.
  */
-export const generateVideo = async (sessionId, boardId) => {
+export const generateVideo = async (sessionId, boardId, { maxWalletCredits } = {}) => {
   const { data } = await axios.post(
     `${BASE_URL}/onboarding/sessions/${encodeURIComponent(sessionId)}/videos`,
-    { boardId },
+    {
+      boardId,
+      // The wallet figure the user was shown and agreed to, when a split
+      // confirmation was involved. Billing refuses (409) rather than charging
+      // more than this if the onboarding budget moved in the meantime — see
+      // SplitChargeDialog. Omitted when nothing was quoted, which is also how
+      // an older client behaves, and the server then skips the check.
+      ...(maxWalletCredits == null ? {} : { maxWalletCredits }),
+    },
     { headers: { Authorization: `Bearer ${getCookies()}` } }
   );
   return data;
@@ -217,8 +303,13 @@ export const listOnboardingSessions = async (limit = 20) => {
 /**
  * Everything the app needs to decide where onboarding stands, in one call.
  *
- * `{ freeRenderAvailable, onboardingCompleted, resumeSessionId, resumeJobId,
- *    resumePhase, resumeBoardId, lastExitReason }`
+ * `{ allowanceRemaining, allowanceTotal, onboardingCompleted, onboardingSkipped,
+ *    resumeSessionId, resumeJobId, resumePhase, resumeBoardId, lastExitReason }`
+ *
+ * `allowanceRemaining` is a NUMBER of credits, not a boolean — it replaced
+ * `freeRenderAvailable` on 2026-09-23. Onboarding now carries a budget rather
+ * than one free render, so the UI has to be able to say "this costs 3" the
+ * moment the budget can no longer cover a render.
  *
  * This replaces what `localStorage` used to be trusted for. Storage cannot
  * survive a cleared browser, a second device or a phone opened mid-run, and in
@@ -239,7 +330,16 @@ export const getOnboardingEligibility = async () => {
     return data;
   } catch {
     return {
-      freeRenderAvailable: true,
+      // Zero, not the full 35. The old fallback claimed a free render was
+      // owed, which was safe when the worst case was showing an offer twice.
+      // Claiming BUDGET we cannot confirm is different: the screen would
+      // promise free renders the server will charge for. Unknown must read as
+      // "no budget", and the cost shown will simply be the real one.
+      allowanceRemaining: 0,
+      allowanceTotal: 0,
+      // Same reasoning: an unknown balance must not put an offer on screen.
+      generationLeft: 0,
+      generationKind: 'none',
       onboardingCompleted: false,
       resumeSessionId: null,
       resumeJobId: null,

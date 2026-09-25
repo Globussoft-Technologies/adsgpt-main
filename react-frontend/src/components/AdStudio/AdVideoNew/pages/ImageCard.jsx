@@ -47,6 +47,18 @@ const MODEL_LABEL_OVERRIDES = {
 // Backend `inputs.type` → AdCreativeNewLayout route key. NOTE:
 // `recreate_ads` is intentionally NOT in this map — recreating one of
 // those re-opens the AdLibrary RecreateAdModal (handled separately below).
+// Display names for `inputs.type`. Only the types that need one are here —
+// anything absent still prints its raw value, which is what every card did
+// before this map existed.
+//
+// `recreate_ads` is deliberately NOT in it: that is AdLibrary's recreate and it
+// is left exactly as it was.
+const IMAGE_TYPE_LABELS = {
+  template_recreate: 'Template Recreate',
+};
+
+const IMAGE_TYPE_LABEL = (value) => IMAGE_TYPE_LABELS[value] || value || '-';
+
 const IMAGE_TYPE_TO_ROUTE = {
   ai_ads: 'ai-creatives',
   lifestyle: 'lifestyle',
@@ -310,6 +322,17 @@ export default function ImageCard({
 
   // Shared recreate flow — used by both the success-state hover bar and the
   // failed-state hover bar. Tailors inputs to one image at the card's
+  /* ── Onboarding output has no Recreate ────────────────────────────────────
+     Recreate re-opens the editor that MADE a generation, pre-filled. Nothing
+     here can do that for an onboarding ad: what produced it — the template, the
+     product photo the user uploaded, the brand context — lives on the
+     onboarding session, not on this row. The button would open the AdCreative
+     editor with an empty form and no way back to the thing being recreated.
+     Same reason `template_recreate` was kept distinct from AdLibrary's
+     `recreate_ads` in the first place (ONB-011). */
+  const isOnboardingOutput = item?.inputs?.type === 'template_recreate';
+  const showRecreate = enableRecreate && !isOnboardingOutput;
+
   // matched aspect, then either hands off to the AdLibrary RecreateAdModal
   // (for `recreate_ads`) or routes to the appropriate AdCreativeNew editor.
   const handleRecreate = (e) => {
@@ -362,7 +385,7 @@ export default function ImageCard({
             <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg border border-black/10 bg-white p-3 text-xs text-gray-900 shadow-xl dark:border-transparent dark:bg-black/90 dark:text-white">
               <p>
                 <span className="text-gray-500 dark:text-gray-400">Type:</span>{' '}
-                {item?.creativeType || item?.inputs?.type || '-'}
+                {IMAGE_TYPE_LABEL(item?.creativeType || item?.inputs?.type)}
               </p>
               <p>
                 <span className="text-gray-500 dark:text-gray-400">Model:</span>{' '}
@@ -628,7 +651,7 @@ export default function ImageCard({
                 <Megaphone size={18} />
               </button>
             )}
-            {enableRecreate && (
+            {showRecreate && (
               <button
                 className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
                 onClick={handleRecreate}
@@ -677,7 +700,7 @@ export default function ImageCard({
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{errorMessage}</p>
 
           <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-linear-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-            {enableRecreate && (
+            {showRecreate && (
               <button
                 className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
                 onClick={handleRecreate}

@@ -157,7 +157,26 @@ const videoSchema = new mongoose.Schema(
         // It arrives already finished from the storyboard service rather than
         // being produced by this backend's own pipeline, so its record carries a
         // result and nothing else: no scenes, no segments, no audio.
-        enum: ["ugc", "broll", "avatar", "clone", "ai_ads", "storyboard", "clone_your_ad"],
+        //
+        // `template_recreate` — the same deal, but rebuilt from a template the
+        // user picked in onboarding rather than from a written concept. It is
+        // NOT `clone_ad`: that is AdLibrary's recreate, and it has its own
+        // re-open behaviour in My Space that would find nothing to fill here.
+        //
+        // This enum is load-bearing: `type` is `required`, so a value missing
+        // from it throws inside the best-effort catch that files the row — the
+        // clip plays perfectly in the workspace and the library stays empty,
+        // with nothing failing loudly enough to notice.
+        enum: [
+          "ugc",
+          "broll",
+          "avatar",
+          "clone",
+          "ai_ads",
+          "storyboard",
+          "template_recreate",
+          "clone_your_ad",
+        ],
         required: true,
       },
       model: {

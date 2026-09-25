@@ -142,14 +142,25 @@ function OnboardingTourInner({ tourKey, rootRef, steps, ready, onStart, enabled 
   }, [index, seek]);
 
   // ── auto-start, once per mount ──────────────────────────────────────────
+  //
+  // MARKED SEEN AT THE START, not at the end. `close()` also marks it, but
+  // close only runs when the user finishes the last step or presses Skip —
+  // so anyone who simply walked away mid-tour (back to the board, a reload,
+  // a second render) was never recorded, and the tour auto-started at them
+  // all over again on their next visit.
+  //
+  // "Seen" is the honest reading of the field: they have been shown it. The
+  // replay pill is there for a deliberate second viewing, and re-running an
+  // unasked-for tour is the worse of the two mistakes.
   useEffect(() => {
     if (!enabled || !ready || loading || seen || autoStarted.current) return undefined;
     const t = setTimeout(() => {
       autoStarted.current = true;
+      markSeen();
       start();
     }, START_DELAY_MS);
     return () => clearTimeout(t);
-  }, [enabled, ready, loading, seen, start]);
+  }, [enabled, ready, loading, seen, start, markSeen]);
 
   // ── measure ─────────────────────────────────────────────────────────────
   const measure = useCallback(() => {

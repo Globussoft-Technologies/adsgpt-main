@@ -86,6 +86,18 @@ export default function VideoCard({
   // console.log("model",model)
   const isSeedanceModel = ['seedance_v1', 'seedance_v2', 'seedance_fast'].includes(model);
 
+  /* ── Onboarding output has no Recreate ────────────────────────────────────
+     Both kinds of onboarding clip: `storyboard` (rendered from a concept this
+     app never wrote) and `template_recreate` (rebuilt from a template the user
+     picked there). Recreate re-opens the editor that MADE a generation,
+     pre-filled — and nothing here can do that for either: the concept, the
+     template and the product image all live on the onboarding session, not on
+     this row. The button would open an empty editor.
+     Hidden in ONE place per card and that covers fullscreen too, because
+     fullscreen is the native API on the same container — the same hover bar. */
+  const isOnboardingOutput =
+    item?.inputs?.type === 'storyboard' || item?.inputs?.type === 'template_recreate';
+
   const isCloneModel = item?.inputs?.type === 'clone';
   const isAiAds = item?.inputs?.type === 'ai_ads';
   const rawError = item?.results?.[0]?.error;
@@ -1109,13 +1121,15 @@ export default function VideoCard({
                   </div>
                 </div>
 
-                <button
-                  className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
-                  onClick={handleRecreate}
-                  title="Recreate Video"
-                >
-                  <Edit size={18} />
-                </button>
+                {!isOnboardingOutput && (
+                  <button
+                    className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+                    onClick={handleRecreate}
+                    title="Recreate Video"
+                  >
+                    <Edit size={18} />
+                  </button>
+                )}
 
                 <button
                   onClick={handleFullscreen}
@@ -1159,13 +1173,15 @@ export default function VideoCard({
           ) : (
             <p className="mt-2 text-xs text-gray-400">An error occurred during video generation.</p>
           )}
-          <button
-            className="absolute right-3 bottom-3 rounded-full p-2 text-gray-500 backdrop-blur transition-colors hover:bg-black/5 hover:text-black dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
-            onClick={handleRecreate}
-            title="Recreate Video"
-          >
-            <Edit size={18} />
-          </button>
+          {!isOnboardingOutput && (
+            <button
+              className="absolute right-3 bottom-3 rounded-full p-2 text-gray-500 backdrop-blur transition-colors hover:bg-black/5 hover:text-black dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
+              onClick={handleRecreate}
+              title="Recreate Video"
+            >
+              <Edit size={18} />
+            </button>
+          )}
         </div>
       )}
 

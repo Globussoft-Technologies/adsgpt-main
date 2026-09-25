@@ -40,6 +40,28 @@ function buildDateMatch(from, to) {
   return { createdAt: range };
 }
 
+/* Rows carry what the WALLET paid. Onboarding rows can also carry what the
+   free allowance paid, and the two together are the render's real price — so
+   every row gets the split spelled out rather than leaving a 32-credit video
+   that cost the user 1 looking like a 1-credit video.
+
+   `effective_total_credits` is the number to read as "what this render was
+   worth"; `effective_credit_deduction` stays what it has always been, the
+   charge against the user's own balance, so nothing that already reads it
+   changes meaning. */
+function withAllowanceSplit(item, effectiveCredits, effectiveCost) {
+  const fromAllowance = Number(item.allowance_deduction) || 0;
+  return {
+    ...item,
+    effective_credit_deduction: effectiveCredits,
+    effective_cost: effectiveCost,
+    // Credits given away by the onboarding allowance. Zero everywhere else —
+    // nothing outside onboarding has an allowance to spend.
+    allowance_credit_deduction: fromAllowance,
+    effective_total_credits: effectiveCredits + fromAllowance,
+  };
+}
+
 async function addEffectiveGenerationCredits(media) {
   const modelCache = new Map();
   const result = [];
@@ -48,13 +70,20 @@ async function addEffectiveGenerationCredits(media) {
     const storedCredits = Number(item.credit_deduction) || 0;
     const storedCost = Number(item.cost) || 0;
     if (storedCredits > 0 && storedCost > 0) {
-      result.push({
-        ...item,
-        effective_credit_deduction: storedCredits,
-        effective_cost: storedCost,
-      });
+      result.push(withAllowanceSplit(item, storedCredits, storedCost));
       continue;
     }
+
+    /* A ZERO THAT IS AN ANSWER, not a gap.
+       The recompute below exists for rows whose price was never recorded, and
+       it treats `credit_deduction: 0` as "unknown" — which is right for those
+       and wrong for onboarding, where zero can mean the allowance paid for all
+       of it. An image covered by the budget was coming out as "1 free + 4 cr":
+       1 genuinely given away, and 4 credits invented from the model config for
+       a wallet that was never touched.
+       A row carrying either kind of onboarding evidence has already been
+       priced, so its stored figure stands. */
+    const pricedByOnboarding = Number(item.allowance_deduction) > 0 || item.free === true;
 
     const modelKey = String(item.model || "").trim();
     if (!modelCache.has(modelKey)) {
@@ -74,16 +103,17 @@ async function addEffectiveGenerationCredits(media) {
         null,
       );
 
-    const effectiveCredits = item.type === "image"
-      ? Number(selectedTier?.credits) || 0
-      : storedCredits;
+    const effectiveCredits =
+      pricedByOnboarding || item.type !== "image"
+        ? storedCredits
+        : Number(selectedTier?.credits) || 0;
     const effectiveCost = storedCost > 0
       ? storedCost
       : item.type === "image"
         ? modelConfigurationService.getRuntimeImagePrice(configuredModel, item.quality)
         : modelConfigurationService.getRuntimeVideoPrice(configuredModel, item.duration);
 
-    result.push({ ...item, effective_credit_deduction: effectiveCredits, effective_cost: effectiveCost });
+    result.push(withAllowanceSplit(item, effectiveCredits, effectiveCost));
   }
 
   return result;
@@ -667,6 +697,11 @@ exports.userDetail = async (req, res) => {
             generations: { $sum: 1 },
             cost: { $sum: "$effective_cost" },
             credits: { $sum: "$effective_credits" },
+            // Credits this user did NOT pay for, because the onboarding
+            // allowance covered them. Kept out of `credits` on purpose: that
+            // figure means "charged to their balance", and folding a giveaway
+            // into it would overstate what they have actually spent.
+            allowanceCredits: { $sum: { $ifNull: ["$allowance_deduction", 0] } },
             images: { $sum: { $cond: [{ $eq: ["$type", "image"] }, 1, 0] } },
             videos: { $sum: { $cond: [{ $eq: ["$type", "video"] }, 1, 0] } },
           },
@@ -675,7 +710,14 @@ exports.userDetail = async (req, res) => {
     ]);
 
     const mediaWithEffectiveCredits = await addEffectiveGenerationCredits(media);
-    const summary = totals[0] || { generations: 0, cost: 0, credits: 0, images: 0, videos: 0 };
+    const summary = totals[0] || {
+      generations: 0,
+      cost: 0,
+      credits: 0,
+      allowanceCredits: 0,
+      images: 0,
+      videos: 0,
+    };
 
     return res.json({
       success: true,
@@ -697,6 +739,9 @@ exports.userDetail = async (req, res) => {
         generations: summary.generations,
         cost: parseFloat((summary.cost || 0).toFixed(4)),
         credits: summary.credits || 0,
+        // What onboarding gave away, and what the two add up to.
+        allowanceCredits: summary.allowanceCredits || 0,
+        totalCredits: (summary.credits || 0) + (summary.allowanceCredits || 0),
         images: summary.images || 0,
         videos: summary.videos || 0,
       },

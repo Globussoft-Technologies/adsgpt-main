@@ -264,9 +264,12 @@ const CustomVideoPlayer = ({ src, aspect, autoPlay = false }) => {
         controls={false}
       />
 
-      {
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-full w-full rounded-2xl bg-gradient-to-b from-black/10 via-transparent to-black to-90%" />
-      }
+      {/* NO radius of its own. This gradient is opaque black at the bottom, so
+          rounding it left the two bottom corners unpainted and the frame behind
+          them showed through as a pair of arcs. The container is already
+          `rounded-2xl overflow-hidden`, which clips this to exactly the right
+          shape — the second radius only ever cut into it. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-full w-full bg-gradient-to-b from-black/10 via-transparent to-black to-90%" />
 
       {
         <div className="absolute inset-x-0 bottom-2 z-20 flex flex-col px-2 text-white transition-opacity duration-300">

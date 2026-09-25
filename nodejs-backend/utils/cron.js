@@ -10,6 +10,7 @@ const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { runUserRuleCycle } = require('../services/autopilot/userRuleOrchestrator');
 const { runWithUsageContext } = require('../services/meta/metaUsageContext');
 const UnifiedCreditController = require('../controllers/UnifiedCreditController');
+const { sweepStaleRenders } = require('../services/onboarding/staleRenders');
 const oauthSigningKeyService = require('../services/oauth/signingKeyService');
 const { reconcileBillingCycles } = require('../services/billingReconciliation');
 require('dotenv').config();
@@ -99,6 +100,41 @@ const registerCreditReservationSweepCron = () => {
     console.log(
         `[credit-sweep] scheduler registered: cron="${schedule}" maxAge=${maxAgeMin}min`,
     );
+};
+
+// -----------------------------------------------------------------------------
+// Stale onboarding renders
+// Fails any onboarding board still `running` past its cap (2 min for an image,
+// 10 for a video) and releases what it was holding. Without this a render whose
+// terminal event never arrived — DS crashed, a callback never landed — leaves
+// the tile spinning for ever, and a reload brings the spinner straight back.
+// The credit sweeper above only ever fixed the money, and only after an hour.
+// -----------------------------------------------------------------------------
+const registerOnboardingStaleRenderCron = () => {
+    const enabled =
+        String(process.env.ONBOARDING_STALE_SWEEP_ENABLED || 'true').toLowerCase() === 'true';
+    if (!enabled) {
+        console.log('[onboarding-stale] disabled (ONBOARDING_STALE_SWEEP_ENABLED=false)');
+        return;
+    }
+    const schedule = process.env.ONBOARDING_STALE_SWEEP_CRON || '*/2 * * * *';
+    if (!cron.validate(schedule)) {
+        console.error(
+            `[onboarding-stale] invalid ONBOARDING_STALE_SWEEP_CRON: ${schedule}. Cron not registered.`,
+        );
+        return;
+    }
+    cron.schedule(schedule, exclusive('onboarding-stale', 2 * 60, async () => {
+        try {
+            const { scanned, failed } = await sweepStaleRenders();
+            if (failed > 0) {
+                console.log(`[onboarding-stale] failed=${failed} of ${scanned} running boards`);
+            }
+        } catch (err) {
+            console.error('[onboarding-stale] cron tick failed:', err.message);
+        }
+    }));
+    console.log(`[onboarding-stale] scheduler registered: cron="${schedule}"`);
 };
 
 // -----------------------------------------------------------------------------
@@ -247,6 +283,7 @@ const runCronJobs = () => {
 
     // Orphan-reservation sweeper (every 10 min by default)
     registerCreditReservationSweepCron();
+    registerOnboardingStaleRenderCron();
 
     // OAuth signing key rotation (daily at 03:00 by default)
     registerOAuthSigningKeyRotationCron();

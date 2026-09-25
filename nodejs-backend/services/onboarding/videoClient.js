@@ -67,7 +67,7 @@ function alreadyRunning(section, boardId) {
  * caller turns a reason into a status code. Never throws: a failed render must
  * surface as a message on one tile, not as a 500 on the page.
  */
-async function startVideoRun({ userId, sessionId, boardId }) {
+async function startVideoRun({ userId, sessionId, boardId, maxWalletCredits }) {
   const baseUrl = resolveBaseUrl();
   if (!baseUrl) return { ok: false, reason: "not_configured" };
   if (!userId || !sessionId || !boardId) return { ok: false, reason: "bad_request" };
@@ -115,10 +115,30 @@ async function startVideoRun({ userId, sessionId, boardId }) {
   // fresh one on every refresh for a concept that is never going to render.
   const attempts = (Number(videosSection.boards?.[boardId]?.attempts) || 0) + 1;
 
-  const payment = await securePayment({ userId, sessionId, boardId, renderId });
+  const payment = await securePayment({
+    userId,
+    sessionId,
+    boardId,
+    renderId,
+    // The wallet figure the user was shown and agreed to. If the budget moved
+    // under them since, billing refuses rather than charging more than that.
+    maxWalletCredits,
+  });
   if (!payment.ok) {
     log.info("payment.refused", { board: boardId, reason: payment.reason });
-    return { ok: false, reason: payment.reason };
+    return {
+      ok: false,
+      reason: payment.reason,
+      // Carried out so the caller can re-ask with the real numbers.
+      quote:
+        payment.reason === "price_changed"
+          ? {
+              wallet: payment.walletAmount,
+              allowance: payment.allowanceAmount,
+              total: payment.total,
+            }
+          : undefined,
+    };
   }
 
   log.ds("out", "videos", { board: boardId, attempt: attempts });
@@ -146,7 +166,7 @@ async function startVideoRun({ userId, sessionId, boardId }) {
       // Nothing is rendering, so nothing is owed.
       await refund({
         free: payment.free,
-        freeClaimed: payment.freeClaimed,
+        allowanceSpent: payment.allowanceSpent,
         userId,
         sessionId,
         renderId,
@@ -161,6 +181,9 @@ async function startVideoRun({ userId, sessionId, boardId }) {
       free: payment.free,
       renderId,
       frozenAmount: payment.amount,
+      // Without this the true-up compares DS's total against the WALLET's share
+      // alone, which on a split render reads as an overrun every time.
+      allowanceSpent: payment.allowanceSpent,
       meta: data?.meta,
     });
     log.bind({ job: jobId }).info("accepted", { board: boardId, upstreamStatus: data.status });
@@ -182,11 +205,11 @@ async function startVideoRun({ userId, sessionId, boardId }) {
     await markBoardStarted(sessionId, boardId, jobId, {
       renderId: payment.free ? "" : renderId,
       free: payment.free,
-      // Whether the one lifetime free render was spent on this board. Distinct
-      // from `free`: a free-plan user spends the claim AND pays, so a failed
-      // render has to hand the claim back even though it settles a hold. The
-      // webhook (`settleBoard`) is the only reader.
-      freeClaimed: Boolean(payment.freeClaimed),
+      // How much ONBOARDING ALLOWANCE this render spent, so a failure can give
+      // exactly that back. Distinct from `amount`, which is what the user's
+      // wallet was charged — for an allowance-covered render that is zero, and
+      // it should be: nothing left their balance.
+      allowanceSpent: Number(payment.allowanceSpent) || 0,
       amount: chargedAmount,
       model: data?.meta?.model || "",
     }, attempts);
@@ -203,7 +226,7 @@ async function startVideoRun({ userId, sessionId, boardId }) {
     // of payment was taken — the freeze, or the free render itself.
     await refund({
       free: payment.free,
-      freeClaimed: payment.freeClaimed,
+      allowanceSpent: payment.allowanceSpent,
       userId,
       sessionId,
       renderId,

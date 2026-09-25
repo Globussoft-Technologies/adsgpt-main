@@ -17,19 +17,33 @@ import { getOnboardingTours, markOnboardingTourSeen } from '@/apis/onboarding/on
 let toursPromise = null;
 let toursCache = null;
 
+/**
+ * Fills `toursCache` once per page load. RESOLVES TO NOTHING on purpose.
+ *
+ * It used to resolve to `toursCache`, and that was the bug behind "the tour
+ * comes back every time I switch screens": `markSeen` REPLACES the cache with a
+ * new object, while the memoized promise keeps resolving to the object it
+ * captured at fetch time. Every remount then read that stale snapshot and set
+ * `seen` back to false, so the tour auto-started again — even though the flag
+ * was already written and stored on the server.
+ *
+ * Callers read the module-level `toursCache` after awaiting, so they always see
+ * the current value.
+ */
 function loadTours() {
   if (!toursPromise) {
     toursPromise = getOnboardingTours()
       .then((data) => {
+        // Server values UNDER anything already marked in this tab: a tour
+        // closed a second ago must not be reopened by a slower response.
         toursCache = { ...(data || {}), ...(toursCache || {}) };
-        return toursCache;
       })
       .catch(() => {
         // Unreadable: treat every tour as seen rather than auto-starting on
         // every visit. The replay pill still lets the user open it. Cleared so
         // the next page load asks again.
+        toursCache = { workspace: true, clip: true, ...(toursCache || {}) };
         toursPromise = null;
-        return { workspace: true, clip: true, ...(toursCache || {}) };
       });
   }
   return toursPromise;
@@ -48,8 +62,14 @@ export default function useTourSeen(tourKey, enabled = true) {
     // Tour disabled by env: no read. The tour does not auto-start anyway.
     if (!enabled) return undefined;
     let alive = true;
-    loadTours().then((tours) => {
-      if (alive) setState({ seen: Boolean(tours[tourKey]), loading: false });
+    loadTours().then(() => {
+      if (!alive) return;
+      // MONOTONIC. Once this tab knows a tour has been seen it can never
+      // un-know it — not from a slow response, not from a remount. "Seen" only
+      // ever travels one way, which is the whole point of the flag.
+      setState((prev) =>
+        prev.seen ? prev : { seen: Boolean(toursCache?.[tourKey]), loading: false },
+      );
     });
     return () => {
       alive = false;

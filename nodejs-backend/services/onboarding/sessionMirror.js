@@ -30,6 +30,7 @@ const logger = require("../../utils/logger");
 // The money half of a terminal video callback. Kept out of this file because
 // what a render costs is not this file's business; what it stores is.
 const { settleBoard } = require("./renderBilling");
+const { asClipBoard } = require("./templateAdResult");
 
 const TERMINAL_STATUSES = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -210,8 +211,21 @@ function videoBoardWrites(incomingResult, previousBoards = {}, meta = {}) {
   const incoming = Array.isArray(incomingResult?.videos) ? incomingResult.videos : [];
   const writes = {};
 
-  for (const item of incoming) {
-    const boardId = item?.board_id;
+  for (const raw of incoming) {
+    // The two video routes put different things in `videos[]` — a board wrapper
+    // for a storyboard, the bare clip for a recreate. Normalised to the wrapper
+    // so everything below (and every reader of the stored board) sees one shape.
+    const item = asClipBoard(raw);
+    // `meta.boardId` OVERRIDES the id in the payload, and a recreate needs it to.
+    //
+    // A storyboard render is keyed by the board the user picked and upstream
+    // echoes that same id straight back, so the payload's `board_id` IS the key.
+    // A recreate is keyed by the TEMPLATE (`recreate:<templateId>`) while DS
+    // mints its own uuid per render — so keying on the payload wrote a SECOND,
+    // orphan board under that uuid: no billing (the lookup below found nothing
+    // to carry forward), while the real board sat at `running` for ever and its
+    // hold was never settled, only swept an hour later.
+    const boardId = meta.boardId || item?.board_id;
     // Nothing to key it by. A clip we cannot address is a clip we cannot show
     // against a tile, and inventing an id would only make it un-de-duplicable.
     if (!boardId) continue;
@@ -352,41 +366,82 @@ async function mirrorJobResult(sessionId, kind, patch = {}) {
     }
   }
 
-  // ── Videos are written PER BOARD ────────────────────────────────────────
+  // ── Board-keyed sections are written PER BOARD ──────────────────────────
   // Not folded into a shared array — see `videoBoardWrites` for why that would
   // lose a clip whenever two renders finish together, which is the normal case
   // once a user starts more than one.
-  if (section === "videos") {
+  //
+  // `recreates` takes the same path, and MUST: this block is where a terminal
+  // callback is turned into a settle. Left out of it, a recreate would freeze
+  // credits and never release them — the hold would sit until a sweeper that is
+  // not scheduled anywhere eventually caught it.
+  //
+  // Its per-board WRITES come from `templateAdResult` instead (an image result
+  // is not shaped like a clip, so `videoBoardWrites` finds nothing in it). What
+  // this block still does for it is the failure path and the money.
+  if (section === "videos" || section === "recreates") {
     // `result` never becomes a stored field for this section. It is derived
     // from the per-board keys on the way out, so there is no shared value for
     // concurrent callbacks to fight over.
     delete set[`${section}.result`];
 
     const previous = await OnboardingSession.findOne({ sessionId })
-      .select("videos.boards")
+      .select(`${section}.boards`)
       .lean();
-    const previousBoards = previous?.videos?.boards || {};
+    const previousBoards = previous?.[section]?.boards || {};
 
     // One independent `$set` per board. Two callbacks for two different boards
     // touch two different keys and cannot collide, however close together they
     // land.
-    const writes = videoBoardWrites(result, previousBoards, { jobId });
-    Object.assign(set, writes);
+    // `videoBoardWrites` keys on `videos.boards.…`; a recreate's entries live
+    // under its own section. Rewritten rather than parameterised, because the
+    // helper is shared with a path that has no section to be told about.
+    //
+    // WHICH BOARD THIS JOB IS FOR. Only `recreates` needs telling: its keys are
+    // ours and the payload's are DS's (see `videoBoardWrites`). Found through
+    // the job index, which is where we recorded what we started this job FOR —
+    // the same handle the terminal-with-no-board fallback below uses. One
+    // render per recreate job (`VARIATIONS` is 1), so one board to find.
+    const ourBoardId =
+      section === "recreates"
+        ? Object.keys(previousBoards).find((id) => previousBoards[id]?.jobId === jobId)
+        : undefined;
+    if (section === "recreates" && jobId && !ourBoardId) {
+      // Falling back to DS's id is what produced the orphan board this exists to
+      // prevent, so say so — the clip is still stored rather than dropped, but
+      // its money will need looking at.
+      logger.error("[sessionMirror] recreate board not found for job", { sessionId, jobId });
+    }
+    const writes = videoBoardWrites(result, previousBoards, { jobId, boardId: ourBoardId });
+    for (const [path, entry] of Object.entries(writes)) {
+      set[path.replace(/^videos\./, `${section}.`)] = entry;
+    }
 
-    // A job that ended with no clip at all — upstream failed before producing
-    // one, so nothing in the payload names the board. Without this the tile
-    // that job belongs to stays `running` for ever: the spinner never stops,
-    // and a reload brings it back.
+    // A terminal job whose payload names no board. Without this the tile that
+    // job belongs to stays `running` for ever: the spinner never stops, and a
+    // reload brings it back.
     //
     // The board is found through the index, because the index is where we
     // recorded which board we started this job FOR.
+    //
+    // THE OUTCOME COMES FROM THE JOB, not from the empty payload. This used to
+    // write "failed" unconditionally, on the assumption that no clip in the
+    // result meant no clip was rendered. That holds for a storyboard and is
+    // simply untrue for an image recreate: an image result has no `videos[]`
+    // and never will, so `videoBoardWrites` finds nothing for a render that
+    // succeeded perfectly. Every successful image recreate was therefore marked
+    // failed here and REFUNDED — the user was handed a finished ad, told it had
+    // failed, and not charged for it.
     if (isTerminal && !Object.keys(writes).length && jobId) {
+      const jobSucceeded = status === "succeeded";
       for (const [id, entry] of Object.entries(previousBoards)) {
         if (entry?.jobId !== jobId || entry?.status !== "running") continue;
         set[`${section}.boards.${id}`] = {
           ...entry,
-          status: "failed",
-          error: error ? String(error) : "The render did not complete",
+          status: jobSucceeded ? "succeeded" : "failed",
+          // A board that succeeded carries no error, even if the section does
+          // (a previous attempt's message can still be sitting there).
+          error: jobSucceeded ? "" : error ? String(error) : "The render did not complete",
           updatedAt: new Date(),
         };
       }
@@ -428,7 +483,7 @@ async function mirrorJobResult(sessionId, kind, patch = {}) {
   // idempotency comes from the board-keyed fold above rather than from this
   // filter.
   const filter = { sessionId };
-  if (!isTerminal && section !== "videos") {
+  if (!isTerminal && section !== "videos" && section !== "recreates") {
     filter[`${section}.status`] = { $nin: [...TERMINAL_STATUSES] };
   }
 
@@ -510,13 +565,26 @@ async function markSectionStarted(sessionId, kind, jobId) {
  * list view reads at a glance — but only in the direction that stays true:
  * `running` while anything is in flight. Nothing here can un-finish a board.
  */
-async function markBoardStarted(sessionId, boardId, jobId, billing = null, attempts = 1) {
+async function markBoardStarted(
+  sessionId,
+  boardId,
+  jobId,
+  billing = null,
+  attempts = 1,
+  // Which section this render belongs to. `videos` is the storyboard clips;
+  // `recreates` is ads built from a reference template. They are kept apart
+  // because both sections derive a status and a result list from
+  // `Object.values(boards)` — sharing one map would make a running recreate
+  // report the storyboard module as running, and put an image into the
+  // session's list of clips.
+  section = "videos",
+) {
   if (!sessionId || !boardId) return false;
   await OnboardingSession.updateOne(
     { sessionId },
     {
       $set: {
-        [`videos.boards.${boardId}`]: {
+        [`${section}.boards.${boardId}`]: {
           jobId: jobId || "",
           status: "running",
           error: "",
@@ -537,13 +605,21 @@ async function markBoardStarted(sessionId, boardId, jobId, billing = null, attem
           // client-side tally would hand the user a fresh retry every refresh
           // for a concept that is never going to render.
           attempts,
+          // WHEN THIS RENDER WAS STARTED, and never written again.
+          // `updatedAt` moves every time the board is touched, so ordering a
+          // list on it makes a card jump position the moment its render
+          // finishes. The clip strip orders on this instead, and nothing under
+          // the user's cursor moves.
+          //
+          // A retry legitimately resets it: that IS a new render.
+          createdAt: new Date(),
           updatedAt: new Date(),
         },
         // A summary, not a truth: the section is "running" while ANY board is.
-        // Which board, and whether the others finished, is `videos.boards`.
-        "videos.status": "running",
-        "videos.jobId": jobId || "",
-        "videos.startedAt": new Date(),
+        // Which board, and whether the others finished, is `<section>.boards`.
+        [`${section}.status`]: "running",
+        [`${section}.jobId`]: jobId || "",
+        [`${section}.startedAt`]: new Date(),
       },
     }
   );
@@ -566,7 +642,10 @@ async function readSection(sessionId, kind) {
   // `videos` has no stored `result` — the clips live one per board key, so that
   // simultaneous renders cannot overwrite each other. The array the contract
   // describes is assembled here, on the way out.
-  if (section === "videos") {
+  // Both board-keyed sections assemble their result the same way: the entries
+  // live one per board key so simultaneous renders cannot overwrite each other,
+  // and the array the contract describes is built here, on the way out.
+  if (section === "videos" || section === "recreates") {
     return { ...stored, result: videosResultFromBoards(stored.boards) };
   }
   return stored;

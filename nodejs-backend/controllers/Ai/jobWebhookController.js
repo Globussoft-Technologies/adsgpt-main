@@ -56,6 +56,7 @@ const { startTemplateRun, RETRY_THRESHOLD } = require("../../services/onboarding
 const { startStoryboardRun } = require("../../services/onboarding/storyboardClient");
 const { handleStoryboardResult } = require("../../services/onboarding/keyframeRecovery");
 const { fileSessionClips } = require("../../services/onboarding/mySpaceClip");
+const { finishRecreate } = require("../../services/onboarding/jobStreamBridge");
 const { fileBrandToBrandIQ } = require("../../services/onboarding/brandIQEntry");
 
 /**
@@ -617,10 +618,42 @@ exports.receive = async (req, res) => {
       // Fire-and-forget: the library copy is a convenience, and failing it must
       // not fail this callback — a 500 here makes upstream retry a render that
       // actually succeeded.
-      if (applied.kind === "video.generate" && status === "succeeded") {
-        fileSessionClips({ userId: applied.userId, sessionId: applied.sessionId, result })
+      //
+      // `video.from_template` files on exactly the same terms: a recreated
+      // VIDEO comes back on DS's own durable link, shaped like a clip. Only
+      // this gate was keeping it out, so the clip rendered, was charged for,
+      // and never appeared in the library. The SSE bridge already allowed it —
+      // which meant it worked locally and not wherever the callback is what
+      // actually arrives.
+      if (
+        (applied.kind === "video.generate" || applied.kind === "video.from_template") &&
+        status === "succeeded"
+      ) {
+        fileSessionClips({
+          userId: applied.userId,
+          sessionId: applied.sessionId,
+          result,
+          kind: applied.kind,
+        })
           .then((filed) => filed && log.info("myspace.filed", { count: filed }))
           .catch((e) => log.error("myspace.file_failed", { message: e.message }));
+      }
+
+      // A finished IMAGE recreate. Same reasoning as the clip above, and the
+      // same fire-and-forget shape — but this one was reachable ONLY from the
+      // SSE bridge, which is not a guaranteed delivery path. When the callback
+      // was what actually arrived, the ad was never written to the board, never
+      // filed into My Space, and never shown to the user who had just paid for
+      // it. Deduped inside `storeTemplateAdResult`, so both paths delivering
+      // the same result is a no-op.
+      if (applied.kind === "image.from_template" && status === "succeeded") {
+        finishRecreate({
+          jobId,
+          userId: applied.userId,
+          sessionId: applied.sessionId,
+          result,
+          log,
+        }).catch((e) => log.error("recreate.store_failed", { message: e.message }));
       }
 
       // The brand goes to BrandIQ on the same terms and for the same reason:

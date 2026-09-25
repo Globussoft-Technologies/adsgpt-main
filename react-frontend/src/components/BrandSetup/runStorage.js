@@ -90,3 +90,44 @@ export function clearClipBoard() {
     /* nothing to do */
   }
 }
+
+// ── edits made on the clip screen ───────────────────────────────────────────
+//
+// An edited image (logo, crop, filters…) becomes its own card in the clip
+// strip, next to the render it came from. The edit itself is filed in MySpace
+// by the server, but the STRIP is client state — without this a reload drops
+// every edited card while the originals come back, which reads as the edits
+// having been lost.
+//
+// One key holding ONE session's edits, not a key per session: a new onboarding
+// simply overwrites it, so the storage never grows with every run a user makes.
+// localStorage rather than sessionStorage because the run itself is (see
+// STORAGE_KEY) — an edit should come back whenever its session does.
+const EDITS_KEY = 'adsgpt.onboarding.edits';
+
+/**
+ * @typedef {{id:string, parentId:string, src:string, title:string,
+ *            model?:string, at:number}} StoredEdit
+ */
+
+/** @returns {Record<string, StoredEdit>} this session's edits, by id */
+export function readEdits(sessionId) {
+  try {
+    if (!sessionId) return {};
+    const stored = JSON.parse(localStorage.getItem(EDITS_KEY) || 'null');
+    // Another session's edits are not this one's — treated as none.
+    return stored?.sessionId === sessionId && stored.items ? stored.items : {};
+  } catch {
+    return {};
+  }
+}
+
+/** @param {Record<string, StoredEdit>} items */
+export function rememberEdits(sessionId, items) {
+  try {
+    if (sessionId) localStorage.setItem(EDITS_KEY, JSON.stringify({ sessionId, items }));
+  } catch {
+    // Losing this costs the edited cards in the strip after a reload; the
+    // images themselves are still in MySpace.
+  }
+}

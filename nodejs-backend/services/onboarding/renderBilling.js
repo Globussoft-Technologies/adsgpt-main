@@ -270,37 +270,7 @@ async function returnFreeRender(userId, sessionId) {
  * later. A retry mints a fresh one, so it can never collide with a hold still
  * open from the previous attempt.
  */
-async function securePayment({ userId, sessionId, boardId, renderId }) {
-  // The claim and the charge are two separate questions, and they were one
-  // until free-plan billing existed.
-  //
-  //   freeClaimed — did this user just spend their one lifetime free render?
-  //                 Everyone claims. It is what retires the banner and what
-  //                 `/eligibility` reads, so entry and exit behave identically
-  //                 for every plan.
-  //   free        — is the render actually costing them nothing? Only on a
-  //                 PAID plan. A free-plan user is shown "free" and charged,
-  //                 out of the 35 credits we gave them for nothing.
-  //
-  // They have to be tracked separately because the undo paths differ: a render
-  // that never happens has to hand back the claim AND release the hold, and
-  // before this those were the same branch.
-  const freeClaimed = await claimFreeRender(userId, sessionId);
-
-  if (freeClaimed && !(await isFreePlanUser(userId))) {
-    logger.info(
-      `[onboarding][credits] FREE render claimed user=${userId} session=${sessionId} board=${boardId}`,
-    );
-    return { ok: true, free: true, freeClaimed: true, renderId, amount: 0 };
-  }
-
-  if (freeClaimed) {
-    logger.info(
-      `[onboarding][credits] free render claimed but CHARGED (free plan) ` +
-        `user=${userId} session=${sessionId} board=${boardId}`,
-    );
-  }
-
+async function securePayment({ userId, sessionId, boardId, renderId, maxWalletCredits }) {
   const amount = ceilingAmount();
   if (!amount) {
     // Every model in the map priced at zero means the configuration is not
@@ -309,15 +279,59 @@ async function securePayment({ userId, sessionId, boardId, renderId }) {
     logger.error(
       "[onboarding][credits] ceiling computed as 0 — model configuration missing. Refusing to render.",
     );
-    // Nothing rendered, so the lifetime freebie must not stay spent.
-    if (freeClaimed) await returnFreeRender(userId, sessionId);
     return { ok: false, reason: "not_configured" };
+  }
+
+  // ── The allowance first, then the wallet for the rest ──────────────────
+  //
+  // Split on the CEILING, not on the eventual actual, because this is the only
+  // number that exists before the upstream call.
+  //
+  // Partial since ONB-010. It used to be all-or-nothing: a user holding 25 with
+  // a 32-credit render kept the 25 forever and paid 32 in cash. The budget now
+  // pays its 25 and the wallet covers 7 — and the user is shown exactly that
+  // before any of it is taken.
+  const { fromAllowance, fromWallet } = await splitCharge(userId, amount);
+
+  if (fromWallet === 0) {
+    logger.info(
+      `[onboarding][credits] covered by allowance ${fromAllowance} user=${userId} ` +
+        `session=${sessionId} board=${boardId}`,
+    );
+    // `free: true` is what every downstream reader keys on for "no wallet hold
+    // exists". `allowanceSpent` is what a failed render gives back.
+    return { ok: true, free: true, allowanceSpent: fromAllowance, renderId, amount: 0 };
+  }
+
+  // ── The quote guard ────────────────────────────────────────────────────
+  //
+  // `maxWalletCredits` is the wallet number the user was SHOWN and agreed to.
+  // Between that screen and this line another tab can spend the budget, which
+  // would silently make the wallet's share bigger than the one they accepted.
+  // Rather than charge more than was agreed, hand the budget back untouched and
+  // let the caller re-ask with the real number.
+  //
+  // Absent means no quote was made (the free-plan path, which has no allowance
+  // to shift under it) and the check does not apply.
+  if (maxWalletCredits != null && fromWallet > Number(maxWalletCredits)) {
+    if (fromAllowance) await returnAllowance(userId, fromAllowance);
+    logger.info(
+      `[onboarding][credits] quote stale user=${userId} board=${boardId} ` +
+        `quoted=${maxWalletCredits} now=${fromWallet} — refusing`,
+    );
+    return {
+      ok: false,
+      reason: "price_changed",
+      walletAmount: fromWallet,
+      allowanceAmount: fromAllowance,
+      total: amount,
+    };
   }
 
   const freeze = await UnifiedCreditController.freezeCredits({
     userId,
     reservationKey: renderId,
-    amount,
+    amount: fromWallet,
     meta: {
       service_type: "ad_video",
       surface: "onboarding",
@@ -328,17 +342,18 @@ async function securePayment({ userId, sessionId, boardId, renderId }) {
   });
 
   if (!freeze.ok) {
-    // A free-plan user who cannot cover 32 gets the ordinary 402. Handing the
-    // claim back matters here: without it one failed freeze would silently burn
-    // their one free render and retire the banner for a clip they never got.
-    if (freeClaimed) await returnFreeRender(userId, sessionId);
+    // The budget was already drawn a few lines up. Nothing is rendering, so it
+    // has to go back — otherwise a user who could not afford the wallet half
+    // loses the allowance half for nothing.
+    if (fromAllowance) await returnAllowance(userId, fromAllowance);
     return { ok: false, reason: freeze.reason };
   }
 
   logger.info(
-    `[onboarding][credits] froze ceiling ${amount} user=${userId} render=${renderId}`,
+    `[onboarding][credits] froze ${fromWallet} (+${fromAllowance} allowance, ceiling ${amount}) ` +
+      `user=${userId} render=${renderId}`,
   );
-  return { ok: true, free: false, freeClaimed, renderId, amount };
+  return { ok: true, free: false, allowanceSpent: fromAllowance, renderId, amount: fromWallet };
 }
 
 /**
@@ -348,28 +363,43 @@ async function securePayment({ userId, sessionId, boardId, renderId }) {
  * seconds rather than at settlement. A free render has no hold to adjust, and
  * an unpriceable model keeps the ceiling (see `priceFor`).
  */
-async function trueUp({ free, renderId, frozenAmount, meta }) {
+async function trueUp({ free, renderId, frozenAmount, allowanceSpent = 0, meta }) {
   if (free || !renderId) return frozenAmount;
 
+  // WHAT THE RENDER COST THE USER IN TOTAL, not just the wallet's share. With a
+  // split hold the wallet may be holding 7 of a 32-credit render, and comparing
+  // DS's 32 against that 7 would read as "actual exceeds ceiling" on every
+  // single split render — a false alarm on the one log line that is supposed to
+  // mean something is wrong.
+  const held = frozenAmount + (Number(allowanceSpent) || 0);
+
   const actual = priceFor(meta);
-  if (!actual || actual >= frozenAmount) {
-    if (actual > frozenAmount) {
+  if (!actual || actual >= held) {
+    if (actual > held) {
       // The render is already queued; cancelling it would cost the user their
       // clip to fix our accounting. Settle at the ceiling and shout — the
       // ceiling is what needs raising.
       logger.error(
-        `[onboarding][credits] actual ${actual} EXCEEDS ceiling ${frozenAmount} ` +
+        `[onboarding][credits] actual ${actual} EXCEEDS ceiling ${held} ` +
           `(model=${meta?.model}) — holding at ceiling, raise CEILING or the model map.`,
       );
     }
     return frozenAmount;
   }
 
-  await UnifiedCreditController.releasePartial(renderId, actual);
+  // WALLET FIRST. The refund comes off the user's real credits before it comes
+  // off the budget: allowance is worthless outside onboarding, so giving back a
+  // credit is worth more to them than giving back a credit of budget. The
+  // allowance keeps what it spent and the wallet drops to the remainder.
+  const newWallet = Math.max(0, actual - (Number(allowanceSpent) || 0));
+  if (newWallet >= frozenAmount) return frozenAmount;
+
+  await UnifiedCreditController.releasePartial(renderId, newWallet);
   logger.info(
-    `[onboarding][credits] trued up render=${renderId} ${frozenAmount} -> ${actual} (model=${meta?.model})`,
+    `[onboarding][credits] trued up render=${renderId} wallet ${frozenAmount} -> ${newWallet} ` +
+      `(actual ${actual}, allowance ${allowanceSpent}, model=${meta?.model})`,
   );
-  return actual;
+  return newWallet;
 }
 
 /**
@@ -395,22 +425,34 @@ async function settleBoard({ sessionId, userId, boardId, entry }) {
 
   const succeeded = entry.status === "succeeded";
 
+  // THE BUDGET COMES BACK FIRST, and independently of the wallet hold. Since
+  // ONB-010 a render can be paid for by BOTH, so this can no longer live inside
+  // the `billing.free` branch below — a split render that failed would have
+  // returned its wallet hold and quietly kept the allowance.
+  if (!succeeded && billing.allowanceSpent) {
+    await returnAllowance(userId, billing.allowanceSpent);
+  }
+
   if (billing.free) {
     if (succeeded) {
       logger.info(
-        `[onboarding][credits] free render delivered user=${userId} board=${boardId}`,
+        `[onboarding][credits] allowance render delivered user=${userId} board=${boardId}`,
       );
       return true;
     }
-    // The freebie bought nothing. Hand it back.
+    // The budget bought nothing — already handed back above.
+    //
+    // `allowanceSpent` is absent on boards rendered before the allowance
+    // existed: those were the genuinely free lifetime render, and the claim is
+    // what has to be released instead. Old rows must keep behaving the way they
+    // were written.
+    if (billing.allowanceSpent) return true;
     return returnFreeRender(userId, sessionId);
   }
 
-  // A free-plan user's first render is BOTH: the lifetime claim is spent and a
-  // hold is open. `billing.free` is false, so the hold is settled below — but
-  // if the render failed the claim has to come back too, or they lose the
-  // freebie to a render that never existed. Older boards carry no
-  // `freeClaimed`, and `undefined` reads as false, which is the old behaviour.
+  // Legacy only: a board written under ONB-006, where a free-plan user spent
+  // the lifetime claim AND paid. Nothing writes `freeClaimed` any more, but
+  // rows that carry it still have to be settled the way they were made.
   if (!succeeded && billing.freeClaimed) {
     await returnFreeRender(userId, sessionId);
   }
@@ -437,13 +479,433 @@ async function settleBoard({ sessionId, userId, boardId, entry }) {
  * Both forms of payment are undone independently, because a free-plan user's
  * first render takes both: the lifetime claim AND a credit hold.
  */
-async function refund({ free, freeClaimed, userId, sessionId, renderId }) {
-  // The claim comes back whenever it was taken — on a genuinely free render,
-  // and on a charged one.
-  if (free || freeClaimed) await returnFreeRender(userId, sessionId);
+async function refund({ free, freeClaimed, allowanceSpent, userId, sessionId, renderId }) {
+  // Whatever was actually taken comes back. Only one of these can be true for
+  // any one render, but all three are checked because rows written by three
+  // different versions of this file are still out there.
+  if (allowanceSpent) await returnAllowance(userId, allowanceSpent);
+  else if (free || freeClaimed) await returnFreeRender(userId, sessionId);
+
   if (free || !renderId) return true;
   await UnifiedCreditController.releaseCredits(renderId);
   return true;
+}
+
+/* ── The onboarding allowance ────────────────────────────────────────────────
+   Supersedes the free-render claim (ONB-001/006). Design:
+   `docs/ai/modules/onboarding/ONBOARDING_ALLOWANCE.md`.
+
+   A budget in credits that only onboarding can spend. Not credits: nothing is
+   added to the wallet and nothing here is spendable anywhere else.
+
+   PAID PLANS ONLY, and that is not a detail. A free-plan user already holds 35
+   real credits from their signup grant and spends those normally — in
+   onboarding and everywhere else. Granting them an allowance on top would hand
+   out the same 35 twice.                                                      */
+
+/**
+ * Can this user hold an allowance at all?
+ *
+ * Requires POSITIVE proof of a paid plan, which is why this does not simply
+ * invert `isFreePlanUser`. That function answers "no" when `FREE_PLAN_ID` is
+ * unset, because for the old free-render logic the safe direction was to give
+ * a render away. Here the same answer is the expensive one: every free-plan
+ * user would look paid and collect 35 on top of the 35 they already have.
+ *
+ * So an unconfigured `FREE_PLAN_ID` means NOBODY gets an allowance, and
+ * everybody is charged normally. That fails towards the behaviour we already
+ * had rather than towards giving money away, and it is loud in the log.
+ */
+let warnedNoFreePlanId = false;
+
+async function canHoldAllowance(userId) {
+  if (!userId) return false;
+  if (!process.env.FREE_PLAN_ID) {
+    // Once per process. `/eligibility` runs on every app boot for every user,
+    // so an unthrottled error here would bury itself in its own repetition.
+    if (!warnedNoFreePlanId) {
+      warnedNoFreePlanId = true;
+      logger.error(
+        "[onboarding][credits] FREE_PLAN_ID is not set — refusing to grant the onboarding " +
+          "allowance to anyone. Every render is charged normally until it is configured.",
+      );
+    }
+    return false;
+  }
+  return !(await isFreePlanUser(userId));
+}
+
+/**
+ * What is left of this user's allowance, in credits.
+ *
+ * `.lean()` deliberately: a hydrated document fills the schema default in, so
+ * every profile that predates the field would report a full 35. That absence is
+ * the whole migration (ONBOARDING_ALLOWANCE.md D5), and hydrating it away would
+ * silently hand the allowance to every existing account.
+ */
+async function allowanceRemaining(userId) {
+  if (!(await canHoldAllowance(userId))) return 0;
+  const profile = await UserProfile.findOne(
+    { user_id: userId },
+    { onboarding_allowance_total: 1, onboarding_allowance_used: 1 },
+  ).lean();
+  if (!profile) return 0;
+  const total = Number(profile.onboarding_allowance_total) || 0;
+  const used = Number(profile.onboarding_allowance_used) || 0;
+  return Math.max(total - used, 0);
+}
+
+/**
+ * Spend `amount` from the allowance, all or nothing.
+ *
+ * ATOMIC, and it has to be: two tabs pressing Generate in the same moment must
+ * not both be told the budget covered them. The `$expr` guard means the write
+ * only lands while enough remains, so the second caller matches nothing and
+ * falls through to the wallet — the same discipline the free-render claim used.
+ *
+ * Returns how much the allowance actually paid — 0 when it paid nothing.
+ *
+ * PARTIAL BY DESIGN (ONB-010, supersedes D1). It takes whatever it can up to
+ * `max` and leaves the caller to fund the rest. The rule it replaces was all-
+ * or-nothing, and it existed to stop a user being told "free" and then charged
+ * the remainder. That risk is now handled where it belongs — the user is shown
+ * the split and confirms it BEFORE anything is taken — so the budget no longer
+ * has to rot just because it cannot cover a whole render on its own.
+ *
+ * Read-then-write, so it retries: the amount to take depends on what remains,
+ * and the `$expr` guard only lets the write land while that much is still
+ * there. A losing racer re-reads and takes the smaller share rather than
+ * overdrawing. Three attempts, then it gives up and funds nothing from the
+ * budget — a wallet charge is recoverable, a negative allowance is not.
+ */
+async function drawAllowance(userId, max) {
+  if (!max || max <= 0) return 0;
+  if (!(await canHoldAllowance(userId))) return 0;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const remaining = await allowanceRemaining(userId);
+    const take = Math.min(remaining, max);
+    if (take <= 0) return 0;
+
+    // eslint-disable-next-line no-await-in-loop
+    const spent = await UserProfile.findOneAndUpdate(
+      {
+        user_id: userId,
+        $expr: {
+          $gte: [
+            {
+              $subtract: [
+                { $ifNull: ["$onboarding_allowance_total", 0] },
+                { $ifNull: ["$onboarding_allowance_used", 0] },
+              ],
+            },
+            take,
+          ],
+        },
+      },
+      { $inc: { onboarding_allowance_used: take } },
+      { new: true, projection: { onboarding_allowance_total: 1, onboarding_allowance_used: 1 } },
+    ).lean();
+
+    if (!spent) continue; // somebody else got there first; re-read and retry
+
+    const left =
+      (Number(spent.onboarding_allowance_total) || 0) -
+      (Number(spent.onboarding_allowance_used) || 0);
+    logger.info(
+      `[onboarding][credits] allowance drew ${take}/${max} user=${userId} remaining=${left}`,
+    );
+    return take;
+  }
+
+  logger.warn(
+    `[onboarding][credits] allowance draw contended out user=${userId} max=${max} — wallet funds all of it`,
+  );
+  return 0;
+}
+
+/**
+ * How one render is paid for: some budget, the rest wallet.
+ *
+ * The single place that decides the split, so the quote the user is shown and
+ * the charge that is taken cannot drift apart in their arithmetic.
+ */
+async function splitCharge(userId, amount) {
+  const fromAllowance = await drawAllowance(userId, amount);
+  return { fromAllowance, fromWallet: Math.max(0, amount - fromAllowance) };
+}
+
+/**
+ * Back-compat wrapper: "did the budget cover the WHOLE thing".
+ *
+ * Kept because it reads well at call sites that genuinely mean all-or-nothing,
+ * and because it is exported. It draws partially like everything else now, so
+ * it returns what it could not use.
+ */
+async function spendAllowance(userId, amount) {
+  const { fromAllowance, fromWallet } = await splitCharge(userId, amount);
+  if (fromWallet === 0 && fromAllowance > 0) return true;
+  if (fromAllowance > 0) await returnAllowance(userId, fromAllowance);
+  return false;
+}
+
+/**
+ * Give allowance back — the render it paid for never happened.
+ *
+ * Floored at zero rather than trusted to balance, because a double-return is a
+ * bug that would otherwise mint budget out of nothing.
+ */
+async function returnAllowance(userId, amount) {
+  if (!amount || amount <= 0) return false;
+  await UserProfile.updateOne(
+    { user_id: userId, onboarding_allowance_used: { $gte: amount } },
+    { $inc: { onboarding_allowance_used: -amount } },
+  );
+  logger.info(`[onboarding][credits] allowance returned ${amount} user=${userId}`);
+  return true;
+}
+
+
+/* ── Template-ad billing (Recreate) ──────────────────────────────────────────
+   A recreate is a SEPARATE purchase from the onboarding storyboard render, and
+   keeping it separate is the whole point of this section rather than a flag on
+   `securePayment`.
+
+   `securePayment` claims the one lifetime FREE render (`claimFreeRender`). A
+   recreate must never do that: the free render is the promise the entry banner
+   makes about a first onboarding clip, and spending it on a template recreate
+   would retire that banner for a render the user never asked to be free. So
+   this path freezes and settles like any ordinary paid action, and never
+   touches the claim.
+
+   Contract: `/TEMPLATE_AD_GENERATION_API_CONTRACT.md`.                        */
+
+// The image model and quality tier a recreate renders at. Fixed server-side,
+// like everything else in onboarding (ONB-004) — there is no picker.
+//
+// The model is sent ON THE REQUEST, not left to the deployment default, and
+// that is deliberate: the image route documents `meta.model` as "the request's
+// model override, OR EMPTY for the configured default". An empty string prices
+// at 0, which `priceFor` turns into "unpriced model, hold at the ceiling" —
+// a silent mis-charge. Naming it makes the render and the charge the same model
+// by construction, and `meta.model` echoes it back as proof.
+const TEMPLATE_AD_IMAGE_MODEL = "gemini-3.1-flash-image";
+
+// Low tier — Nano Banana 2 is priced low 1 / medium 2 / high 3 / ultra_high 4
+// in the admin registry, so a recreate costs ONE credit.
+//
+// Worth knowing before anyone changes this: the tier is OUR pricing dimension
+// only. The from-template route takes no `quality` field — its nearest knob is
+// `resolution` ("1K", "2K"), which we do not send, so DS renders at whatever
+// the deployment defaults to. Charging the low tier does not make DS render
+// cheaply; if that is the intent, it is a `resolution` on the request, not this
+// constant.
+const TEMPLATE_AD_IMAGE_QUALITY = "low";
+
+/**
+ * Per-image credit rate for the recreate image model, at its quality tier.
+ *
+ * Quality-aware, because image models are priced per tier in the admin registry
+ * (Nano Banana 2: low 1 / medium 2 / high 3 / ultra_high 4) and the flat
+ * `getModelDeduction` would read the model's headline rate instead of the tier
+ * we actually render at.
+ */
+function imageRateFor(model) {
+  const key = String(model || "").trim() || TEMPLATE_AD_IMAGE_MODEL;
+  return (
+    Number(
+      UnifiedCreditController.getModelDeductionByQuality(key, TEMPLATE_AD_IMAGE_QUALITY),
+    ) || 0
+  );
+}
+
+/**
+ * What one recreate costs, from the `meta` DS returned on the 202.
+ *
+ * ── Why this is not `priceFor` ──────────────────────────────────────────────
+ * `priceFor` is a per-SECOND video formula: `rate x duration_s x count`. The
+ * image route's meta is `{template_id, model, variations}` — no `duration_s`,
+ * no `count`. Every field it reads is absent and every fallback happens to be
+ * wrong for an image, so a 3-credit image would price as 3 x 8 x 1 = 24.
+ * Eight times over, with no error anywhere.
+ *
+ * Images are priced PER IMAGE (the admin registry says so: "4 / image"), so
+ * the only multiplier is how many takes were rendered.
+ */
+function priceForTemplateAd(kind, meta) {
+  const variations = Math.max(Number(meta?.variations) || 1, 1);
+
+  if (kind === "image") {
+    const rate = imageRateFor(meta?.model);
+    if (!rate) {
+      logger.error(
+        "[onboarding][credits] unpriced IMAGE model from DS — holding at ceiling. " +
+          `model="${meta?.model}" quality="${TEMPLATE_AD_IMAGE_QUALITY}". ` +
+          "Add it to the admin AI Models registry or every recreate is mispriced.",
+      );
+      return 0;
+    }
+    return rate * variations;
+  }
+
+  // Video: the same per-second shape the storyboard render uses, with
+  // `variations` where that one reads `count` — the two contracts name the
+  // same idea differently.
+  const rate = rateFor(meta?.model);
+  if (!rate) {
+    logger.error(
+      `[onboarding][credits] unpriced VIDEO model from DS — holding at ceiling. model="${meta?.model}"`,
+    );
+    return 0;
+  }
+  const seconds = Number(meta?.duration_s) || CEILING_DURATION_S;
+  return rate * seconds * variations;
+}
+
+/**
+ * The hold taken BEFORE the call, when we do not yet know what DS will report.
+ *
+ * Erring high is the safe direction: it can only ever refund. For images that
+ * is the tier we render at times one take; for video it is onboarding's own
+ * existing ceiling (`veo-3.1-fast` x 8s = 32), unchanged.
+ */
+function templateAdCeiling(kind) {
+  if (kind === "image") return imageRateFor(TEMPLATE_AD_IMAGE_MODEL);
+  return ceilingAmount();
+}
+
+/**
+ * Freeze for one recreate. No free claim, ever — see the section header.
+ *
+ * Returns `{ ok: true, renderId, amount }` or `{ ok: false, reason }`.
+ */
+async function secureTemplateAdPayment({
+  userId,
+  sessionId,
+  templateId,
+  renderId,
+  kind,
+  maxWalletCredits,
+}) {
+  const amount = templateAdCeiling(kind);
+  if (!amount) {
+    // A rate of zero means the configuration is missing, not that this is free.
+    // Charging nothing is never a safe default for a paid render.
+    logger.error(
+      `[onboarding][credits] template-ad ceiling computed as 0 (kind=${kind}) — ` +
+        "model configuration missing. Refusing to render.",
+    );
+    return { ok: false, reason: "not_configured" };
+  }
+
+  // Same rule as a storyboard render: the budget pays what it can and the
+  // wallet covers the rest (ONB-010).
+  const { fromAllowance, fromWallet } = await splitCharge(userId, amount);
+
+  if (fromWallet === 0) {
+    logger.info(
+      `[onboarding][credits] recreate covered by allowance ${fromAllowance} user=${userId} ` +
+        `template=${templateId} kind=${kind}`,
+    );
+    return {
+      ok: true,
+      renderId,
+      amount: 0,
+      total: amount,
+      allowanceSpent: fromAllowance,
+      coveredByAllowance: true,
+    };
+  }
+
+  // The wallet's share grew between the quote and now — see `securePayment`.
+  if (maxWalletCredits != null && fromWallet > Number(maxWalletCredits)) {
+    if (fromAllowance) await returnAllowance(userId, fromAllowance);
+    logger.info(
+      `[onboarding][credits] recreate quote stale user=${userId} template=${templateId} ` +
+        `quoted=${maxWalletCredits} now=${fromWallet} — refusing`,
+    );
+    return {
+      ok: false,
+      reason: "price_changed",
+      walletAmount: fromWallet,
+      allowanceAmount: fromAllowance,
+      total: amount,
+    };
+  }
+
+  const freeze = await UnifiedCreditController.freezeCredits({
+    userId,
+    reservationKey: renderId,
+    amount: fromWallet,
+    meta: {
+      service_type: kind === "image" ? "ad_creative" : "ad_video",
+      surface: "onboarding_recreate",
+      sessionId,
+      templateId,
+      ceiling: true,
+    },
+  });
+
+  if (!freeze.ok) {
+    // The budget was drawn above and nothing is rendering, so it goes back.
+    if (fromAllowance) await returnAllowance(userId, fromAllowance);
+    return {
+      ok: false,
+      reason: freeze.reason === "NO_BASE_PLAN" ? "no_plan" : "insufficient_credits",
+    };
+  }
+
+  logger.info(
+    `[onboarding][credits] recreate hold ${fromWallet} (+${fromAllowance} allowance, ` +
+      `ceiling ${amount}) user=${userId} session=${sessionId} template=${templateId} ` +
+      `kind=${kind} render=${renderId}`,
+  );
+  return {
+    ok: true,
+    renderId,
+    amount: fromWallet,
+    total: amount,
+    allowanceSpent: fromAllowance,
+    coveredByAllowance: false,
+  };
+}
+
+/**
+ * Hand back the unused part of the hold as soon as DS says what it is rendering.
+ *
+ * Same discipline as `trueUp`: an actual ABOVE the ceiling is never charged —
+ * the render is already queued and cancelling it would cost the user their ad
+ * to fix our accounting — it is held at the ceiling and logged loudly.
+ */
+async function trueUpTemplateAd({ renderId, frozenAmount, allowanceSpent = 0, meta, kind }) {
+  if (!renderId) return frozenAmount;
+
+  // Total held across both purses — see `trueUp` for why the wallet's share
+  // alone is the wrong thing to compare DS's number against.
+  const held = frozenAmount + (Number(allowanceSpent) || 0);
+
+  const actual = priceForTemplateAd(kind, meta);
+  if (!actual || actual >= held) {
+    if (actual > held) {
+      logger.error(
+        `[onboarding][credits] recreate actual ${actual} EXCEEDS ceiling ${held} ` +
+          `(kind=${kind} model=${meta?.model}) — holding at ceiling.`,
+      );
+    }
+    return frozenAmount;
+  }
+
+  // Wallet first — the user's real credits come back before their budget does.
+  const newWallet = Math.max(0, actual - (Number(allowanceSpent) || 0));
+  if (newWallet >= frozenAmount) return frozenAmount;
+
+  await UnifiedCreditController.releasePartial(renderId, newWallet);
+  logger.info(
+    `[onboarding][credits] recreate trued up render=${renderId} wallet ${frozenAmount} -> ` +
+      `${newWallet} (actual ${actual}, allowance ${allowanceSpent})`,
+  );
+  return newWallet;
 }
 
 module.exports = {
@@ -456,10 +918,25 @@ module.exports = {
   priceFor,
   ceilingAmount,
   isFreePlanUser,
+  // The onboarding allowance
+  allowanceRemaining,
+  spendAllowance,
+  drawAllowance,
+  splitCharge,
+  returnAllowance,
+  canHoldAllowance,
+  // Recreate (template ad) — a separate purchase; never claims the free render.
+  secureTemplateAdPayment,
+  trueUpTemplateAd,
+  priceForTemplateAd,
+  templateAdCeiling,
+  TEMPLATE_AD_IMAGE_MODEL,
   _internals: {
     DS_MODEL_TO_CONFIG_KEY,
     rateFor,
     CEILING_DURATION_S,
     ONBOARDING_MODEL_KEY,
+    imageRateFor,
+    TEMPLATE_AD_IMAGE_QUALITY,
   },
 };

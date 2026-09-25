@@ -29,10 +29,13 @@ const ENABLE_NEW_LAYOUT = import.meta.env.VITE_ENABLE_NEW_EDITOR_LAYOUT === 'tru
 const ONBOARDING_OFFERED_KEY = 'adsgpt.onboarding.offered';
 
 const Layout = () => {
-  // Whether the free render is still owed, and which session the offer bar owes
+  // How much onboarding allowance is left, and which session the offer bar owes
   // it in. One call per app load, shared with OnBoardHome's resume.
   const {
-    freeRenderAvailable,
+    allowanceRemaining,
+    allowanceTotal,
+    generationLeft,
+    generationKind,
     resumeSessionId,
     shouldStartOnboarding,
     loading: eligibilityLoading,
@@ -255,7 +258,18 @@ const Layout = () => {
                   `?session=` when the user skipped a run with the render still
                   unspent: the bar owes them THAT session, not a fresh start. */}
               <FreeAdBanner
-                available={freeRenderAvailable}
+                // `generationLeft`, not `allowanceRemaining`: a free-plan
+                // user holds no allowance and was seeing no bar at all, which
+                // left the group with the least room to spend the least
+                // informed. See the eligibility controller.
+                available={generationLeft > 0}
+                remaining={generationLeft}
+                total={allowanceTotal}
+                kind={generationKind}
+                // No number out here. On the dashboard this is an invitation,
+                // and a live balance on every screen of the app reads as a
+                // meter being watched rather than something being offered.
+                showCount={false}
                 onCreate={() =>
                   navigate(
                     resumeSessionId

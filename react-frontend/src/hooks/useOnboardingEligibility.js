@@ -55,20 +55,32 @@ export default function useOnboardingEligibility({ enabled = true } = {}) {
     eligibility: state,
     loading,
     refresh,
-    // Convenience reads, so callers do not each re-derive the same booleans.
-    // Both false while loading: "unknown" must never render as "available".
-    freeRenderAvailable: Boolean(state?.freeRenderAvailable) && !loading,
+    // Convenience reads, so callers do not each re-derive the same thing.
+    // Zero while loading: "unknown" must never render as "you have budget",
+    // because that is the reading that puts the word "free" on a screen that
+    // is about to charge someone.
+    allowanceRemaining: loading ? 0 : Number(state?.allowanceRemaining) || 0,
+    allowanceTotal: loading ? 0 : Number(state?.allowanceTotal) || 0,
+    /* What the OFFER BAR counts down, which is not always the allowance.
+       A paid user counts down their onboarding budget; a free-plan user holds
+       none (they already have real credits from signup) and counts down their
+       own balance instead. `generationKind` says which, because free
+       generation and a user's own money cannot be described the same way.
+       Everything that decides whether a render is FREE still reads
+       `allowanceRemaining` — these two are for copy only. */
+    generationLeft: loading ? 0 : Number(state?.generationLeft) || 0,
+    generationKind: loading ? 'none' : state?.generationKind || 'none',
     resumeSessionId: state?.resumeSessionId || '',
     /**
-     * A user who has never engaged with onboarding at all, and still has the
-     * free render owed to them. The first-run redirect's whole condition.
+     * A user who has never engaged with onboarding at all, and still has
+     * budget to spend there. The first-run redirect's whole condition.
      *
      * All four parts matter. `completed` and `skipped` are both "they have
      * answered the question" — sending either back in is the app arguing with
-     * a decision the user already made. `freeRenderAvailable` false means they
-     * spent it, so there is nothing left to offer. And a `resumeSessionId`
-     * means they have a run in progress, which the banner handles: pushing
-     * them into it unasked is a different, pushier product.
+     * a decision the user already made. An exhausted allowance means there is
+     * nothing left to offer. And a `resumeSessionId` means they have a run in
+     * progress, which the banner handles: pushing them into it unasked is a
+     * different, pushier product.
      *
      * False while loading, so a slow eligibility call cannot bounce someone
      * who turns out to be an existing user.
@@ -76,7 +88,7 @@ export default function useOnboardingEligibility({ enabled = true } = {}) {
     shouldStartOnboarding:
       !loading &&
       Boolean(state) &&
-      Boolean(state.freeRenderAvailable) &&
+      Number(state.allowanceRemaining) > 0 &&
       !state.onboardingCompleted &&
       !state.onboardingSkipped &&
       !state.resumeSessionId,

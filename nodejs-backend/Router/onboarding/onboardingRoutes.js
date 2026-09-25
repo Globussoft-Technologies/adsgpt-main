@@ -84,6 +84,22 @@ router.post("/sessions/:sessionId/templates", ctrl.loadMoreTemplates);
 // (media links rotate between runs).
 router.post("/sessions/:sessionId/templates/refresh", ctrl.refreshTemplates);
 
+// "More like this" for one reference template — the fixed-anchor search. No
+// session in the path because the upstream route needs none: the anchor id is
+// the query. Declared before the session routes for readability only; the paths
+// cannot collide.
+router.get("/templates/:templateId/similar", ctrl.getSimilarTemplates);
+
+// Recreate — an ad built from a chosen reference template. Multipart, because
+// the product image is an upload and the route's contract needs it as a URL:
+// `handleUploadErrors` turns multer's own rejections into the same 400 shape
+// the rest of this router answers with.
+router.post(
+  "/sessions/:sessionId/templates/:templateId/recreate",
+  handleUploadErrors,
+  ctrl.recreateFromTemplate
+);
+
 // Module 4 — render one storyboard concept into a clip. One board per call:
 // the user renders concepts individually, and a batch job could not report
 // progress per tile. See services/onboarding/videoClient.js.

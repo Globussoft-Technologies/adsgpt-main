@@ -13,6 +13,10 @@
  * flow MySpace uses, with the clip as its payload. A second posting path would
  * be a second set of bugs about connected accounts.
  *
+ * An IMAGE gets an Edit block in place of Versions (`ImageEditPanel`): logo,
+ * crop, adjust, filters, text, resize — all in the browser. Each saved edit is a
+ * new image filed in MySpace and a new card in the strip; this one is untouched.
+ *
  * Two things from the design are still absent, and deliberately: resize exports
  * (the render is fixed at 9:16 server-side, so the buttons would do nothing)
  * and the "+" that starts a new version (regeneration is switched off in
@@ -52,6 +56,9 @@ import { Header } from './Workspace';
 import { ClipSettleLoader, CLIP_LINES } from './FrameLoader';
 import RetryCountdownButton from './RetryCountdownButton';
 import OnboardingTour from './OnboardingTour';
+import ClipStrip from './ClipStrip';
+import ImageEditPanel from './ImageEditPanel';
+import { canvasToBlob, downloadBlob, loadCanvasImage } from './QuickImageTools';
 
 const SURF2 = '#232329';
 const LINE = 'rgba(255,255,255,0.09)';
@@ -145,10 +152,14 @@ function Spinner({ tone }) {
 }
 
 /** The 9:16 box every stage fills, so nothing shifts when one replaces another. */
-function Frame({ children }) {
+function Frame({ children, ratio = 'aspect-9/16' }) {
   return (
     <div
-      className="relative aspect-9/16 h-full max-h-full w-auto overflow-hidden rounded-2xl border"
+      // A storyboard clip is always 9:16; an image is whatever the template was.
+      // Forcing the clip's ratio on it would make the loading box a different
+      // shape from the picture that replaces it, which reads as the layout
+      // jumping at the end of the render.
+      className={`relative ${ratio} h-full max-h-full w-auto overflow-hidden rounded-2xl border`}
       style={{ background: '#1B1B21', borderColor: LINE }}
     >
       {children}
@@ -187,6 +198,42 @@ function GifStage({ loader }) {
         style={{ background: 'linear-gradient(180deg,rgba(0,0,0,0.35) 0%,transparent 35%)' }}
       />
       <StatusPill>Processing</StatusPill>
+    </>
+  );
+}
+
+/**
+ * The whole loading state for an image recreate.
+ *
+ * The three-stage machine above — settle mosaic, then the loader GIF, then the
+ * glow — is built for a render that takes about a minute and has boundary
+ * keyframes to tease. An image lands in roughly fifteen seconds and has none of
+ * that: the mosaic is a video's mosaic, no loader GIF is ever built for a
+ * recreate, and the glow announces "Generating video" for something that is not
+ * one. Three wrong answers in a row, and the last of them says the wrong word.
+ *
+ * So a still gets one quiet state instead, and it says what is actually
+ * happening.
+ */
+function StillStage() {
+  return (
+    <>
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(100deg, rgba(255,255,255,0.03) 20%, rgba(255,255,255,0.075) 40%, rgba(255,255,255,0.03) 60%)',
+          backgroundSize: '260% 100%',
+          animation: 'clipStillSheen 1600ms ease-in-out infinite',
+        }}
+      />
+      <StatusPill tone="live">Generating image</StatusPill>
+      <style>{`
+        @keyframes clipStillSheen {
+          from { background-position: 160% 0; }
+          to   { background-position: -60% 0; }
+        }
+      `}</style>
     </>
   );
 }
@@ -291,6 +338,91 @@ function FailedStage({ error, onRetry, onBack, attempts = 1 }) {
   );
 }
 
+/**
+ * An edited image, with a before/after slider against the image it came from.
+ *
+ * Off by default — the stage is the ad, and a slider across it all the time
+ * would be in the way of simply looking at it. In compare mode both images are
+ * `object-contain` in the same box, so an edit that changed the SHAPE (a crop,
+ * fit-to-placement) still lines up on its centre instead of jumping. The
+ * dragging is a native range input stretched over the stage, invisible: it gets
+ * pointer, touch and keyboard for free.
+ */
+function CompareStill({ src, before }) {
+  const [on, setOn] = useState(false);
+  const [pct, setPct] = useState(50);
+
+  return (
+    <div className="relative flex h-full w-full items-center justify-center">
+      {on ? (
+        <div className="absolute inset-0 overflow-hidden rounded-xl">
+          <img
+            src={src}
+            alt="After"
+            className="absolute inset-0 h-full w-full object-contain"
+            draggable={false}
+          />
+          <div
+            className="absolute inset-0"
+            // The page ground behind BEFORE, so its letterbox does not show the
+            // AFTER image through it when the two differ in shape.
+            style={{ background: '#0f0f0f', clipPath: `inset(0 ${100 - pct}% 0 0)` }}
+          >
+            <img
+              src={before}
+              alt="Before"
+              className="absolute inset-0 h-full w-full object-contain"
+              draggable={false}
+            />
+          </div>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-[#15DCFF]"
+            style={{ left: `${pct}%` }}
+          >
+            <span className="absolute top-1/2 left-1/2 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-[#15DCFF] bg-[#0f0f0f] text-[11px] font-bold text-[#15DCFF]">
+              ⇆
+            </span>
+          </div>
+          <span className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white/85">
+            Before
+          </span>
+          <span className="pointer-events-none absolute right-3 bottom-3 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white/85">
+            After
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={pct}
+            onChange={(e) => setPct(Number(e.target.value))}
+            aria-label="Compare before and after"
+            className="absolute inset-0 h-full w-full cursor-ew-resize opacity-0"
+          />
+        </div>
+      ) : (
+        <img
+          src={src}
+          alt="Your edited ad"
+          className="max-h-full max-w-full rounded-xl object-contain"
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => setOn((v) => !v)}
+        className="absolute top-0 left-1/2 z-[2] -translate-x-1/2 rounded-full border px-3 py-1.5 text-[12px] font-semibold backdrop-blur-md transition"
+        style={{
+          background: 'rgba(14,14,17,0.78)',
+          borderColor: on ? 'rgba(21,220,255,0.45)' : LINE_STRONG,
+          color: on ? '#15DCFF' : 'rgba(255,255,255,0.85)',
+        }}
+      >
+        {on ? 'Done comparing' : 'Compare with before'}
+      </button>
+    </div>
+  );
+}
+
 /* ── the side panel ──────────────────────────────────────────────────────── */
 
 /** A block heading, in the panel's own small-caps voice. */
@@ -342,13 +474,101 @@ function Meta({ label, children }) {
 }
 
 /**
+ * Download for an image, in the format the user picks.
+ *
+ * A video's download is the file as rendered. An image can be re-encoded in the
+ * browser for free, and people genuinely need different ones: PNG to keep it
+ * crisp, JPG because an ad account or a colleague wants one, WebP for size.
+ * The image is redrawn on a canvas (through the CORS proxy) and exported; JPG
+ * has no transparency, so it is painted onto white rather than black.
+ */
+const DOWNLOAD_FORMATS = [
+  { value: 'png', label: 'PNG', mime: 'image/png' },
+  { value: 'jpg', label: 'JPG', mime: 'image/jpeg' },
+  { value: 'webp', label: 'WebP', mime: 'image/webp' },
+];
+
+function ImageDownload({ src }) {
+  const [format, setFormat] = useState('png');
+  const [busy, setBusy] = useState(false);
+
+  const download = async () => {
+    if (busy) return;
+    setBusy(true);
+    const f = DOWNLOAD_FORMATS.find((x) => x.value === format) || DOWNLOAD_FORMATS[0];
+    try {
+      const img = await loadCanvasImage(src);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (f.value === 'jpg') {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      ctx.drawImage(img, 0, 0);
+      const blob = await canvasToBlob(canvas, f.mime, 0.92);
+      downloadBlob(blob, `adsgpt-ad-${Date.now()}.${f.value}`);
+    } catch (err) {
+      // The proxy being down should not cost the user their download: fall back
+      // to the file as stored, in whatever format that is.
+      console.warn('[onboarding] format download failed, downloading original:', err);
+      handleDownload(src);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <PanelButton primary icon={Download} onClick={download}>
+        {busy ? 'Preparing…' : `Download ${DOWNLOAD_FORMATS.find((x) => x.value === format)?.label}`}
+      </PanelButton>
+      <div className="flex gap-1" role="radiogroup" aria-label="Download format">
+        {DOWNLOAD_FORMATS.map((x) => {
+          const on = x.value === format;
+          return (
+            <button
+              key={x.value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setFormat(x.value)}
+              className="flex-1 rounded-md border py-1 text-[11.5px] font-semibold transition"
+              style={{
+                background: on ? 'rgba(21,220,255,0.09)' : 'transparent',
+                borderColor: on ? 'rgba(21,220,255,0.35)' : LINE,
+                color: on ? '#15DCFF' : 'rgba(255,255,255,0.55)',
+              }}
+            >
+              {x.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Everything you do with the clip, and what it is.
  *
  * The title lives here rather than in a strip above the stage: a bar carrying
  * one label and one button was mostly empty space, and it pushed the player
  * down for no reason. The panel already had to exist.
  */
-function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
+function SidePanel({
+  title,
+  angle,
+  status,
+  ready,
+  src,
+  clip,
+  board,
+  message,
+  isStill = false,
+  onEdited,
+}) {
   const [postAd, setPostAd] = useState({ open: false, payload: null, autoAdvance: false });
 
   /**
@@ -376,7 +596,9 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
       // → select → compose machine behaves identically here.
       payload: {
         url: src,
-        isVideo: true,
+        // The post modal renders a player or a picture off this. Saying `true`
+        // for a still would hand an image to a `<video>`.
+        isVideo: !isStill,
         prompt: board?.voiceover || board?.premise || title,
         item: { url: src, title, aiAds: { source: 'onboarding' } },
       },
@@ -397,9 +619,13 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
           <PanelLabel>Send it out</PanelLabel>
           {ready ? (
             <div className="mt-3 flex flex-col gap-2">
-              <PanelButton primary icon={Download} onClick={() => handleDownload(src)}>
-                Download MP4
-              </PanelButton>
+              {isStill ? (
+                <ImageDownload src={src} />
+              ) : (
+                <PanelButton primary icon={Download} onClick={() => handleDownload(src)}>
+                  Download MP4
+                </PanelButton>
+              )}
               <PanelButton icon={Megaphone} onClick={openPostAd}>
                 Post to ad account
               </PanelButton>
@@ -408,11 +634,30 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
             <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/70">
               {status === 'failed'
                 ? 'Nothing to send — this concept didn’t render.'
-                : message || 'Ready in about a minute.'}
+                : message || (isStill ? 'Ready in about fifteen seconds.' : 'Ready in about a minute.')}
             </p>
           )}
         </div>
 
+        {isStill ? (
+          // An image has nothing to version (regeneration is off) but plenty to
+          // touch up — see `ImageEditPanel`. Only once it exists: there is
+          // nothing to edit while it renders.
+          ready && onEdited ? (
+            <div data-tour="edit">
+              <PanelLabel>Edit</PanelLabel>
+              <p className="mt-1 text-[11.5px] text-white/55">
+                Every edit is saved as a new image. This one stays as it is.
+              </p>
+              <ImageEditPanel
+                src={src}
+                model={clip?.model}
+                prompt={title}
+                onEdited={onEdited}
+              />
+            </div>
+          ) : null
+        ) : (
         <div data-tour="versions">
           <PanelLabel>Versions</PanelLabel>
           <p className="mt-1 text-[11.5px] text-white/55">A new version never destroys this cut.</p>
@@ -440,6 +685,7 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
             )}
           </div>
         </div>
+        )}
 
         {/* The concept itself, in the space the two blocks above leave behind.
             `mt-auto` rather than a fixed position: on a short viewport it sits
@@ -484,7 +730,10 @@ function SidePanel({ title, angle, status, ready, src, clip, board, message }) {
                 {ready ? 'ready' : status === 'failed' ? 'failed' : 'rendering'}
               </span>
             </Meta>
-            <Meta label="Ratio">9:16</Meta>
+            {/* A clip is always 9:16; a still is whatever the template was, and
+                we are not told which. Claiming a ratio we do not know is worse
+                than not showing one. */}
+            {!isStill && <Meta label="Ratio">9:16</Meta>}
             {clip?.duration_s ? <Meta label="Length">{clip.duration_s}s</Meta> : null}
             {clip?.model ? <Meta label="Model">{clip.model}</Meta> : null}
           </dl>
@@ -517,11 +766,21 @@ export default function ClipView({
   board,
   index,
   state = {},
+  // Every render this onboarding has produced, for the strip under the stage.
+  // Empty (or a single entry) renders nothing — see `ClipStrip`.
+  stripItems = [],
+  onSelectClip,
   onBack,
   onRetry,
   onStartOver,
   onFinish,
   onSkip,
+  // `(url) => void` — an image edit was saved. The host adds it to the strip as
+  // a card of its own; absent, the Edit block is not shown.
+  onEdited,
+  // The image an edited card was made from, for the before/after slider.
+  // Empty for anything that is not an edit.
+  compareSrc = '',
 }) {
   const status = state.status || 'running';
   const clip = state.video?.video || null;
@@ -530,6 +789,18 @@ export default function ClipView({
   // 24h copy as the fallback, and never a link that claims to be an image — so
   // the player does not have to know which of the two exists.
   const src = clip?.src || clip?.url || clip?.local_url || '';
+
+  // A recreate from an IMAGE template renders a picture, not a clip. Everything
+  // else — the progress copy, the failure states, the exits — is identical,
+  // because Node normalises an image result into the same board shape a video
+  // carries (`templateAdResult.asBoardVideo`).
+  //
+  // Read from the BOARD first and the result second, and that order is the
+  // point: while the render is running there is no result yet, so a check on
+  // `mime_type` alone would show the video loading stages for the whole wait and
+  // only correct itself at the very end. The board knows from the 202.
+  const isStill =
+    board?.kind === 'image' || String(clip?.mime_type || '').startsWith('image/');
 
   const loader = useMemo(() => {
     if (!state.loader?.url) return null;
@@ -554,23 +825,36 @@ export default function ClipView({
   // First-visit tour, only once there is a clip to talk about. `relative` on
   // the root below: the overlay is positioned against it.
   const tourRootRef = useRef(null);
+  // An image gets its own words and the Edit step in place of Versions — the
+  // video copy ("play it", "the MP4") is wrong for it, and the Versions block
+  // is not on screen to point at.
   const tourSteps = [
     {
       // The player itself, not the whole stage it is centred in.
       target: '[data-tour="clip-stage"] > *',
-      title: 'Your video is ready',
-      body: 'Play it here, scrub through it, or open it full screen.',
+      title: isStill ? 'Your ad is ready' : 'Your video is ready',
+      body: isStill
+        ? 'This is your finished image ad.'
+        : 'Play it here, scrub through it, or open it full screen.',
     },
     {
       target: '[data-tour="send"]',
       title: 'Send it out',
-      body: 'Download the MP4, or post it straight to your connected ad account.',
+      body: isStill
+        ? 'Download the image, or post it straight to your connected ad account.'
+        : 'Download the MP4, or post it straight to your connected ad account.',
     },
-    {
-      target: '[data-tour="versions"]',
-      title: 'Versions',
-      body: 'Every cut is kept. Making a new version never replaces this one.',
-    },
+    isStill
+      ? {
+          target: '[data-tour="edit"]',
+          title: 'Edit your ad',
+          body: 'Add your logo, crop, adjust or add text. Each edit is saved as a new image in My Space.',
+        }
+      : {
+          target: '[data-tour="versions"]',
+          title: 'Versions',
+          body: 'Every cut is kept. Making a new version never replaces this one.',
+        },
     {
       target: '[data-tour="concept"]',
       title: 'The idea behind it',
@@ -600,14 +884,41 @@ export default function ClipView({
             Back to Board
           </button>
         </div>
-        <div data-tour="clip-stage" className="grid min-h-0 flex-1 place-items-center p-5">
-          {ready ? (
+        {/* FLEX, not grid, and that is load-bearing. `max-h-full` on the image
+            below is a percentage, so it only constrains anything when its
+            containing block has a DEFINITE height. A grid row is sized by its
+            content, so the percentage resolved against the image's own height
+            and constrained nothing: a tall still rendered at natural size and
+            ran straight off the bottom of the screen. This element already has
+            a definite height (`flex-1` + `min-h-0` inside a flex column), and
+            in a flex container the percentage resolves against it. */}
+        {/* KEYED ON THE BOARD, so switching clips from the strip replays the
+            entry animation instead of swapping the frame instantly. The remount
+            is wanted for its own sake too: it resets the player rather than
+            pointing the running one at a different file mid-playback. */}
+        <div
+          key={board?.id || 'stage'}
+          data-tour="clip-stage"
+          className="clip-stage flex min-h-0 flex-1 items-center justify-center p-5"
+        >
+          {ready && isStill && compareSrc ? (
+            <CompareStill src={src} before={compareSrc} />
+          ) : ready && isStill ? (
+            // `object-contain`, never `cover`: an ad is the whole composition,
+            // and cropping the thing the user just paid to have made is the one
+            // thing this must not do. The ratio is the image's own.
+            <img
+              src={src}
+              alt="Your recreated ad"
+              className="max-h-full max-w-full rounded-xl object-contain"
+            />
+          ) : ready ? (
             // The app's player, not a bare `<video>`: play, scrub, speed, PiP,
             // fullscreen and its own download, identical to every other clip in
             // the product.
             <CustomVideoPlayer src={src} aspect="ASPECT_9_16_FULL" />
           ) : (
-            <Frame>
+            <Frame ratio={isStill ? 'aspect-square' : 'aspect-9/16'}>
               {status === 'failed' ? (
                 <FailedStage
                   error={state.error}
@@ -615,6 +926,9 @@ export default function ClipView({
                   onBack={onBack}
                   attempts={state.attempts}
                 />
+              ) : isStill ? (
+                // One state, start to finish — see `StillStage`.
+                <StillStage />
               ) : stage === 'gif' && loader ? (
                 <GifStage loader={loader} />
               ) : stage === 'pulse' ? (
@@ -625,9 +939,25 @@ export default function ClipView({
             </Frame>
           )}
         </div>
+
+        <style>{`
+          .clip-stage { animation: clipStageIn 320ms cubic-bezier(0.22,1,0.36,1) both; }
+          @keyframes clipStageIn {
+            from { opacity: 0; transform: scale(0.985); }
+            to   { opacity: 1; transform: none; }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .clip-stage { animation: none; }
+          }
+        `}</style>
+
+        {/* Under the stage and inside the same column, so it sits beneath the
+            ad rather than beside it and the side panel keeps its full height. */}
+        <ClipStrip items={stripItems} activeId={board?.id || ''} onSelect={onSelectClip} />
         </div>
 
         <SidePanel
+          isStill={isStill}
           title={title}
           angle={angle}
           status={status}
@@ -636,6 +966,7 @@ export default function ClipView({
           clip={clip}
           board={board}
           message={state.message}
+          onEdited={onEdited}
         />
       </div>
 
@@ -645,10 +976,15 @@ export default function ClipView({
       >
         <p className="text-[12.5px] text-white/70">
           {ready
-            ? 'Your first clip is ready.'
+            ? isStill
+              ? 'Your ad is ready.'
+              : 'Your first clip is ready.'
             : status === 'failed'
               ? 'Nothing rendered for this concept.'
-              : state.message || 'Rendering — this usually takes about a minute.'}
+              : state.message ||
+                (isStill
+                  ? 'Rendering — this usually takes about fifteen seconds.'
+                  : 'Rendering — this usually takes about a minute.')}
         </p>
       </footer>
 

@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import BrandSetup from '../BrandSetup/BrandSetup';
 import Workspace from '../BrandSetup/Workspace';
 import ClipView from '../BrandSetup/ClipView';
+import { toMediaUrl } from '../BrandSetup/ImageEditPanel';
 import {
   readRun,
   rememberRun,
@@ -15,6 +16,8 @@ import {
   rememberClipBoard,
   readClipBoard,
   clearClipBoard,
+  readEdits,
+  rememberEdits,
 } from '../BrandSetup/runStorage';
 // Dropped entirely from a production bundle — `import.meta.env.DEV` is a
 // literal `false` there, so the branch below and this import go with it.
@@ -176,6 +179,19 @@ const OnBoardHome = () => {
   // is the same session one level down, and a route would mean re-reading the
   // whole session on every open and back.
   const [clipBoardId, setClipBoardId] = useState('');
+  // Boards a recreate invented, by key. Kept separate from the session's own
+  // storyboards because they are not storyboards — they are only ever looked up
+  // when the clip view needs a heading for a render that has no concept behind
+  // it. Client-side and not persisted: the RENDER is on the session (Node wrote
+  // it with `markBoardStarted`), and this is just its label.
+  const [recreateBoards, setRecreateBoards] = useState({});
+  // Image edits saved on the clip screen, by id (`edit:<ms>`). Each is its own
+  // card in the strip, after the render it came from. Unlike `recreateBoards`
+  // these ARE persisted (runStorage `rememberEdits`): an edit has no server-side
+  // render to hydrate from, so without it a reload would silently drop it from
+  // the strip. Lazily seeded from the remembered run so a reload straight onto
+  // an edited card finds it on the first paint.
+  const [edits, setEdits] = useState(() => readEdits(readRun()?.sessionId));
   // The full session document — brand, templates, storyboards, videos. Held
   // separately from `run.result`, which is the brand context alone and cannot
   // describe the other rails no matter how well they completed.
@@ -466,6 +482,10 @@ const OnBoardHome = () => {
         // `videosHydrated`. Cheap, and it is what makes a dropped socket
         // invisible.
         if (doc?.videos) dispatch(videosHydrated(doc.videos));
+        // The same fold for recreates. They live in their own section
+        // server-side — two different maps, two different status derivations —
+        // but the browser keeps ONE `byBoard`, so both hydrate into it.
+        if (doc?.recreates) dispatch(videosHydrated(doc.recreates));
 
         const sectionsPending = ['templates', 'storyboards'].some((k) =>
           ['queued', 'running'].includes(doc?.[k]?.status)
@@ -535,7 +555,15 @@ const OnBoardHome = () => {
    * screen is for, so there is nothing to gain by spending the first second of
    * it on the workspace.
    */
-  const startVideo = async (board) => {
+  // `quote` is `{ maxWalletCredits }` when a split confirmation was shown. It
+  // is passed straight through to billing, which refuses (409) rather than
+  // charging more than the figure the user agreed to.
+  //
+  // Returns `{ priceChanged, quote }` on that refusal, so the caller can re-ask
+  // with the real numbers. Nothing has been charged at that point, and nothing
+  // about this render's state has moved — which is why the phase switch and the
+  // optimistic dispatches below are undone for it.
+  const startVideo = async (board, quote) => {
     // A storyboard's own id is `id`; `board_id` is what the video payloads call
     // the same value when they point back at it. The map here is keyed the
     // video contract's way, because that is what arrives on the socket.
@@ -567,10 +595,24 @@ const OnBoardHome = () => {
       .catch(() => {});
 
     try {
-      const res = await generateVideo(run.sessionId, boardId);
+      const res = await generateVideo(run.sessionId, boardId, quote);
       if (res?.accepted) dispatch(videoAccepted({ boardId, jobId: res.jobId }));
       else dispatch(videoRejected({ boardId, reason: res?.reason, jobId: res?.jobId }));
     } catch (error) {
+      // 409: the onboarding budget moved between the quote and the charge, so
+      // the server took NOTHING. Not a failure of this render — it has not
+      // started yet — so the board is put back the way it was and the caller
+      // re-asks. Treating it as a rejection would leave a dead tile behind a
+      // dialog the user is about to see again.
+      if (error?.response?.status === 409) {
+        dispatch(videoRejected({ boardId, reason: 'price_changed' }));
+        setPhase('workspace');
+        setClipBoardId('');
+        return {
+          priceChanged: true,
+          quote: error?.response?.data?.quote,
+        };
+      }
       // Node answers a refusal with a `reason` even on the error statuses —
       // 501 when the deployment has no video generation, 502 when upstream is
       // not answering. Reading it back is what lets the tile say WHICH, rather
@@ -588,6 +630,46 @@ const OnBoardHome = () => {
   };
 
   /**
+   * A recreate has been accepted. Take the user to the SAME place a storyboard
+   * render takes them.
+   *
+   * Everything after this point is the storyboard flow, reused as it stands:
+   * `videoStarted`/`videoAccepted` register the job so the socket's frames find
+   * a home, and the clip view renders whatever that board ends up holding. The
+   * only new thing is the board itself, which is synthetic — a recreate has no
+   * storyboard concept behind it, so one is made from the template.
+   *
+   * Called by the sheet with the 202 it got back.
+   */
+  const startRecreate = ({ jobId, boardId, kind, template }) => {
+    if (!jobId || !boardId) return;
+
+    setRecreateBoards((prev) => ({
+      ...prev,
+      [boardId]: {
+        id: boardId,
+        // What is being rendered, known from the 202 — BEFORE any result
+        // arrives. The clip view needs it to choose a loading state, and the
+        // result's own `mime_type` does not exist yet while that state is on
+        // screen.
+        kind: kind === 'image' ? 'image' : 'video',
+        // What the clip view puts in its heading. A recreate's own words are
+        // the template's, because that is all it has — and "Recreated ad" beats
+        // an empty title or a raw id.
+        title: template?.content_type || template?.video_kind_label || 'Recreated ad',
+        angle: (template?.tags || template?.tone || []).slice(0, 2).join(' · '),
+      },
+    }));
+
+    setClipBoardId(boardId);
+    setPhase('clip');
+    rememberClipBoard(boardId);
+
+    dispatch(videoStarted(boardId));
+    dispatch(videoAccepted({ boardId, jobId }));
+  };
+
+  /**
    * Open a concept's clip view WITHOUT starting anything.
    *
    * `startVideo` starts a render for any board that isn't ready or running —
@@ -595,12 +677,65 @@ const OnBoardHome = () => {
    * Back to board → open a failed card silently fired a new render (and walked
    * straight past the retry UI). Opening is only ever this. Bug 2026-09-15.
    */
+  // A different session (start over, the dev switcher) has different edits.
+  useEffect(() => {
+    if (run.sessionId) setEdits(readEdits(run.sessionId));
+  }, [run.sessionId]);
+
+  /**
+   * An image edit was saved on the clip screen (ClipView → ImageEditPanel).
+   *
+   * It becomes the newest card and opens on the stage, the way a new image
+   * lands at the front of MySpace. The source card is left exactly as it was,
+   * so the original and every step after it stay one click away. Titles do not
+   * stack "(edited)" when an edit is edited again.
+   */
+  const addEdit = (parentId, parentTitle, url, model) => {
+    if (!url) return;
+    const id = `edit:${Date.now()}`;
+    const base = String(parentTitle || 'Your ad').replace(/ \(edited\)$/, '');
+    setEdits((prev) => {
+      const next = {
+        ...prev,
+        [id]: { id, parentId, src: url, title: `${base} (edited)`, model, at: Date.now() },
+      };
+      rememberEdits(run.sessionId, next);
+      return next;
+    });
+    setClipBoardId(id);
+    rememberClipBoard(id);
+  };
+
   const openClip = (board) => {
     const boardId = board?.id;
     if (!boardId) return;
     setClipBoardId(boardId);
     setPhase('clip');
     rememberClipBoard(boardId);
+  };
+
+  /**
+   * The header's "See your ads": the clip screen, on the NEWEST render.
+   *
+   * Newest by `startedAt` rather than by position in the map — insertion order
+   * is whatever hydration happened to produce on a reload, and the user's idea
+   * of "my latest ad" is the one they started last.
+   *
+   * Falls back to the newest render of ANY status, so a run that is still going
+   * opens on itself rather than on an older finished clip. Only reachable once
+   * something is ready, so the fallback is a safety net, not the normal case.
+   */
+  const viewLatestAd = () => {
+    const entries = Object.entries(run.videos?.byBoard || {});
+    if (!entries.length) return;
+    const newest = (list) =>
+      list.sort((a, b) => (Number(b[1]?.startedAt) || 0) - (Number(a[1]?.startedAt) || 0))[0];
+    const ready = entries.filter(([, v]) => v?.status === 'ready');
+    const pick = newest(ready.length ? ready : entries);
+    if (!pick) return;
+    setClipBoardId(pick[0]);
+    setPhase('clip');
+    rememberClipBoard(pick[0]);
   };
 
   /**
@@ -775,17 +910,111 @@ const OnBoardHome = () => {
   if (phase === 'clip') {
     const boards = session?.storyboards?.result?.storyboards || [];
     const boardIndex = boards.findIndex((b) => b?.id === clipBoardId);
+    // A recreate has no storyboard behind it, so its board comes from the map
+    // above. Looked up second, so a real concept always wins.
+    const isRecreate = boardIndex < 0 && clipBoardId.startsWith('recreate:');
+    // `recreateBoards` is client state and does not survive a reload, so a
+    // resumed recreate gets a stand-in. The RENDER survives — it is on the
+    // session — and this is only the heading above it.
+    // An edit is shown through the same view as a finished image render: a
+    // board that says "image", and a state that is already ready. Nothing in
+    // ClipView needs to know it is an edit.
+    const edit = edits[clipBoardId];
+    const clipBoard = edit
+      ? { id: edit.id, title: edit.title, kind: 'image' }
+      : boardIndex >= 0
+        ? boards[boardIndex]
+        : recreateBoards[clipBoardId] ||
+          (isRecreate ? { id: clipBoardId, title: 'Recreated ad' } : undefined);
+    const clipState = edit
+      ? {
+          status: 'ready',
+          video: { video: { src: toMediaUrl(edit.src), mime_type: 'image/png', model: edit.model } },
+        }
+      : run.videos?.byBoard?.[clipBoardId] || {};
+    // What an edit was made from, for ClipView's before/after slider: another
+    // edit, or the render it started from.
+    const parentClip = edit && run.videos?.byBoard?.[edit.parentId]?.video?.video;
+    const compareSrc = !edit
+      ? ''
+      : edits[edit.parentId]
+        ? toMediaUrl(edits[edit.parentId].src)
+        : parentClip?.src || parentClip?.url || parentClip?.local_url || '';
+    /* Every render this session has produced, for the strip under the stage.
+       ONE map holds both kinds — a storyboard clip and a template recreate are
+       the same thing to the browser (see `videoAccepted`) — so this is simply
+       everything in it, oldest first.
+
+       In-flight renders are included deliberately: a card that is still going
+       is the one the user is most curious about, and leaving it out made the
+       strip disagree with the render they had just started. Sorted on
+       `startedAt` so a card never changes place as others finish. */
+    const stripItems = Object.entries(run.videos?.byBoard || {})
+      .map(([id, st]) => {
+        const concept = boards.find((b) => b?.id === id);
+        const recreated = recreateBoards[id];
+        const c = st?.video?.video || null;
+        return {
+          id,
+          title:
+            concept?.title ||
+            recreated?.title ||
+            (id.startsWith('recreate:') ? 'Recreated ad' : 'Your ad'),
+          status: st?.status || 'running',
+          src: c?.src || c?.url || '',
+          poster: st?.poster || '',
+          // The board's kind is the reliable read — `mime_type` is only there
+          // once the render has landed, and the card exists before that.
+          isImage:
+            recreated?.kind === 'image' ||
+            String(c?.mime_type || '').startsWith('image/'),
+          // The SERVER's timestamp when there is one, this tab's clock only as
+          // a fallback for a render started in this session that the server has
+          // not written back yet. Sorting on `startedAt` alone put the strip in
+          // map-iteration order after every reload.
+          at: Number(st?.serverAt) || Number(st?.startedAt) || 0,
+        };
+      })
+      // Edits join as cards of their own. Stamped when saved, so they sort in
+      // after the render they came from — the newest one last, like any render.
+      .concat(
+        Object.values(edits).map((e) => ({
+          id: e.id,
+          title: e.title,
+          status: 'ready',
+          src: toMediaUrl(e.src),
+          poster: '',
+          isImage: true,
+          at: Number(e.at) || 0,
+        }))
+      )
+      .sort((a, b) => a.at - b.at);
+
     return (
       <>
         <ClipView
-          board={boards[boardIndex]}
-          index={boardIndex >= 0 ? boardIndex + 1 : 1}          state={run.videos?.byBoard?.[clipBoardId] || {}}
+          board={clipBoard}
+          index={boardIndex >= 0 ? boardIndex + 1 : 1}
+          state={clipState}
+          compareSrc={compareSrc}
+          stripItems={stripItems}
+          // Switching cards is the same move as opening one from the board:
+          // remember it, so a reload comes back to the one being looked at.
+          onSelectClip={(id) => {
+            if (!id || id === clipBoardId) return;
+            setClipBoardId(id);
+            rememberClipBoard(id);
+          }}
           // Return to the board without clearing the run or its render state.
           onBack={() => {
             clearClipBoard();
             setPhase('workspace');
           }}
-          onRetry={() => startVideo(boards[boardIndex])}
+          // A recreate cannot be retried from here: retrying it means the
+          // sheet's form again — a product image and an instruction — which
+          // this screen does not have. Passing nothing is what makes the view
+          // offer "try another" instead of a Retry that could not work.
+          onRetry={isRecreate ? undefined : () => startVideo(boards[boardIndex])}
           // HIDE-MARK - Start over: only when the onboarding guard is off.
           onStartOver={START_OVER_ENABLED ? startOver : undefined}
           // The exit. Onboarding ends here and the product begins.
@@ -796,6 +1025,9 @@ const OnBoardHome = () => {
           // screen they have finished with.
           onFinish={finishOnboarding}
           onSkip={skipOnboarding}
+          onEdited={(url) =>
+            addEdit(clipBoardId, clipBoard?.title, url, clipState?.video?.video?.model)
+          }
         />
         {connectionBanner}
         {devSwitcher}
@@ -830,8 +1062,13 @@ const OnBoardHome = () => {
           // Per concept. Opens the clip view and starts the render together —
           // see `startVideo`.
           onGenerateVideo={startVideo}
+          // A recreate accepted in the sheet lands on the SAME clip screen a
+          // storyboard render does — see `startRecreate`.
+          onRecreateStarted={startRecreate}
           // View a concept's clip screen without starting a render.
           onOpenVideo={openClip}
+          // The header shortcut back into everything they have made.
+          onViewAds={viewLatestAd}
           videosByBoard={run.videos?.byBoard || {}}
           // Template matching runs once, for five, when the brand lands. This
           // asks for the next five. It answers 202 and nothing else — the page

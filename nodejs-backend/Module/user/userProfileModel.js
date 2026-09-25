@@ -73,6 +73,34 @@ const userProfileSchema = new mongoose.Schema(
     // Which session spent it. Diagnostics, and it lets the un-claim verify it
     // is releasing the claim it thinks it is.
     onboarding_free_render_session_id: { type: String, default: "" },
+    /* ── The onboarding allowance (supersedes the free-render claim above) ───
+       A budget in credits that ONLY onboarding can spend. It is not credits:
+       nothing is added to the wallet, and it cannot be spent anywhere else in
+       the product.
+
+       Paid plans only. A free-plan user already holds 35 real credits from
+       their signup grant and spends those normally, here and everywhere else —
+       granting them an allowance on top would be handing out the same 35 twice.
+
+       `_total` carries the default and `_used` counts spend, so remaining is
+       `total - used`. Two fields rather than one countdown because a countdown
+       cannot tell "never granted" from "spent it all", and those two have to
+       answer the banner differently.
+
+       WHY THE DEFAULT IS THE MIGRATION: profiles written before this field
+       existed simply do not have it, and `undefined - 0` is what makes an
+       existing account ineligible — the same trick `onboarding_offer_enrolled_at`
+       uses. So no backfill, and accounts that already went through onboarding
+       get nothing, which is the decision (ONBOARDING_ALLOWANCE.md D5).
+
+       The two rules that come with it, both easy to break:
+         · read it `.lean()` — a hydrated document fills the default in, and
+           every old profile would look granted;
+         · any upsert that CREATES a profile must pass `setDefaultsOnInsert`,
+           or a genuinely new user silently gets no allowance.                */
+    onboarding_allowance_total: { type: Number, default: 35 },
+    onboarding_allowance_used: { type: Number, default: 0 },
+
     // Reached the end of onboarding at least once. Retires the banner for good.
     onboarding_completed_at: { type: Date, default: null },
     // Left early. Deliberately NOT the same as completed: a skipper who never

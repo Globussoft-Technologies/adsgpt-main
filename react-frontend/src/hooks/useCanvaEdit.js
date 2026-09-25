@@ -5,6 +5,12 @@
 // checkCanvaAuth: if already connected it redirects straight to the upload
 // endpoint, otherwise it kicks off the Canva OAuth authorize flow. Loading is
 // keyed by image URL so a grid of cards only spins the button that was clicked.
+//
+// `{ newTab: true }` (onboarding's clip screen) runs the same flow in a new tab
+// instead of replacing this one: the Canva round-trip never comes back here, so
+// on a page the user is in the middle of, replacing it would strand them in
+// Canva with their session one reload away. MySpace passes nothing and keeps
+// the in-place redirect.
 import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { checkCanvaAuth } from '@/apis/canva/canvaApi';
@@ -19,14 +25,21 @@ export const useCanvaEdit = () => {
   // URL of the image whose Canva request is in flight, or null when idle.
   const [loadingUrl, setLoadingUrl] = useState(null);
 
-  const editInCanva = async (imageUrl, e) => {
+  const editInCanva = async (imageUrl, e, { newTab = false } = {}) => {
     if (e) e.stopPropagation();
     if (!imageUrl) return;
     setLoadingUrl(imageUrl);
+    // Opened NOW, blank, and pointed at Canva after the auth check. A tab opened
+    // after an `await` is no longer inside the click, and popup blockers stop it.
+    const tab = newTab ? window.open('', '_blank') : null;
+    const go = (url) => {
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+    };
     try {
       const result = await checkCanvaAuth(imageUrl);
       if (result.status) {
-        window.location.href = `${BACKEND_URL}/adsgpt/canva/v2/upload?id=${userId}&url=${encodeURIComponent(imageUrl)}`;
+        go(`${BACKEND_URL}/adsgpt/canva/v2/upload?id=${userId}&url=${encodeURIComponent(imageUrl)}`);
       } else {
         const { state, codeChallenge } = result;
         const params = new URLSearchParams({
@@ -38,12 +51,14 @@ export const useCanvaEdit = () => {
           code_challenge: codeChallenge,
           code_challenge_method: 'S256',
         });
-        window.location.href = `https://www.canva.com/api/oauth/authorize?${params.toString()}`;
+        go(`https://www.canva.com/api/oauth/authorize?${params.toString()}`);
       }
-      // keep loadingUrl set — a redirect is in progress, the spinner stays until
-      // the page unloads.
+      // In place: keep loadingUrl set — a redirect is in progress, the spinner
+      // stays until the page unloads. In a new tab this page stays, so stop.
+      if (tab) setLoadingUrl(null);
     } catch (err) {
       console.error('Canva auth error:', err);
+      tab?.close();
       setLoadingUrl(null);
     }
   };

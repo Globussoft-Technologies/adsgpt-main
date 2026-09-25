@@ -183,7 +183,15 @@ export default function UserDetailPage() {
 
   const user = data?.user;
   const credits = data?.credits;
-  const summary = data?.summary || { generations: 0, cost: 0, credits: 0, images: 0, videos: 0 };
+  const summary = data?.summary || {
+    generations: 0,
+    cost: 0,
+    credits: 0,
+    allowanceCredits: 0,
+    totalCredits: 0,
+    images: 0,
+    videos: 0,
+  };
   const byModel = data?.byModel || [];
   const generations = data?.generations || { data: [], total: 0, hasMore: false };
   const displayName = user?.name || user?.login || userId;
@@ -261,6 +269,29 @@ export default function UserDetailPage() {
         <StatCard label="Generations" value={formatNumber(summary.generations)} accent="indigo" icon={Activity} />
         <StatCard label="Images" value={formatNumber(summary.images)} accent="sky" icon={ImageIcon} />
         <StatCard label="Videos" value={formatNumber(summary.videos)} accent="violet" icon={Video} />
+        {/* Only when there is something to say. Onboarding is the one thing
+            that gives credits away, so on most accounts this is zero and a
+            permanent empty tile would just be noise.
+
+            `credits` is what the user was CHARGED and is shown beside it, so
+            the two read as the split they are rather than as one number that
+            might mean either. */}
+        {summary.allowanceCredits > 0 ? (
+          <>
+            <StatCard
+              label="Credits given (onboarding)"
+              value={formatNumber(summary.allowanceCredits)}
+              accent="emerald"
+              icon={Wallet}
+            />
+            <StatCard
+              label="Credits charged"
+              value={formatNumber(summary.credits)}
+              accent="amber"
+              icon={Wallet}
+            />
+          </>
+        ) : null}
       </div>
 
       {credits ? (
@@ -723,23 +754,43 @@ function MediaCard({ item }) {
         <div className="flex items-center justify-between text-slate-500">
           <span className="truncate">{item.source || "—"}</span>
           <span className="tabular-nums">
-            {/* "Free" comes off the row's own flag, never from a zero.
-                Onboarding gives a user their FIRST render on the house and
-                charges for the rest, so within the same source some rows are
-                giveaways and some are not — and a chargeable one can also read
-                zero today, simply because its price has not been set. Inferring
-                free from that would put the wrong label on money. */}
-            {item.free ? (
-              <span className="font-semibold text-emerald-600">Free</span>
-            ) : item.effective_credit_deduction || item.credit_deduction ? (
-              `${item.effective_credit_deduction || item.credit_deduction} cr`
-            ) : (
-              "—"
-            )}
+            {/* WHO PAID, not just how much. An onboarding render can be funded
+                by two purses at once — a free allowance that only exists there,
+                and the user's own credits — so "2 cr" on a 32-credit video was
+                true about the charge and wildly misleading about the render.
+                It now reads "30 free + 2 cr".
+
+                "Free" still comes off the row's own flag and never from a zero:
+                a chargeable row can read zero simply because its price has not
+                been set, and inferring free from that would put the wrong label
+                on money. */}
+            <CreditSplit item={item} />
             {item.duration ? ` · ${item.duration}s` : ""}
           </span>
         </div>
       </div>
     </div>
   );
+}
+
+/** What one generation cost, split by which purse paid it. */
+function CreditSplit({ item }) {
+  // `??`, not `||`: a genuine zero is an answer here, and falling through it
+  // would report the raw figure in place of the resolved one.
+  const wallet = Number(item.effective_credit_deduction ?? item.credit_deduction ?? 0) || 0;
+  const allowance = Number(item.allowance_credit_deduction ?? item.allowance_deduction ?? 0) || 0;
+
+  if (allowance > 0) {
+    return (
+      <>
+        <span className="font-semibold text-emerald-600">{allowance} free</span>
+        {wallet > 0 ? <span className="text-slate-500"> + {wallet} cr</span> : null}
+      </>
+    );
+  }
+  // Given away with no allowance recorded — the lifetime free render, or a row
+  // written before the split was stored.
+  if (item.free) return <span className="font-semibold text-emerald-600">Free</span>;
+  if (wallet) return `${wallet} cr`;
+  return "—";
 }

@@ -33,6 +33,8 @@
 const onboardingClient = require("./onboardingClient");
 const { resolveVideoMedia, resolveResultMedia } = require("./mediaUrls");
 const { fileSessionClips } = require("./mySpaceClip");
+const { storeTemplateAdResult } = require("./templateAdResult");
+const OnboardingSessionModel = require("../../Module/onboarding/onboardingSession");
 const AiJob = require("../../Module/ai/aiJob");
 const logger = require("../../utils/logger");
 const { createFlowLog } = require("../../utils/flowLog");
@@ -108,6 +110,54 @@ const STREAM_IDLE_TIMEOUT_MS = 3 * 60 * 1000;
 // SAME job_id — would start a second consumer on the same stream, and the
 // client would receive every event twice.
 const active = new Map();
+
+/**
+ * Finish an image recreate: store it durably, mirror it, and put it on the
+ * socket in the shape the clip view already reads.
+ *
+ * The board key and the billing record are read back off the session rather
+ * than carried on the frame, because the frame is DS's and carries neither —
+ * and `markBoardStarted` wrote both at the moment the render was accepted,
+ * which is the only moment either was known.
+ */
+async function finishRecreate({ jobId, userId, sessionId, result, log }) {
+  const session = await OnboardingSessionModel.findOne({ sessionId })
+    .select("recreates.boards")
+    .lean();
+  const boards = session?.recreates?.boards || {};
+  // The board this job belongs to. Matched on the job id because that is the
+  // only handle the terminal frame carries.
+  const boardId = Object.keys(boards).find((key) => boards[key]?.jobId === jobId);
+  if (!boardId) {
+    log.warn("recreate.no_board", { job: jobId });
+    return;
+  }
+  const entry = boards[boardId] || {};
+
+  const payloads = await storeTemplateAdResult({
+    userId,
+    sessionId,
+    boardId,
+    templateId: entry.billing?.templateId || "",
+    result,
+    billing: entry.billing,
+    // What the user asked for, carried on the billing record since the terminal
+    // frame does not echo it. It becomes the library row's label.
+    instruction: entry.billing?.instruction || "",
+  });
+
+  for (const board of payloads) {
+    emit(userId, {
+      job_id: jobId,
+      session_id: sessionId,
+      // `board_video`, not a new event name. The browser's reducer already turns
+      // this into a board that is `ready` with something to show.
+      event: "board_video",
+      data: board,
+    });
+  }
+  if (payloads.length) log.info("recreate.stored", { count: payloads.length, board: boardId });
+}
 
 function emit(userId, payload) {
   if (!global.io || !userId) return;
@@ -346,10 +396,40 @@ async function pump({ jobId, userId, sessionId }) {
             // RAW result on purpose: My Space stores the root-relative S3 path
             // and resolves it at render time. Deduped in `mySpaceClip`, so the
             // webhook delivering the same result is a no-op. Fire-and-forget.
-            if (frame.data?.kind === "video.generate" && frame.data?.status === "succeeded") {
-              fileSessionClips({ userId, sessionId, result: frame.data?.result })
+            // `video.from_template` files the same way: a recreated VIDEO comes
+            // back on DS's own durable link, exactly as a storyboard clip does,
+            // so `fileSessionClips` handles it unchanged. Without this the clip
+            // rendered, was paid for, and never appeared in My Space — the kind
+            // check was the only thing keeping it out.
+            if (
+              (frame.data?.kind === "video.generate" ||
+                frame.data?.kind === "video.from_template") &&
+              frame.data?.status === "succeeded"
+            ) {
+              fileSessionClips({
+                userId,
+                sessionId,
+                result: frame.data?.result,
+                kind: frame.data.kind,
+              })
                 .then((filed) => filed && log.info("myspace.filed", { count: filed }))
                 .catch((e) => log.error("myspace.file_failed", { message: e.message }));
+            }
+
+            // A finished recreate's image link EXPIRES IN TEN MINUTES, so the
+            // bytes are pulled down the moment the result lands. Same
+            // fire-and-forget shape and the same dedupe as the clip filing
+            // above — the webhook delivering this same payload is a no-op.
+            // A finished IMAGE recreate. Two things have to happen that a video
+            // gets for free: its link may expire in ten minutes, and its result
+            // is not shaped like a clip. `templateAdResult` does both and hands
+            // back board payloads in the clip's own shape — which are then
+            // emitted as `board_video`, so the browser's existing video pipeline
+            // renders them with no branch of its own.
+            if (frame.data?.kind === "image.from_template" && frame.data?.status === "succeeded") {
+              finishRecreate({ jobId, userId, sessionId, result: frame.data?.result, log }).catch(
+                (e) => log.error("recreate.store_failed", { message: e.message }),
+              );
             }
             return finish();
           }
@@ -445,6 +525,11 @@ function startJobStreamBridge({ jobId, userId, sessionId = "" }) {
 
 module.exports = {
   startJobStreamBridge,
+  // Exported because the WEBHOOK needs it too. This stream is not a guaranteed
+  // delivery path — it can fail to attach, or drop before the terminal frame —
+  // and while it was the only caller, a recreate whose result arrived by
+  // callback instead was never stored, never filed, and never shown.
+  finishRecreate,
   JOB_EVENT,
   _internals: { splitFrames, parseFrame, active },
 };

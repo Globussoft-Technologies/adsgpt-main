@@ -41,10 +41,12 @@ import creditIcon from '@/assets/layouts/profile/adcreative.svg';
 import CustomVideoPlayer from '../AdStudio/AdVideo/AdVideoChats/CustomVideoPlayer';
 import PostAdMySpaceModal from '../AdStudio/AdVideoNew/PostAdMySpace/PostAdMySpaceModal';
 import useOnboardingEligibility from '@/hooks/useOnboardingEligibility';
+import SplitChargeDialog from './SplitChargeDialog';
 import FreeAdBanner from './FreeAdBanner';
 import { FrameSettleLoader, FrameStatusLine, FRAME_LINES, useRotatingCopy } from './FrameLoader';
 import RetryCountdownButton from './RetryCountdownButton';
 import OnboardingTour from './OnboardingTour';
+import RecreateModal from './RecreateModal';
 
 /* ── tokens ───────────────────────────────────────────────────────────────────
    Named here rather than scattered through the markup, because every surface on
@@ -56,6 +58,36 @@ const SURF2 = '#232329'; // a control sitting on a card
 const CHROME = '#131317'; // header and sidebar
 const LINE = 'rgba(255,255,255,0.09)';
 const LINE_STRONG = 'rgba(255,255,255,0.16)';
+
+// What one storyboard render costs, and therefore what the allowance has to
+// cover for it to be free. Mirrors `renderBilling.ceilingAmount()` —
+// `rateFor('veo-3.1-fast') * 8`. Duplicated here only because `/eligibility`
+// answers with the budget, not with prices; if a third copy of this number ever
+// appears, that is the signal to have the server send it.
+const VIDEO_RENDER_COST = 32;
+/* TEMPORARY (2026-09-24, Bharath): the credit badge is hidden on every
+   Generate button. The cost itself is unchanged — billing, the split
+   confirmation and the offer bar all still use `VIDEO_RENDER_COST` — this only
+   stops the card putting a price in front of the user before they have decided
+   anything. Set to `false` to bring the badges back.
+
+   RecreateModal carries its own copy of this flag for its Recreate button.
+   Two constants rather than a shared module, because the sheet is imported BY
+   this file and importing back would be a cycle. Flip BOTH. */
+const HIDE_RENDER_PRICE = true;
+
+/* ── Don't start a video the user is only scrolling past ─────────────────────
+
+   A tile that enters view and leaves again — which is every tile in a fast
+   scroll — should never begin decoding. The viewport gate alone still kicked
+   one off for each tile on the way past.
+
+   NOT paired with pausing on scroll, which was tried and reverted (2026-09-25):
+   it measured faster and FELT worse. Stopping and restarting twenty decoders
+   around every gesture is itself a burst of work, and a wall of ads that
+   freezes the moment you touch the wheel reads as the page struggling even
+   when the frame rate says otherwise.                                          */
+const PLAY_DWELL_MS = 200;
 
 /* ── chrome ─────────────────────────────────────────────────────────────────*/
 
@@ -78,9 +110,27 @@ const LINE_STRONG = 'rgba(255,255,255,0.16)';
  * @param generated  At least one clip is ready. Swaps the exit for "Go to
  *   dashboard" (which calls `onFinish` — the user got their clip, so this run is
  *   completed, not skipped). Until then "Skip for now" is the only exit.
+ * @param hasRenders  At least one render exists — RUNNING or ready. Distinct
+ *   from `generated`, which means one has finished: a render in flight is still
+ *   something to go and look at, and the clip screen is where its progress is.
+ * @param onViewAds  Opens the clip screen on the newest render. Passed only
+ *   from the workspace: on the clip screen the user is already standing in it,
+ *   and a button that goes where you are reads as broken.
+ *
+ *   It REPLACES "Go to dashboard" rather than sitting beside it. Once there is
+ *   something to see, that is the thing worth offering here; leaving is still
+ *   possible from "Skip for now" beside it, and from the clip screen itself.
  */
-export function Header({ onStartOver, onFinish, onSkip, generated = false }) {
+export function Header({
+  onStartOver,
+  onFinish,
+  onSkip,
+  generated = false,
+  hasRenders = false,
+  onViewAds,
+}) {
   const exit = generated ? onFinish || onSkip : onSkip;
+  const showViewAds = Boolean(hasRenders && onViewAds);
   return (
     <header
       className="flex h-13 shrink-0 items-center justify-between border-b border-white/[0.07] px-4"
@@ -99,7 +149,10 @@ export function Header({ onStartOver, onFinish, onSkip, generated = false }) {
             Start over
           </button>
         )}
-        {!generated && onSkip && (
+        {/* The quiet exit. Normally it gives way to "Go to dashboard" once a
+            clip exists — but when "See your ads" has taken that button's place
+            it stays, or the workspace would have no way out at all. */}
+        {(!generated || showViewAds) && onSkip && (
           <button
             type="button"
             onClick={onSkip}
@@ -108,11 +161,26 @@ export function Header({ onStartOver, onFinish, onSkip, generated = false }) {
             Skip for now
           </button>
         )}
-        {generated && exit && (
+        {showViewAds && (
+          <button
+            type="button"
+            onClick={onViewAds}
+            className="inline-flex items-center gap-2 rounded-lg bg-[linear-gradient(180deg,#9176ff_0%,#7c5cff_46%,#6148c7_100%)] px-3 py-1.5 text-xs font-bold whitespace-nowrap text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4),inset_0_-1px_0_rgba(0,0,0,0.28)] transition hover:brightness-110 active:translate-y-px"
+          >
+            {/* Named for what is behind it, not for the screen it opens. "See
+                your ads" is a thing the user made; "Go to clip view" is a thing
+                the app has. */}
+            See your ads
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M5 12h13M13 6l6 6-6 6" />
+            </svg>
+          </button>
+        )}
+        {generated && exit && !showViewAds && (
           <button
             type="button"
             onClick={exit}
-            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-semibold text-white/80 transition hover:border-[#15DCFF]/50 hover:text-white"
+            className="inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-white/80 transition hover:border-[#15DCFF]/50 hover:text-white"
             style={{ background: SURF2, borderColor: LINE_STRONG }}
           >
             Go to dashboard
@@ -445,7 +513,7 @@ function useFitScale(deps) {
  * stretched the card to hold them. Capped at `calc(50% - 4px)` the pair adds up
  * to exactly the strip available, so the card's padding survives on both edges.
  */
-function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, tourAnchor = false, framesExhausted, freeRenderSpent }) {
+function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, tourAnchor = false, framesExhausted, showPrice }) {
   const frames = (board.images || [])
     .filter((img) => img.status === 'ready' && img.src)
     .slice(0, 2);
@@ -578,7 +646,7 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, t
         state={videoState}
         onGenerate={onGenerate}
         onWatch={() => setWatching(true)}
-        freeRenderSpent={freeRenderSpent}
+        showPrice={showPrice}
         // Nothing to render until the keyframes exist.
         disabled={framesPending}
         // Only used by the exhausted-retry state, to send the user somewhere
@@ -708,7 +776,7 @@ function InlineClip({ src, board, onClose, onOpen }) {
  * for a board that already has one, and a button still offering it would be a
  * promise nothing keeps.
  */
-function ConceptAction({ board, state, onGenerate, onWatch, onOpen, freeRenderSpent = false, disabled = false }) {
+function ConceptAction({ board, state, onGenerate, onWatch, onOpen, showPrice = false, disabled = false }) {
   const status = state?.status;
   const open = () => onGenerate?.(board);
 
@@ -793,7 +861,10 @@ function ConceptAction({ board, state, onGenerate, onWatch, onOpen, freeRenderSp
           14px on a dark gradient and simply did not read; the struck number was
           smaller again. Both are up a size and the icon sits on its own lighter
           disc so it has an edge to be seen against. */}
-      <span className="flex shrink-0 items-center gap-[6px]">
+      {/* Hidden for now — see `HIDE_RENDER_PRICE` at the top of this file. The
+          whole badge goes, coin and "Free" pill included: a coin with nothing
+          beside it reads as a broken price. */}
+      <span hidden={HIDE_RENDER_PRICE} className="flex shrink-0 items-center gap-[6px]">
         {/* 20px, not 14. This is the same `adcreative.svg` the profile page
             uses — but it renders it at 28, and the artwork is a 1879px PNG with
             fine detail in it. At half that size the detail did not survive the
@@ -801,13 +872,14 @@ function ConceptAction({ board, state, onGenerate, onWatch, onOpen, freeRenderSp
             icon rather than a small one. No backing plate: the plate was there
             to rescue a size that was simply too small. */}
         <img src={creditIcon} alt="" className="h-5 w-5 shrink-0" />
-        {/* Once the free render is spent the price is the price — no strike,
-            no "Free" pill promising something the backend will charge for. */}
-        {freeRenderSpent ? (
-          <span className="shrink-0 text-[13px] font-bold">32</span>
+        {/* Once the allowance can no longer cover a render, the price is the
+            price — no strike, no "Free" pill promising something the backend
+            will charge for. */}
+        {showPrice ? (
+          <span className="shrink-0 text-[13px] font-bold">{VIDEO_RENDER_COST}</span>
         ) : (
           <>
-            <s className="shrink-0 text-[13px] font-semibold opacity-75">32</s>
+            <s className="shrink-0 text-[13px] font-semibold opacity-75">{VIDEO_RENDER_COST}</s>
             <span className="shrink-0 rounded-[5px] bg-black/30 px-[7px] py-[1px] text-[13px] font-bold">
               Free
             </span>
@@ -1273,9 +1345,11 @@ function ConceptSkeleton({ delay = 0, index = 1 }) {
         <span className="shrink-0 whitespace-nowrap" style={{ textShadow: '0 1px 0 rgba(0,0,0,0.22)' }}>
           Generate
         </span>
-        <span className="flex shrink-0 items-center gap-[6px]">
+        {/* Hidden with the real one, or the placeholder would promise a badge
+            the finished card does not have. */}
+        <span hidden={HIDE_RENDER_PRICE} className="flex shrink-0 items-center gap-[6px]">
           <img src={creditIcon} alt="" className="h-5 w-5 shrink-0" />
-          <span className="shrink-0 text-[13px] font-bold">32</span>
+          <span className="shrink-0 text-[13px] font-bold">{VIDEO_RENDER_COST}</span>
         </span>
       </button>
     </article>
@@ -1474,11 +1548,19 @@ const youtubeThumbs = (id) => [
  * has ended up, which is a function of the dock's height. Two chips on a 65px
  * tile is two clipped chips, and a clipped word is worse than an absent one.
  */
-function TemplateTile({ template: t, expanded, slot = 0 }) {
+function TemplateTile({ template: t, expanded, slot = 0, onRecreate, paused = false }) {
   const video = useRef(null);
   const [hover, setHover] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
+  // The playhead bar is written straight to the DOM. It used to be state, and
+  // `timeupdate` fires ~4x a second PER PLAYING TILE — twenty autoplaying tiles
+  // meant ~80 React renders a second doing nothing but moving a 2px bar, which
+  // is most of what made the rail feel heavy.
+  const bar = useRef(null);
+  // The tile's root, and whether it is actually on screen. See `useEffect`
+  // below: a tile that nobody can see does not get to run a decoder.
+  const root = useRef(null);
+  const [inView, setInView] = useState(false);
   // Which of the tile's candidate sources is in play. Advanced by `onError`,
   // never reset, so a dead source is tried once and then left behind.
   const [srcIndex, setSrcIndex] = useState(0);
@@ -1549,8 +1631,13 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
   const onEnter = () => {
     setHover(true);
     // Belt and braces: if autoplay was refused (some browsers hold it until the
-    // page has been interacted with), a hover is that interaction.
-    video.current?.play().catch(() => {});
+    // page has been interacted with), a hover is that interaction. Kept as a
+    // DIRECT call rather than routed through `applyPlayback`, because a
+    // `setTimeout` breaks the user-gesture chain that this exists to borrow —
+    // and a hover is a deliberate stop on one tile, not a scroll past it.
+    if (!paused && inView) {
+      video.current?.play().catch(() => {});
+    }
   };
   // Video tiles keep playing on leave — they autoplay, muted and looping, from
   // the moment they load, so the rail reads as a wall of moving ads rather than
@@ -1558,12 +1645,67 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
   // still hover-only: it is a third-party player per tile (see `showingVideo`).
   const onLeave = () => setHover(false);
 
+  // ── Who is allowed to play ────────────────────────────────────────────────
+  // Only tiles on screen. The rail is a wall of autoplaying ads by design, but
+  // "the wall" is twenty-odd files and the window shows six of them: the rest
+  // were decoding full-size video into a scroll region nobody was looking at.
+  //
+  // 300px of margin means a tile is already running by the time it is scrolled
+  // to, so the wall still reads as alive rather than as tiles that wake up when
+  // you arrive. Clipping counts here — a tile scrolled out of the collapsed
+  // strip is out of view even though the strip itself is on screen.
+  useEffect(() => {
+    const el = root.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setInView(true);
+      return undefined;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { rootMargin: '300px' }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  // ── One decision, two inputs ────────────────────────────────────────────
+  //
+  // `paused` is the same rule from outside: the workspace sets it on the whole
+  // dock while the recreate sheet is open, because those tiles are behind an
+  // opaque sheet and were decoding every frame of themselves into nothing.
+  // `inView` is the viewport gate.
+  //
+  // Pausing is IMMEDIATE and starting is DELAYED: a tile being scrolled past
+  // should never have started. The dwell is cancelled on every re-decision, so
+  // a tile that leaves view mid-dwell simply never plays.
+  const dwell = useRef(null);
+
+  const applyPlayback = useCallback(() => {
+    const el = video.current;
+    clearTimeout(dwell.current);
+    if (!el) return;
+    if (paused || !inView) {
+      el.pause();
+      return;
+    }
+    dwell.current = setTimeout(() => {
+      // Re-read the ref: `video.current` can be gone by now.
+      video.current?.play().catch(() => {});
+    }, PLAY_DWELL_MS);
+  }, [paused, inView]);
+
+  useEffect(() => {
+    applyPlayback();
+    return () => clearTimeout(dwell.current);
+  }, [applyPlayback]);
+
   return (
     // A div, not a link. The tile used to open the reference ad in a new tab,
     // which is the wrong thing to happen when the reference ad is already
     // playing inside it — and a click has a better job waiting for it (choosing
     // the template), so it does nothing at all rather than doing the old thing.
     <div
+      ref={root}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       className={cn(
@@ -1602,14 +1744,17 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
           muted
           loop
           playsInline
-          autoPlay
-          preload="auto"
-          // Autoplay usually starts it; this covers the cases where the
-          // attribute alone does not (a source swapped in after a failure, a
-          // tab that was hidden while the file loaded).
-          onCanPlay={(e) => {
-            if (e.currentTarget.paused) e.currentTarget.play().catch(() => {});
-          }}
+          // No `autoPlay` attribute: the effect above starts it, and only when
+          // the tile is on screen. Offscreen tiles fetch metadata (enough for a
+          // first frame and the real aspect) and nothing more.
+          preload={inView ? 'auto' : 'metadata'}
+          // Covers the cases the effect alone does not — a source swapped in
+          // after a failure, or a tab that was hidden while the file loaded.
+          // Routed through the same decision rather than calling `play()`
+          // directly: a file that finishes loading mid-scroll would otherwise
+          // start decoding immediately, which is the one thing the scroll gate
+          // exists to prevent.
+          onCanPlay={applyPlayback}
           onError={() => setSrcIndex((i) => i + 1)}
           onLoadedMetadata={(e) => {
             const { videoWidth: w, videoHeight: h } = e.currentTarget;
@@ -1621,7 +1766,9 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
           onPause={() => setPlaying(false)}
           onTimeUpdate={(e) => {
             const el = e.currentTarget;
-            if (el.duration) setProgress((el.currentTime / el.duration) * 100);
+            if (el.duration && bar.current) {
+              bar.current.style.width = `${(el.currentTime / el.duration) * 100}%`;
+            }
           }}
           className="h-full w-full object-cover"
         />
@@ -1763,12 +1910,15 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
           with a reference ad you like, in the same build as the concept cards'
           Generate so the two read as the same offer.
 
-          Inert for now, deliberately: what "recreate" turns a template into is
-          not decided, and a button that navigates somewhere arbitrary is harder
-          to correct later than one that does nothing yet. */}
+          Opens the recreate sheet (`RecreateModal`). The sheet itself is still a
+          mock — there is no generation endpoint in any contract we hold — but
+          the shape of the ask is decided, so the button is no longer inert. */}
       <button
         type="button"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRecreate?.(t);
+        }}
         className={cn(
           'absolute right-2 bottom-2 z-[3] inline-flex items-center gap-1.5 rounded-[7px]',
           'bg-[linear-gradient(180deg,#9176ff_0%,#7c5cff_46%,#6148c7_100%)] px-2.5 py-1.5',
@@ -1791,7 +1941,7 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
           is a lot of third-party JavaScript for a 2px bar. */}
       {playing && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-white/[0.12]">
-          <div className="h-full bg-[#7c5cff]" style={{ width: `${progress}%` }} />
+          <div ref={bar} className="h-full bg-[#7c5cff]" style={{ width: '0%' }} />
         </div>
       )}
     </div>
@@ -1822,7 +1972,7 @@ function TemplateTile({ template: t, expanded, slot = 0 }) {
  * behind it need the same number to pad themselves with, or the last row of
  * cards would sit permanently under the dock with no way to scroll it clear.
  */
-function TemplateDock({ items, pending, failed, height, ceiling, onResize, onLoadMore, canLoadMore }) {
+function TemplateDock({ items, pending, failed, height, ceiling, onResize, onLoadMore, canLoadMore, onRecreate, paused }) {
   const strip = useRef(null);
   const [box, setBox] = useState({ width: 0, height: 0 });
   const [atStart, setAtStart] = useState(true);
@@ -2220,7 +2370,7 @@ function TemplateDock({ items, pending, failed, height, ceiling, onResize, onLoa
                         transition: 'none',
                       }}
                     >
-                      <TemplateTile template={t} expanded slot={tileW} />
+                      <TemplateTile template={t} expanded slot={tileW} onRecreate={onRecreate} paused={paused} />
                     </div>
                   );
                 })}
@@ -2377,6 +2527,9 @@ export default function Workspace({
   onGenerateVideo,
   // Opens a concept's clip view and nothing else — never starts a render.
   onOpenVideo,
+  // Opens the clip screen on the NEWEST render, from the header. Only shown
+  // once something has actually been made — see `Header`.
+  onViewAds,
   // `{ [boardId]: { status, … } }` — one entry per concept a render was started
   // for. Not part of `session`, because it is live client state: the section
   // read tells you what the SERVER has, and this also holds the click that has
@@ -2385,6 +2538,9 @@ export default function Workspace({
   // Asks for the next page of templates. Absent in the preview harness, which
   // has no session to page against — the control hides rather than failing.
   onLoadMoreTemplates,
+  // A recreate was accepted: `{ jobId, boardId, template }`. The host takes the
+  // user to the clip screen, exactly as it does for a storyboard render.
+  onRecreateStarted,
 }) {
   // The two rails come off the SESSION, not the brand result. `result` is the
   // brand context alone — templates and storyboards live in their own sections
@@ -2449,6 +2605,11 @@ export default function Workspace({
 
   const templatesPending = ['queued', 'running'].includes(templates.status);
 
+  // The template whose Recreate was pressed, or null. Owned here rather than in
+  // the dock because the sheet is portalled to `document.body` and the dock is
+  // one of the panels it has to escape — see RecreateModal's header.
+  const [recreateTemplate, setRecreateTemplate] = useState(null);
+
   // Is the free render still owed? Two sources: the server (a render spent in
   // an earlier visit) and this screen (a render started just now, before any
   // re-read of eligibility). A failed render is not counted — it doesn't spend
@@ -2477,11 +2638,85 @@ export default function Workspace({
   const renderStartedHere = Object.values(videosByBoard).some(
     (v) => v?.status && v.status !== 'failed'
   );
-  const freeRenderSpent =
-    renderStartedHere ||
-    (!eligibilityLoading && Boolean(eligibility) && !eligibility.freeRenderAvailable);
-  // Whether that answer is actually in yet — see the offer bar below.
-  const freeRenderKnown = renderStartedHere || (!eligibilityLoading && Boolean(eligibility));
+  // ── Is this render covered by the onboarding allowance? ─────────────────
+  //
+  // "Covered" still means COVERED IN FULL, and that is why this compares against
+  // the whole cost rather than asking "is there any budget left". A user with 3
+  // credits of budget is not getting a 32-credit video for free, and a button
+  // that says "Free" to them is the exact thing D2 forbids.
+  //
+  // What changed in ONB-010 is what happens in the gap. The budget is no longer
+  // all-or-nothing: those 3 credits now pay their share and the wallet funds the
+  // other 29. Because real credits leave a wallet in that case, it is confirmed
+  // first — see `askToSplit` below.
+  const allowanceLeft = Number(eligibility?.allowanceRemaining) || 0;
+  const allowanceKnown = renderStartedHere || (!eligibilityLoading && Boolean(eligibility));
+  // `renderStartedHere` is the optimistic half: a render started in this
+  // session has already spent from the budget, and eligibility has not been
+  // re-read yet. Assuming it is gone errs towards showing the price, which is
+  // the safe direction — the opposite would promise free and then charge.
+  const coveredByAllowance =
+    !renderStartedHere && !eligibilityLoading && allowanceLeft >= VIDEO_RENDER_COST;
+  // What the cards read. Named for what it DOES rather than for what is true of
+  // the user: "show the real price" is the instruction, and it is right whenever
+  // the allowance is not covering this render — including while we do not yet
+  // know, which is the case that must never render as "Free".
+  const showPrice = !coveredByAllowance;
+  // What the offer bar counts down. Deliberately a DIFFERENT number from
+  // `allowanceLeft` above: a free-plan user has no allowance but does have
+  // credits, and showing them nothing was leaving the tightest budget the
+  // least informed.
+  const bannerLeft = Number(eligibility?.generationLeft) || 0;
+
+  // ── The split confirmation ───────────────────────────────────────────────
+  //
+  // Only for the middle case: SOME budget left, but not enough. With a full
+  // budget nothing leaves the wallet and there is nothing to agree to; with no
+  // budget at all this is an ordinary paid action, priced on the button like
+  // every other one in the product.
+  const splitNeeded =
+    allowanceKnown && !coveredByAllowance && allowanceLeft > 0 && allowanceLeft < VIDEO_RENDER_COST;
+  // `{ board, allowance, wallet, stale }` while the dialog is up.
+  const [splitAsk, setSplitAsk] = useState(null);
+  const [splitBusy, setSplitBusy] = useState(false);
+
+  // Every route to a render goes through here, so the confirmation cannot be
+  // bypassed by whichever card or button is added next.
+  const requestVideo = useCallback(
+    async (board, quote) => {
+      const result = await onGenerateVideo?.(board, quote);
+      // The budget moved between the quote and the charge. NOTHING was taken —
+      // the server refused rather than charging more than was shown — so this
+      // re-asks with the real numbers instead of surfacing an error.
+      if (result?.priceChanged && result.quote) {
+        setSplitBusy(false);
+        setSplitAsk({
+          board,
+          allowance: Number(result.quote.allowance) || 0,
+          wallet: Number(result.quote.wallet) || 0,
+          stale: true,
+        });
+        return;
+      }
+      setSplitBusy(false);
+      setSplitAsk(null);
+    },
+    [onGenerateVideo]
+  );
+
+  const handleGenerateVideo = useCallback(
+    (board) => {
+      if (!splitNeeded) return requestVideo(board);
+      setSplitAsk({
+        board,
+        allowance: allowanceLeft,
+        wallet: VIDEO_RENDER_COST - allowanceLeft,
+        stale: false,
+      });
+      return undefined;
+    },
+    [splitNeeded, allowanceLeft, requestVideo]
+  );
 
   // The brand panel sizes itself to its own content. Re-measured whenever the
   // context changes, because that is the only thing that changes its length.
@@ -2614,9 +2849,9 @@ export default function Workspace({
     {
       target: '[data-tour="concept"] [data-tour="generate"]',
       title: 'Turn an idea into a video',
-      body: freeRenderSpent
+      body: showPrice
         ? 'Press Generate on the idea you like and we render the full clip.'
-        : 'Press Generate on the idea you like and we render the full clip. Your first one is free.',
+        : 'Press Generate on the idea you like and we render the full clip — this one is on us.',
     },
     {
       target: '[data-tour="templates"]',
@@ -2640,12 +2875,22 @@ export default function Workspace({
           button did nothing but scroll — an invitation to a place you are
           standing in. The line itself still earns its space: it is what tells
           the user the render they are about to start costs them nothing. */}
-      {/* `!freeRenderSpent` alone was true WHILE the eligibility call was in
-          flight — "not known yet" rendered as "still owed" — so on every reload
-          the bar appeared for a frame and vanished for users who had already
-          spent theirs. The answer has to be in before the bar can claim
-          anything; a render started on this screen settles it without waiting. */}
-      <FreeAdBanner available={freeRenderKnown && !freeRenderSpent} />
+      {/* `allowanceKnown` is load-bearing: a budget of zero and a budget not
+          yet read back both look like "no number", and rendering the second as
+          the first made the bar appear for a frame on every reload and then
+          vanish. The answer has to be IN before the bar can claim anything; a
+          render started on this screen settles it without waiting. */}
+      <FreeAdBanner
+        // Inside onboarding the bar counts down whatever pays for the next
+        // render — the allowance for a paid user, their own balance for a
+        // free-plan one — so it reads `generationLeft` like the dashboard bar
+        // does. The FREE badges on the cards keep reading `allowanceLeft`,
+        // which is the only one of the two that means "this costs nothing".
+        available={allowanceKnown && bannerLeft > 0}
+        remaining={bannerLeft}
+        total={Number(eligibility?.allowanceTotal) || 0}
+        kind={eligibility?.generationKind || 'allowance'}
+      />
       <Header
         onStartOver={onStartOver}
         onSkip={onSkip}
@@ -2654,6 +2899,13 @@ export default function Workspace({
         // only once the user actually has something. Hydration refills
         // `videosByBoard` on reload, so this survives a refresh.
         generated={Object.values(videosByBoard).some((v) => v?.status === 'ready')}
+        // RUNNING counts here, unlike `generated`. A render in flight is worth
+        // going to look at — the clip screen is the only place its progress
+        // shows — so the button appears the moment one starts.
+        hasRenders={Object.values(videosByBoard).some(
+          (v) => v?.status === 'ready' || v?.status === 'running',
+        )}
+        onViewAds={onViewAds}
       />
 
       {/* The first column animates between the panel and the rail widths
@@ -2837,7 +3089,7 @@ export default function Workspace({
                       tourAnchor={board.id === tourBoard?.id}
                       board={board}
                       index={i + 1}
-                      onGenerate={onGenerateVideo}
+                      onGenerate={handleGenerateVideo}
                       // The expand control on the inline player. Same handler:
                       // the board already has a clip, so it opens the screen
                       // rather than starting anything.
@@ -2845,12 +3097,12 @@ export default function Workspace({
                       // starts a render for a FAILED board — so opening a
                       // failed card re-rendered it. Falls back only for the
                       // preview harness, which passes no onOpenVideo.
-                      onOpen={() => (onOpenVideo || onGenerateVideo)?.(board)}
+                      onOpen={() => (onOpenVideo ? onOpenVideo(board) : handleGenerateVideo(board))}
                       // Per concept, so a tile that is rendering says so while
                       // the others still offer the price.
                       videoState={videosByBoard[board.id]}
                       framesExhausted={framesExhausted}
-                      freeRenderSpent={freeRenderSpent}
+                      showPrice={showPrice}
                     />
                   ))
                 : storyboardsFailed
@@ -2870,11 +3122,69 @@ export default function Workspace({
             onResize={resizeDock}
             onLoadMore={onLoadMoreTemplates}
             canLoadMore={canLoadMoreTemplates}
+            onRecreate={setRecreateTemplate}
+            paused={Boolean(recreateTemplate)}
           />
         </main>
       </div>
 
       <OnboardingTour tourKey="workspace" rootRef={tourRootRef} steps={tourSteps} ready={tourReady} onStart={collapseDockForTour} />
+
+      {/* Shown only when the budget covers PART of a render — see the dialog's
+          own header for why that case needs confirming and the other two do
+          not. Nothing is charged until Generate is pressed here. */}
+      <SplitChargeDialog
+        open={Boolean(splitAsk)}
+        cost={VIDEO_RENDER_COST}
+        allowance={splitAsk?.allowance || 0}
+        wallet={splitAsk?.wallet || 0}
+        stale={Boolean(splitAsk?.stale)}
+        busy={splitBusy}
+        onCancel={() => {
+          setSplitAsk(null);
+          setSplitBusy(false);
+        }}
+        onConfirm={() => {
+          if (!splitAsk) return;
+          setSplitBusy(true);
+          // The wallet figure travels with the request: the server refuses to
+          // charge more than the number on this screen.
+          requestVideo(splitAsk.board, { maxWalletCredits: splitAsk.wallet });
+        }}
+      />
+
+      {/* `TemplateTile` and `videoSources` are passed in rather than imported by
+          the sheet, so the two files never import each other. */}
+      {recreateTemplate && (
+        <RecreateModal
+          template={recreateTemplate}
+          items={templateItems}
+          sourcesFor={videoSources}
+          aspectFor={aspectOf}
+          allowanceRemaining={allowanceLeft}
+          // `session_id`, snake_case: that is what `GET /onboarding/sessions/:id`
+          // answers with. Reading `sessionId` here left it undefined, and the
+          // sheet's submit guard returned on it — Recreate did nothing at all,
+          // silently. `sessionId` is kept as a fallback for the preview harness,
+          // which builds the object by hand.
+          sessionId={session?.session_id || session?.sessionId || ''}
+          // A started recreate has moved the budget, so the number the banner
+          // and the Generate buttons show is now stale. Re-reading is cheaper
+          // than tracking it locally, and it cannot drift from the server.
+          onStarted={(started) => {
+            // The budget has moved, so the banner and the buttons are stale.
+            refreshEligibility();
+            // Close the sheet and hand off. The sheet's job ends at "it
+            // started"; watching it happen belongs on the clip screen, which is
+            // where a storyboard render already goes.
+            setRecreateTemplate(null);
+            onRecreateStarted?.({ ...started, template: recreateTemplate });
+          }}
+          TileComponent={TemplateTile}
+          onPickTemplate={setRecreateTemplate}
+          onClose={() => setRecreateTemplate(null)}
+        />
+      )}
     </div>
   );
 }

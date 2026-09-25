@@ -41,6 +41,13 @@ const {
   videosResultFromBoards,
 } = require("../../services/onboarding/sessionMirror");
 const { startTemplateRun, nextPage } = require("../../services/onboarding/templateBridge");
+const { fetchSimilarTemplates } = require("../../services/onboarding/similarTemplates");
+const { startTemplateAdRun } = require("../../services/onboarding/templateAdClient");
+const { canHoldAllowance } = require("../../services/onboarding/renderBilling");
+// Read-only here: the offer bar needs a free-plan user's own balance, because
+// they hold no onboarding allowance to count down.
+const UnifiedCreditController = require("../UnifiedCreditController");
+const { storeProductImage } = require("../../services/onboarding/productUpload");
 const { startVideoRun } = require("../../services/onboarding/videoClient");
 const { buildBoardLoader } = require("../../services/onboarding/loaderClient");
 const {
@@ -692,12 +699,25 @@ exports.listSessions = async (req, res) => {
 function resumePhaseFor(session) {
   if (!session) return { phase: "setup" };
 
-  // A clip that is rendering or rendered is the deepest screen, and the board
-  // it belongs to is what the clip view needs to open at all.
-  const boards = session.videos?.boards || {};
-  for (const [boardId, entry] of Object.entries(boards)) {
-    if (entry?.status === "running" || entry?.status === "succeeded") {
-      return { phase: "clip", boardId };
+  /* A render that is STILL RUNNING is the deepest screen, and the board it
+     belongs to is what the clip view needs to open at all.
+
+     Deliberately not "or succeeded". That version pinned the user to the clip
+     screen for ever: once any render had finished, every reload dragged them
+     back to it — even when they had pressed Back to the board and were working
+     there. A finished clip is not unfinished business; it lives on the board
+     and opens from there.
+
+     Work in flight IS different: the user cannot see its progress from
+     anywhere else, and dropping them on the board would look like the render
+     they just paid for had vanished.
+
+     `recreates` counts for the same reason `videos` does — it is the same clip
+     screen, reached from a template instead of a concept. */
+  const running = [session.videos?.boards, session.recreates?.boards];
+  for (const boards of running) {
+    for (const [boardId, entry] of Object.entries(boards || {})) {
+      if (entry?.status === "running") return { phase: "clip", boardId };
     }
   }
 
@@ -731,7 +751,7 @@ function resumePhaseFor(session) {
 exports.getEligibility = async (req, res) => {
   /*
     #swagger.tags = ['Onboarding']
-    #swagger.summary = 'Free-render eligibility and where to resume'
+    #swagger.summary = 'Onboarding allowance and where to resume'
     #swagger.security = [{ "BearerAuth": [] }]
   */
   try {
@@ -744,8 +764,8 @@ exports.getEligibility = async (req, res) => {
     // one that can tell an old row from a new one.
     const profile = await UserProfile.findOne({ user_id: userId })
       .select(
-        "onboarding_offer_enrolled_at onboarding_free_render_used_at " +
-          "onboarding_completed_at onboarding_skipped_at"
+        "onboarding_offer_enrolled_at onboarding_completed_at onboarding_skipped_at " +
+          "onboarding_allowance_total onboarding_allowance_used"
       )
       .lean();
 
@@ -761,7 +781,13 @@ exports.getEligibility = async (req, res) => {
     // response would be a promise the render path could not keep.
     if (!profile?.onboarding_offer_enrolled_at) {
       return res.status(200).json({
-        freeRenderAvailable: false,
+        allowanceRemaining: 0,
+        allowanceTotal: 0,
+        // Present and zero, not absent: every other answer from this route
+        // carries them, and a client reading `undefined` here would be reading
+        // a different shape depending on who asked.
+        generationLeft: 0,
+        generationKind: "none",
         onboardingCompleted: false,
         onboardingSkipped: false,
         resumeSessionId: null,
@@ -775,7 +801,56 @@ exports.getEligibility = async (req, res) => {
       });
     }
 
-    const freeRenderAvailable = !profile?.onboarding_free_render_used_at;
+    // ── The allowance ──────────────────────────────────────────────────
+    //
+    // Supersedes `freeRenderAvailable` (ONBOARDING_ALLOWANCE.md R1). It is a
+    // NUMBER, not a boolean, because the client has to show a cost the moment
+    // the budget can no longer cover one: a banner that keeps saying "free"
+    // while credits are deducted is the one outcome this must not produce (D2).
+    //
+    // Read off the same `.lean()` profile as everything else here, and computed
+    // the same way `allowanceRemaining` does — but WITHOUT the plan check,
+    // deliberately: a free-plan user has no allowance at all, and asking the
+    // billing service per request would mean a second round trip on app boot.
+    // `canHoldAllowance` is what the render path enforces; this is display.
+    const allowanceTotal = Number(profile?.onboarding_allowance_total) || 0;
+    const allowanceUsed = Number(profile?.onboarding_allowance_used) || 0;
+    // Free-plan users get no allowance — they already hold 35 real credits.
+    const eligibleForAllowance = await canHoldAllowance(userId);
+    const allowanceLeft = eligibleForAllowance
+      ? Math.max(allowanceTotal - allowanceUsed, 0)
+      : 0;
+
+    /* ── What the offer bar counts down ──────────────────────────────────
+       A PAID user counts down their onboarding allowance: a budget that only
+       exists here and is worth stating, because when it runs out the next
+       render is charged.
+
+       A FREE-PLAN user holds no allowance — they already have 35 real credits
+       from signup, and granting a budget on top would hand out the same 35
+       twice (ONB-009). The bar was therefore hidden from them entirely, which
+       left the one group with the least room to spend seeing nothing at all.
+       So they count down THEIR OWN BALANCE instead.
+
+       `generationKind` says which of the two this is, because the copy must
+       differ: an allowance is genuinely free generation, a wallet balance is
+       the user's own money and calling it free would be a lie. Kept as a
+       separate field from `allowanceRemaining` on purpose — the render path
+       and the "Free" badges key on the allowance, and must keep reading zero
+       for a free-plan user or they would promise a render that gets charged. */
+    let generationLeft = allowanceLeft;
+    let generationKind = eligibleForAllowance ? "allowance" : "none";
+    if (!eligibleForAllowance) {
+      try {
+        const wallet = await UnifiedCreditController.getCreditStatus(userId);
+        generationLeft = Math.max(Number(wallet?.remaining_credits) || 0, 0);
+        generationKind = generationLeft > 0 ? "wallet" : "none";
+      } catch (err) {
+        // The bar is not worth a failed page load. No number means no bar.
+        logger.warn("[onboarding] wallet read for banner failed", { message: err.message });
+      }
+    }
+
     const onboardingCompleted = Boolean(profile?.onboarding_completed_at);
     // Distinct from completed, and the first-run redirect needs both: a user
     // who walked out of onboarding deliberately has answered the question, and
@@ -788,7 +863,7 @@ exports.getEligibility = async (req, res) => {
     // back, and `onboardingCompleted` above is what stops us pushing them
     // there uninvited.
     const session = await OnboardingSession.findOne({ userId })
-      .select("sessionId brand.status brand.jobId videos.boards exitReason")
+      .select("sessionId brand.status brand.jobId videos.boards recreates.boards exitReason")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -796,7 +871,16 @@ exports.getEligibility = async (req, res) => {
 
     return res.status(200).json({
       enrolled: true,
-      freeRenderAvailable,
+      // How much onboarding-only budget is left, in credits, and what it
+      // started at. Zero means the next render is charged normally — which the
+      // copy has to reflect.
+      allowanceRemaining: allowanceLeft,
+      allowanceTotal: eligibleForAllowance ? allowanceTotal : 0,
+      // What the offer bar shows. For a paid user this equals
+      // `allowanceRemaining`; for a free-plan user it is their own balance.
+      // Only the bar reads these — see the note above the computation.
+      generationLeft,
+      generationKind,
       onboardingCompleted,
       onboardingSkipped,
       resumeSessionId: session?.sessionId || null,
@@ -1046,6 +1130,14 @@ exports.getSession = async (req, res) => {
         ...(session.videos || {}),
         result: resolveVideoMedia(videosResultFromBoards(session.videos?.boards)),
       },
+      // Ads built from a reference template. Its own section, assembled exactly
+      // like `videos` above — one entry per board key, the list built on the way
+      // out. Without this a reload lands on an empty clip screen for a recreate
+      // that the database is holding perfectly well.
+      recreates: {
+        ...(session.recreates || {}),
+        result: resolveVideoMedia(videosResultFromBoards(session.recreates?.boards)),
+      },
     });
   } catch (error) {
     logger.error("[onboarding] getSession failed", error);
@@ -1197,9 +1289,27 @@ exports.generateVideo = async (req, res) => {
     // with this userId — the same rule the rest of this controller follows, and
     // the reason Python's unverified `user_id` never becomes an authorization
     // decision.
-    const result = await startVideoRun({ userId, sessionId, boardId });
+    // What the confirmation screen told the user their WALLET would be charged.
+    // Absent means the client did not quote (an older build, or a user with no
+    // allowance in play) and billing skips the check.
+    const maxWalletCredits =
+      req.body?.maxWalletCredits == null ? undefined : Number(req.body.maxWalletCredits);
+
+    const result = await startVideoRun({ userId, sessionId, boardId, maxWalletCredits });
 
     if (!result.ok) {
+      // The budget shifted between the quote and the charge — another tab spent
+      // it. Nothing has been taken. 409 rather than 402, because this is not
+      // "you cannot afford it", it is "the price you agreed to is stale": the
+      // client re-asks with the numbers in `quote`.
+      if (result.reason === "price_changed") {
+        return res.status(409).json({
+          accepted: false,
+          reason: result.reason,
+          quote: result.quote,
+          error: "Your onboarding credits changed. Please confirm the new total.",
+        });
+      }
       // Payment refusals are their own answers, not generic failures: the
       // client shows a plan prompt for one and a top-up prompt for the other,
       // and both need a status it can branch on without parsing prose.
@@ -1275,6 +1385,172 @@ exports.buildLoader = async (req, res) => {
   } catch (error) {
     logger.error("[onboarding] buildLoader failed", { message: error.message });
     return res.status(200).json({ ok: false, reason: "error" });
+  }
+};
+
+/**
+ * "More like this" — templates ranked against ONE template, not against a brand.
+ *
+ * Deliberately session-less, because the upstream route is: the anchor id in the
+ * path IS the query, and no stored context is read. That also sidesteps the
+ * contract's §"Important access model" warning, which is about the
+ * session-reading endpoint — there is no session here to own or to leak.
+ * Authentication still applies (the router is mounted behind `authenticateJWT`)
+ * so this cannot be used as an open search endpoint.
+ *
+ * Answers 200 with a possibly-empty list. The caller falls back to what it
+ * already has, so an empty answer and a failed one are told apart by `ok`
+ * rather than by the status code alone.
+ */
+exports.getSimilarTemplates = async (req, res) => {
+  /*
+    #swagger.tags = ['Onboarding']
+    #swagger.summary = 'Reference templates similar to one template'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const userId = req.user?.user_id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const result = await fetchSimilarTemplates({
+      templateId: req.params.templateId,
+      limit: req.query.limit,
+      skip: req.query.skip,
+      searchId: req.query.search_id,
+      // The template's own `media_type`, so the service does not have to guess
+      // the corpus from the id's shape.
+      kind: req.query.kind,
+      userId,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error, templates: [] });
+    }
+
+    return res.status(200).json({
+      templates: result.templates,
+      count: result.count,
+      // Upstream's paging cursor, passed straight through. `has_more` is the
+      // end signal; `search_id` freezes the ranking so page 2 is the next page
+      // rather than a re-rank that repeats page 1.
+      has_more: Boolean(result.hasMore),
+      next_skip: result.nextSkip ?? null,
+      search_id: result.searchId || "",
+      // Present only when one corpus leg failed while the other answered. The
+      // client shows its results either way; this is for the log and support.
+      ...(result.warning ? { warning: result.warning } : {}),
+    });
+  } catch (error) {
+    logger.error(`getSimilarTemplates failed: ${error.message}`);
+    return res.status(500).json({ error: "Something went wrong", templates: [] });
+  }
+};
+
+/**
+ * Recreate — build a new ad from a reference template the user picked.
+ *
+ * Multipart: one product image (required — it is what the ad is OF) plus an
+ * optional free-text instruction. The template lends composition and style and
+ * nothing else; the contract is explicit that none of the session's own scraped
+ * imagery is used as the product.
+ *
+ * Ordering here is the whole of the money safety: ownership, then the upload,
+ * then the charge. The upload is the step most likely to fail, and a hold taken
+ * before it would strand credits on a render that never started.
+ */
+exports.recreateFromTemplate = async (req, res) => {
+  /*
+    #swagger.tags = ['Onboarding']
+    #swagger.summary = 'Generate an ad from a chosen reference template'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  const flow = createFlowLog("recreate", { req: newReqId() });
+  try {
+    const userId = req.user?.user_id;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { sessionId, templateId } = req.params;
+    // Ownership by query, so another user's session is indistinguishable from
+    // one that does not exist.
+    const session = await findOwnedBySession(sessionId, userId);
+    if (!session) return res.status(404).json({ error: "Not found" });
+
+    const kind = req.body?.kind === "image" ? "image" : "video";
+    const instruction = String(req.body?.instruction || "").trim().slice(0, 2000);
+
+    // `upload.any()` on the route, so the file arrives in an array whatever the
+    // field is called.
+    const file = (req.files || [])[0];
+    if (!file) {
+      return res.status(400).json({
+        error: "A product image is required",
+        reason: "product_required",
+      });
+    }
+
+    const stored = await storeProductImage({ file, userId, sessionId, log: flow });
+    if (!stored.ok) {
+      const message =
+        stored.reason === "unsupported_type"
+          ? "That file type isn't supported — use a PNG, JPG or WebP"
+          : stored.reason === "too_large"
+            ? "That image is too large (max 10 MB)"
+            : "We couldn't store that image. Please try again.";
+      return res.status(400).json({ error: message, reason: stored.reason });
+    }
+
+    const run = await startTemplateAdRun({
+      userId,
+      sessionId,
+      templateId,
+      kind,
+      productUrls: [stored.url],
+      instruction,
+      maxWalletCredits:
+        req.body?.maxWalletCredits == null ? undefined : Number(req.body.maxWalletCredits),
+    });
+
+    if (!run.ok) {
+      // See the storyboard route above — the quote went stale, nothing was
+      // charged, and the client re-confirms against `quote`.
+      if (run.reason === "price_changed") {
+        return res.status(409).json({
+          error: run.reason,
+          reason: run.reason,
+          quote: run.quote,
+        });
+      }
+      const status =
+        run.reason === "no_plan"
+          ? 403
+          : run.reason === "insufficient_credits"
+            ? 402
+            : run.reason === "template_unavailable"
+              ? 404
+              : ["bad_request", "product_required"].includes(run.reason)
+                ? 400
+                : 502;
+      return res.status(status).json({ error: run.reason, reason: run.reason });
+    }
+
+    return res.status(202).json({
+      jobId: run.jobId,
+      // The key this render is stored under on the session. The client needs it
+      // to register the job on the socket and to read the board back, and it is
+      // minted server-side so the two sides cannot disagree about it.
+      boardId: run.boardId,
+      templateId,
+      kind,
+      // What was actually held, so the UI can show a real number instead of the
+      // placeholder it used while this was a mock. Split into the two purses,
+      // because "0 credits" and "0 credits plus 25 of your budget" are
+      // different things to tell a user.
+      credits: run.amount,
+      allowanceSpent: run.allowanceSpent,
+    });
+  } catch (error) {
+    logger.error(`recreateFromTemplate failed: ${error.message}`);
+    return res.status(500).json({ error: "Something went wrong" });
   }
 };
 

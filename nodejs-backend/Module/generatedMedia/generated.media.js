@@ -14,7 +14,21 @@ const GeneratedMediaSchema = new Schema({
     // 'adFactory'  = saved from /createUsage (Python sends tokens here)
     // 'adVideo'    = saved from socket for video generation
     source: { type: String, default: "" },
+    // What the user's OWN WALLET was charged. Not the whole price of the
+    // render — see `allowance_deduction`.
     credit_deduction: { type: Number, default: 0 },
+    /* What the ONBOARDING ALLOWANCE paid, in credits.
+       ── Why it is a second number ──────────────────────────────────────────
+       Onboarding renders can be paid for by two purses at once: a free budget
+       that only exists inside onboarding, and the user's real credits. A
+       32-credit video made with 31 of budget left costs the user 1 — and the
+       admin panel showed exactly that 1, which reads as a cheap render rather
+       than as "31 given away, 1 charged".
+       So the split is stored rather than inferred. Together these two ARE the
+       price: `credit_deduction + allowance_deduction` is what the render cost,
+       and each half says who paid it. Zero on every non-onboarding row, which
+       is correct: nothing else has an allowance to spend. */
+    allowance_deduction: { type: Number, default: 0 },
     // Explicitly given away, rather than merely costing nothing.
     //
     // The two are not the same and the admin panel has to tell them apart: a
@@ -22,8 +36,9 @@ const GeneratedMediaSchema = new Schema({
     // price has not been worked out yet. Inferring "free" from a zero would
     // label both, and the second label would be a lie.
     //
-    // Set today by onboarding, which gives every user their first render on the
-    // house and charges for the rest.
+    // Set today by onboarding: true when NOTHING left the user's wallet, i.e.
+    // the allowance covered the render in full. A split render is `false` with
+    // a non-zero `allowance_deduction` — partly given away, partly charged.
     free: { type: Boolean, default: false },
     cost: { type: Number, default: 0 },
     duration: { type: Number, default: 0 },
