@@ -613,6 +613,26 @@ const OnBoardHome = () => {
           quote: error?.response?.data?.quote,
         };
       }
+      // 402 / 403: it cannot be paid for, so it never started. Handled exactly
+      // like the quote above — put the board back and let the caller say so
+      // WHERE THE USER IS. Previously this fell through to `videoRejected` on a
+      // clip screen we had already navigated to, so the news arrived one screen
+      // away from the board, from the plan, and from anything that could fix
+      // it.
+      if (error?.response?.status === 402 || error?.response?.status === 403) {
+        dispatch(videoRejected({ boardId, reason: error?.response?.data?.reason || 'insufficient' }));
+        setPhase('workspace');
+        setClipBoardId('');
+        clearClipBoard();
+        return {
+          insufficient: true,
+          needsPlan: error?.response?.status === 403,
+          // `{ total, allowance, walletNeeded, walletBalance }` when billing
+          // could describe the gap — see `securePayment`. Absent for a refusal
+          // that never got as far as pricing (no plan at all).
+          shortfall: error?.response?.data?.shortfall,
+        };
+      }
       // Node answers a refusal with a `reason` even on the error statuses —
       // 501 when the deployment has no video generation, 502 when upstream is
       // not answering. Reading it back is what lets the tile say WHICH, rather

@@ -1324,6 +1324,9 @@ exports.generateVideo = async (req, res) => {
         return res.status(402).json({
           accepted: false,
           reason: result.reason,
+          // How it broke down, so the client can name the real gap rather than
+          // saying "not enough" to someone holding most of the price already.
+          shortfall: result.shortfall,
           error: "You don't have enough credits for this render.",
         });
       }

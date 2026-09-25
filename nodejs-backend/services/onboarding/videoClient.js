@@ -138,6 +138,18 @@ async function startVideoRun({ userId, sessionId, boardId, maxWalletCredits }) {
               total: payment.total,
             }
           : undefined,
+      // How the refusal broke down, when it was a money refusal. Lets the
+      // client say "25 free covered it, 7 wanted, 2 in the wallet" instead of
+      // "your balance does not cover it".
+      shortfall:
+        payment.walletNeeded === undefined
+          ? undefined
+          : {
+              total: payment.total,
+              allowance: payment.allowanceAvailable,
+              walletNeeded: payment.walletNeeded,
+              walletBalance: payment.walletBalance,
+            },
     };
   }
 

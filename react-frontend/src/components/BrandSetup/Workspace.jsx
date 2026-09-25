@@ -47,6 +47,7 @@ import { FrameSettleLoader, FrameStatusLine, FRAME_LINES, useRotatingCopy } from
 import RetryCountdownButton from './RetryCountdownButton';
 import OnboardingTour from './OnboardingTour';
 import RecreateModal from './RecreateModal';
+import InsufficientCreditsDialog from './InsufficientCreditsDialog';
 
 /* ── tokens ───────────────────────────────────────────────────────────────────
    Named here rather than scattered through the markup, because every surface on
@@ -2680,11 +2681,45 @@ export default function Workspace({
   const [splitAsk, setSplitAsk] = useState(null);
   const [splitBusy, setSplitBusy] = useState(false);
 
+  /* ── Can this render be paid for at all? ────────────────────────────────
+     Answerable here only for a user whose `generationKind` is `wallet` — a
+     free plan, where that number IS their whole balance. A paid user's wallet
+     is not on this screen (they count down an allowance instead), so for them
+     the only honest answer comes from the server's 402, handled below.
+     `{ cost, balance }` while the dialog is up; `balance: null` means "we know
+     it was refused but not by how much". */
+  const [shortAsk, setShortAsk] = useState(null);
+  const walletIsTheWholeBalance = eligibility?.generationKind === 'wallet';
+
   // Every route to a render goes through here, so the confirmation cannot be
   // bypassed by whichever card or button is added next.
   const requestVideo = useCallback(
     async (board, quote) => {
       const result = await onGenerateVideo?.(board, quote);
+      // Refused for money. Nothing started and nothing navigated — say so here,
+      // on the board, beside the thing they were trying to render.
+      if (result?.insufficient) {
+        setSplitBusy(false);
+        setSplitAsk(null);
+        // The server's breakdown when it sent one — it is the only thing that
+        // knows a PAID user's wallet. Falling back to this screen's own numbers
+        // covers the free-plan case, where the balance IS what the bar counts.
+        const gap = result.shortfall;
+        setShortAsk(
+          gap
+            ? {
+                cost: Number(gap.total) || VIDEO_RENDER_COST,
+                allowance: Number(gap.allowance) || 0,
+                walletNeeded: Number(gap.walletNeeded) || 0,
+                balance: Number(gap.walletBalance) || 0,
+              }
+            : {
+                cost: VIDEO_RENDER_COST,
+                balance: walletIsTheWholeBalance ? bannerLeft : null,
+              },
+        );
+        return;
+      }
       // The budget moved between the quote and the charge. NOTHING was taken —
       // the server refused rather than charging more than was shown — so this
       // re-asks with the real numbers instead of surfacing an error.
@@ -2701,11 +2736,18 @@ export default function Workspace({
       setSplitBusy(false);
       setSplitAsk(null);
     },
-    [onGenerateVideo]
+    [onGenerateVideo, walletIsTheWholeBalance, bannerLeft]
   );
 
   const handleGenerateVideo = useCallback(
     (board) => {
+      // Caught before the request when the numbers are on this screen: a free
+      // plan's balance is the whole story, so there is no reason to ask the
+      // server and no reason for the user to wait to be told no.
+      if (walletIsTheWholeBalance && allowanceKnown && bannerLeft < VIDEO_RENDER_COST) {
+        setShortAsk({ cost: VIDEO_RENDER_COST, balance: bannerLeft });
+        return undefined;
+      }
       if (!splitNeeded) return requestVideo(board);
       setSplitAsk({
         board,
@@ -2715,7 +2757,7 @@ export default function Workspace({
       });
       return undefined;
     },
-    [splitNeeded, allowanceLeft, requestVideo]
+    [splitNeeded, allowanceLeft, requestVideo, walletIsTheWholeBalance, allowanceKnown, bannerLeft]
   );
 
   // The brand panel sizes itself to its own content. Re-measured whenever the
@@ -3134,6 +3176,28 @@ export default function Workspace({
       {/* Shown only when the budget covers PART of a render — see the dialog's
           own header for why that case needs confirming and the other two do
           not. Nothing is charged until Generate is pressed here. */}
+      {/* Refused for money — see `InsufficientCreditsDialog`. Deliberately on
+          THIS screen: the clip view is where a render is watched, not where a
+          user finds out they cannot start one. */}
+      <InsufficientCreditsDialog
+        open={Boolean(shortAsk)}
+        cost={shortAsk?.cost || 0}
+        balance={shortAsk?.balance ?? null}
+        allowance={shortAsk?.allowance ?? 0}
+        walletNeeded={shortAsk?.walletNeeded ?? null}
+        // Wording only — both go to the same page. A free-plan user needs a
+        // plan; a paid one short by five credits needs credits, not a
+        // different subscription.
+        plan={walletIsTheWholeBalance ? 'free' : 'paid'}
+        onClose={() => setShortAsk(null)}
+        onUpgrade={() => {
+          // The same destination every other out-of-credits surface in the app
+          // sends people to.
+          window.open(import.meta.env.VITE_SIGNUP_URL, '_blank', 'noopener');
+          setShortAsk(null);
+        }}
+      />
+
       <SplitChargeDialog
         open={Boolean(splitAsk)}
         cost={VIDEO_RENDER_COST}

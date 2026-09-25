@@ -346,7 +346,18 @@ async function securePayment({ userId, sessionId, boardId, renderId, maxWalletCr
     // has to go back — otherwise a user who could not afford the wallet half
     // loses the allowance half for nothing.
     if (fromAllowance) await returnAllowance(userId, fromAllowance);
-    return { ok: false, reason: freeze.reason };
+    // The SHAPE of the refusal, not just the fact of it. "You cannot afford
+    // this" is useless to someone holding 25 of onboarding budget: what they
+    // need to know is that 25 was covered, 7 was wanted from the wallet, and
+    // the wallet had 2. `remaining` is what `freezeCredits` saw.
+    return {
+      ok: false,
+      reason: freeze.reason,
+      total: amount,
+      allowanceAvailable: fromAllowance,
+      walletNeeded: fromWallet,
+      walletBalance: Number(freeze.remaining) || 0,
+    };
   }
 
   logger.info(
