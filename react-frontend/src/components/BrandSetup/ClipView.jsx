@@ -6,21 +6,22 @@
  * is nothing useful to do behind it.
  *
  * ── The side panel ──────────────────────────────────────────────────────────
- * Download, post, and the version history — the three things you do with a
- * finished clip, in the panel the design puts them in.
+ * Download and post — the things you do with a finished clip — plus, for an
+ * image, the Edit block.
  *
  * Posting is not reimplemented here: it opens `PostAdMySpaceModal`, the exact
  * flow MySpace uses, with the clip as its payload. A second posting path would
  * be a second set of bugs about connected accounts.
  *
- * An IMAGE gets an Edit block in place of Versions (`ImageEditPanel`): logo,
+ * An IMAGE gets an Edit block (`ImageEditPanel`): logo,
  * crop, adjust, filters, text, resize — all in the browser. Each saved edit is a
  * new image filed in MySpace and a new card in the strip; this one is untouched.
  *
- * Two things from the design are still absent, and deliberately: resize exports
- * (the render is fixed at 9:16 server-side, so the buttons would do nothing)
- * and the "+" that starts a new version (regeneration is switched off in
- * `videoClient`). A control a user cannot make work is worse than no control.
+ * Versions is gone for both kinds (user decision 2026-09-25). Regeneration is
+ * switched off in `videoClient`, so it could only ever list one entry — the
+ * clip already on the stage. Resize exports for video are absent too (the
+ * render is fixed at 9:16 server-side). A control a user cannot make work is
+ * worse than no control.
  *
  * ── The waiting sequence ────────────────────────────────────────────────────
  * Three stages, and each exists because the one before it stops being honest:
@@ -47,7 +48,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Download, Megaphone } from 'lucide-react';
+import { Download, Megaphone } from 'lucide-react';
 import { handleDownload } from '@/utils/download';
 import CustomVideoPlayer from '../AdStudio/AdVideo/AdVideoChats/CustomVideoPlayer';
 import PostAdMySpaceModal from '../AdStudio/AdVideoNew/PostAdMySpace/PostAdMySpaceModal';
@@ -604,11 +605,6 @@ function SidePanel({
       },
     });
 
-  // Only versions that actually produced something are listed. `version` is
-  // upstream's own counter, so this is the truth about the clip rather than a
-  // count of how many times somebody pressed a button.
-  const versions = clip?.version ? [clip] : [];
-
   return (
     <>
       <aside
@@ -639,59 +635,23 @@ function SidePanel({
           )}
         </div>
 
-        {isStill ? (
-          // An image has nothing to version (regeneration is off) but plenty to
-          // touch up — see `ImageEditPanel`. Only once it exists: there is
-          // nothing to edit while it renders.
-          ready && onEdited ? (
-            <div data-tour="edit">
-              <PanelLabel>Edit</PanelLabel>
-              <p className="mt-1 text-[11.5px] text-white/55">
-                Every edit is saved as a new image. This one stays as it is.
-              </p>
-              <ImageEditPanel
-                src={src}
-                model={clip?.model}
-                prompt={title}
-                onEdited={onEdited}
-              />
-            </div>
-          ) : null
-        ) : (
-        <div data-tour="versions">
-          <PanelLabel>Versions</PanelLabel>
-          <p className="mt-1 text-[11.5px] text-white/55">A new version never destroys this cut.</p>
-          <div className="mt-3 flex flex-col gap-2">
-            {versions.length ? (
-              versions.map((v) => (
-                <div
-                  key={v.id || v.version}
-                  className="flex items-center gap-2.5 rounded-lg border px-3 py-2.5"
-                  style={{ background: SURF2, borderColor: 'rgba(21,220,255,0.3)' }}
-                >
-                  <Check size={14} className="shrink-0 text-[#15DCFF]" />
-                  <span className="text-[12.5px] font-semibold text-[#15DCFF]">
-                    v{v.version} · current
-                  </span>
-                  {v.model && (
-                    <span className="ml-auto truncate font-mono text-[9.5px] text-white/25">
-                      {v.model}
-                    </span>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="text-[12.5px] text-white/70">No cut yet.</p>
-            )}
+        {/* An image's next step is touching it up — see `ImageEditPanel`. Only
+            once it exists: there is nothing to edit while it renders. */}
+        {isStill && ready && onEdited && (
+          <div data-tour="edit">
+            <PanelLabel>Edit</PanelLabel>
+            <p className="mt-1 text-[11.5px] text-white/55">
+              Every edit is saved as a new image. This one stays as it is.
+            </p>
+            <ImageEditPanel src={src} model={clip?.model} prompt={title} onEdited={onEdited} />
           </div>
-        </div>
         )}
 
-        {/* The concept itself, in the space the two blocks above leave behind.
-            `mt-auto` rather than a fixed position: on a short viewport it sits
-            straight under Versions, and on a tall one it settles at the bottom
-            instead of leaving a column of nothing. */}
-        <div data-tour="concept" className="mt-auto border-t pt-5" style={{ borderColor: LINE }}>
+        {/* The concept, straight under the blocks above. It used to be pinned
+            to the foot (`mt-auto`) to fill the space under Versions; with
+            Versions gone that left a column of nothing between "Send it out"
+            and the concept on every video, so it now just follows. */}
+        <div data-tour="concept" className="border-t pt-5" style={{ borderColor: LINE }}>
           <PanelLabel>This concept</PanelLabel>
 
           <h2 className="mt-2.5 text-[14px] leading-snug font-semibold text-white">{title}</h2>
@@ -825,9 +785,8 @@ export default function ClipView({
   // First-visit tour, only once there is a clip to talk about. `relative` on
   // the root below: the overlay is positioned against it.
   const tourRootRef = useRef(null);
-  // An image gets its own words and the Edit step in place of Versions — the
-  // video copy ("play it", "the MP4") is wrong for it, and the Versions block
-  // is not on screen to point at.
+  // An image gets its own words and an Edit step — the video copy ("play it",
+  // "the MP4") is wrong for it. A video has no third step since Versions went.
   const tourSteps = [
     {
       // The player itself, not the whole stage it is centred in.
@@ -844,23 +803,17 @@ export default function ClipView({
         ? 'Download the image, or post it straight to your connected ad account.'
         : 'Download the MP4, or post it straight to your connected ad account.',
     },
-    isStill
-      ? {
-          target: '[data-tour="edit"]',
-          title: 'Edit your ad',
-          body: 'Add your logo, crop, adjust or add text. Each edit is saved as a new image in My Space.',
-        }
-      : {
-          target: '[data-tour="versions"]',
-          title: 'Versions',
-          body: 'Every cut is kept. Making a new version never replaces this one.',
-        },
+    isStill && {
+      target: '[data-tour="edit"]',
+      title: 'Edit your ad',
+      body: 'Add your logo, crop, adjust or add text. Each edit is saved as a new image in My Space.',
+    },
     {
       target: '[data-tour="concept"]',
       title: 'The idea behind it',
       body: 'The concept, voiceover and camera move this clip was made from.',
     },
-  ];
+  ].filter(Boolean);
 
   return (
     <div ref={tourRootRef} className="relative flex h-screen flex-col" style={{ background: '#0f0f0f' }}>

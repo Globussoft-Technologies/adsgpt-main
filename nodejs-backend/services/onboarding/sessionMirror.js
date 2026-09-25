@@ -171,7 +171,45 @@ function normalizeTemplateResult(result) {
   );
 
   const { image_templates: _drop, ...rest } = result;
-  return { ...rest, templates: [...videos, ...images] };
+  const merged = [...videos, ...images];
+  // Only a raw page (still carrying `image_templates`) is re-ranked. A stored,
+  // already-normalized result is several pages folded together, and the latest
+  // page's `results` would reshuffle tiles that earlier pages placed.
+  return { ...rest, templates: hasImages ? orderByRank(merged, result.results) : merged };
+}
+
+/**
+ * Orders the page by upstream's `results[]` rank so videos and images
+ * interleave as the reranker scored them, instead of all videos then all images.
+ *
+ * `results[]` items are `{rank, kind, score, video|image}` and name the same
+ * templates the SSE events delivered. Matched by `template_id`, falling back to
+ * the media URL (image creatives may lack an id upstream). Anything in the list
+ * that `results` does not mention keeps its place after the ranked ones; with no
+ * usable `results`, the list is returned unchanged.
+ */
+function orderByRank(list, results) {
+  if (!Array.isArray(results) || results.length === 0) return list;
+
+  const keysOf = (t) =>
+    [t?.template_id, t?.sha256, t?.image_url, t?.video_url].filter(Boolean);
+  const byKey = new Map();
+  list.forEach((t) => keysOf(t).forEach((k) => byKey.has(k) || byKey.set(k, t)));
+
+  const placed = new Set();
+  const ranked = [];
+  [...results]
+    .sort((a, b) => (Number(a?.rank) || Infinity) - (Number(b?.rank) || Infinity))
+    .forEach((r) => {
+      const payload = r?.[r?.kind] || r?.video || r?.image;
+      const hit = keysOf(payload).map((k) => byKey.get(k)).find(Boolean);
+      if (hit && !placed.has(hit)) {
+        placed.add(hit);
+        ranked.push(hit);
+      }
+    });
+
+  return [...ranked, ...list.filter((t) => !placed.has(t))];
 }
 
 /**

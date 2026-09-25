@@ -1,7 +1,7 @@
 // OnboardingTour — a first-visit coachmark tour for the onboarding screens.
 //
 // Used by Workspace (brand → ideas → Generate → templates) and ClipView
-// (player → send it out → versions → concept).
+// (player → send it out → edit, for images → concept).
 //
 // ── How it finds things ─────────────────────────────────────────────────────
 // Each step names a CSS selector, looked up INSIDE `rootRef`. The screens mark

@@ -2774,11 +2774,12 @@ export default function Workspace({
   // ── Brand panel collapse ─────────────────────────────────────────────────
   // User decisions 2026-09-15: collapses to a 56px rail with the logo, toggled
   // by a chevron beside the brand name, width animated, remembered per browser.
+  // Collapsed by default (2026-09-25): only an explicit expand ('0') opens it.
   const [brandCollapsed, setBrandCollapsed] = useState(() => {
     try {
-      return localStorage.getItem(BRAND_PANEL_KEY) === '1';
+      return localStorage.getItem(BRAND_PANEL_KEY) !== '0';
     } catch {
-      return false;
+      return true;
     }
   });
   const toggleBrandPanel = () =>
