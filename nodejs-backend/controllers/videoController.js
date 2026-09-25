@@ -4469,10 +4469,10 @@ exports.cloneAdAnalyze = async (req, res) => {
 
     const inputs = value.inputs || {};
 
-    const targetDurationNum = Number(inputs.targetDurationSeconds) || 4;
+    const targetDurationNum = Number(inputs.targetDurationSeconds) || 8;
     const durationStr = String(targetDurationNum);
-    const modelStr = inputs.model || "seedance-2.5";
-    const aspectRatioStr = inputs.aspectRatio || "16:9";
+    const modelStr = inputs.model || "google-omni";
+    const aspectRatioStr = inputs.aspectRatio || "9:16";
     const imagesArr = inputs.productImageUrls || [];
     const brandNameStr = inputs.productBrandName || "";
     const instructionsStr = inputs.additionalInstructions || "";
@@ -4630,8 +4630,31 @@ exports.cloneAdAnalyze = async (req, res) => {
 
 exports.updateCloneAdAnalyzeResult = async (req, res) => {
   try {
-    const { sessionId } = req.params;
-    const { status, identification, error, userId, jobId } = req.body || {};
+    const sessionId = req.params.sessionId || req.body?.sessionId;
+
+    const {
+      status,
+      identification,
+      error,
+      userId,
+      jobId,
+      recommendedModel,
+      recommendedDurationSeconds,
+      recommendedAspectRatio,
+      recommendationReason,
+      durationSeconds,
+      sourceVideoUrl,
+      galleryVideoUrl,
+      productImageUrls,
+      additionalInstructions,
+    } = req.body || {};
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: "sessionId is required",
+      });
+    }
 
     const record = await VideoGeneration.findById(sessionId);
     if (!record) {
@@ -4655,9 +4678,39 @@ exports.updateCloneAdAnalyzeResult = async (req, res) => {
         record.inputs?.productBrandName ||
         "";
 
+      const recModel =
+        recommendedModel ||
+        req.body.model ||
+        rawIdentification.recommendedModel ||
+        rawIdentification.model ||
+        "";
+      const recDuration =
+        recommendedDurationSeconds ||
+        req.body.duration ||
+        rawIdentification.recommendedDurationSeconds ||
+        rawIdentification.duration ||
+        (durationSeconds ? Math.round(Number(durationSeconds)) : null) ||
+        (req.body.durationSeconds ? Math.round(Number(req.body.durationSeconds)) : null);
+      const recAspect =
+        recommendedAspectRatio ||
+        req.body.aspectRatio ||
+        rawIdentification.recommendedAspectRatio ||
+        rawIdentification.aspectRatio ||
+        "";
+      const recReason =
+        recommendationReason ||
+        req.body.reason ||
+        rawIdentification.recommendationReason ||
+        rawIdentification.reason ||
+        "";
+
       const finalIdentification = {
         ...rawIdentification,
         ...(extractedBrand ? { productBrandName: extractedBrand, brandName: extractedBrand } : {}),
+        ...(recModel ? { recommendedModel: recModel, model: recModel } : {}),
+        ...(recDuration ? { recommendedDurationSeconds: recDuration, duration: recDuration } : {}),
+        ...(recAspect ? { recommendedAspectRatio: recAspect, aspectRatio: recAspect } : {}),
+        ...(recReason ? { recommendationReason: recReason, reason: recReason } : {}),
       };
 
       const updatedRecord = await VideoGeneration.findByIdAndUpdate(
@@ -4673,6 +4726,14 @@ exports.updateCloneAdAnalyzeResult = async (req, res) => {
                   "inputs.productBrandName": extractedBrand,
                 }
               : {}),
+            ...(recModel ? { "inputs.model": recModel } : {}),
+            ...(recDuration ? { "inputs.duration": `${recDuration}s` } : {}),
+            ...(recAspect ? { "inputs.aspectRatio": recAspect } : {}),
+            ...(recReason ? { "inputs.reason": recReason } : {}),
+            ...(sourceVideoUrl ? { "inputs.sourceVideoUrl": sourceVideoUrl } : {}),
+            ...(galleryVideoUrl ? { "inputs.galleryVideoUrl": galleryVideoUrl } : {}),
+            ...(productImageUrls?.length ? { "inputs.productImageUrls": productImageUrls } : {}),
+            ...(additionalInstructions ? { "inputs.additionalInstructions": additionalInstructions } : {}),
             ...(jobId ? { jobId } : {}),
           },
         },
@@ -4686,7 +4747,12 @@ exports.updateCloneAdAnalyzeResult = async (req, res) => {
           promptPercentage: 100,
           productBrandName: extractedBrand,
           brandName: extractedBrand,
+          recommendedModel: recModel,
+          recommendedDurationSeconds: recDuration,
+          recommendedAspectRatio: recAspect,
+          recommendationReason: recReason,
           identification: updatedRecord.identification,
+          inputs: updatedRecord.inputs,
         });
       }
 
@@ -4767,16 +4833,51 @@ exports.cloneAdGenerate = async (req, res) => {
       });
     }
 
-    // Step 4: Read required Analyse data from MongoDB record
-    const sourceVidUrl = existingRecord.inputs?.sourceVideoUrl || existingRecord.inputs?.videoSample || "";
+    // Step 4: Read required Analyse data from MongoDB record with optional user overrides from request
+    const inputOverrides = value.inputs || req.body.inputs || {};
+    const sourceVidUrl = existingRecord.inputs?.sourceVideoUrl || "";
     const galleryVidUrl = existingRecord.inputs?.galleryVideoUrl || "";
     const imagesArr = existingRecord.inputs?.productImageUrls || existingRecord.inputs?.images || [];
-    const brandNameStr = existingRecord.inputs?.brandName || existingRecord.inputs?.productBrandName || "";
-    const rawDuration = existingRecord.inputs?.duration || existingRecord.inputs?.targetDurationSeconds || "4";
-    const targetDurationNum = parseInt(String(rawDuration), 10) || 4;
-    const aspectRatioStr = existingRecord.inputs?.aspectRatio || "16:9";
-    const instructionsStr = existingRecord.inputs?.userPrompt || existingRecord.inputs?.additionalInstructions || "";
-    const modelStr = existingRecord.inputs?.model || "seedance-2.5";
+
+    const hasBrandOverride =
+      inputOverrides.productBrandName !== undefined ||
+      inputOverrides.brandName !== undefined;
+    const brandNameStr = hasBrandOverride
+      ? String(inputOverrides.productBrandName ?? inputOverrides.brandName ?? "")
+      : existingRecord.inputs?.brandName || existingRecord.inputs?.productBrandName || "";
+
+    const hasDurationOverride =
+      inputOverrides.targetDurationSeconds !== undefined ||
+      inputOverrides.duration !== undefined;
+    const rawDuration = hasDurationOverride
+      ? (inputOverrides.targetDurationSeconds ?? inputOverrides.duration)
+      : (existingRecord.inputs?.targetDurationSeconds ?? existingRecord.inputs?.duration ?? 8);
+    const targetDurationNum = parseInt(String(rawDuration), 10) || 8;
+
+    const hasAspectOverride = inputOverrides.aspectRatio !== undefined;
+    const aspectRatioStr = hasAspectOverride
+      ? String(inputOverrides.aspectRatio)
+      : existingRecord.inputs?.aspectRatio || "9:16";
+
+    const hasInstructionsOverride =
+      inputOverrides.additionalInstructions !== undefined ||
+      inputOverrides.userPrompt !== undefined;
+    const instructionsStr = hasInstructionsOverride
+      ? String(inputOverrides.additionalInstructions ?? inputOverrides.userPrompt ?? "")
+      : existingRecord.inputs?.additionalInstructions || existingRecord.inputs?.userPrompt || "";
+
+    const hasModelOverride = inputOverrides.model !== undefined;
+    const modelStr = hasModelOverride
+      ? String(inputOverrides.model)
+      : existingRecord.inputs?.model || "google-omni";
+
+    const hasVisualDescOverride =
+      inputOverrides.visualDescription !== undefined ||
+      inputOverrides.analysisSummary !== undefined;
+    const visualDescStr = hasVisualDescOverride
+      ? String(inputOverrides.visualDescription ?? inputOverrides.analysisSummary ?? "")
+      : existingRecord.identification?.visualDescription || "";
+
     const identificationObj = existingRecord.identification || {};
 
     const logoImageUrlStr = value.logoImageUrl || value.inputs?.logoImageUrl || "";
@@ -4784,6 +4885,27 @@ exports.cloneAdGenerate = async (req, res) => {
     // Automatically determine watermark based on user subscription plan ("8" is free plan -> watermark=true)
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0] || req.user?.subscription_plan_id || "8";
     const watermark = plan == "8";
+
+    // Update DB with latest overrides if provided
+    if (value.inputs || req.body.inputs) {
+      await VideoGeneration.findByIdAndUpdate(sessionId, {
+        $set: {
+          "inputs.brandName": brandNameStr,
+          "inputs.productBrandName": brandNameStr,
+          "inputs.duration": String(targetDurationNum),
+          "inputs.aspectRatio": aspectRatioStr,
+          "inputs.model": modelStr,
+          "inputs.userPrompt": instructionsStr,
+          "inputs.additionalInstructions": instructionsStr,
+          ...(hasVisualDescOverride
+            ? {
+                "identification.visualDescription": visualDescStr,
+                "identification.analysisSummary": visualDescStr,
+              }
+            : {}),
+        },
+      }).catch(() => {});
+    }
 
     // Step 5: Determine required credits
     const creditPerSecond = UnifiedCreditController.getModelDeduction(modelStr);
@@ -4835,7 +4957,7 @@ exports.cloneAdGenerate = async (req, res) => {
         identification: {
           confidence: identificationObj.confidence || "high",
           productCategory: identificationObj.productCategory || "",
-          visualDescription: identificationObj.visualDescription || "",
+          visualDescription: visualDescStr || identificationObj.visualDescription || "",
           isCompositeImage: Boolean(identificationObj.isCompositeImage),
           imageType: identificationObj.imageType || "product",
         },
@@ -5009,6 +5131,23 @@ exports.updateCloneAdGenerateResult = async (req, res) => {
         });
       }
 
+      await notifyUser(effectiveUserId, {
+        event: "videoCreated",
+        socketPayload: {
+          _id: sessionId,
+          video: {
+            ...(updatedRecord?.toObject?.() || updatedRecord || {}),
+            url: record.watermark ? (newResult.waterMarkUrl || url) : url,
+          },
+          userId: effectiveUserId,
+        },
+        push: {
+          title: "Video ready 🎬",
+          body: "Your generated video is ready. Tap to view it.",
+          data: { type: "video", id: sessionId?.toString() || "" },
+        },
+      });
+
       return res.status(200).json({
         success: true,
         message: "Generation result processed successfully",
@@ -5042,6 +5181,19 @@ exports.updateCloneAdGenerateResult = async (req, res) => {
           error: pythonError,
         });
       }
+
+      await notifyUser(effectiveUserId, {
+        event: "videoCreated",
+        socketPayload: {
+          _id: sessionId,
+          video: {
+            ...(record?.toObject?.() || record || {}),
+            status: "failed",
+            url: "failed",
+          },
+          userId: effectiveUserId,
+        },
+      });
 
       return res.status(200).json({
         success: true,

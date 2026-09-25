@@ -749,9 +749,35 @@ export const initSocket = (url) => (dispatch, getState) => {
     });
     socket.on('cloneAdGenerateReady', (data) => {
       emitter.emit('cloneAd:generateReady', data);
+      if (data?.data || data?.result) {
+        dispatch(
+          updateVideo({
+            _id: data.sessionId,
+            video: {
+              ...(data.data || {}),
+              url: data.url || data.result?.url,
+              status: 'completed',
+            },
+          })
+        );
+        dispatch(fetchProcessingCount());
+      }
     });
     socket.on('cloneAdGenerateFailed', (data) => {
       emitter.emit('cloneAd:generateFailed', data);
+      if (data?.sessionId) {
+        dispatch(
+          updateVideo({
+            _id: data.sessionId,
+            video: {
+              _id: data.sessionId,
+              status: 'failed',
+              url: 'failed',
+            },
+          })
+        );
+        dispatch(fetchProcessingCount());
+      }
     });
 
     // AdFactory Autopilot — one terminal event per cycle, fired after the

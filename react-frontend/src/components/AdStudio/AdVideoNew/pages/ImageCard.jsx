@@ -385,6 +385,14 @@ export default function ImageCard({
             <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-[130px] w-52 overflow-y-auto rounded-lg border border-black/10 bg-white p-3 text-xs text-gray-900 shadow-xl dark:border-transparent dark:bg-black/90 dark:text-white">
               <p>
                 <span className="text-gray-500 dark:text-gray-400">Type:</span>{' '}
+                {(() => {
+                  const t = item?.creativeType || item?.inputs?.type || '-';
+                  const lower = String(t).toLowerCase();
+                  if (lower === 'clone_your_ad' || lower === 'clone-ad' || lower === 'clone_ad' || lower === 'clone_video' || lower === 'clone your ad') {
+                    return 'Re Create Ad';
+                  }
+                  return t;
+                })()}
                 {IMAGE_TYPE_LABEL(item?.creativeType || item?.inputs?.type)}
               </p>
               <p>

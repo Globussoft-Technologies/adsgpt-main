@@ -727,7 +727,9 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
               className={`min-w-112.5 rounded-3xl transition-all duration-300 max-lg:max-h-[88vh] max-lg:overflow-y-auto 2xl:max-h-[85vh] ${
                 activePage === 'ai-ads' && currentAIAdsStep === 'details'
                   ? 'scale-75 2xl:scale-100'
-                  : 'h-fit scale-75 2xl:scale-100'
+                  : activePage === 'clone-ad'
+                    ? 'w-full max-w-4xl 2xl:max-w-5xl h-fit max-h-[84vh] scale-100'
+                    : 'h-fit scale-75 2xl:scale-100'
               } ${
                 activePage !== 'ugc' && activePage !== 'clone-ad'
                   ? 'rounded-[30px] border border-black/5 bg-white/70 shadow-[0_2px_12px_rgba(0,0,0,0.03)] backdrop-blur-md dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none'
@@ -737,9 +739,11 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   ? 'w-full max-w-[1480px]'
                   : activePage === 'ai-ads'
                     ? 'w-fit max-w-none'
-                    : activePage === 'avatar' && currentAvatarStep === 'face-capture'
-                      ? 'w-full max-w-4xl sm:min-w-[700px] 2xl:max-w-5xl'
-                      : 'w-full max-w-2xl 2xl:max-w-4xl'
+                    : activePage === 'clone-ad'
+                      ? 'w-full max-w-4xl 2xl:max-w-5xl h-fit max-h-[84vh]'
+                      : activePage === 'avatar' && currentAvatarStep === 'face-capture'
+                        ? 'w-full max-w-4xl sm:min-w-[700px] 2xl:max-w-5xl'
+                        : 'w-full max-w-2xl 2xl:max-w-4xl'
               } ${
                 (activePage === 'ai-ads' && currentAIAdsStep === 'generation') || activePage === 'clone-ad'
                   ? ''

@@ -469,17 +469,35 @@ export default function VideoCard({
     }, 150);
   };
 
-  const formatInfoValue = (value) => {
+  const formatInfoValue = (value, label = '') => {
     if (value === true) return 'On';
     if (value === false) return 'Off';
     if (value === null || value === undefined || String(value).trim() === '' || String(value).trim() === '-') return null;
-    return String(value)
+    const str = String(value).trim();
+    if (String(label).toLowerCase() === 'type') {
+      const lower = str.toLowerCase();
+      if (
+        lower === 'clone_your_ad' ||
+        lower === 'clone-ad' ||
+        lower === 'clone_ad' ||
+        lower === 'clone_video' ||
+        lower === 'clone your ad'
+      ) {
+        return 'Re Create Ad';
+      }
+      if (lower === 'ai_ads' || lower === 'ai-ads') return 'AI Ads';
+      if (lower === 'broll' || lower === 'b-roll') return 'Product B-rolls';
+      if (lower === 'ugc') return 'UGC Ads';
+      if (lower === 'avatar') return 'AI Avatar Ads';
+      if (lower === 'clone') return 'Clone Yourself';
+    }
+    return str
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
   const InfoRow = ({ label, value, className = '' }) => {
-    const formatted = formatInfoValue(value);
+    const formatted = formatInfoValue(value, label);
     if (!formatted) return null;
     return (
       <p className={className}>

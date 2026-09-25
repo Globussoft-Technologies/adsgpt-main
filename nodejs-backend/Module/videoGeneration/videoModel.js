@@ -228,6 +228,7 @@ const videoSchema = new mongoose.Schema(
       productType: String,
       userPrompt: { type: String},
       captionsEnabled: { type: Boolean, default: false },
+      reason: String,
       // confirmed scenes sent to generate-video step
       scenes: { type: mongoose.Schema.Types.Mixed },
 

@@ -290,9 +290,9 @@ const baseCloneAdInputs = {
     .max(3)
     .required(),
   additionalInstructions: Joi.string().allow("", null).optional(),
-  model: Joi.string().trim().optional(),
-  targetDurationSeconds: Joi.number().integer().min(4).required(),
-  aspectRatio: Joi.string().trim().required(),
+  model: Joi.string().trim().default("google-omni").optional(),
+  targetDurationSeconds: Joi.number().integer().min(4).default(8).optional(),
+  aspectRatio: Joi.string().trim().default("9:16").optional(),
 };
 
 const cloneAdAnalyzeSchema = Joi.object({
@@ -310,6 +310,18 @@ const cloneAdAnalyzeSchema = Joi.object({
 const cloneAdGenerateSchema = Joi.object({
   sessionId: Joi.string().trim().required(),
   logoImageUrl: Joi.string().allow("", null).optional().default(null),
+  inputs: Joi.object({
+    brandName: Joi.string().allow("", null).optional(),
+    productBrandName: Joi.string().allow("", null).optional(),
+    model: Joi.string().trim().optional(),
+    targetDurationSeconds: Joi.number().integer().min(4).optional(),
+    aspectRatio: Joi.string().trim().optional(),
+    additionalInstructions: Joi.string().allow("", null).optional(),
+    visualDescription: Joi.string().allow("", null).optional(),
+    analysisSummary: Joi.string().allow("", null).optional(),
+  })
+    .unknown(true)
+    .optional(),
 }).unknown(true);
 
 const resolveMediaSchema = Joi.object({
