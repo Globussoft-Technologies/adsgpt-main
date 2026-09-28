@@ -3232,7 +3232,7 @@ const DeleteAccount = async (req, res) => {
         ...(login ? [{ login }] : []),
         ...(userEmail ? [{ email: userEmail }] : []),
       ],
-    });
+    }).select("+apple_refresh_token");
 
     if (!userProfile || userProfile.is_deleted === true) {
       return res.status(404).json({
