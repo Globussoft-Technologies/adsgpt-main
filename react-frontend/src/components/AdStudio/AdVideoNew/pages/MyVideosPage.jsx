@@ -120,6 +120,19 @@ export default function MyVideosPage({ videoType = '', startDate = '', endDate =
     initFetch();
   }, [dispatch, videoType, startDate, endDate]);
 
+  // Live polling safeguard for active processing videos
+  const hasProcessingVideos = useMemo(() => {
+    return allVideos.some((v) => v.status === 'processing');
+  }, [allVideos]);
+
+  useEffect(() => {
+    if (!hasProcessingVideos) return;
+    const interval = setInterval(() => {
+      dispatch(fetchAllVideos({ skip: 0, limit, type: videoType, startDate, endDate }));
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [hasProcessingVideos, dispatch, videoType, startDate, endDate]);
+
   const handleScroll = async () => {
     const el = containerRef.current;
     if (!el || isLoading || !hasMore) return;

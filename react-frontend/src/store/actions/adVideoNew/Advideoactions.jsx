@@ -16,6 +16,8 @@ import {
   setAiAdsSceneData,
   setAiAdsSceneError,
   setAiAdsSceneLoading,
+  updateVideo,
+  updateVideoPromptPercentage,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { uploadToS3 } from '@/utils/imageUpload';
 import { globalToast } from '@/utils/globalToast';
@@ -89,6 +91,16 @@ export const generateVideoAction =
 
       if (response.status === 200 || response.status === 201) {
         dispatch(setImageAndScript(response.data));
+        const record = response.data?.video || response.data?.data || response.data;
+        if (record?._id) {
+          dispatch(
+            updateVideo({
+              ...record,
+              status: record.status || 'processing',
+              promptPercentage: record.promptPercentage || 0,
+            })
+          );
+        }
         globalToast.success('Video generation started successfully!');
         return response.data;
       } else {
@@ -1060,7 +1072,7 @@ export const cloneAdAnalyzeAction = (payload) => async () => {
   }
 };
 
-export const cloneAdGenerateAction = (payload) => async () => {
+export const cloneAdGenerateAction = (payload) => async (dispatch) => {
   try {
     const response = await axios.post(
       `${BACKEND_HOST}/adsgpt/video/clone-ad-generate`,
@@ -1072,6 +1084,22 @@ export const cloneAdGenerateAction = (payload) => async () => {
         },
       }
     );
+    const sid = response.data?.sessionId || payload?.sessionId;
+    if (sid) {
+      dispatch(
+        updateVideo({
+          _id: sid,
+          sessionId: sid,
+          status: 'processing',
+          promptPercentage: 0,
+          inputs: {
+            type: 'clone_ad',
+            ...(payload?.inputs || {}),
+          },
+          createdAt: new Date().toISOString(),
+        })
+      );
+    }
     return response.data;
   } catch (error) {
     const errorMsg =

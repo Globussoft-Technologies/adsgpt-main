@@ -141,24 +141,32 @@ const adVideoNewSlice = createSlice({
     },
 
     updateVideoPromptPercentage: (state, action) => {
-      const { id, promptPercentage } = action.payload;
-
-      const video = state.allVideos.find((v) => v._id === id);
+      const { id, sessionId, promptPercentage } = action.payload || {};
+      const targetId = id || sessionId;
+      const video = state.allVideos.find(
+        (v) => v._id === targetId || v.id === targetId || String(v?._id || '') === String(targetId)
+      );
 
       if (video) {
         video.promptPercentage = promptPercentage;
+        if (video.status !== 'completed' && video.status !== 'failed') {
+          video.status = 'processing';
+        }
       }
     },
 
     updateVideo: (state, action) => {
-      const videoData = action.payload.video || action.payload;
-      if (!videoData?._id) return;
+      const videoData = action.payload?.video || action.payload;
+      const targetId = String(videoData?._id || videoData?.sessionId || videoData?.id || '');
+      if (!targetId) return;
 
       // Derive real status from the payload — don't blindly mark as completed
       const hasUrl = videoData?.url || videoData?.results?.[0]?.url;
-      const resolvedStatus = videoData?.status || (hasUrl ? 'completed' : 'failed');
+      const resolvedStatus = videoData?.status || (hasUrl ? 'completed' : 'processing');
 
-      const index = state.allVideos.findIndex((v) => v._id === videoData._id);
+      const index = state.allVideos.findIndex(
+        (v) => String(v?._id || v?.id || '') === targetId
+      );
 
       if (index !== -1) {
         state.allVideos[index] = {

@@ -706,7 +706,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
       ) : (
         <>
           {/* Header */}
-          <div className="flex items-center gap-2 p-4 text-zinc-900 dark:text-white">
+          <div className={`${activePage === 'clone-ad' ? 'absolute top-4 left-4 z-20 p-0' : 'flex items-center gap-2 p-4'} text-zinc-900 dark:text-white`}>
             <button
               onClick={handleBackNavigation}
               className="flex items-center gap-2 text-xl 2xl:text-3xl"
@@ -721,14 +721,14 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
             />
           </div>
 
-          <div className="flex flex-1 items-center justify-center overflow-hidden px-4">
+          <div className="flex flex-1 h-full w-full items-center justify-center overflow-hidden px-4">
             <div
               ref={modalRef}
               className={`min-w-112.5 rounded-3xl transition-all duration-300 max-lg:max-h-[88vh] max-lg:overflow-y-auto 2xl:max-h-[85vh] ${
                 activePage === 'ai-ads' && currentAIAdsStep === 'details'
                   ? 'scale-75 2xl:scale-100'
                   : activePage === 'clone-ad'
-                    ? 'w-full max-w-4xl 2xl:max-w-5xl h-fit max-h-[84vh] scale-100'
+                    ? 'w-full max-w-6xl h-fit max-h-[92vh] scale-100'
                     : 'h-fit scale-75 2xl:scale-100'
               } ${
                 activePage !== 'ugc' && activePage !== 'clone-ad'
@@ -740,7 +740,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                   : activePage === 'ai-ads'
                     ? 'w-fit max-w-none'
                     : activePage === 'clone-ad'
-                      ? 'w-full max-w-4xl 2xl:max-w-5xl h-fit max-h-[84vh]'
+                      ? 'w-full max-w-6xl h-fit max-h-[92vh]'
                       : activePage === 'avatar' && currentAvatarStep === 'face-capture'
                         ? 'w-full max-w-4xl sm:min-w-[700px] 2xl:max-w-5xl'
                         : 'w-full max-w-2xl 2xl:max-w-4xl'

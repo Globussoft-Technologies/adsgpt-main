@@ -1,6 +1,6 @@
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
 import UpgradeModal from '../UpgradeModal';
-import { CloudUpload, LinkIcon, Loader2, Video, X, Clock, AlertCircle, AlertTriangle, Sparkles, RotateCcw, ArrowRight, CheckCircle2, Cpu, Layers, Search, FileText, Minus, Plus, ChevronLeft, Clapperboard } from 'lucide-react';
+import { CloudUpload, LinkIcon, Loader2, Video, X, Clock, AlertCircle, AlertTriangle, Sparkles, RotateCcw, ArrowRight, CheckCircle2, Cpu, Layers, Search, FileText, Minus, Plus, ChevronLeft, Clapperboard, ExternalLink } from 'lucide-react';
 import SparkleDark from '@/assets/layouts/prompt/sparkle-dark.svg';
 import TimerDarkLogo from '@/assets/layouts/prompt/advideo/timer.svg';
 import { useEffect, useMemo, useState, useRef } from 'react';
@@ -208,7 +208,7 @@ const YouTubePreviewPlayer = ({ videoId, onDurationChange }) => {
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden bg-black pointer-events-none [&_div]:w-full [&_div]:h-full [&_div]:flex [&_div]:items-center [&_div]:justify-center [&_iframe]:w-full [&_iframe]:aspect-video [&_iframe]:max-h-full [&_iframe]:border-0 [&_iframe]:object-contain [&_iframe]:pointer-events-none"
+      className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden pointer-events-none [&_div]:w-full [&_div]:h-full [&_div]:flex [&_div]:items-center [&_div]:justify-center [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-w-full [&_iframe]:!min-h-full [&_iframe]:border-0 [&_iframe]:object-cover [&_iframe]:pointer-events-none"
     />
   );
 };
@@ -328,11 +328,22 @@ const InstagramMetaEmbed = ({ url }) => {
           <Video className="h-6 w-6 text-zinc-400" />
         </div>
         <p className="text-sm font-semibold text-zinc-200 max-w-xs leading-relaxed">
-          Unable to preview this Instagram video
+          We can't show the preview
         </p>
         <p className="text-xs text-zinc-400 max-w-xs mt-1.5 leading-normal">
-          We couldn't load the Instagram preview. Please check the URL or try another video.
+          You can see this video on a different page.
         </p>
+        {url && (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3.5 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/20 hover:border-white/30 cursor-pointer active:scale-95"
+          >
+            <span>Open Video on Different Page</span>
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
       </div>
     );
   }
@@ -483,11 +494,22 @@ const FacebookMetaEmbed = ({ url }) => {
           <Video className="h-6 w-6 text-zinc-400" />
         </div>
         <p className="text-sm font-semibold text-zinc-200 max-w-xs leading-relaxed">
-          Unable to preview this Facebook video
+          We can't show the preview
         </p>
         <p className="text-xs text-zinc-400 max-w-xs mt-1.5 leading-normal">
-          We couldn't load the Facebook preview. Please check the URL or try another video.
+          You can see this video on a different page.
         </p>
+        {url && (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3.5 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/20 hover:border-white/30 cursor-pointer active:scale-95"
+          >
+            <span>Open Video on Different Page</span>
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
       </div>
     );
   }
@@ -495,7 +517,7 @@ const FacebookMetaEmbed = ({ url }) => {
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center"
+      className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden p-0 [&>div]:w-full [&>div]:h-full [&>div]:flex [&>div]:justify-center"
     >
       {isLoading && (
         <div className="flex flex-col items-center justify-center gap-2.5 text-zinc-400">
@@ -507,8 +529,8 @@ const FacebookMetaEmbed = ({ url }) => {
         <iframe
           src={embedUrl}
           title="Facebook Video Player"
-          className={`w-full h-full border-0 ${isLoading ? 'hidden' : ''}`}
-          style={{ border: 'none', overflow: 'hidden', minHeight: '320px' }}
+          className={`w-full h-full border-0 object-cover ${isLoading ? 'hidden' : ''}`}
+          style={{ border: 'none', overflow: 'hidden', width: '100%', height: '100%' }}
           scrolling="no"
           frameBorder="0"
           allowFullScreen={true}
@@ -621,6 +643,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const [sourceVideoUrl, setSourceVideoUrl] = useState('');
   const [galleryVideoUrl, setGalleryVideoUrl] = useState('');
   const [sourceVideoFile, setSourceVideoFile] = useState(null);
+  const [localVideoBlobUrl, setLocalVideoBlobUrl] = useState('');
   const [sourceDuration, setSourceDuration] = useState(null); // Isolated source video length in seconds
   const [previewVideoError, setPreviewVideoError] = useState(false);
   const [productImages, setProductImages] = useState([]);
@@ -628,6 +651,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const [videoModel, setVideoModel] = useState('');
   const [videoDuration, setVideoDuration] = useState('');
   const [aspectRatio, setAspectRatio] = useState('');
+  const [detectedVideoAspectRatio, setDetectedVideoAspectRatio] = useState('');
   const [brandName, setBrandName] = useState('');
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [recommendationReason, setRecommendationReason] = useState('');
@@ -661,6 +685,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const uploadedS3UrlRef = useRef('');
   const lastUploadedFileRef = useRef(null);
   const lastPrefilledSourceRef = useRef('');
+  const localVideoBlobUrlRef = useRef('');
 
   const getStageDetails = (rawStage) => {
     if (!rawStage) {
@@ -777,6 +802,64 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     dispatch(fetchModelCreditsAction());
   }, [dispatch]);
 
+  const detectVideoFileRatio = (fileOrBlob) => {
+    try {
+      const tempVid = document.createElement('video');
+      tempVid.preload = 'metadata';
+      const isFile = typeof fileOrBlob !== 'string';
+      const url = isFile ? URL.createObjectURL(fileOrBlob) : fileOrBlob;
+      tempVid.src = url;
+      tempVid.onloadedmetadata = () => {
+        if (isFile) {
+          URL.revokeObjectURL(url);
+        }
+        const w = tempVid.videoWidth;
+        const h = tempVid.videoHeight;
+        if (w && h) {
+          const ratio = w / h;
+          let detectedRatio = '9:16';
+          if (ratio > 2.0) detectedRatio = '21:9';
+          else if (ratio > 1.45) detectedRatio = '16:9';
+          else if (ratio > 1.15) detectedRatio = '4:3';
+          else if (ratio > 0.85) detectedRatio = '1:1';
+          else if (ratio > 0.65) detectedRatio = '3:4';
+          else detectedRatio = '9:16';
+
+          setDetectedVideoAspectRatio(detectedRatio);
+          setAspectRatio(detectedRatio);
+        }
+        if (tempVid.duration) {
+          validateSourceDuration(tempVid.duration);
+        }
+      };
+    } catch (e) {
+      console.warn('[CloneYourAd] Could not detect video ratio:', e);
+    }
+  };
+
+  const handleVideoMetadataLoaded = (e) => {
+    const video = e.target;
+    if (!video) return;
+    if (video.duration) {
+      validateSourceDuration(video.duration);
+    }
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (w && h) {
+      const ratio = w / h;
+      let detectedRatio = '9:16';
+      if (ratio > 2.0) detectedRatio = '21:9';
+      else if (ratio > 1.45) detectedRatio = '16:9';
+      else if (ratio > 1.15) detectedRatio = '4:3';
+      else if (ratio > 0.85) detectedRatio = '1:1';
+      else if (ratio > 0.65) detectedRatio = '3:4';
+      else detectedRatio = '9:16';
+
+      setDetectedVideoAspectRatio(detectedRatio);
+      setAspectRatio(detectedRatio);
+    }
+  };
+
   const handlePrefillVideoUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -799,11 +882,20 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       lastPrefilledSourceRef.current = '';
     }
 
+    if (localVideoBlobUrlRef.current) {
+      URL.revokeObjectURL(localVideoBlobUrlRef.current);
+    }
+    const blobUrl = URL.createObjectURL(file);
+    localVideoBlobUrlRef.current = blobUrl;
+    setLocalVideoBlobUrl(blobUrl);
+
     setSourceVideoFile(file);
     setPrefillUrl(file.name);
     setSourceVideoUrl('');
     setGalleryVideoUrl('');
+    setPreviewVideoError(false);
     setPrefillError('');
+    detectVideoFileRatio(file);
     e.target.value = '';
   };
 
@@ -828,11 +920,20 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               lastPrefilledSourceRef.current = '';
             }
 
+            if (localVideoBlobUrlRef.current) {
+              URL.revokeObjectURL(localVideoBlobUrlRef.current);
+            }
+            const blobUrl = URL.createObjectURL(file);
+            localVideoBlobUrlRef.current = blobUrl;
+            setLocalVideoBlobUrl(blobUrl);
+
             setSourceVideoFile(file);
             setPrefillUrl(file.name);
             setSourceVideoUrl('');
             setGalleryVideoUrl('');
+            setPreviewVideoError(false);
             setPrefillError('');
+            detectVideoFileRatio(file);
             return;
           }
         }
@@ -842,6 +943,11 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     const pastedText = e.clipboardData?.getData('text')?.trim();
     if (pastedText) {
       e.preventDefault();
+      if (localVideoBlobUrlRef.current) {
+        URL.revokeObjectURL(localVideoBlobUrlRef.current);
+        localVideoBlobUrlRef.current = '';
+        setLocalVideoBlobUrl('');
+      }
       const cleanUrl = extractCleanUrl(pastedText);
       if (cleanUrl !== lastPrefilledSourceRef.current) {
         uploadedS3UrlRef.current = '';
@@ -852,6 +958,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       setPrefillUrl(cleanUrl);
       setSourceVideoUrl(cleanUrl);
       setGalleryVideoUrl('');
+      setPreviewVideoError(false);
       setPrefillError('');
     }
   };
@@ -1349,28 +1456,22 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   useEffect(() => {
     if (isAspectRatioLoading || !aspectRatioOptions.length) return;
     if (!aspectRatio || !aspectRatioOptions.some((option) => option.value === aspectRatio)) {
-      setAspectRatio(aspectRatioOptions[0].value);
+      if (detectedVideoAspectRatio && aspectRatioOptions.some((opt) => opt.value === detectedVideoAspectRatio)) {
+        setAspectRatio(detectedVideoAspectRatio);
+      } else {
+        setAspectRatio(aspectRatioOptions[0].value);
+      }
     }
-  }, [aspectRatio, aspectRatioOptions, isAspectRatioLoading]);
+  }, [aspectRatio, aspectRatioOptions, isAspectRatioLoading, detectedVideoAspectRatio]);
 
   const effectiveMediaUrl = useMemo(
-    () => sourceVideoUrl || galleryVideoUrl || '',
-    [sourceVideoUrl, galleryVideoUrl]
+    () => localVideoBlobUrl || sourceVideoUrl || galleryVideoUrl || (sourceVideoFile ? URL.createObjectURL(sourceVideoFile) : '') || '',
+    [localVideoBlobUrl, sourceVideoUrl, galleryVideoUrl, sourceVideoFile]
   );
 
   // Detect social platforms directly on frontend using react-social-media-embed
   const youtubeId = useMemo(() => getYouTubeVideoId(effectiveMediaUrl), [effectiveMediaUrl]);
   const isImage = useMemo(() => isImageUrl(effectiveMediaUrl), [effectiveMediaUrl]);
-
-  const isDirectVideo = useMemo(() => {
-    if (!effectiveMediaUrl || isImage) return false;
-    return (
-      effectiveMediaUrl.startsWith('blob:') ||
-      Boolean(galleryVideoUrl) ||
-      /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(effectiveMediaUrl)
-    );
-  }, [effectiveMediaUrl, isImage, galleryVideoUrl]);
-
   const isInstagram = useMemo(() => Boolean(effectiveMediaUrl && !isImage && /(?:instagram\.com|instagr\.am)/i.test(effectiveMediaUrl.trim())), [effectiveMediaUrl, isImage]);
   const isLinkedIn = useMemo(() => Boolean(effectiveMediaUrl && !isImage && /(?:linkedin\.com|lnkd\.in)/i.test(effectiveMediaUrl.trim())), [effectiveMediaUrl, isImage]);
   const isTikTok = useMemo(() => Boolean(effectiveMediaUrl && !isImage && /tiktok\.com/i.test(effectiveMediaUrl.trim())), [effectiveMediaUrl, isImage]);
@@ -1378,8 +1479,31 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const isTwitter = useMemo(() => Boolean(effectiveMediaUrl && !isImage && /(?:twitter\.com|x\.com)/i.test(effectiveMediaUrl.trim())), [effectiveMediaUrl, isImage]);
   const isPinterest = useMemo(() => Boolean(effectiveMediaUrl && !isImage && /(?:pinterest\.com|pin\.it)/i.test(effectiveMediaUrl.trim())), [effectiveMediaUrl, isImage]);
 
+  const isDirectVideo = useMemo(() => {
+    if (!effectiveMediaUrl || isImage) return false;
+    return (
+      effectiveMediaUrl.startsWith('blob:') ||
+      effectiveMediaUrl.startsWith('data:') ||
+      Boolean(galleryVideoUrl) ||
+      Boolean(localVideoBlobUrl) ||
+      Boolean(sourceVideoFile) ||
+      /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(effectiveMediaUrl) ||
+      Boolean(
+        !youtubeId &&
+        !isInstagram &&
+        !isLinkedIn &&
+        !isTikTok &&
+        !isFacebook &&
+        !isTwitter &&
+        !isPinterest &&
+        (effectiveMediaUrl.startsWith('http://') || effectiveMediaUrl.startsWith('https://'))
+      )
+    );
+  }, [effectiveMediaUrl, isImage, galleryVideoUrl, localVideoBlobUrl, sourceVideoFile, youtubeId, isInstagram, isLinkedIn, isTikTok, isFacebook, isTwitter, isPinterest]);
+
   const sourceType = useMemo(() => {
-    if (!effectiveMediaUrl || isImage || previewVideoError) return 'default';
+    if (previewVideoError) return 'error';
+    if (!effectiveMediaUrl && !sourceVideoFile) return 'default';
     if (youtubeId) return 'youtube';
     if (isInstagram) return 'instagram';
     if (isLinkedIn) return 'linkedin';
@@ -1389,10 +1513,16 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     if (isPinterest) return 'pinterest';
     if (isDirectVideo) return 'direct-video';
     return 'default';
-  }, [effectiveMediaUrl, isImage, previewVideoError, isDirectVideo, youtubeId, isInstagram, isLinkedIn, isTikTok, isFacebook, isTwitter, isPinterest]);
+  }, [effectiveMediaUrl, sourceVideoFile, previewVideoError, isDirectVideo, youtubeId, isInstagram, isLinkedIn, isTikTok, isFacebook, isTwitter, isPinterest]);
 
   useEffect(() => {
     dispatch(fetchModelCreditsAction());
+    return () => {
+      if (localVideoBlobUrlRef.current) {
+        URL.revokeObjectURL(localVideoBlobUrlRef.current);
+        localVideoBlobUrlRef.current = '';
+      }
+    };
   }, [dispatch]);
 
   // Socket.io & Event Emitter listeners for asynchronous DS team callback events
@@ -1761,11 +1891,14 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
           const file = items[i].getAsFile();
           if (file) {
             e.preventDefault();
-            if (sourceVideoUrl && sourceVideoUrl.startsWith('blob:')) {
-              URL.revokeObjectURL(sourceVideoUrl);
+            if (localVideoBlobUrlRef.current) {
+              URL.revokeObjectURL(localVideoBlobUrlRef.current);
             }
             const url = URL.createObjectURL(file);
-            setSourceVideoUrl(url);
+            localVideoBlobUrlRef.current = url;
+            setLocalVideoBlobUrl(url);
+            setSourceVideoUrl('');
+            setGalleryVideoUrl('');
             setSourceVideoFile(file);
             setSourceDuration(null);
             setPreviewVideoError(false);
@@ -1790,11 +1923,14 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     const pastedText = e.clipboardData?.getData('text');
     if (pastedText && pastedText.trim().startsWith('http')) {
       e.preventDefault(); // Crucial: prevent browser native double-paste
-      if (sourceVideoUrl && sourceVideoUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(sourceVideoUrl);
+      if (localVideoBlobUrlRef.current) {
+        URL.revokeObjectURL(localVideoBlobUrlRef.current);
+        localVideoBlobUrlRef.current = '';
+        setLocalVideoBlobUrl('');
       }
       const cleanUrl = extractCleanUrl(pastedText);
       setSourceVideoUrl(cleanUrl);
+      setGalleryVideoUrl('');
       setSourceVideoFile(null);
       setSourceDuration(null);
       setPreviewVideoError(false);
@@ -1805,11 +1941,14 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
   const handleUrlInputChange = (e) => {
     const rawVal = e.target.value;
-    if (sourceVideoUrl && sourceVideoUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(sourceVideoUrl);
+    if (localVideoBlobUrlRef.current) {
+      URL.revokeObjectURL(localVideoBlobUrlRef.current);
+      localVideoBlobUrlRef.current = '';
+      setLocalVideoBlobUrl('');
     }
     const cleanUrl = extractCleanUrl(rawVal);
     setSourceVideoUrl(cleanUrl);
+    setGalleryVideoUrl('');
     setSourceVideoFile(null);
     setSourceDuration(null);
     setPreviewVideoError(false);
@@ -1835,11 +1974,14 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       return;
     }
 
-    if (sourceVideoUrl && sourceVideoUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(sourceVideoUrl);
+    if (localVideoBlobUrlRef.current) {
+      URL.revokeObjectURL(localVideoBlobUrlRef.current);
     }
     const url = URL.createObjectURL(file);
-    setSourceVideoUrl(url);
+    localVideoBlobUrlRef.current = url;
+    setLocalVideoBlobUrl(url);
+    setSourceVideoUrl('');
+    setGalleryVideoUrl('');
     setSourceVideoFile(file);
     setSourceDuration(null);
     setPreviewVideoError(false);
@@ -1861,10 +2003,13 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   };
 
   const handleClearSourceVideo = () => {
-    if (sourceVideoUrl && sourceVideoUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(sourceVideoUrl);
+    if (localVideoBlobUrlRef.current) {
+      URL.revokeObjectURL(localVideoBlobUrlRef.current);
+      localVideoBlobUrlRef.current = '';
+      setLocalVideoBlobUrl('');
     }
     setSourceVideoUrl('');
+    setGalleryVideoUrl('');
     setSourceVideoFile(null);
     setSourceDuration(null);
     setPreviewVideoError(false);
@@ -2151,6 +2296,11 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                     <button
                       type="button"
                       onClick={() => {
+                        if (localVideoBlobUrlRef.current) {
+                          URL.revokeObjectURL(localVideoBlobUrlRef.current);
+                          localVideoBlobUrlRef.current = '';
+                          setLocalVideoBlobUrl('');
+                        }
                         setSourceVideoFile(null);
                         setPrefillUrl('');
                         setSourceVideoUrl('');
@@ -2158,6 +2308,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                         uploadedS3UrlRef.current = '';
                         lastUploadedFileRef.current = null;
                         lastPrefilledSourceRef.current = '';
+                        setPreviewVideoError(false);
                         setPrefillError('');
                       }}
                       className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-white shrink-0 cursor-pointer mr-1"
@@ -2175,9 +2326,15 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                       onPaste={handlePrefillPaste}
                       onChange={(e) => {
                         const val = e.target.value;
+                        if (localVideoBlobUrlRef.current) {
+                          URL.revokeObjectURL(localVideoBlobUrlRef.current);
+                          localVideoBlobUrlRef.current = '';
+                          setLocalVideoBlobUrl('');
+                        }
                         setPrefillUrl(val);
                         setSourceVideoUrl(val.trim());
                         setGalleryVideoUrl('');
+                        setPreviewVideoError(false);
                         setPrefillError('');
                         if (sourceVideoFile) {
                           setSourceVideoFile(null);
@@ -2188,17 +2345,21 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                         }
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && prefillUrl?.trim() && !isAnalyzing) {
+                        if (e.key === 'Enter' && prefillUrl?.trim()) {
                           handleStartAnalyze();
                         }
                       }}
-                      disabled={isAnalyzing}
-                      className="w-full rounded-full bg-transparent pr-4 pl-5 py-2.5 text-xs text-zinc-800 placeholder:text-zinc-500 focus:outline-none dark:text-white dark:placeholder:text-white/30 disabled:opacity-50"
+                      className="w-full rounded-full bg-transparent pr-4 pl-5 py-2.5 text-xs text-zinc-800 placeholder:text-zinc-500 focus:outline-none dark:text-white dark:placeholder:text-white/30"
                     />
                     {prefillUrl ? (
                       <button
                         type="button"
                         onClick={() => {
+                          if (localVideoBlobUrlRef.current) {
+                            URL.revokeObjectURL(localVideoBlobUrlRef.current);
+                            localVideoBlobUrlRef.current = '';
+                            setLocalVideoBlobUrl('');
+                          }
                           setPrefillUrl('');
                           setSourceVideoUrl('');
                           setGalleryVideoUrl('');
@@ -2206,6 +2367,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                           uploadedS3UrlRef.current = '';
                           lastUploadedFileRef.current = null;
                           lastPrefilledSourceRef.current = '';
+                          setPreviewVideoError(false);
                           setPrefillError('');
                         }}
                         className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-white shrink-0 cursor-pointer mr-2"
@@ -2358,25 +2520,16 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               onClick={handleStartAnalyze}
               disabled={
                 (!prefillUrl?.trim() && !sourceVideoFile && !sourceVideoUrl) ||
-                productImages.length === 0 ||
-                isAnalyzing
+                productImages.length === 0
               }
               className={`rounded-full px-8 py-2.5 text-sm font-bold shadow-lg transition-all ${
                 (!prefillUrl?.trim() && !sourceVideoFile && !sourceVideoUrl) ||
-                productImages.length === 0 ||
-                isAnalyzing
+                productImages.length === 0
                   ? 'bg-zinc-300 text-zinc-500 dark:bg-white/10 dark:text-white/30 cursor-not-allowed pointer-events-none'
                   : 'bg-gray-900 text-white dark:bg-white dark:text-black hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] cursor-pointer'
               }`}
             >
-              {isAnalyzing ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Processing...</span>
-                </div>
-              ) : (
-                'Continue'
-              )}
+              Continue
             </button>
           </div>
         </div>
@@ -2384,10 +2537,16 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     );
   }
 
+  const isCompactWorkspace =
+    isAnalyzing ||
+    analysisState === 'analyzing' ||
+    analysisState === 'failed' ||
+    analysisState === 'timeout';
+
   return (
-    <div className="flex flex-col w-full items-start gap-2">
-      {/* Top Header Action: Change Video Button outside the card */}
-      <div className="w-full flex items-center justify-start pl-1">
+    <div className="flex flex-col w-full max-w-[860px] lg:max-w-[940px] 2xl:max-w-[1000px] items-start gap-1 my-auto mx-auto">
+      {/* Top Header Action: Change Video Button outside the card, aligned to card left edge */}
+      <div className="flex items-center justify-start pl-0.5 mb-0.5">
         <button
           type="button"
           onClick={() => {
@@ -2395,6 +2554,10 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               clearTimeout(timeoutTimerRef.current);
               timeoutTimerRef.current = null;
             }
+            setIsAnalyzing(false);
+            setAnalysisState('form');
+            setAnalyzeProgress(0);
+            currentSessionIdRef.current = null;
             setCurrentStep('input');
           }}
           className="flex items-center gap-1 text-xs font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition active:scale-95 cursor-pointer"
@@ -2405,7 +2568,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       </div>
 
       {/* Main Unified Workspace Card */}
-      <div className="relative flex flex-col justify-center w-full overflow-hidden rounded-[28px] border border-black/5 dark:border-white/10 bg-white/95 dark:bg-[#18181B] shadow-2xl p-6 sm:p-7 2xl:p-8">
+      <div className="relative flex flex-col justify-center w-full overflow-hidden rounded-[28px] border border-black/5 dark:border-white/10 bg-white/95 dark:bg-[#18181B] shadow-2xl py-4.5 sm:py-5 px-5 sm:px-6 lg:px-7">
         {/* Top Right Close Button */}
         <button
           onClick={onClose}
@@ -2416,17 +2579,35 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
           <X className="h-5 w-5" />
         </button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 w-full gap-7 lg:gap-9 items-center justify-center my-auto overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] w-full gap-5 sm:gap-6 lg:gap-7 items-stretch justify-center my-auto overflow-hidden">
           {/* Left side — Video Preview Canvas (Borderless, Sleek, Symmetrically Centered) */}
-          <div className="relative flex items-center justify-center w-full my-auto overflow-hidden">
+          <div className="relative flex flex-col items-center justify-center shrink-0 h-full overflow-hidden">
             {/* Aspect-Ratio Adapting Video Preview */}
             <div
-              className={`relative flex items-center justify-center overflow-hidden rounded-2xl lg:rounded-3xl bg-black/90 dark:bg-zinc-950 transition-all duration-300 ${
-                aspectRatio === '9:16'
-                  ? 'aspect-[9/16] h-[480px] 2xl:h-[520px] max-h-full w-auto'
+              className={`relative flex items-center justify-center overflow-hidden rounded-2xl lg:rounded-3xl bg-black/90 dark:bg-zinc-950 transition-all duration-300 shadow-sm ${
+                isCompactWorkspace
+                  ? (aspectRatio === '16:9' || (!aspectRatio && detectedVideoAspectRatio === '16:9'))
+                    ? 'aspect-video w-[330px] sm:w-[380px] lg:w-[420px] 2xl:w-[460px] max-w-full h-auto'
+                    : (aspectRatio === '21:9' || (!aspectRatio && detectedVideoAspectRatio === '21:9'))
+                    ? 'aspect-[21/9] w-[330px] sm:w-[380px] lg:w-[430px] 2xl:w-[470px] max-w-full h-auto'
+                    : (aspectRatio === '4:3' || (!aspectRatio && detectedVideoAspectRatio === '4:3'))
+                    ? 'aspect-[4/3] w-[310px] sm:w-[350px] lg:w-[390px] max-w-full h-auto'
+                    : (aspectRatio === '1:1' || (!aspectRatio && detectedVideoAspectRatio === '1:1'))
+                    ? 'aspect-square h-full max-h-[440px] lg:max-h-[470px] w-auto'
+                    : (aspectRatio === '3:4' || (!aspectRatio && detectedVideoAspectRatio === '3:4'))
+                    ? 'aspect-[3/4] h-full min-h-[420px] lg:min-h-[450px] 2xl:min-h-[480px] max-h-[66vh] w-auto'
+                    : 'aspect-[9/16] h-full min-h-[440px] lg:min-h-[470px] 2xl:min-h-[500px] max-h-[66vh] w-auto'
+                  : aspectRatio === '16:9'
+                  ? 'aspect-video w-[330px] sm:w-[380px] lg:w-[420px] 2xl:w-[460px] max-w-full h-auto'
+                  : aspectRatio === '21:9'
+                  ? 'aspect-[21/9] w-[330px] sm:w-[380px] lg:w-[430px] 2xl:w-[470px] max-w-full h-auto'
+                  : aspectRatio === '4:3'
+                  ? 'aspect-[4/3] w-[310px] sm:w-[350px] lg:w-[390px] max-w-full h-auto'
                   : aspectRatio === '1:1'
-                  ? 'aspect-square h-[420px] 2xl:h-[460px] max-h-full w-auto'
-                  : 'aspect-video w-full max-h-[300px] 2xl:max-h-[340px]'
+                  ? 'aspect-square h-full max-h-[450px] lg:max-h-[480px] w-auto'
+                  : aspectRatio === '3:4'
+                  ? 'aspect-[3/4] h-full min-h-[430px] lg:min-h-[460px] 2xl:min-h-[490px] max-h-[68vh] w-auto'
+                  : 'aspect-[9/16] h-full min-h-[450px] lg:min-h-[480px] 2xl:min-h-[510px] max-h-[68vh] w-auto'
               }`}
             >
               {previewVideoError ? (
@@ -2435,11 +2616,22 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                     <Video className="h-6 w-6 text-zinc-400" />
                   </div>
                   <p className="text-sm font-semibold text-zinc-200 max-w-xs leading-relaxed">
-                    Unable to preview this video
+                    We can't show the preview
                   </p>
                   <p className="text-xs text-zinc-400 max-w-xs mt-1.5 leading-normal">
-                    We couldn't load a preview for this video. Please try another URL or upload the video directly.
+                    You can see this video on a different page.
                   </p>
+                  {effectiveMediaUrl && (
+                    <a
+                      href={effectiveMediaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3.5 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/20 hover:border-white/30 cursor-pointer active:scale-95"
+                    >
+                      <span>Open Video on Different Page</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  )}
                 </div>
               ) : sourceType === 'direct-video' ? (
                 <video
@@ -2450,7 +2642,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                   loop
                   playsInline
                   referrerPolicy="no-referrer"
-                  onLoadedMetadata={(e) => validateSourceDuration(e.target.duration)}
+                  onLoadedMetadata={handleVideoMetadataLoaded}
                   onError={() => setPreviewVideoError(true)}
                   className="absolute inset-0 z-0 h-full w-full object-cover bg-black"
                 />
@@ -2466,12 +2658,12 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                   url={effectiveMediaUrl}
                 />
               ) : sourceType === 'linkedin' ? (
-                <div className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center">
-                  <LinkedInEmbed key={effectiveMediaUrl} url={effectiveMediaUrl} width="100%" />
+                <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden p-0 [&>div]:w-full [&>div]:h-full [&>div]:flex [&>div]:justify-center [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-w-full [&_iframe]:!min-h-full [&_iframe]:object-cover [&_iframe]:border-0">
+                  <LinkedInEmbed key={effectiveMediaUrl} url={effectiveMediaUrl} width="100%" height="100%" />
                 </div>
               ) : sourceType === 'tiktok' ? (
-                <div className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center">
-                  <TikTokEmbed key={effectiveMediaUrl} url={effectiveMediaUrl} width="100%" />
+                <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden p-0 [&>div]:w-full [&>div]:h-full [&>div]:flex [&>div]:justify-center [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-w-full [&_iframe]:!min-h-full [&_iframe]:object-cover [&_iframe]:border-0">
+                  <TikTokEmbed key={effectiveMediaUrl} url={effectiveMediaUrl} width="100%" height="100%" />
                 </div>
               ) : sourceType === 'facebook' ? (
                 <FacebookMetaEmbed
@@ -2479,13 +2671,26 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                   url={effectiveMediaUrl}
                 />
               ) : sourceType === 'twitter' ? (
-                <div className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center">
-                  <TwitterEmbed key={effectiveMediaUrl} url={effectiveMediaUrl} width="100%" />
+                <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden p-0 [&>div]:w-full [&>div]:h-full [&>div]:flex [&>div]:justify-center [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-w-full [&_iframe]:!min-h-full [&_iframe]:object-cover [&_iframe]:border-0">
+                  <TwitterEmbed key={effectiveMediaUrl} url={effectiveMediaUrl} width="100%" height="100%" />
                 </div>
               ) : sourceType === 'pinterest' ? (
-                <div className="absolute inset-0 z-0 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black p-2 [&>div]:w-full [&>div]:flex [&>div]:justify-center">
-                  <PinterestEmbed key={effectiveMediaUrl} url={effectiveMediaUrl} width="100%" />
+                <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden p-0 [&>div]:w-full [&>div]:h-full [&>div]:flex [&>div]:justify-center [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-w-full [&_iframe]:!min-h-full [&_iframe]:object-cover [&_iframe]:border-0">
+                  <PinterestEmbed key={effectiveMediaUrl} url={effectiveMediaUrl} width="100%" height="100%" />
                 </div>
+              ) : effectiveMediaUrl ? (
+                <video
+                  key={effectiveMediaUrl}
+                  src={effectiveMediaUrl}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  referrerPolicy="no-referrer"
+                  onLoadedMetadata={handleVideoMetadataLoaded}
+                  onError={() => setPreviewVideoError(true)}
+                  className="absolute inset-0 z-0 h-full w-full object-cover bg-black"
+                />
               ) : CLONE_YOUR_AD_DEMO_URL?.match(/\.(mp4|webm|mov)(\?.*)?$/i) ? (
                 <video
                   src={CLONE_YOUR_AD_DEMO_URL}
@@ -2502,6 +2707,22 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                   className="absolute inset-0 z-0 h-full w-full object-cover bg-black"
                 />
               )}
+
+              {/* Message at the bottom downward of the video preview section (Yellow Box location) */}
+              {effectiveMediaUrl && (previewVideoError || (!sourceVideoFile && sourceType !== 'youtube' && !isDirectVideo)) && (
+                <div className="absolute bottom-3 left-3 right-3 z-30 flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/15 bg-black/85 px-3 py-2 text-center text-[11px] text-zinc-300 backdrop-blur-md shadow-xl">
+                  <span className="text-zinc-300 text-xs font-medium">Can't see the preview?</span>
+                  <a
+                    href={effectiveMediaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-[#15DCFF] hover:underline cursor-pointer"
+                  >
+                    <span>You can see it on a different page</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              )}
             </div>
 
             {/* Error overlay if video exceeds 60 seconds */}
@@ -2516,20 +2737,20 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
           </div>
 
           {/* Right side — Form Controls */}
-          <div className="flex flex-col justify-center gap-3.5 2xl:gap-4 w-full text-zinc-900 dark:text-white">
+          <div className="flex flex-col justify-between gap-2.5 sm:gap-3 w-full min-w-0 max-h-[80vh] overflow-y-auto pr-1 text-zinc-900 dark:text-white">
             {/* Top Title */}
-            <div>
-              <h2 className="text-lg lg:text-xl font-bold uppercase tracking-wide text-zinc-900 dark:text-white">
+            <div className={isCompactWorkspace ? 'text-center w-full' : 'text-left'}>
+              <h2 className="text-base sm:text-lg lg:text-xl font-bold uppercase tracking-wide text-zinc-900 dark:text-white">
                 Re Create Ad
               </h2>
             </div>
 
             {/* ── ANALYSIS RESULT STATE (Photo 4) ─────────────────────────────── */}
             {analysisState === 'success' || analysisResult ? (
-              <div className="flex flex-col gap-3.5 pt-1">
+              <div className="flex flex-col gap-2.5 pt-0.5">
                 {/* Header Banner - Subtle green & reduced height with Accuracy pill */}
-                <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2.5 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400">
-                  <div className="flex items-center gap-2.5">
+                <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-400">
+                  <div className="flex items-center gap-2">
                     <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
                       <CheckCircle2 className="h-3.5 w-3.5" />
                     </div>
@@ -2559,7 +2780,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
                 {/* Generation Output Video (If generated) */}
                 {generatedVideoUrl && (
-                  <div className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-white/10 dark:bg-white/5">
+                  <div className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-2.5 dark:border-white/10 dark:bg-white/5">
                     <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                       Generated Re Create Ad Video
                     </span>
@@ -2567,21 +2788,21 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                       src={generatedVideoUrl}
                       controls
                       autoPlay
-                      className="max-h-56 w-full rounded-lg object-cover"
+                      className="max-h-48 w-full rounded-lg object-cover"
                     />
                   </div>
                 )}
 
                 {generateError && (
-                  <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-500">
+                  <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-500">
                     <AlertCircle className="h-4 w-4 shrink-0" />
                     <span>{generateError}</span>
                   </div>
                 )}
 
                 {/* Brand / Product (Editable Input) */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                     BRAND / PRODUCT
                   </label>
                   <input
@@ -2589,29 +2810,29 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                     value={brandName}
                     onChange={(e) => setBrandName(e.target.value)}
                     placeholder="Enter brand or product name"
-                    className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3.5 py-2.5 text-xs font-semibold text-zinc-800 transition focus:border-[#15DCFF]/50 focus:outline-none focus:ring-1 focus:ring-[#15DCFF]/50 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-800 transition focus:border-[#15DCFF]/50 focus:outline-none focus:ring-1 focus:ring-[#15DCFF]/50 dark:border-white/10 dark:bg-white/5 dark:text-white"
                   />
                 </div>
 
                 {/* Analysis Summary (Editable Textarea) */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                     ANALYSIS SUMMARY
                   </label>
                   <textarea
                     value={editableVisualDescription}
                     onChange={(e) => setEditableVisualDescription(e.target.value)}
-                    rows={3}
+                    rows={2}
                     placeholder="Analysis visual description summary..."
-                    className="max-h-28 w-full resize-none overflow-y-auto rounded-xl border border-black/10 bg-zinc-50 p-3 text-xs leading-relaxed text-zinc-800 transition focus:border-[#15DCFF]/50 focus:outline-none focus:ring-1 focus:ring-[#15DCFF]/50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200"
+                    className="max-h-20 w-full resize-none overflow-y-auto rounded-xl border border-black/10 bg-zinc-50 p-2.5 text-xs leading-relaxed text-zinc-800 transition focus:border-[#15DCFF]/50 focus:outline-none focus:ring-1 focus:ring-[#15DCFF]/50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200"
                   />
                 </div>
 
                 {/* Model & Duration (2 Columns) */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 items-start">
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 items-start">
                   {/* Model */}
                   <div className="flex min-w-0 flex-1 flex-col gap-1 justify-start">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                    <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                       AI MODEL
                     </label>
                     <CommonDropdown
@@ -2619,7 +2840,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                       label="AI Model"
                       icon={SparkleDark}
                       type="b-roll"
-                      className="w-full min-w-0 justify-between !h-7.5 md:!h-8 2xl:!h-9 !py-0 px-3 2xl:px-4 [&>div]:min-w-0 [&>div>span]:truncate"
+                      className="w-full min-w-0 justify-between !h-7.5 md:!h-8 2xl:!h-8.5 !py-0 px-2.5 2xl:px-3.5 [&>div]:min-w-0 [&>div>span]:truncate"
                       value={videoChatModels.find((o) => o.value === videoModel)}
                       onChange={(val) => {
                         setVideoModel(val);
@@ -2630,7 +2851,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
                   {/* Duration (Dropdown) */}
                   <div className="flex min-w-0 flex-1 flex-col gap-1 justify-start">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                    <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                       DURATION
                     </label>
                     <CommonDropdown
@@ -2638,7 +2859,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                       label="Duration"
                       icon={TimerDarkLogo}
                       type="b-roll"
-                      className="w-full min-w-0 justify-between !h-7.5 md:!h-8 2xl:!h-9 !py-0 px-3 2xl:px-4 [&>div]:min-w-0 [&>div>span]:truncate"
+                      className="w-full min-w-0 justify-between !h-7.5 md:!h-8 2xl:!h-8.5 !py-0 px-2.5 2xl:px-3.5 [&>div]:min-w-0 [&>div>span]:truncate"
                       value={configuredDurationOptions.find((o) => o.value === selectedVideoDuration) || configuredDurationOptions[0]}
                       onChange={(val) => {
                         setVideoDuration(val);
@@ -2648,9 +2869,9 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                   </div>
                 </div>
 
-                {/* Aspect Ratio (Full Width with wrapping so all options like Seedance 2.5 show fully) */}
-                <div className="flex flex-col gap-1.5 justify-start">
-                  <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                {/* Aspect Ratio (Compact Pill Buttons) */}
+                <div className="flex flex-col gap-1 justify-start">
+                  <label className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                     ASPECT RATIO
                     {isAspectRatioLoading && <Loader2 className="h-3 w-3 animate-spin" />}
                   </label>
@@ -2667,7 +2888,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                             setAspectRatio(value);
                             setErrors((prev) => ({ ...prev, aspectRatio: '' }));
                           }}
-                          className={`flex items-center justify-center gap-1.5 rounded-[50px] border px-3 py-1.5 text-[11px] md:text-xs transition font-medium cursor-pointer ${
+                          className={`flex items-center justify-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition font-medium cursor-pointer ${
                             isSelected
                               ? 'border-black/20 bg-black/10 font-semibold text-zinc-900 dark:border-white/30 dark:bg-white/15 dark:text-white'
                               : 'border-black/10 bg-transparent text-zinc-500 hover:text-zinc-900 hover:bg-black/5 dark:border-white/10 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-white/5'
@@ -2676,7 +2897,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                         >
                           <AspectRatioPreview
                             ratio={value}
-                            className={`h-3.5 w-3.5 shrink-0 ${
+                            className={`h-3 w-3 shrink-0 ${
                               isSelected
                                 ? 'text-zinc-900 dark:text-white'
                                 : 'text-zinc-500 dark:text-zinc-400'
@@ -2691,40 +2912,40 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
                 {/* AI Recommendation Reason (Display Text) */}
                 {recommendationReason && (
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                       REASON
                     </label>
-                    <div className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3.5 py-2.5 text-xs leading-relaxed text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                    <div className="w-full max-h-16 overflow-y-auto rounded-xl border border-black/10 bg-zinc-50 px-3 py-1.5 text-xs leading-relaxed text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
                       {recommendationReason}
                     </div>
                   </div>
                 )}
 
                 {/* Additional Instructions (Optional) */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                     ADDITIONAL INSTRUCTIONS (OPTIONAL)
                   </label>
-                  <input
-                    type="text"
+                  <textarea
                     value={additionalInfo}
                     onChange={(e) => setAdditionalInfo(e.target.value)}
+                    rows={1}
                     placeholder="e.g. emphasize vibrant lighting, keep fast pace..."
-                    className="w-full rounded-xl border border-black/10 bg-zinc-50 px-3.5 py-2 text-xs text-zinc-800 transition focus:border-[#15DCFF]/50 focus:outline-none focus:ring-1 focus:ring-[#15DCFF]/50 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className="h-8 min-h-[32px] max-h-20 w-full resize-none overflow-y-auto rounded-xl border border-black/10 bg-zinc-50 px-3 py-1.5 text-xs leading-normal text-zinc-800 transition focus:border-[#15DCFF]/50 focus:outline-none focus:ring-1 focus:ring-[#15DCFF]/50 dark:border-white/10 dark:bg-white/5 dark:text-white"
                   />
                 </div>
 
                 {/* Small Disclaimer */}
-                <div className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: '#F5C451' }}>
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: '#F5C451' }} />
+                <div className="flex items-center gap-1.5 text-[10px] font-medium" style={{ color: '#F5C451' }}>
+                  <AlertTriangle className="h-3 w-3 shrink-0" style={{ color: '#F5C451' }} />
                   <span style={{ color: '#F5C451' }}>
                     ! AI can make mistakes. Please review the details carefully before proceeding.
                   </span>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="mt-1 flex items-center justify-end gap-3 pt-1">
+                <div className="mt-0.5 flex items-center justify-end gap-2.5 pt-1 shrink-0">
                   {(() => {
                     const selectedModel = videoChatModels.find((model) => model.value === videoModel);
                     const hasEstimateInputs = Boolean(videoModel && selectedVideoDuration && selectedModel);
@@ -2744,12 +2965,12 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                           <ShadcnTooltip
                             label={`Will use : ${est} credits, ${availableCredits - est} left after`}
                           >
-                            <span className="rounded-full bg-black/5 px-2.5 py-1 text-xs font-medium text-gray-500 dark:bg-white/20 dark:text-white/90">
+                            <span className="rounded-xl bg-black/5 px-3 py-2 text-xs font-medium text-gray-500 dark:bg-white/20 dark:text-white/90">
                               ~{est} credits
                             </span>
                           </ShadcnTooltip>
                         ) : hasEstimateInputs ? (
-                          <span className="rounded-full border border-red-500 bg-red-500 px-2.5 py-1 text-xs font-medium text-white">
+                          <span className="rounded-xl border border-red-500 bg-red-500 px-3.5 py-2 text-xs font-medium text-white">
                             Not enough credits — need {est}, you have {availableCredits}
                           </span>
                         ) : null}
@@ -2758,11 +2979,14 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                           type="button"
                           disabled={isGenerating || (hasEstimateInputs && !enough)}
                           onClick={handleGenerate}
-                          className={`flex items-center gap-2 rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] px-7 py-2.5 text-xs font-semibold text-white shadow-md transition hover:opacity-90 cursor-pointer ${isGenerating || (hasEstimateInputs && !enough) ? 'cursor-not-allowed opacity-70' : ''
-                            }`}
+                          className={`flex items-center gap-2 rounded-full px-8 py-2.5 text-sm font-bold shadow-lg transition-all ${
+                            isGenerating || (hasEstimateInputs && !enough)
+                              ? 'cursor-not-allowed bg-[#909294] text-white opacity-70 pointer-events-none'
+                              : 'bg-gray-900 text-white dark:bg-white dark:text-black hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] cursor-pointer'
+                          }`}
                         >
                           {isGenerating && <Loader2 className="h-4 w-4 animate-spin" />}
-                          {isGenerating ? 'Generating Video...' : 'Generate →'}
+                          {isGenerating ? 'Generating...' : 'Generate'}
                         </button>
                       </div>
                     );
@@ -2771,27 +2995,27 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               </div>
             ) : analysisState === 'analyzing' || isAnalyzing ? (
               /* ── AI STACKED CARD ANALYSIS UI (Photo 2) ────────────────────────── */
-              <div className="flex flex-col items-center justify-between gap-5 py-4 text-center">
+              <div className="flex flex-col items-center justify-center gap-4 sm:gap-5 py-3 sm:py-4 px-2 text-center h-full my-auto">
                 {/* Header */}
-                <div className="flex flex-col items-center gap-1.5">
-                  <div className="flex items-center gap-1.5 rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-3 py-1 text-[10px] font-bold tracking-wider text-[#15DCFF] uppercase dark:border-[#15DCFF]/40 dark:bg-[#15DCFF]/15">
-                    <span className="relative flex h-1.5 w-1.5">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-1.5 rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/10 px-3.5 py-1 text-[11px] font-bold tracking-wider text-[#15DCFF] uppercase dark:border-[#15DCFF]/40 dark:bg-[#15DCFF]/15">
+                    <span className="relative flex h-2 w-2">
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#15DCFF] opacity-75"></span>
-                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#15DCFF]"></span>
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-[#15DCFF]"></span>
                     </span>
                     LIVE PROCESSING
                   </div>
 
-                  <h3 className="text-base font-bold text-zinc-900 2xl:text-lg dark:text-white">
+                  <h3 className="text-lg sm:text-xl font-bold text-zinc-900 2xl:text-2xl dark:text-white">
                     AI Analysis in Progress
                   </h3>
-                  <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="max-w-md text-xs sm:text-sm text-zinc-500 dark:text-zinc-400">
                     “Deconstructing video stream & extracting ad elements in real time”
                   </p>
                 </div>
 
                 {/* Stacked Cards Area */}
-                <div className="relative flex h-36 w-full max-w-sm items-start justify-center pt-2">
+                <div className="relative flex h-40 sm:h-44 w-full max-w-md items-start justify-center pt-2">
                   <AnimatePresence mode="popLayout">
                     {analysisCards.slice(0, 4).map((card, index) => {
                       const IconComp = card.icon || Sparkles;
@@ -2819,38 +3043,38 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                             position: 'absolute',
                             width: '100%',
                           }}
-                          className={`flex items-center justify-between rounded-xl border p-3.5 shadow-xl backdrop-blur-md transition-colors ${isActive
+                          className={`flex items-center justify-between rounded-2xl border p-3.5 sm:p-4 shadow-xl backdrop-blur-md transition-colors ${isActive
                               ? 'border-[#15DCFF]/40 bg-zinc-900/90 text-white shadow-[#15DCFF]/10 dark:bg-[#18181b]/95'
                               : 'border-zinc-800/80 bg-zinc-900/60 text-zinc-400 dark:bg-[#18181b]/60'
                             }`}
                         >
                           <div className="flex items-center gap-3">
                             <div
-                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isActive
+                              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isActive
                                   ? 'bg-gradient-to-tr from-[#15DCFF] to-[#6b72f8] text-white shadow-md'
                                   : 'bg-zinc-800 text-zinc-400'
                                 }`}
                             >
-                              <IconComp className="h-4 w-4" />
+                              <IconComp className="h-5 w-5" />
                             </div>
 
                             <div className="flex flex-col justify-center text-left">
-                              <span className="text-xs font-bold leading-tight text-white">
+                              <span className="text-xs sm:text-sm font-bold leading-tight text-white">
                                 {card.title}
                               </span>
-                              <span className="text-[11px] leading-tight text-zinc-400">
+                              <span className="text-[11px] sm:text-xs leading-tight text-zinc-400 mt-0.5">
                                 {card.description}
                               </span>
                             </div>
                           </div>
 
                           {isActive ? (
-                            <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/15 px-2.5 py-0.5">
-                              <Loader2 className="h-3 w-3 animate-spin text-[#15DCFF]" />
-                              <span className="text-[10px] font-semibold text-[#15DCFF]">Active</span>
+                            <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-[#15DCFF]/30 bg-[#15DCFF]/15 px-3 py-1">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#15DCFF]" />
+                              <span className="text-[11px] font-semibold text-[#15DCFF]">Active</span>
                             </div>
                           ) : (
-                            <span className="shrink-0 text-[10px] font-medium text-zinc-500">
+                            <span className="shrink-0 text-xs font-medium text-zinc-500">
                               {card.timestamp}
                             </span>
                           )}
@@ -2861,14 +3085,14 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                 </div>
 
                 {/* Progress Percentage Bar Below Stack */}
-                <div className="flex w-full max-w-sm flex-col items-center gap-1.5 pt-0">
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10 shadow-inner dark:bg-white/20">
+                <div className="flex w-full max-w-md flex-col items-center gap-2 pt-1">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-black/10 shadow-inner dark:bg-white/20">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-[#15DCFF] to-[#6b72f8] transition-all duration-500 ease-out"
                       style={{ width: `${analyzeProgress}%` }}
                     />
                   </div>
-                  <div className="flex w-full justify-between px-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                  <div className="flex w-full justify-between px-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
                     <span>Processing Stream</span>
                     <span className="font-bold text-[#15DCFF]">{analyzeProgress}%</span>
                   </div>
@@ -2876,20 +3100,20 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
               </div>
             ) : analysisState === 'failed' ? (
               /* ── ANALYSIS FAILED STATE ─────────────────────────────────────── */
-              <div className="my-auto flex flex-col items-center justify-center gap-4 py-8 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-500 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-400">
-                  <AlertTriangle className="h-6 w-6" />
+              <div className="my-auto flex flex-col items-center justify-center gap-5 py-8 px-4 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-500 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-400">
+                  <AlertTriangle className="h-7 w-7" />
                 </div>
 
-                <div className="flex max-w-sm flex-col items-center gap-1.5">
-                  <h3 className="text-base font-bold text-zinc-900 2xl:text-lg dark:text-white">
+                <div className="flex max-w-md flex-col items-center gap-2">
+                  <h3 className="text-lg sm:text-xl font-bold text-zinc-900 2xl:text-2xl dark:text-white">
                     Analysis Failed
                   </h3>
-                  <p className="text-xs text-zinc-600 dark:text-zinc-300">
+                  <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300">
                     We couldn't complete the analysis for this ad.
                   </p>
                   {userSafeError ? (
-                    <div className="mt-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-left text-xs leading-relaxed text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
+                    <div className="mt-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-left text-xs leading-relaxed text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
                       <span className="font-bold">Reason: </span>
                       {userSafeError}
                     </div>
@@ -2903,24 +3127,24 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                 <button
                   type="button"
                   onClick={handleTryAgain}
-                  className="mt-2 flex items-center gap-2 rounded-full bg-gray-900 px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black cursor-pointer"
+                  className="mt-2 flex items-center gap-2 rounded-full bg-gray-900 px-7 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black cursor-pointer"
                 >
-                  <RotateCcw className="h-3.5 w-3.5" />
+                  <RotateCcw className="h-4 w-4" />
                   Try Again
                 </button>
               </div>
             ) : analysisState === 'timeout' ? (
               /* ── ANALYSIS TIMEOUT STATE ───────────────────────────────────── */
-              <div className="my-auto flex flex-col items-center justify-center gap-4 py-8 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-500 dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-400">
-                  <Clock className="h-6 w-6" />
+              <div className="my-auto flex flex-col items-center justify-center gap-5 py-8 px-4 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-500 dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-400">
+                  <Clock className="h-7 w-7" />
                 </div>
 
-                <div className="flex max-w-sm flex-col items-center gap-1.5">
-                  <h3 className="text-base font-bold text-zinc-900 2xl:text-lg dark:text-white">
+                <div className="flex max-w-md flex-col items-center gap-2">
+                  <h3 className="text-lg sm:text-xl font-bold text-zinc-900 2xl:text-2xl dark:text-white">
                     Analysis is taking longer than expected
                   </h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400">
                     We couldn't get the analysis result in time. Please check your connection and try again.
                   </p>
                 </div>
@@ -2928,9 +3152,9 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                 <button
                   type="button"
                   onClick={handleTryAgain}
-                  className="mt-2 flex items-center gap-2 rounded-full bg-gray-900 px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black cursor-pointer"
+                  className="mt-2 flex items-center gap-2 rounded-full bg-gray-900 px-7 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black cursor-pointer"
                 >
-                  <RotateCcw className="h-3.5 w-3.5" />
+                  <RotateCcw className="h-4 w-4" />
                   Try Again
                 </button>
               </div>
