@@ -105,12 +105,12 @@ function generateAppleServerApiToken() {
 }
 
 function generateAppleClientSecret() {
-  const privateKey = process.env.APPLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  const keyId = process.env.APPLE_KEY_ID;
+  const privateKey = process.env.APPLE_SIGNIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const keyId = process.env.APPLE_SIGNIN_KEY_ID;
   const teamId = process.env.APPLE_TEAM_ID;
   const bundleId = process.env.APPLE_BUNDLE_ID;
   if (!privateKey || !keyId || !teamId || !bundleId) {
-    throw new Error("Apple App Store credentials are incomplete for client secret.");
+    throw new Error("Apple Sign-In credentials are incomplete for client secret.");
   }
   const now = Math.floor(Date.now() / 1000);
   return jwt.sign(
@@ -1329,6 +1329,11 @@ const AppleSignup = async (req, res) => {
       }
     }
     
+    const decoded = await verifyFirebaseToken(firebaseIdToken);
+    if (decoded.firebase?.sign_in_provider !== "apple.com") {
+      return res.status(400).json({ ok: false, code: "INVALID_PROVIDER", error: "Please use Apple to sign in to this endpoint." });
+    }
+
     let appleRefreshToken = null;
     if (authorizationCode) {
       try {
@@ -1338,11 +1343,6 @@ const AppleSignup = async (req, res) => {
         logger.warn("mobile.apple.signup authorization_code_exchange_failed");
         logger.error("[AppleSignup] Failed to exchange Apple authorization code:", err.response?.data || err.message);
       }
-    }
-    
-    const decoded = await verifyFirebaseToken(firebaseIdToken);
-    if (decoded.firebase?.sign_in_provider !== "apple.com") {
-      return res.status(400).json({ ok: false, code: "INVALID_PROVIDER", error: "Please use Apple to sign in to this endpoint." });
     }
     if (decoded.email && bodyEmail && decoded.email.toLowerCase() !== bodyEmail.toLowerCase()) {
       return res.status(400).json({ ok: false, code: "EMAIL_MISMATCH", error: "The provided email does not match the authenticated account." });
@@ -1534,6 +1534,11 @@ const AppleLogin = async (req, res) => {
   try {
     const { firebaseIdToken, platform, email: bodyEmail, authorizationCode } = req.body;
     
+    const decoded = await verifyFirebaseToken(firebaseIdToken);
+    if (decoded.firebase?.sign_in_provider !== "apple.com") {
+      return res.status(400).json({ ok: false, code: "INVALID_PROVIDER", error: "Please use Apple to sign in to this endpoint." });
+    }
+
     let appleRefreshToken = null;
     if (authorizationCode) {
       try {
@@ -1543,11 +1548,6 @@ const AppleLogin = async (req, res) => {
         logger.warn("mobile.apple.login authorization_code_exchange_failed");
         logger.error("[AppleLogin] Failed to exchange Apple authorization code:", err.response?.data || err.message);
       }
-    }
-    
-    const decoded = await verifyFirebaseToken(firebaseIdToken);
-    if (decoded.firebase?.sign_in_provider !== "apple.com") {
-      return res.status(400).json({ ok: false, code: "INVALID_PROVIDER", error: "Please use Apple to sign in to this endpoint." });
     }
     if (decoded.email && bodyEmail && decoded.email.toLowerCase() !== bodyEmail.toLowerCase()) {
       return res.status(400).json({ ok: false, code: "EMAIL_MISMATCH", error: "The provided email does not match the authenticated account." });
@@ -3250,7 +3250,7 @@ const DeleteAccount = async (req, res) => {
     if (userProfile.firebase_uid) {
       try {
         let refreshTokenToRevoke = userProfile.apple_refresh_token;
-        if (!refreshTokenToRevoke && authorizationCode && (userProfile.loginProviders?.includes("apple") || userProfile.platform === "ios")) {
+        if (authorizationCode && (userProfile.loginProviders?.includes("apple") || userProfile.platform === "ios")) {
           try {
             const tokenRes = await exchangeAppleAuthCode(authorizationCode);
             refreshTokenToRevoke = tokenRes.refresh_token;
@@ -3262,10 +3262,12 @@ const DeleteAccount = async (req, res) => {
 
         if (refreshTokenToRevoke) {
           await revokeAppleToken(refreshTokenToRevoke).catch((err) => {
-            logger.error("mobile.apple.delete token_revocation_failed");
+            logger.warn("mobile.apple.delete token_revocation_failed");
             logger.error("[DeleteAccount] Failed to revoke Apple token:", err.response?.data || err.message);
           });
         }
+        
+        userProfile.apple_refresh_token = "";
         const admin = require("firebase-admin");
         if (admin.apps && admin.apps.length > 0) {
           await admin.auth().deleteUser(userProfile.firebase_uid);
@@ -4152,6 +4154,14 @@ const v2AppleAuth = async (req, res) => {
       return res.status(400).json({
         success: false, statusCode: 400,
         error: "firebaseIdToken is required.", code: "INVALID_INPUT",
+      });
+    }
+
+    const decoded = await verifyFirebaseToken(firebaseIdToken);
+    if (decoded.firebase?.sign_in_provider !== "apple.com") {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "Please use Apple to sign in to this endpoint.", code: "INVALID_PROVIDER",
       });
     }
 
