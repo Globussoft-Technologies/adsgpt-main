@@ -30,15 +30,18 @@ exports.appleSignupPayload = {
   $phoneNumber: "+15551234567",
   email: "user@privaterelay.appleid.com",
   platform: "ios",
+  authorizationCode: "cb81a2...",
 };
 
 exports.appleLoginPayload = {
   firebaseIdToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
   platform: "ios",
+  authorizationCode: "cb81a2...",
 };
 
 exports.deleteAccountPayload = {
   reason: "User requested deletion from mobile app settings",
+  authorizationCode: "cb81a2...",
 };
 
 exports.acceptMobileTermsPayload = {
@@ -60,7 +63,7 @@ exports.restoreApplePurchasesPayload = {
 exports.verifyGooglePaymentPayload = {
   productId: "io.adsgpt.app.subscription.starter.monthly",
   purchaseToken: "GPA.3311-2244-5566-77889",
-  packageName: "com.adsgpt.app",
+  packageName: "io.adsgpt.app",
 };
 
 // ─── Mobile Webhook Payloads ──────────────────────────────────────────────────
@@ -113,6 +116,7 @@ exports.v2GoogleAuthPayload = {
 exports.v2AppleAuthPayload = {
   $firebaseIdToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
   platform: "ios",
+  authorizationCode: "cb81a2...",
 };
 
 exports.v2UpdateProfilePayload = {

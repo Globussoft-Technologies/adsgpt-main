@@ -146,6 +146,7 @@ const userProfileSchema = new mongoose.Schema(
     // === Mobile & Social Auth Fields ===
     firebase_uid: { type: String, default: "" },
     loginProviders: [{ type: String }], // e.g. ["general", "google", "apple"]
+    apple_refresh_token: { type: String, default: "" },
     last_login_at: { type: Date, default: null },
     platform: { type: String, default: "" },
   },

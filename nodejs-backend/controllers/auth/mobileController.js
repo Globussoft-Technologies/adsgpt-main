@@ -4,6 +4,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { google } = require("googleapis");
+const logger = require("../../utils/logger");
 const { generateToken } = require("../../services/authService");
 const UserProfile = require("../../Module/user/userProfileModel");
 const MobileStoreTransaction = require("../../Module/mobilePayments/mobileStoreTransactionModel");
@@ -16,6 +17,35 @@ const apiKey = process.env.AMEMBER_API_KEY;
 const baseUrl = process.env.AMEMBER_BASE_API_URL;
 const secretKey = process.env.JWT_SECRET_KEY;
 const tokenExpiryTime = process.env.TOKEN_EXPIRY_TIME || 1440;
+
+function googleSubscriptionItem(purchase, productId) {
+  const items = purchase?.lineItems || [];
+  return items.find((item) => item.productId === productId && !item.deferredItemReplacement) ||
+    items.find((item) => !item.deferredItemReplacement) || null;
+}
+
+function googleIsFreeTrial(item, notificationType) {
+  if (notificationType === 2) return false;
+  if (item?.offerPhase) return Boolean(item.offerPhase.freeTrial);
+  const offerId = String(item?.offerDetails?.offerId || "");
+  const tags = item?.offerDetails?.offerTags || [];
+  return /free-?trial/i.test(offerId) || tags.some((tag) => /trial/i.test(String(tag)));
+}
+
+function googleOrderId(purchase, item) {
+  return item?.latestSuccessfulOrderId || purchase?.latestOrderId || "";
+}
+
+function googleExpiryDate(item) {
+  const date = item?.expiryTime && new Date(item.expiryTime);
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+}
+
+function googleHasEntitlement(purchase, item) {
+  const expiry = googleExpiryDate(item);
+  return ["SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_IN_GRACE_PERIOD", "SUBSCRIPTION_STATE_CANCELED"].includes(purchase?.subscriptionState) &&
+    Boolean(expiry && expiry > new Date());
+}
 
 function verifyAndDecodeAppleJWS(jwsString) {
   if (!jwsString) throw new Error("Empty Apple JWS token.");
@@ -74,6 +104,51 @@ function generateAppleServerApiToken() {
   );
 }
 
+function generateAppleClientSecret() {
+  const privateKey = process.env.APPLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const keyId = process.env.APPLE_KEY_ID;
+  const teamId = process.env.APPLE_TEAM_ID;
+  const bundleId = process.env.APPLE_BUNDLE_ID;
+  if (!privateKey || !keyId || !teamId || !bundleId) {
+    throw new Error("Apple App Store credentials are incomplete for client secret.");
+  }
+  const now = Math.floor(Date.now() / 1000);
+  return jwt.sign(
+    { iss: teamId, iat: now, exp: now + 86400 * 180, aud: "https://appleid.apple.com", sub: bundleId },
+    privateKey,
+    { algorithm: "ES256", header: { alg: "ES256", kid: keyId, typ: "JWT" } }
+  );
+}
+
+async function exchangeAppleAuthCode(authorizationCode) {
+  const clientSecret = generateAppleClientSecret();
+  const params = new URLSearchParams({
+    client_id: process.env.APPLE_BUNDLE_ID,
+    client_secret: clientSecret,
+    code: authorizationCode,
+    grant_type: "authorization_code",
+  });
+  const response = await axios.post("https://appleid.apple.com/auth/token", params.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
+  logger.info("mobile.apple.authorization_code_exchanged");
+  return response.data;
+}
+
+async function revokeAppleToken(refreshToken) {
+  const clientSecret = generateAppleClientSecret();
+  const params = new URLSearchParams({
+    client_id: process.env.APPLE_BUNDLE_ID,
+    client_secret: clientSecret,
+    token: refreshToken,
+    token_type_hint: "refresh_token",
+  });
+  await axios.post("https://appleid.apple.com/auth/revoke", params.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
+  logger.info("mobile.apple.token_revoked");
+}
+
 async function crossCheckAppleTransaction(payload, retries = 3) {
   const baseUrl =
     payload.environment === "Sandbox"
@@ -103,7 +178,7 @@ async function crossCheckAppleTransaction(payload, retries = 3) {
     } catch (err) {
       const isRetryable = err.response && (err.response.status >= 500 || err.response.data?.errorCode === 5000001);
       if (isRetryable && attempt < retries) {
-        console.warn(`[verifyApplePayment] Apple API 5000001/latency error (attempt ${attempt}/${retries}). Retrying in ${attempt * 2}s...`);
+        logger.warn(`[verifyApplePayment] Apple API 5000001/latency error (attempt ${attempt}/${retries}). Retrying in ${attempt * 2}s...`);
         await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
       } else {
         throw err;
@@ -195,7 +270,7 @@ async function verifyFirebaseToken(idToken) {
   try {
     return await getAuth(getApps()[0]).verifyIdToken(idToken, true);
   } catch (err) {
-    console.error("[mobileController] Firebase verifyIdToken error:", err.message);
+    logger.error("[mobileController] Firebase verifyIdToken error:", err.message);
     const error = new Error("Invalid, revoked, or expired Firebase ID token.");
     error.code = "INVALID_FIREBASE_TOKEN";
     error.status = 401;
@@ -246,7 +321,7 @@ async function updateAmemberPassword(amemberUserId, newPassword) {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
   } catch (e) {
-    console.error("[updateAmemberPassword] error updating password in aMember:", e.message);
+    logger.error("[updateAmemberPassword] error updating password in aMember:", e.message);
   }
 }
 
@@ -278,7 +353,7 @@ async function findUserByEmailOrFirebaseUid({ email, firebaseUid }) {
         if (data[firstKey]?.user_id) amemberUser = data[firstKey];
       }
     } catch (e) {
-      console.error("[mobileController] error looking up aMember user by email:", e.message);
+      logger.error("[mobileController] error looking up aMember user by email:", e.message);
     }
   }
 
@@ -328,7 +403,7 @@ async function getAmemberProducts() {
       amemberProductsCache = allProducts;
       amemberProductsCacheExpiry = Date.now() + 5 * 60 * 1000;
     } catch (e) {
-      console.error("[mobileController] fetch products error:", e.message);
+      logger.error("[mobileController] fetch products error:", e.message);
     }
   }
   return amemberProductsCache || [];
@@ -358,7 +433,7 @@ async function getAmemberProductCategoryMap() {
     amemberProductCategoriesCache = categoryMap;
     amemberProductCategoriesCacheExpiry = Date.now() + 5 * 60 * 1000;
   } catch (error) {
-    console.error("[mobileController] fetch product categories error:", error.message);
+    logger.error("[mobileController] fetch product categories error:", error.message);
     amemberProductCategoriesCache = new Map();
     amemberProductCategoriesCacheExpiry = Date.now() + 60 * 1000;
   }
@@ -563,11 +638,11 @@ async function postAmemberInvoice({
         });
         await axios.put(`${baseUrl}/access/${acc.access_id}`, expireParams.toString(), {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        }).catch((e) => console.warn("[postAmemberInvoice] Could not expire previous access:", e.message));
+        }).catch((e) => logger.warn("[postAmemberInvoice] Could not expire previous access:", e.message));
       }
     }
   } catch (prevErr) {
-    console.warn("[postAmemberInvoice] Warning checking previous active access:", prevErr.message);
+    logger.warn("[postAmemberInvoice] Warning checking previous active access:", prevErr.message);
   }
 
   // Expire previous active transactions in MongoDB MobileStoreTransaction
@@ -584,7 +659,7 @@ async function postAmemberInvoice({
         "meta.replaced_at": new Date(),
       },
     }
-  ).catch((err) => console.warn("[postAmemberInvoice] Expire previous active transactions warning:", err.message));
+  ).catch((err) => logger.warn("[postAmemberInvoice] Expire previous active transactions warning:", err.message));
 
   const publicId = `${platform}_${canonicalTransactionId}`;
   const paysysId = platform === "ios" ? "app-store" : "google-play";
@@ -640,11 +715,11 @@ async function postAmemberInvoice({
   payload.append("nested[access][0][begin_date]", beginDateStr);
   payload.append("nested[access][0][expire_date]", expireDateStr);
 
-  console.log(`[postAmemberInvoice] Sending POST to ${baseUrl}/invoices with payload:`, payload.toString());
+  logger.info(`[postAmemberInvoice] Sending POST to ${baseUrl}/invoices with payload:`, payload.toString());
   const resReq = await axios.post(`${baseUrl}/invoices`, payload.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
-  console.log(`[postAmemberInvoice] aMember API Response:`, JSON.stringify(resReq.data, null, 2));
+  logger.info(`[postAmemberInvoice] aMember API Response:`, JSON.stringify(resReq.data, null, 2));
 
   // Access is granted by the `nested[access][0]` block on the invoice POST
   // above, which links the row to the invoice so aMember can expire and
@@ -663,7 +738,7 @@ async function postAmemberInvoice({
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
   } catch (userErr) {
-    console.error("[postAmemberInvoice] aMember user status update warning:", userErr.message);
+    logger.error("[postAmemberInvoice] aMember user status update warning:", userErr.message);
   }
 
   return resReq.data;
@@ -688,7 +763,7 @@ async function activateAmemberUserStatus({
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
   } catch (userErr) {
-    console.warn("[activateAmemberUserStatus] User status update info:", userErr.message);
+    logger.warn("[activateAmemberUserStatus] User status update info:", userErr.message);
   }
 }
 
@@ -702,12 +777,22 @@ async function deleteAmemberInvoice(platform, canonicalTransactionId) {
     for (const inv of invoices) {
       if (inv && inv.invoice_id) {
         await axios.delete(`${baseUrl}/invoices/${inv.invoice_id}?_key=${apiKey}`);
-        console.log(`[deleteAmemberInvoice] Deleted invoice ${inv.invoice_id} for ${publicId}`);
+        logger.info(`[deleteAmemberInvoice] Deleted invoice ${inv.invoice_id} for ${publicId}`);
       }
     }
   } catch (err) {
-    console.error("[deleteAmemberInvoice] Failed to delete invoice from aMember:", err.message);
+    logger.error("[deleteAmemberInvoice] Failed to delete invoice from aMember:", err.message);
+    throw err;
   }
+}
+
+async function amemberInvoiceExists(platform, transactionId) {
+  const publicId = `${platform}_${transactionId}`;
+  const response = await axios.get(`${baseUrl}/invoices`, {
+    params: { _key: apiKey, "_filter[public_id]": publicId },
+  });
+  const invoices = Array.isArray(response.data) ? response.data : Object.values(response.data || {});
+  return invoices.some((invoice) => invoice?.public_id === publicId);
 }
 
 // ── Auth Handlers ────────────────────────────────────────────────────────────
@@ -890,7 +975,7 @@ const MobileSignup = async (req, res) => {
       nextAction: "SELECT_PLAN",
     });
   } catch (error) {
-    console.error("[MobileSignup] error:", error);
+    logger.error("[MobileSignup] error:", error);
     return res.status(error.status || 500).json({
       ok: false,
       code: error.code || "INTERNAL_ERROR",
@@ -1089,7 +1174,7 @@ const GoogleSignup = async (req, res) => {
       nextAction: "SELECT_PLAN",
     });
   } catch (error) {
-    console.error("[GoogleSignup] error:", error);
+    logger.error("[GoogleSignup] error:", error);
     return res.status(error.status || 500).json({
       ok: false,
       code: error.code || "INVALID_GOOGLE_TOKEN",
@@ -1207,7 +1292,7 @@ const GoogleLogin = async (req, res) => {
       nextAction: active ? "OPEN_APP" : "SELECT_PLAN",
     });
   } catch (error) {
-    console.error("[GoogleLogin] error:", error);
+    logger.error("[GoogleLogin] error:", error);
     return res.status(error.status || 500).json({
       ok: false,
       code: error.code || "INVALID_GOOGLE_TOKEN",
@@ -1235,7 +1320,7 @@ const AppleSignup = async (req, res) => {
     }
   */
   try {
-    const { firebaseIdToken, firstName, lastName, phoneNumber, platform, email: bodyEmail } = req.body;
+    const { firebaseIdToken, firstName, lastName, phoneNumber, platform, email: bodyEmail, authorizationCode } = req.body;
     let cleanPhoneNumber = "";
     if (phoneNumber !== undefined && phoneNumber !== null && String(phoneNumber).trim() !== "") {
       cleanPhoneNumber = normalizePhoneNumber(phoneNumber);
@@ -1243,6 +1328,18 @@ const AppleSignup = async (req, res) => {
         return res.status(400).json({ ok: false, code: "INVALID_PHONE_NUMBER", error: "A valid phone number is required." });
       }
     }
+    
+    let appleRefreshToken = null;
+    if (authorizationCode) {
+      try {
+        const tokenRes = await exchangeAppleAuthCode(authorizationCode);
+        appleRefreshToken = tokenRes.refresh_token;
+      } catch (err) {
+        logger.warn("mobile.apple.signup authorization_code_exchange_failed");
+        logger.error("[AppleSignup] Failed to exchange Apple authorization code:", err.response?.data || err.message);
+      }
+    }
+    
     const decoded = await verifyFirebaseToken(firebaseIdToken);
     if (decoded.firebase?.sign_in_provider !== "apple.com") {
       return res.status(400).json({ ok: false, code: "INVALID_PROVIDER", error: "Please use Apple to sign in to this endpoint." });
@@ -1257,8 +1354,12 @@ const AppleSignup = async (req, res) => {
       return res.status(400).json({ ok: false, code: "INVALID_APPLE_TOKEN", error: "Apple account must provide an email address." });
     }
 
-    const derivedFirstName = firstName || "";
-    const derivedLastName = lastName || "";
+    let derivedFirstName = firstName || "";
+    let derivedLastName = lastName || "";
+    if (!derivedFirstName.trim() && !derivedLastName.trim()) {
+      derivedFirstName = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "") || "AdsGPT";
+      derivedLastName = "User";
+    }
 
     const { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
     if (mongoProfile || amemberUser) {
@@ -1343,6 +1444,7 @@ const AppleSignup = async (req, res) => {
       existingDeletedProfile.name_l = derivedLastName;
       existingDeletedProfile.phoneNumber = cleanPhoneNumber;
       existingDeletedProfile.platform = platform || "ios";
+      if (appleRefreshToken) existingDeletedProfile.apple_refresh_token = appleRefreshToken;
       if (!existingDeletedProfile.loginProviders?.includes("apple")) {
         existingDeletedProfile.loginProviders = [...(existingDeletedProfile.loginProviders || []), "apple"];
       }
@@ -1361,6 +1463,7 @@ const AppleSignup = async (req, res) => {
         amember_user_id: amemberUserId,
         firebase_uid: firebaseUid,
         loginProviders: ["apple"],
+        apple_refresh_token: appleRefreshToken || "",
         last_login_at: new Date(),
         platform: platform || "ios",
       });
@@ -1401,7 +1504,7 @@ const AppleSignup = async (req, res) => {
       nextAction: "SELECT_PLAN",
     });
   } catch (error) {
-    console.error("[AppleSignup] error:", error);
+    logger.error("[AppleSignup] error:", error);
     return res.status(error.status || 500).json({
       ok: false,
       code: error.code || "INVALID_APPLE_TOKEN",
@@ -1429,7 +1532,19 @@ const AppleLogin = async (req, res) => {
     }
   */
   try {
-    const { firebaseIdToken, platform, email: bodyEmail } = req.body;
+    const { firebaseIdToken, platform, email: bodyEmail, authorizationCode } = req.body;
+    
+    let appleRefreshToken = null;
+    if (authorizationCode) {
+      try {
+        const tokenRes = await exchangeAppleAuthCode(authorizationCode);
+        appleRefreshToken = tokenRes.refresh_token;
+      } catch (err) {
+        logger.warn("mobile.apple.login authorization_code_exchange_failed");
+        logger.error("[AppleLogin] Failed to exchange Apple authorization code:", err.response?.data || err.message);
+      }
+    }
+    
     const decoded = await verifyFirebaseToken(firebaseIdToken);
     if (decoded.firebase?.sign_in_provider !== "apple.com") {
       return res.status(400).json({ ok: false, code: "INVALID_PROVIDER", error: "Please use Apple to sign in to this endpoint." });
@@ -1455,6 +1570,7 @@ const AppleLogin = async (req, res) => {
       if (!mongoProfile.firebase_uid) mongoProfile.firebase_uid = firebaseUid;
       if (!mongoProfile.loginProviders) mongoProfile.loginProviders = ["general"];
       if (!mongoProfile.loginProviders.includes("apple")) mongoProfile.loginProviders.push("apple");
+      if (appleRefreshToken) mongoProfile.apple_refresh_token = appleRefreshToken;
       mongoProfile.platform = platform || mongoProfile.platform || "ios";
       mongoProfile.last_login_at = new Date();
       await mongoProfile.save();
@@ -1510,7 +1626,7 @@ const AppleLogin = async (req, res) => {
       nextAction: active ? "OPEN_APP" : "SELECT_PLAN",
     });
   } catch (error) {
-    console.error("[AppleLogin] error:", error);
+    logger.error("[AppleLogin] error:", error);
     return res.status(error.status || 500).json({
       ok: false,
       code: error.code || "INVALID_APPLE_TOKEN",
@@ -1755,14 +1871,14 @@ const verifyApplePayment = async (req, res) => {
     try {
       decoded = validateApplePayload(verifyAndDecodeAppleJWS(signedTransaction));
     } catch (e) {
-      console.error("[verifyApplePayment] JWS verification failed:", e.message);
+      logger.error("[verifyApplePayment] JWS verification failed:", e.message);
       return res.status(403).json({ ok: false, code: "STORE_PROOF_INVALID", error: "Invalid App Store signature." });
     }
 
     try {
       decoded = await crossCheckAppleTransaction(decoded);
     } catch (e) {
-      console.error("[verifyApplePayment] App Store Server API check failed:", e.message, e.response?.data || e.stack);
+      logger.error("[verifyApplePayment] App Store Server API check failed:", e.message, e.response?.data || e.stack);
       return res.status(403).json({ ok: false, code: "APPLE_SERVER_ERROR", error: "Apple could not confirm this transaction." });
     }
 
@@ -2003,7 +2119,7 @@ const verifyApplePayment = async (req, res) => {
     } catch (invoiceErr) {
       await releaseAppleTransactionProcessing(ownership._id, transactionId);
       const detail = invoiceErr.response?.data?.error || invoiceErr.response?.data?.message || invoiceErr.message;
-      console.error("[verifyApplePayment] aMember invoice failed:", detail);
+      logger.error("[verifyApplePayment] aMember invoice failed:", detail);
       return res.status(422).json({
         ok: false,
         code: "AMEMBER_SYNC_FAILED",
@@ -2048,7 +2164,7 @@ const verifyApplePayment = async (req, res) => {
       expiresDate,
     });
   } catch (error) {
-    console.error("[verifyApplePayment] error:", error);
+    logger.error("[verifyApplePayment] error:", error);
     return res.status(500).json({ ok: false, code: "STORE_PROOF_INVALID", error: error.message || "App Store verification failed." });
   }
 };
@@ -2073,17 +2189,21 @@ const verifyGooglePayment = async (req, res) => {
     }
   */
   try {
-    console.log(`\n\n=== [verifyGooglePayment] START ===`);
-    console.log(`[verifyGooglePayment] Raw req.body:`, JSON.stringify(req.body, null, 2));
+    logger.info(`\n\n=== [verifyGooglePayment] START ===`);
+    logger.info(`[verifyGooglePayment] Raw req.body:`, JSON.stringify(req.body, null, 2));
     
     const { productId, purchaseToken, packageName } = req.body;
+    const expectedGooglePackage = process.env.GOOGLE_PLAY_PACKAGE_NAME || "io.adsgpt.app";
     const rawUserId = req.user?.user_id || req.user?.amember_user_id;
     const amemberUserId = String(rawUserId).replace(/^GPT-/, "");
 
     if (!productId || !purchaseToken) {
       return res.status(400).json({ ok: false, code: "STORE_PROOF_INVALID", error: "productId and purchaseToken are required." });
     }
-    console.log(`[verifyGooglePayment] Init for user: ${amemberUserId}, productId: ${productId}, basePlanId (if any): ${req.body.basePlanId}`);
+    if (packageName && packageName !== expectedGooglePackage) {
+      return res.status(400).json({ ok: false, code: "STORE_PROOF_INVALID", error: "Unexpected Google Play package." });
+    }
+    logger.info(`[verifyGooglePayment] Init for user: ${amemberUserId}, productId: ${productId}, basePlanId (if any): ${req.body.basePlanId}`);
 
     let subscriptionState;
     try {
@@ -2096,13 +2216,13 @@ const verifyGooglePayment = async (req, res) => {
       });
       const androidPublisher = google.androidpublisher({ version: 'v3', auth });
       const response = await androidPublisher.purchases.subscriptionsv2.get({
-        packageName: packageName || process.env.GOOGLE_PLAY_PACKAGE_NAME || "io.adsgpt.app",
+        packageName: expectedGooglePackage,
         token: purchaseToken,
       });
       subscriptionState = response.data;
-      console.log(`[verifyGooglePayment] Google API response for token ${purchaseToken.substring(0, 10)}...:`, JSON.stringify(subscriptionState, null, 2));
+      logger.info(`[verifyGooglePayment] Google API response for token ${purchaseToken.substring(0, 10)}...:`, JSON.stringify(subscriptionState, null, 2));
     } catch (e) {
-      console.error("[verifyGooglePayment] Google Developer API failed:", {
+      logger.error("[verifyGooglePayment] Google Developer API failed:", {
         message: e.message,
         status: e.response?.status,
         data: e.response?.data,
@@ -2117,33 +2237,33 @@ const verifyGooglePayment = async (req, res) => {
     const now = new Date();
     let basePlanId = null;
 
-    if (subscriptionState.lineItems && subscriptionState.lineItems.length > 0) {
-      const item = subscriptionState.lineItems[0];
+    const googleItem = googleSubscriptionItem(subscriptionState, productId);
+    if (googleItem?.productId !== productId || !googleHasEntitlement(subscriptionState, googleItem)) {
+      return res.status(403).json({ ok: false, code: "STORE_PROOF_INVALID", error: "Google Play subscription is not active." });
+    }
+    const googleOrder = googleOrderId(subscriptionState, googleItem);
+    if (!googleOrder) {
+      return res.status(422).json({ ok: false, code: "STORE_PROOF_INVALID", error: "Google Play did not return a successful order ID." });
+    }
+    logger.info("mobile.google.verify play_purchase_validated");
+    if (googleItem) {
+      const item = googleItem;
       if (item.offerDetails && item.offerDetails.basePlanId) {
         basePlanId = item.offerDetails.basePlanId;
       }
       if (item.expiryTime) {
         expiresDate = new Date(item.expiryTime);
       }
-      // Trial detection keys off the offer ID, not offerTags. offerTags are
-      // free-text labels typed per-offer in Play Console, so a missing or
-      // misspelled tag silently booked a free trial as a full-price initial
-      // purchase (granting the paid tier's credits). Every trial offer we
-      // publish is named "<tier>-free-trial" / "<tier>-annual-free-trial",
-      // which Play returns in offerDetails.offerId. offerTags is still honoured
-      // as a fallback for any offer tagged that way.
-      const offerId = String(item.offerDetails?.offerId || "");
-      const offerTags = item.offerDetails?.offerTags || [];
-      if (/free-?trial/i.test(offerId) || offerTags.some((tag) => /trial/i.test(String(tag)))) {
-        isTrial = true;
-      }
+      // The current offer phase is authoritative; offer names and tags are
+      // only a fallback for older responses without offerPhase.
+      isTrial = googleIsFreeTrial(item);
     }
 
     const canonicalTxId = purchaseToken;
     let existingTx = await MobileStoreTransaction.findOne({ canonical_transaction_id: canonicalTxId });
     // If this transaction ID was already processed (by any user), reject it
     if (existingTx) {
-      console.warn(`[verifyGooglePayment] Tx ${canonicalTxId} already processed.`);
+      logger.warn(`[verifyGooglePayment] Tx ${canonicalTxId} already processed.`);
       return res.status(409).json({
         ok: false,
         code: "TRANSACTION_ALREADY_USED",
@@ -2151,12 +2271,12 @@ const verifyGooglePayment = async (req, res) => {
       });
     }
 
-    console.log(`[verifyGooglePayment] Resolving product... isTrial: ${isTrial}, basePlanId: ${basePlanId}`);
+    logger.info(`[verifyGooglePayment] Resolving product... isTrial: ${isTrial}, basePlanId: ${basePlanId}`);
     const matchedProduct = isTrial
       ? await matchAmemberFreeTrialProduct()
       : await matchAmemberProduct(productId, basePlanId);
 
-    console.log(`[verifyGooglePayment] Matched aMember Product:`, JSON.stringify(matchedProduct, null, 2));
+    logger.info(`[verifyGooglePayment] Matched aMember Product:`, JSON.stringify(matchedProduct, null, 2));
 
     // Use actual aMember product price for paid plans
     if (!isTrial && matchedProduct?.amemberProduct?.first_price) {
@@ -2165,12 +2285,12 @@ const verifyGooglePayment = async (req, res) => {
       amount = 0.00;
     }
 
-    console.log(`[verifyGooglePayment] Calculated invoice amount: ${amount}`);
+    logger.info(`[verifyGooglePayment] Calculated invoice amount: ${amount}`);
 
     try {
       const invoicePayload = {
         amemberUserId,
-        canonicalTransactionId: canonicalTxId,
+        canonicalTransactionId: googleOrder,
         platform: "android",
         storeProductId: productId,
         matchedProduct,
@@ -2179,11 +2299,15 @@ const verifyGooglePayment = async (req, res) => {
         purchasedAt: now,
         expiresAt: expiresDate,
       };
-      console.log(`[verifyGooglePayment] Calling postAmemberInvoice with:`, JSON.stringify(invoicePayload, null, 2));
-      await postAmemberInvoice(invoicePayload);
+      logger.info(`[verifyGooglePayment] Calling postAmemberInvoice with:`, JSON.stringify(invoicePayload, null, 2));
+      if (!(await amemberInvoiceExists("android", googleOrder))) {
+        await postAmemberInvoice(invoicePayload);
+      }
+      logger.info("mobile.google.verify amember_invoice_confirmed");
     } catch (invoiceErr) {
+      logger.error("mobile.google.verify amember_invoice_failed");
       const detail = invoiceErr.response?.data?.error || invoiceErr.response?.data?.message || invoiceErr.message;
-      console.error("[verifyGooglePayment] aMember invoice failed:", detail);
+      logger.error("[verifyGooglePayment] aMember invoice failed:", detail);
       return res.status(422).json({
         ok: false,
         code: "AMEMBER_SYNC_FAILED",
@@ -2201,12 +2325,13 @@ const verifyGooglePayment = async (req, res) => {
       event_type: isTrial ? "free_trial" : "initial_purchase",
       amount,
       currency: "USD",
-      amember_invoice_id: `android_${canonicalTxId}`,
+      amember_invoice_id: `android_${googleOrder}`,
       purchased_at: now,
       expires_at: expiresDate,
       raw_payload: subscriptionState,
-      meta: { packageName, base_plan_id: basePlanId },
+      meta: { packageName, base_plan_id: basePlanId, google_order_id: googleOrder },
     });
+    logger.info("mobile.google.verify transaction_recorded");
 
     await activateAmemberUserStatus({
       amemberUserId,
@@ -2262,7 +2387,8 @@ const verifyGooglePayment = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("[verifyGooglePayment] error:", error);
+    logger.error("mobile.google.verify failed");
+    logger.error("[verifyGooglePayment] error:", error);
     return res.status(500).json({ ok: false, code: "STORE_PROOF_INVALID", error: error.message || "Google Play verification failed." });
   }
 };
@@ -2387,9 +2513,10 @@ async function getUserSubscriptionDetails(amemberUserId, userData, active) {
     if (latestTx) {
       const isTxActive = active && new Date(latestTx.expires_at) > new Date();
       const platform = latestTx.platform || "ios";
+      const expectedGooglePackage = process.env.GOOGLE_PLAY_PACKAGE_NAME || "io.adsgpt.app";
       const manageUrl = platform === "ios"
         ? "https://apps.apple.com/account/subscriptions"
-        : `https://play.google.com/store/account/subscriptions?sku=${latestTx.store_product_id || ""}&package=com.adsgpt.app`;
+        : `https://play.google.com/store/account/subscriptions?sku=${latestTx.store_product_id || ""}&package=${expectedGooglePackage}`;
 
       return {
         hasActivePlan: Boolean(active),
@@ -2436,7 +2563,7 @@ async function getUserSubscriptionDetails(amemberUserId, userData, active) {
       manage_url: null,
     };
   } catch (err) {
-    console.error("[getUserSubscriptionDetails] Error:", err.message);
+    logger.error("[getUserSubscriptionDetails] Error:", err.message);
     return {
       hasActivePlan: Boolean(active),
       platform: null,
@@ -2525,7 +2652,7 @@ const getMobileSubscriptionDetails = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("[getMobileSubscriptionDetails] error:", error);
+    logger.error("[getMobileSubscriptionDetails] error:", error);
     return res.status(500).json({ ok: false, error: "Failed to retrieve mobile subscription details." });
   }
 };
@@ -2541,7 +2668,7 @@ const handleAppleWebhook = async (req, res) => {
     try {
       decoded = verifyAndDecodeAppleJWS(signedPayload);
     } catch (err) {
-      console.error("[handleAppleWebhook] JWS verification failed:", err.message);
+      logger.error("[handleAppleWebhook] JWS verification failed:", err.message);
       return res.status(401).json({ ok: false, error: "Forged webhook payload." });
     }
 
@@ -2563,7 +2690,7 @@ const handleAppleWebhook = async (req, res) => {
         );
         txInfo = await crossCheckAppleTransaction(signedTransaction);
       } catch (err) {
-        console.error("[handleAppleWebhook] Apple transaction check failed:", err.message);
+        logger.error("[handleAppleWebhook] Apple transaction check failed:", err.message);
         return res.status(err.response ? 502 : 401).json({
           ok: false,
           error: err.response
@@ -2742,7 +2869,7 @@ const handleAppleWebhook = async (req, res) => {
           }
         }
       } catch (err) {
-        console.error("[handleAppleWebhook] Failed to process transaction info:", err.message);
+        logger.error("[handleAppleWebhook] Failed to process transaction info:", err.message);
         return res.status(500).json({ ok: false, error: "Webhook processing failed." });
       }
     }
@@ -2766,47 +2893,70 @@ const handleAppleWebhook = async (req, res) => {
 
     return res.status(200).json({ ok: true });
   } catch (error) {
-    console.error("[handleAppleWebhook] error:", error);
+    logger.error("[handleAppleWebhook] error:", error);
     return res.status(500).json({ ok: false, error: "Webhook failed." });
   }
 };
 
 const handleGoogleWebhook = async (req, res) => {
   try {
-    console.log(`\n\n=== [handleGoogleWebhook] START ===`);
-    console.log(`[handleGoogleWebhook] Raw req.body:`, JSON.stringify(req.body, null, 2));
+    logger.info(`\n\n=== [handleGoogleWebhook] START ===`);
+    logger.info(`[handleGoogleWebhook] Raw req.body:`, JSON.stringify(req.body, null, 2));
 
     const secretToken = process.env.GOOGLE_PUBSUB_SECRET_TOKEN;
-    if (secretToken && req.query.token !== secretToken) {
+    if (!secretToken) {
+      logger.error("mobile.google.webhook secret_missing");
+      logger.error("[handleGoogleWebhook] GOOGLE_PUBSUB_SECRET_TOKEN is not configured");
+      return res.status(503).json({ ok: false, error: "Webhook is not configured." });
+    }
+    if (req.query.token !== secretToken) {
+      logger.warn("mobile.google.webhook unauthorized");
       return res.status(401).json({ ok: false, error: "Unauthorized webhook." });
     }
 
-    const { message } = req.body;
+    const { message } = req.body || {};
     if (!message || !message.data) return res.status(400).json({ ok: false, error: "message.data is required" });
 
-    const messageId = message.messageId || `g_evt_${Date.now()}`;
+    const messageId = message.messageId || message.message_id;
+    if (!messageId) return res.status(400).json({ ok: false, error: "message.messageId is required" });
     const existing = await MobileStoreWebhookEvent.findOne({ event_id: messageId });
-    if (existing) return res.status(200).json({ ok: true, message: "Duplicate event ignored." });
+    if (existing?.state === "processed") {
+      logger.info("mobile.google.webhook duplicate_ignored");
+      return res.status(200).json({ ok: true, message: "Duplicate event ignored." });
+    }
 
     let decodedData = {};
     try {
       decodedData = JSON.parse(Buffer.from(message.data, "base64").toString("utf-8"));
-      console.log(`[handleGoogleWebhook] Decoded Webhook Payload:`, JSON.stringify(decodedData, null, 2));
-    } catch (e) { }
+      logger.info(`[handleGoogleWebhook] Decoded Webhook Payload:`, JSON.stringify(decodedData, null, 2));
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: "Invalid message.data JSON." });
+    }
 
-    await MobileStoreWebhookEvent.create({
-      platform: "android",
-      event_id: messageId,
-      event_type: "GOOGLE_PUBSUB_EVENT",
-      state: "processed",
-      raw_payload: decodedData,
-    });
+    if (!existing) {
+      await MobileStoreWebhookEvent.create({
+        platform: "android",
+        event_id: messageId,
+        event_type: "GOOGLE_PUBSUB_EVENT",
+        state: "received",
+        raw_payload: decodedData,
+      });
+    } else {
+      await MobileStoreWebhookEvent.updateOne(
+        { event_id: messageId },
+        { $inc: { attempts: 1 }, $set: { state: "received" } }
+      );
+    }
 
+    try {
     const subNotification = decodedData.subscriptionNotification;
     if (subNotification) {
       const purchaseToken = subNotification.purchaseToken;
       const notificationType = subNotification.notificationType;
-      console.log(`[handleGoogleWebhook] Processing subscription notificationType: ${notificationType}`);
+      if (typeof purchaseToken !== "string" || !purchaseToken || !Number.isInteger(notificationType)) {
+        throw new Error("Invalid Google subscription notification.");
+      }
+      logger.info(`[handleGoogleWebhook] Processing subscription notificationType: ${notificationType}`);
 
       // Types that indicate an active, billable subscription (new, renewed, or recovered):
       // 1 = SUBSCRIPTION_RECOVERED  (recovered from account hold)
@@ -2826,55 +2976,52 @@ const handleGoogleWebhook = async (req, res) => {
           });
           const androidPublisher = google.androidpublisher({ version: 'v3', auth });
           const packageName = decodedData.packageName || process.env.GOOGLE_PLAY_PACKAGE_NAME || "io.adsgpt.app";
+          if (packageName !== (process.env.GOOGLE_PLAY_PACKAGE_NAME || "io.adsgpt.app")) {
+            throw new Error("Google notification package does not match this app.");
+          }
           const response = await androidPublisher.purchases.subscriptionsv2.get({
             packageName: packageName,
             token: purchaseToken,
           });
           const subscriptionState = response.data;
-          console.log(`[handleGoogleWebhook] Google API state for token:`, JSON.stringify(subscriptionState, null, 2));
+          logger.info(`[handleGoogleWebhook] Google API state for token:`, JSON.stringify(subscriptionState, null, 2));
 
-          let expiresDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // fallback
+          const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken }).sort({ createdAt: -1 });
+          if (!existingTx?.amember_user_id) throw new Error("Purchase owner not found; retry after purchase verification.");
+          let expiresDate = null;
           let basePlanId = null;
           let isTrial = false;
+          const googleItem = googleSubscriptionItem(subscriptionState, existingTx.store_product_id);
+          const orderId = googleOrderId(subscriptionState, googleItem);
+          if (googleItem?.productId !== existingTx.store_product_id || !googleHasEntitlement(subscriptionState, googleItem) || !orderId) {
+            throw new Error("Google subscription lacks an active entitlement or successful order ID.");
+          }
 
           if (subscriptionState.lineItems && subscriptionState.lineItems.length > 0) {
-            const item = subscriptionState.lineItems[0];
+            const item = googleItem;
             if (item.offerDetails?.basePlanId) {
               basePlanId = item.offerDetails.basePlanId;
             }
             if (item.expiryTime) {
               expiresDate = new Date(item.expiryTime);
             }
-            // Detect if this webhook event is still for a trial period
-            const offerId = String(item.offerDetails?.offerId || "");
-            const offerTags = item.offerDetails?.offerTags || [];
-            if (/free-?trial/i.test(offerId) || offerTags.some((tag) => /trial/i.test(String(tag)))) {
-              isTrial = true;
-            }
+            // Use Google's current phase; the original offer ID may persist after a trial.
+            isTrial = googleIsFreeTrial(item, notificationType);
           }
 
-          await MobileStoreTransaction.updateMany(
-            { original_transaction_id: purchaseToken },
-            {
-              $set: {
-                event_type: isTrial ? "free_trial" : (notificationType === 4 ? "initial_purchase" : "renewal"),
-                amember_sync_pending: false,
-                expires_at: expiresDate,
-                "meta.base_plan_id": basePlanId || "",
-              }
-            }
-          );
-
-          const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken });
-          if (existingTx && existingTx.amember_user_id) {
+          const recordedOrder = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken, "meta.google_order_id": orderId });
+          if (recordedOrder && !recordedOrder.meta?.amember_sync_pending) {
+            await MobileStoreTransaction.updateOne({ _id: recordedOrder._id }, { $set: { expires_at: expiresDate } });
+            logger.info("mobile.google.webhook order_already_recorded");
+          } else {
             const resolvedBasePlanId = basePlanId || existingTx.meta?.base_plan_id;
-            console.log(`[handleGoogleWebhook] Resolving product... isTrial: ${isTrial}, resolvedBasePlanId: ${resolvedBasePlanId}`);
+            logger.info(`[handleGoogleWebhook] Resolving product... isTrial: ${isTrial}, resolvedBasePlanId: ${resolvedBasePlanId}`);
             
             const matchedProduct = isTrial
               ? await matchAmemberFreeTrialProduct()
               : await matchAmemberProduct(existingTx.store_product_id, resolvedBasePlanId);
             
-            console.log(`[handleGoogleWebhook] Matched aMember Product:`, JSON.stringify(matchedProduct, null, 2));
+            logger.info(`[handleGoogleWebhook] Matched aMember Product:`, JSON.stringify(matchedProduct, null, 2));
 
             // Use matched product's actual price for paid renewals — do NOT reuse
             // existingTx.amount which may be 0 if this was originally a free trial.
@@ -2882,11 +3029,14 @@ const handleGoogleWebhook = async (req, res) => {
             if (!isTrial && matchedProduct?.amemberProduct?.first_price) {
               invoiceAmount = Number(matchedProduct.amemberProduct.first_price) || 0.00;
             }
-            console.log(`[handleGoogleWebhook] Calculated invoiceAmount: ${invoiceAmount}`);
+            if (!isTrial && (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0)) {
+              throw new Error("Paid aMember product has no valid price.");
+            }
+            logger.info(`[handleGoogleWebhook] Calculated invoiceAmount: ${invoiceAmount}`);
 
             const invoicePayload = {
               amemberUserId: existingTx.amember_user_id,
-              canonicalTransactionId: purchaseToken,
+              canonicalTransactionId: orderId,
               platform: "android",
               storeProductId: existingTx.store_product_id,
               matchedProduct,
@@ -2895,27 +3045,52 @@ const handleGoogleWebhook = async (req, res) => {
               purchasedAt: new Date(),
               expiresAt: expiresDate,
             };
-            console.log(`[handleGoogleWebhook] Calling postAmemberInvoice with:`, JSON.stringify(invoicePayload, null, 2));
-            await postAmemberInvoice(invoicePayload);
-          } else {
-            console.warn(`[handleGoogleWebhook] Could not find amember_user_id for purchaseToken: ${purchaseToken.substring(0, 10)}...`);
+            logger.info(`[handleGoogleWebhook] Calling postAmemberInvoice with:`, JSON.stringify(invoicePayload, null, 2));
+            if (!recordedOrder) await MobileStoreTransaction.create({
+              user_id: existingTx.user_id,
+              amember_user_id: existingTx.amember_user_id,
+              platform: "android",
+              canonical_transaction_id: orderId,
+              original_transaction_id: purchaseToken,
+              store_product_id: existingTx.store_product_id,
+              event_type: isTrial ? "free_trial" : "renewal",
+              amount: invoiceAmount,
+              currency: existingTx.currency || "USD",
+              amember_invoice_id: `android_${orderId}`,
+              purchased_at: new Date(),
+              expires_at: expiresDate,
+              raw_payload: subscriptionState,
+              meta: { google_order_id: orderId, base_plan_id: resolvedBasePlanId, amember_sync_pending: true },
+            });
+            if (!(await amemberInvoiceExists("android", orderId))) await postAmemberInvoice(invoicePayload);
+            await MobileStoreTransaction.updateOne(
+              { original_transaction_id: purchaseToken, "meta.google_order_id": orderId },
+              { $set: { "meta.amember_sync_pending": false, expires_at: expiresDate } },
+            );
+            logger.info("mobile.google.webhook amember_renewal_confirmed");
           }
         } catch (err) {
-          console.error(`[handleGoogleWebhook] Failed to process notificationType=${notificationType} via Developer API:`, err.message);
-          await MobileStoreTransaction.updateMany(
-            { original_transaction_id: purchaseToken },
-            { $set: { event_type: "renewal", amember_sync_pending: true } }
-          );
+          logger.error(`[handleGoogleWebhook] Failed to process notificationType=${notificationType} via Developer API:`, err.message);
+          throw err;
         }
-      } else if (notificationType === 3 || notificationType === 12 || notificationType === 13) { // Canceled, Revoked, or Expired
+      } else if (notificationType === 3) { // Canceled: keep access through the paid period.
+        logger.info("mobile.google.webhook subscription_canceled");
+        await MobileStoreTransaction.updateMany(
+          { original_transaction_id: purchaseToken },
+          { $set: { "meta.google_canceled": true } },
+        );
+      } else if (notificationType === 12 || notificationType === 13) { // Revoked or expired
+        logger.info(notificationType === 12 ? "mobile.google.webhook subscription_revoked" : "mobile.google.webhook subscription_expired");
         await MobileStoreTransaction.updateMany(
           { original_transaction_id: purchaseToken },
           { $set: { expires_at: new Date() } }
         );
 
-        const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken });
-        if (existingTx && existingTx.canonical_transaction_id) {
-          await deleteAmemberInvoice("android", existingTx.canonical_transaction_id);
+        if (notificationType === 12) {
+          const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken }).sort({ createdAt: -1 });
+          if (existingTx?.amember_invoice_id) {
+            await deleteAmemberInvoice("android", existingTx.amember_invoice_id.replace(/^android_/, ""));
+          }
         }
       }
     }
@@ -2930,9 +3105,16 @@ const handleGoogleWebhook = async (req, res) => {
       }
     } catch (_) {}
 
+    await MobileStoreWebhookEvent.updateOne({ event_id: messageId }, { $set: { state: "processed" } });
+    logger.info(`mobile.google.webhook processed type=${subNotification?.notificationType ?? "test"}`);
     return res.status(200).json({ ok: true });
+    } catch (error) {
+      await MobileStoreWebhookEvent.updateOne({ event_id: messageId }, { $set: { state: "failed", "meta.last_error": error.message } });
+      throw error;
+    }
   } catch (error) {
-    console.error("[handleGoogleWebhook] error:", error);
+    logger.error("mobile.google.webhook failed");
+    logger.error("[handleGoogleWebhook] error:", error);
     return res.status(500).json({ ok: false, error: "Webhook failed." });
   }
 };
@@ -2950,7 +3132,8 @@ const DeleteAccount = async (req, res) => {
           schema: {
             type: "object",
             properties: {
-              reason: { type: "string", description: "Reason for account deletion", example: "User requested deletion from mobile app settings" }
+              reason: { type: "string", description: "Reason for account deletion", example: "User requested deletion from mobile app settings" },
+              authorizationCode: { type: "string", description: "Apple authorization code for revoking the token (optional)", example: "c8b1a2..." }
             }
           }
         }
@@ -2994,16 +3177,34 @@ const DeleteAccount = async (req, res) => {
 
     const targetAmemberUserId = userProfile.amember_user_id || cleanUserId;
     const reason = req.body?.reason || "User requested deletion from mobile app settings";
+    const authorizationCode = req.body?.authorizationCode;
 
     // 2. If Firebase user (Google or Apple), hard-delete from Firebase Admin
     if (userProfile.firebase_uid) {
       try {
+        let refreshTokenToRevoke = userProfile.apple_refresh_token;
+        if (!refreshTokenToRevoke && authorizationCode && (userProfile.loginProviders?.includes("apple") || userProfile.platform === "ios")) {
+          try {
+            const tokenRes = await exchangeAppleAuthCode(authorizationCode);
+            refreshTokenToRevoke = tokenRes.refresh_token;
+          } catch (codeErr) {
+            logger.warn("mobile.apple.delete authorization_code_exchange_failed");
+            logger.error("[DeleteAccount] Failed to exchange provided Apple authorization code for revocation:", codeErr.response?.data || codeErr.message);
+          }
+        }
+
+        if (refreshTokenToRevoke) {
+          await revokeAppleToken(refreshTokenToRevoke).catch((err) => {
+            logger.error("mobile.apple.delete token_revocation_failed");
+            logger.error("[DeleteAccount] Failed to revoke Apple token:", err.response?.data || err.message);
+          });
+        }
         const admin = require("firebase-admin");
         if (admin.apps && admin.apps.length > 0) {
           await admin.auth().deleteUser(userProfile.firebase_uid);
         }
       } catch (fbErr) {
-        console.error("[DeleteAccount] Firebase user deletion warning:", fbErr.message);
+        logger.error("[DeleteAccount] Firebase user deletion warning:", fbErr.message);
       }
     }
 
@@ -3013,7 +3214,7 @@ const DeleteAccount = async (req, res) => {
         const url = `${baseUrl}/users/${targetAmemberUserId}?_key=${apiKey}`;
         await axios.delete(url);
       } catch (amErr) {
-        console.error("[DeleteAccount] aMember user deletion error:", amErr.message);
+        logger.error("[DeleteAccount] aMember user deletion error:", amErr.message);
       }
     }
 
@@ -3028,7 +3229,7 @@ const DeleteAccount = async (req, res) => {
       message: "Account has been successfully deleted.",
     });
   } catch (error) {
-    console.error("[DeleteAccount] error:", error);
+    logger.error("[DeleteAccount] error:", error);
     return res.status(500).json({
       ok: false,
       code: "INTERNAL_ERROR",
@@ -3113,7 +3314,7 @@ const AcceptMobileTerms = async (req, res) => {
         { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
       );
     } catch (error) {
-      console.error("[AcceptMobileTerms] aMember update failed:", error.message);
+      logger.error("[AcceptMobileTerms] aMember update failed:", error.message);
       return res.status(500).json({
         ok: false,
         code: "AMEMBER_TERMS_SYNC_FAILED",
@@ -3128,7 +3329,7 @@ const AcceptMobileTerms = async (req, res) => {
       acceptedAt,
     });
   } catch (error) {
-    console.error("[AcceptMobileTerms] error:", error);
+    logger.error("[AcceptMobileTerms] error:", error);
     return res.status(500).json({
       ok: false,
       code: "INTERNAL_ERROR",
@@ -3256,7 +3457,7 @@ async function getMobileFreeTrial(req, res) {
       },
     });
   } catch (error) {
-    console.error("[getMobileFreeTrial] error:", error.response?.data || error.message);
+    logger.error("[getMobileFreeTrial] error:", error.response?.data || error.message);
     return res.status(500).json({
       ok: false,
       code: "AMEMBER_ERROR",
@@ -3362,7 +3563,7 @@ async function getMobilePlans(req, res) {
       plans,
     });
   } catch (error) {
-    console.error("[getMobilePlans] error:", error);
+    logger.error("[getMobilePlans] error:", error);
     return res.status(500).json({
       ok: false,
       code: "INTERNAL_ERROR",
@@ -3435,7 +3636,7 @@ const ForgotPassword = async (req, res) => {
     const targetLogin = existingUser.login || existingUser.email || cleanInput;
     const url = `${baseUrl}/check-access/send-pass?_key=${apiKey}&login=${encodeURIComponent(targetLogin)}`;
     const amemberResponse = await axios.get(url);
-    console.log('[ForgotPassword] aMember send-pass response:', {
+    logger.info('[ForgotPassword] aMember send-pass response:', {
       status: amemberResponse.status,
       data: amemberResponse.data,
     });
@@ -3445,7 +3646,7 @@ const ForgotPassword = async (req, res) => {
       message: "Password reset link has been sent to your email address.",
     });
   } catch (error) {
-    console.error("[ForgotPassword] error:", error.response?.data || error.message);
+    logger.error("[ForgotPassword] error:", error.response?.data || error.message);
     return res.status(500).json({
       ok: false,
       code: "AMEMBER_ERROR",
@@ -3567,7 +3768,7 @@ const v2EmailAuth = async (req, res) => {
         const resp = await fetch(`${amemberUrl}?${qs}`);
         userData = await resp.json();
       } catch (fetchErr) {
-        console.error("[v2Auth/email] aMember fetch error:", fetchErr.response?.data || fetchErr.message);
+        logger.error("[v2Auth/email] aMember fetch error:", fetchErr.response?.data || fetchErr.message);
         return res.status(500).json({
           success: false, statusCode: 500,
           error: "We're having trouble logging you in right now. Please try again in a moment.",
@@ -3599,7 +3800,7 @@ const v2EmailAuth = async (req, res) => {
         // Resolve the newly registered user data
         userData = await fetchUserDataByName(newAmemberUser.login);
       } catch (createErr) {
-        console.error("[v2Auth/email] signup error:", createErr.response?.data || createErr.message);
+        logger.error("[v2Auth/email] signup error:", createErr.response?.data || createErr.message);
         return res.status(500).json({
           success: false, statusCode: 500,
           error: "Failed to create account. Please try again.",
@@ -3613,7 +3814,7 @@ const v2EmailAuth = async (req, res) => {
     // Sync Mongo profile (creates on first login/signup, updates on subsequent logins)
     if (hasActivePlan || isNewUser) {
       try { await syncUserProfile(userData); }
-      catch (syncErr) { console.error("[v2Auth/email] syncUserProfile warning:", syncErr.message); }
+      catch (syncErr) { logger.error("[v2Auth/email] syncUserProfile warning:", syncErr.message); }
     }
 
     const mongoProfile = await UserProfile.findOne({ email: cleanEmail });
@@ -3642,7 +3843,7 @@ const v2EmailAuth = async (req, res) => {
       _v2BuildSuccessResponse(jwtToken, mongoProfile, userData.user_id, userData.email, fullName, isNewUser, isOnboarded, hasActivePlan),
     );
   } catch (error) {
-    console.error("[v2Auth/emailAuth] Unexpected error:", error);
+    logger.error("[v2Auth/emailAuth] Unexpected error:", error);
     return res.status(500).json({
       success: false, statusCode: 500,
       error: "An unexpected error occurred. Please try again.",
@@ -3662,8 +3863,9 @@ const v2EmailAuth = async (req, res) => {
  * @param {string} expectedProvider "google.com" | "apple.com"
  * @param {string} providerLabel    "google" | "apple"
  * @param {string} [platform]       optional hint from request body
+ * @param {string} [appleRefreshToken] optional refresh token from Apple
  */
-async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, providerLabel, platform) {
+async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, providerLabel, platform, appleRefreshToken = null) {
   const decoded = await verifyFirebaseToken(firebaseIdToken);
 
   if (decoded.firebase?.sign_in_provider !== expectedProvider) {
@@ -3702,6 +3904,9 @@ async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, provide
       if (!mongoProfile.loginProviders) mongoProfile.loginProviders = [];
       if (!mongoProfile.loginProviders.includes(providerLabel)) {
         mongoProfile.loginProviders.push(providerLabel);
+      }
+      if (appleRefreshToken && providerLabel === "apple") {
+        mongoProfile.apple_refresh_token = appleRefreshToken;
       }
       if (platform) mongoProfile.platform = platform;
       mongoProfile.last_login_at = new Date();
@@ -3747,6 +3952,9 @@ async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, provide
       existingDeleted.name_f                 = firstName;
       existingDeleted.name_l                 = lastName;
       existingDeleted.loginProviders         = [providerLabel];
+      if (appleRefreshToken && providerLabel === "apple") {
+        existingDeleted.apple_refresh_token = appleRefreshToken;
+      }
       existingDeleted.last_login_at          = new Date();
       if (platform) existingDeleted.platform = platform;
       await existingDeleted.save();
@@ -3763,6 +3971,7 @@ async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, provide
         amember_user_id: amemberUserId,
         firebase_uid:    firebaseUid,
         loginProviders:  [providerLabel],
+        apple_refresh_token: (providerLabel === "apple" && appleRefreshToken) ? appleRefreshToken : "",
         last_login_at:   new Date(),
         platform:        platform || "",
       });
@@ -3832,7 +4041,7 @@ const v2GoogleAuth = async (req, res) => {
       _v2BuildSuccessResponse(jwtToken, mongoProfile, amemberUserId, email, fullName, isNewUser, isOnboarded, hasActivePlan),
     );
   } catch (error) {
-    console.error("[v2Auth/googleAuth] error:", error.response?.data || error.message || error);
+    logger.error("[v2Auth/googleAuth] error:", error.response?.data || error.message || error);
     const isAxios = error.isAxiosError || (error.message && error.message.includes("status code"));
     const status = isAxios ? 500 : (error.status || 500);
     const errMsg = isAxios ? "We're having trouble logging you in right now. Please try again in a moment." : (error.message || "Google authentication failed.");
@@ -3870,7 +4079,7 @@ const v2AppleAuth = async (req, res) => {
     }
   */
   try {
-    const { firebaseIdToken, platform } = req.body || {};
+    const { firebaseIdToken, platform, authorizationCode } = req.body || {};
 
     if (!firebaseIdToken) {
       return res.status(400).json({
@@ -3879,8 +4088,19 @@ const v2AppleAuth = async (req, res) => {
       });
     }
 
+    let appleRefreshToken = null;
+    if (authorizationCode) {
+      try {
+        const tokenRes = await exchangeAppleAuthCode(authorizationCode);
+        appleRefreshToken = tokenRes.refresh_token;
+      } catch (err) {
+        logger.warn("mobile.apple.v2_auth authorization_code_exchange_failed");
+        logger.error("[v2AppleAuth] Failed to exchange Apple authorization code:", err.response?.data || err.message);
+      }
+    }
+
     const { jwtToken, mongoProfile, email, fullName, isNewUser, amemberUserId, hasActivePlan } =
-      await _v2ResolveFirebaseUser(firebaseIdToken, "apple.com", "apple", platform || "ios");
+      await _v2ResolveFirebaseUser(firebaseIdToken, "apple.com", "apple", platform || "ios", appleRefreshToken);
 
     const userId = mongoProfile?.user_id || `GPT-${amemberUserId}`;
     const isOnboarded = await _v2IsOnboarded(userId);
@@ -3889,7 +4109,7 @@ const v2AppleAuth = async (req, res) => {
       _v2BuildSuccessResponse(jwtToken, mongoProfile, amemberUserId, email, fullName, isNewUser, isOnboarded, hasActivePlan),
     );
   } catch (error) {
-    console.error("[v2Auth/appleAuth] error:", error.response?.data || error.message || error);
+    logger.error("[v2Auth/appleAuth] error:", error.response?.data || error.message || error);
     const isAxios = error.isAxiosError || (error.message && error.message.includes("status code"));
     const status = isAxios ? 500 : (error.status || 500);
     const errMsg = isAxios ? "We're having trouble logging you in right now. Please try again in a moment." : (error.message || "Apple authentication failed.");
@@ -3920,7 +4140,7 @@ async function _v2UpdateAmemberProfile(amemberUserId, { firstName, lastName, pho
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
   } catch (e) {
-    console.error("[_v2UpdateAmemberProfile] error:", e.response?.data || e.message);
+    logger.error("[_v2UpdateAmemberProfile] error:", e.response?.data || e.message);
   }
 }
 
@@ -4037,7 +4257,7 @@ const v2UpdateOnboardingProfile = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("[v2Auth/updateOnboardingProfile] error:", error);
+    logger.error("[v2Auth/updateOnboardingProfile] error:", error);
     return res.status(500).json({
       success: false, statusCode: 500,
       error: "An unexpected error occurred. Please try again.",
