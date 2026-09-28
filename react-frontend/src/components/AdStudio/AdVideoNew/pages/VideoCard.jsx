@@ -483,7 +483,7 @@ export default function VideoCard({
         lower === 'clone_video' ||
         lower === 'clone your ad'
       ) {
-        return 'Re Create Ad';
+        return 'Recreate Ad';
       }
       if (lower === 'ai_ads' || lower === 'ai-ads') return 'AI Ads';
       if (lower === 'broll' || lower === 'b-roll') return 'Product B-rolls';

@@ -70,7 +70,7 @@ const pageConfig = {
     component: CloneYourselfPage,
   },
   'clone-ad': {
-    title: 'Re Create Ad',
+    title: 'Recreate Ad',
     component: CloneYourAdPage,
   },
   myVideos: {
@@ -117,7 +117,7 @@ const selectVideoType = [
   },
   {
     value: 'clone_ad',
-    label: 'Re Create Ad',
+    label: 'Recreate Ad',
   },
   {
     // Clips rendered from an onboarding storyboard concept. They are produced by
@@ -383,6 +383,16 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
 
   const handleBackNavigation = () => {
     if (activePage === 'clone-ad') {
+      let handled = false;
+      if (typeof backHandlerRef.current === 'function') {
+        handled = Boolean(backHandlerRef.current());
+      }
+      if (!handled) {
+        emitter.emit('clone-ad:back', (wasHandled) => {
+          if (wasHandled) handled = true;
+        });
+      }
+      if (handled) return;
       exitToAdVideoHome();
       return;
     }
@@ -474,6 +484,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
     dispatch(setActivePage('home'));
   };
 
+  const backHandlerRef = useRef(null);
   const mySpaceIconRef = useRef(null);
 
   // `kind` ('video' | 'image') drives which MySpace tab opens after the genie
@@ -754,6 +765,9 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                 <PageComponent
                   pageVideo={pageVideo}
                   handleGenerate={handleGenerate}
+                  registerBackHandler={(fn) => {
+                    backHandlerRef.current = fn;
+                  }}
                   onClose={
                     activePage === 'clone-ad'
                       ? exitToAdVideoHome

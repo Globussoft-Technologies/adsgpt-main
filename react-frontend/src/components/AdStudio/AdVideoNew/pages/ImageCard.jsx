@@ -389,7 +389,7 @@ export default function ImageCard({
                   const t = item?.creativeType || item?.inputs?.type || '-';
                   const lower = String(t).toLowerCase();
                   if (lower === 'clone_your_ad' || lower === 'clone-ad' || lower === 'clone_ad' || lower === 'clone_video' || lower === 'clone your ad') {
-                    return 'Re Create Ad';
+                    return 'Recreate Ad';
                   }
                   return t;
                 })()}
