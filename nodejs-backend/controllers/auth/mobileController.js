@@ -2261,14 +2261,15 @@ const verifyGooglePayment = async (req, res) => {
 
     const canonicalTxId = purchaseToken;
     let existingTx = await MobileStoreTransaction.findOne({ canonical_transaction_id: canonicalTxId });
-    // If this transaction ID was already processed (by any user), reject it
     if (existingTx) {
       logger.warn(`[verifyGooglePayment] Tx ${canonicalTxId} already processed.`);
-      return res.status(409).json({
-        ok: false,
-        code: "TRANSACTION_ALREADY_USED",
-        error: "This transaction ID has already been processed."
-      });
+      if (existingTx.amember_user_id !== amemberUserId) {
+        return res.status(409).json({
+          ok: false,
+          code: req.googleRestore ? "restore_conflict" : "subscription_already_linked",
+          error: "This Google Play subscription is already linked to another account."
+        });
+      }
     }
 
     logger.info(`[verifyGooglePayment] Resolving product... isTrial: ${isTrial}, basePlanId: ${basePlanId}`);
@@ -2315,23 +2316,32 @@ const verifyGooglePayment = async (req, res) => {
       });
     }
 
-    existingTx = await MobileStoreTransaction.create({
-      user_id: `GPT-${amemberUserId}`,
-      amember_user_id: amemberUserId,
-      platform: "android",
-      canonical_transaction_id: canonicalTxId,
-      original_transaction_id: canonicalTxId,
-      store_product_id: productId,
-      event_type: isTrial ? "free_trial" : "initial_purchase",
-      amount,
-      currency: "USD",
-      amember_invoice_id: `android_${googleOrder}`,
-      purchased_at: now,
-      expires_at: expiresDate,
-      raw_payload: subscriptionState,
-      meta: { packageName, base_plan_id: basePlanId, google_order_id: googleOrder },
-    });
-    logger.info("mobile.google.verify transaction_recorded");
+    if (!existingTx) {
+      existingTx = await MobileStoreTransaction.create({
+        user_id: `GPT-${amemberUserId}`,
+        amember_user_id: amemberUserId,
+        platform: "android",
+        canonical_transaction_id: canonicalTxId,
+        original_transaction_id: canonicalTxId,
+        store_product_id: productId,
+        event_type: isTrial ? "free_trial" : "initial_purchase",
+        amount,
+        currency: "USD",
+        amember_invoice_id: `android_${googleOrder}`,
+        purchased_at: now,
+        expires_at: expiresDate,
+        raw_payload: subscriptionState,
+        meta: { packageName, base_plan_id: basePlanId, google_order_id: googleOrder },
+      });
+      logger.info("mobile.google.verify transaction_recorded");
+    } else {
+      existingTx.expires_at = expiresDate;
+      existingTx.raw_payload = subscriptionState;
+      existingTx.amember_invoice_id = `android_${googleOrder}`;
+      existingTx.meta = { ...(existingTx.meta || {}), google_order_id: googleOrder, base_plan_id: basePlanId };
+      await existingTx.save();
+      logger.info("mobile.google.verify transaction_updated");
+    }
 
     await activateAmemberUserStatus({
       amemberUserId,
@@ -2473,8 +2483,23 @@ const restoreGooglePurchases = async (req, res) => {
   /*
     #swagger.tags = ['Mobile Native Auth & Payments']
     #swagger.summary = 'Google Play restore purchases'
-    #swagger.description = 'Reconciles active Google Play purchases for the currently authenticated user.'
+    #swagger.description = 'Reconciles active Google Play purchases for the currently authenticated user. Optionally accepts a purchaseToken and productId to verify and restore unlinked purchases.'
     #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.requestBody = {
+      required: false,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            properties: {
+              productId: { type: "string", example: "io.adsgpt.app.subscription.starter.monthly" },
+              purchaseToken: { type: "string", example: "GPA.3311-2244-5566-77889" },
+              packageName: { type: "string", example: "io.adsgpt.app" }
+            }
+          }
+        }
+      }
+    }
     #swagger.responses[200] = {
       description: 'Purchases restored'
     }
@@ -2482,6 +2507,47 @@ const restoreGooglePurchases = async (req, res) => {
   try {
     const rawUserId = req.user?.user_id || req.user?.amember_user_id;
     const amemberUserId = String(rawUserId).replace(/^GPT-/, "");
+
+    const { purchaseToken } = req.body || {};
+
+    if (purchaseToken) {
+      req.googleRestore = true;
+      let statusCode = 200;
+      let responseBody = null;
+      const captureResponse = {
+        status(code) {
+          statusCode = code;
+          return this;
+        },
+        json(body) {
+          responseBody = body;
+          return body;
+        },
+      };
+
+      await verifyGooglePayment(req, captureResponse);
+
+      if (!responseBody?.ok) {
+        const code = responseBody?.code === "subscription_already_linked"
+          ? "restore_conflict"
+          : responseBody?.code || "verification_failed";
+        return res.status(statusCode).json({
+          ...responseBody,
+          ok: false,
+          code,
+          msg: responseBody?.msg || responseBody?.error || "Restore failed.",
+        });
+      }
+
+      return res.status(200).json({
+        ...responseBody,
+        ok: true,
+        msg: "Google Play purchases restored.",
+        restoredCount: 1,
+        entitlements: [responseBody.subscription],
+        subscriptions: [responseBody.subscription],
+      });
+    }
 
     const activeTx = await MobileStoreTransaction.findOne({
       amember_user_id: amemberUserId,
@@ -2494,11 +2560,12 @@ const restoreGooglePurchases = async (req, res) => {
         ok: true,
         restoredCount: 1,
         entitlements: [activeTx],
+        subscriptions: [activeTx],
         user: { user_id: amemberUserId, hasActivePlan: true }
       });
     }
 
-    return res.status(200).json({ ok: true, restoredCount: 0, entitlements: [], user: { user_id: amemberUserId, hasActivePlan: false } });
+    return res.status(200).json({ ok: true, restoredCount: 0, entitlements: [], subscriptions: [], user: { user_id: amemberUserId, hasActivePlan: false } });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }
