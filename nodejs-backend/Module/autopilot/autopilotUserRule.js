@@ -54,9 +54,14 @@ const conditionsSchema = new mongoose.Schema(
 
 const actionSchema = new mongoose.Schema(
   {
+    // `resume` is CONDITION-DRIVEN and distinct from the `autoResume` flag
+    // below. autoResume asks "has the reason I paused this gone away"; a
+    // resume ACTION asks "do these conditions hold", and will turn on an
+    // entity Autopilot never paused. They can coexist on one account and are
+    // logged identically, so read the rule, not the row, to tell them apart.
     type: {
       type: String,
-      enum: ["pause", "alert", "scale"],
+      enum: ["pause", "alert", "scale", "resume"],
       required: true,
     },
     // Signed percent to move the budget by, per firing. Positive raises,

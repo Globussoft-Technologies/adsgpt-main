@@ -115,6 +115,11 @@ export const ACTION_TYPES = [
     hint: "Set status to PAUSED on Meta and stop delivery.",
   },
   {
+    value: "resume",
+    label: "Resume the entity",
+    hint: "Set status to ACTIVE on Meta for anything currently paused that matches. Only reaches entities that delivered inside the lookback window — a long-paused one has no recent numbers to judge.",
+  },
+  {
     value: "alert",
     label: "Alert me",
     hint: "Just notify (Slack / email). No Meta change.",

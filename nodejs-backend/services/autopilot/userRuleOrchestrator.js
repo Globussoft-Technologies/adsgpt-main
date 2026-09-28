@@ -554,7 +554,14 @@ async function writeActionLogRow({
       ruleSeverity: rule.severity,
       ruleMessage: rule.name,
       metricsSnapshot: pickMetricsSnapshot(entity),
-      action: rule.action.type === "pause" ? "pause" : "alert_only",
+      // `scale` never reaches here (applyScale writes its own rows), so the
+      // only shapes are pause, resume and everything-else-is-an-alert.
+      action:
+        rule.action.type === "pause"
+          ? "pause"
+          : rule.action.type === "resume"
+            ? "resume"
+            : "alert_only",
       actionPayload: actionPayload || undefined,
       dryRun,
       outcome,
@@ -688,6 +695,7 @@ async function evaluateRuleAtAccount({
       }
 
       const isPause = rule.action.type === "pause";
+      const isResume = rule.action.type === "resume";
 
       // Already-paused entities are a no-op: skip silently with no log
       // row and no counter bump. Without this guard the cron would write
@@ -695,6 +703,16 @@ async function evaluateRuleAtAccount({
       // entity, drowning the action log in noise. Pause action + status
       // already PAUSED = nothing to do, nothing to record.
       if (isPause && (target.status || "").toUpperCase() === "PAUSED") {
+        continue;
+      }
+
+      // The mirror of the guard above, and load-bearing for a different
+      // reason. A resume rule's conditions keep matching after the entity is
+      // running — nothing about "roas > 3" stops being true once the ad is
+      // back on — so without this it would re-issue the same write, and log
+      // the same row, every hour forever. Silent, like the pause side: an
+      // unchanged verdict is not information.
+      if (isResume && (target.status || "").toUpperCase() !== "PAUSED") {
         continue;
       }
 
@@ -734,9 +752,65 @@ async function evaluateRuleAtAccount({
       }
       if (isPause && actionBudget) actionBudget.spend("pause");
 
+      // Resume shares the ACCOUNT's resume budget with autoResume, on purpose:
+      // the ceiling is meant to bound how much Autopilot turns on in one tick,
+      // regardless of which mechanism decided to. Two independent allowances
+      // would let a rule-driven resume and an autoResume sweep each spend the
+      // full budget in the same cycle.
+      if (isResume && actionBudget && !actionBudget.canSpend("resume")) {
+        if (!actionBudget.claimExhaustionLog("resume")) {
+          getLogger().info(
+            `[autopilot v4] resume: per-cycle ceiling of ${actionBudget.limits.resume} reached for ${acctKey} — remaining matches roll to the next tick`,
+          );
+          await writeActionLogRow({
+            runId,
+            userId,
+            acctKey,
+            acctName,
+            rule,
+            entity: target,
+            level: rule.evaluateOn,
+            outcome: "skipped",
+            skipReason: "action-budget-exhausted",
+            dryRun: finalDryRun,
+            actionPayload: {
+              limit: actionBudget.limits.resume,
+              detail: `Autopilot already resumed ${actionBudget.limits.resume} entities on this account this cycle and stopped for the hour. The rest are re-checked next tick.`,
+            },
+          });
+        }
+        continue;
+      }
+      if (isResume && actionBudget) actionBudget.spend("resume");
+
       let outcome = "success";
       let error = null;
       const attemptStart = Date.now();
+
+      if (isResume && !finalDryRun) {
+        try {
+          await metaCall(
+            (api) =>
+              resumeEntity({
+                level: rule.evaluateOn,
+                entityId: target[`${rule.evaluateOn}_id`] || target.id,
+                api,
+              }),
+            {
+              acctKey,
+              accessToken,
+              userId,
+              label: `resume ${rule.evaluateOn}`,
+            },
+          );
+        } catch (err) {
+          outcome = "failed";
+          error = formatMetaError(err);
+          getLogger().error(
+            `[autopilot v4] resume failed rule=${rule._id} entity=${target[`${rule.evaluateOn}_id`]}: ${error}`,
+          );
+        }
+      }
 
       if (isPause && !finalDryRun) {
         try {
@@ -787,6 +861,20 @@ async function evaluateRuleAtAccount({
           acctSummary.findings_count += 1;
         } else if (outcome === "failed") {
           acctSummary.failed += 1;
+          acctSummary.findings_count += 1;
+        }
+      } else if (isResume) {
+        // Counted into the SAME block autoResume reports through, so the
+        // digest says how many entities came back on this account rather than
+        // splitting one number across two mechanisms the reader does not care
+        // to distinguish.
+        if (outcome === "success") {
+          if (finalDryRun) acctSummary.resume.would_resume += 1;
+          else acctSummary.resume.resumed += 1;
+          acctSummary.actionable_count += 1;
+          acctSummary.findings_count += 1;
+        } else if (outcome === "failed") {
+          acctSummary.resume.failed += 1;
           acctSummary.findings_count += 1;
         }
       } else {
@@ -1739,6 +1827,12 @@ async function processAccount({
     set failed(v) {
       counters.failed = v;
     },
+    // Not proxied onto `pause` like the rest: a resume rule's tallies belong
+    // in the same block autoResume writes to, so the digest reports one
+    // resume count per account rather than two half-counts. Handed through by
+    // reference so `acctSummary.resume.resumed += 1` inside the rule loop
+    // lands on the real summary object.
+    resume: acctSummary.resume,
   };
 
   if (!accountAccessToken) {
@@ -1866,6 +1960,14 @@ async function processAccount({
             // Skip the three previous-period queries unless a rule
             // here actually reads a `prev_*` field.
             needsPrevious: batchNeedsPreviousPeriod(rulesAtLookback),
+            // Widen the insights queries to paused entities only when a
+            // rule in THIS lookback group actually resumes. Scoped to the
+            // group rather than the account because each group is its own
+            // audit: a 7-day resume rule must not make the 30-day pause
+            // group pay for paused rows it will never read.
+            includePaused: rulesAtLookback.some(
+              (r) => r.action && r.action.type === "resume",
+            ),
           },
         }),
       {

@@ -256,6 +256,10 @@ Module._load = function patched(request, parent, isMain) {
           lookbackDays: options.lookbackDays,
           prevLookbackDays: options.prevLookbackDays,
           lookbackPreset: options.lookbackPreset,
+          // Whether this audit was asked to widen its insights queries to
+          // paused entities. Recorded so a test can prove the cost is paid
+          // only when a resume rule is present.
+          includePaused: options.includePaused,
         });
         // Lookup precedence: (acct, lookback) → (acct) → throw.
         const lbKey = `${adAccountId}:${options.lookbackDays}`;
@@ -2094,6 +2098,213 @@ const { runUserRuleCycle } = orchestrator;
 
   const scaleRows = () =>
     stubs.actionLogWrites.filter((r) => r.action === "scale_budget");
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Condition-driven resume (action.type === "resume")
+  //
+  // Distinct from autoResume, which undoes Autopilot's OWN pauses when their
+  // reason stops holding. A resume RULE evaluates conditions against a paused
+  // entity and turns it on, whoever paused it. The tests below pin the two
+  // properties that make that safe to ship: it only ever touches entities
+  // that are actually paused, and the extra data it needs is fetched only
+  // when such a rule exists.
+  // ───────────────────────────────────────────────────────────────────────
+  const resumeActionRule = (over = {}) => ({
+    _id: "rr1",
+    userId: "u1",
+    enabled: true,
+    name: "Bring back the winners",
+    severity: "medium",
+    evaluateOn: "ad",
+    conditions: {
+      operator: "AND",
+      rules: [{ field: "roas", op: ">", value: 3 }],
+    },
+    action: { type: "resume" },
+    attachments: [{ adAccountId: "act_42", campaignId: "camp_1" }],
+    ...over,
+  });
+
+  const pausedAdFixture = (over = {}) =>
+    auditFixture({
+      overrides: {
+        ads: [
+          {
+            ad_id: "ad_1",
+            campaign_id: "camp_1",
+            adset_id: "as_1",
+            ad_name: "Paused winner",
+            status: "PAUSED",
+            spend: 10000,
+            roas: 7.8,
+            ...over,
+          },
+        ],
+      },
+    });
+
+  const resumeActionRows = () =>
+    stubs.actionLogWrites.filter((r) => r.action === "resume");
+
+  await group("runUserRuleCycle — resume as a rule action", async () => {
+    await testAsync("a matching PAUSED entity is resumed and logged", async () => {
+      resetStubs();
+      stubs.rules = [resumeActionRule()];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok-u1" }];
+      stubs.auditByAccount.set("act_42", pausedAdFixture());
+
+      const result = await runUserRuleCycle({ dryRun: false });
+
+      assert.equal(stubs.pauseCalls.length, 1, "one Meta status write");
+      assert.equal(stubs.pauseCalls[0].entityId, "ad_1");
+      assert.equal(
+        stubs.pauseCalls[0].payload.status,
+        "ACTIVE",
+        "resume must write ACTIVE, not PAUSED",
+      );
+      assert.equal(resumeActionRows().length, 1, "logged as a resume row");
+      assert.equal(resumeActionRows()[0].outcome, "success");
+      assert.equal(result.accounts[0].resume.resumed, 1);
+      // Never counted as a pause, or the digest reports the opposite of what
+      // happened.
+      assert.equal(result.accounts[0].pause.paused, 0);
+    });
+
+    await testAsync("an ACTIVE entity is left alone, with no row", async () => {
+      // The guard that stops this re-firing forever: a resume rule's
+      // conditions keep matching after the ad is running, so without it the
+      // same write and the same row would repeat every hour.
+      resetStubs();
+      stubs.rules = [resumeActionRule()];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok-u1" }];
+      stubs.auditByAccount.set("act_42", pausedAdFixture({ status: "ACTIVE" }));
+
+      const result = await runUserRuleCycle({ dryRun: false });
+
+      assert.equal(stubs.pauseCalls.length, 0, "no Meta write");
+      assert.equal(stubs.actionLogWrites.length, 0, "and no log noise");
+      assert.equal(result.accounts[0].resume.resumed, 0);
+    });
+
+    await testAsync("a paused entity that fails the conditions stays paused", async () => {
+      resetStubs();
+      stubs.rules = [resumeActionRule()];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok-u1" }];
+      stubs.auditByAccount.set("act_42", pausedAdFixture({ roas: 0.4 }));
+
+      await runUserRuleCycle({ dryRun: false });
+
+      assert.equal(stubs.pauseCalls.length, 0);
+      assert.equal(resumeActionRows().length, 0);
+    });
+
+    await testAsync("a dry run records would_resume and calls Meta never", async () => {
+      resetStubs();
+      stubs.rules = [resumeActionRule()];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok-u1" }];
+      stubs.auditByAccount.set("act_42", pausedAdFixture());
+
+      const result = await runUserRuleCycle({ dryRun: true });
+
+      assert.equal(stubs.pauseCalls.length, 0, "rehearsal touches nothing");
+      assert.equal(resumeActionRows().length, 1);
+      assert.equal(resumeActionRows()[0].dryRun, true);
+      assert.equal(result.accounts[0].resume.would_resume, 1);
+      assert.equal(result.accounts[0].resume.resumed, 0);
+    });
+
+    await testAsync("a failed resume is recorded, not swallowed", async () => {
+      resetStubs();
+      stubs.rules = [resumeActionRule()];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok-u1" }];
+      stubs.auditByAccount.set("act_42", pausedAdFixture());
+      stubs.resumeFailNext = new Error("Meta said no");
+
+      const result = await runUserRuleCycle({ dryRun: false });
+
+      assert.equal(resumeActionRows().length, 1);
+      assert.equal(resumeActionRows()[0].outcome, "failed");
+      assert.ok(resumeActionRows()[0].error, "the reason is kept");
+      assert.equal(result.accounts[0].resume.failed, 1);
+      assert.equal(result.accounts[0].resume.resumed, 0);
+    });
+
+    await testAsync("paused rows are fetched ONLY when a resume rule exists", async () => {
+      // The ACTIVE filter on the insights queries is what keeps a large
+      // account under Meta's data-volume ceiling. Widening it unconditionally
+      // is how code 100 comes back, so the flag must track the rules.
+      resetStubs();
+      stubs.rules = [
+        {
+          _id: "p1", userId: "u1", enabled: true, name: "Pause losers",
+          severity: "high", evaluateOn: "ad",
+          conditions: { operator: "AND", rules: [{ field: "roas", op: "<", value: 1 }] },
+          action: { type: "pause" },
+          attachments: [{ adAccountId: "act_42", campaignId: "camp_1" }],
+        },
+      ];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok-u1" }];
+      stubs.auditByAccount.set("act_42", auditFixture());
+
+      await runUserRuleCycle({ dryRun: true });
+      assert.equal(stubs.auditCalls.length, 1);
+      assert.equal(
+        stubs.auditCalls[0].includePaused,
+        false,
+        "a pause-only account must not pay for paused rows",
+      );
+
+      resetStubs();
+      stubs.rules = [resumeActionRule()];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok-u1" }];
+      stubs.auditByAccount.set("act_42", pausedAdFixture());
+
+      await runUserRuleCycle({ dryRun: true });
+      assert.equal(stubs.auditCalls[0].includePaused, true);
+    });
+
+    await testAsync("pause and resume rules coexist on one account", async () => {
+      // Two rules, opposite actions, one audit. Each must see only the
+      // entities its own guard admits: pause acts on the ACTIVE ad, resume on
+      // the PAUSED one, and neither touches the other's.
+      resetStubs();
+      stubs.rules = [
+        {
+          _id: "p1", userId: "u1", enabled: true, name: "Pause losers",
+          severity: "high", evaluateOn: "ad",
+          conditions: { operator: "AND", rules: [{ field: "roas", op: "<", value: 1 }] },
+          action: { type: "pause" },
+          attachments: [{ adAccountId: "act_42", campaignId: "camp_1" }],
+        },
+        resumeActionRule(),
+      ];
+      stubs.fbUsers = [{ userId: "u1", accessToken: "tok-u1" }];
+      stubs.auditByAccount.set("act_42", auditFixture({
+        overrides: {
+          ads: [
+            { ad_id: "live_loser", campaign_id: "camp_1", adset_id: "as_1",
+              ad_name: "Live loser", status: "ACTIVE", spend: 9000, roas: 0.2 },
+            { ad_id: "paused_winner", campaign_id: "camp_1", adset_id: "as_1",
+              ad_name: "Paused winner", status: "PAUSED", spend: 9000, roas: 7.8 },
+          ],
+        },
+      }));
+
+      const result = await runUserRuleCycle({ dryRun: false });
+
+      const paused = stubs.pauseCalls.filter((c) => c.payload.status === "PAUSED");
+      const resumed = stubs.pauseCalls.filter((c) => c.payload.status === "ACTIVE");
+      assert.equal(paused.length, 1);
+      assert.equal(paused[0].entityId, "live_loser");
+      assert.equal(resumed.length, 1);
+      assert.equal(resumed[0].entityId, "paused_winner");
+      assert.equal(result.accounts[0].pause.paused, 1);
+      assert.equal(result.accounts[0].resume.resumed, 1);
+      // One audit serves both rules; the resume rule is what widened it.
+      assert.equal(stubs.auditCalls.length, 1);
+      assert.equal(stubs.auditCalls[0].includePaused, true);
+    });
+  });
 
   await group("runUserRuleCycle — scale", async () => {
     await testAsync("raises the ad set budget by the rule's pct", async () => {

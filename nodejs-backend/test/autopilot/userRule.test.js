@@ -134,6 +134,19 @@ group("createRuleSchema — accepts well-formed rules", () => {
     assertValid(validRule({ severity: "high" }));
   });
 
+  test("action 'resume' is accepted", () => {
+    // Condition-driven resume: turn an entity back on when the conditions
+    // hold. Distinct from the `autoResume` flag, which only ever undoes
+    // Autopilot's own pauses.
+    assertValid(validRule({ action: { type: "resume" } }));
+  });
+
+  test("a resume rule may not carry a scale percentage", () => {
+    // `pct` belongs to scale alone. A stray one means the author
+    // misunderstood the form, and silently ignoring it hides that.
+    assertInvalid(validRule({ action: { type: "resume", pct: 10 } }));
+  });
+
   test("action 'alert' is accepted", () => {
     assertValid(validRule({ action: { type: "alert" } }));
   });

@@ -77,7 +77,7 @@ const NUMERIC_OPS = [">", "<", ">=", "<=", "==", "!="];
 const STRING_OPS = ["==", "!="];
 
 const SEVERITIES = ["low", "medium", "high"];
-const ACTION_TYPES = ["pause", "alert", "scale"];
+const ACTION_TYPES = ["pause", "alert", "scale", "resume"];
 const EVALUATE_ON = ["campaign", "adset", "ad"];
 
 // Hard caps — keep cron cost bounded.

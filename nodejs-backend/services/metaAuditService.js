@@ -710,6 +710,25 @@ async function runAuditForAccount({
     // which is the common case, since most rules compare against absolute
     // thresholds rather than the previous period.
     needsPrevious = true,
+    // Autopilot v4 only. Widen the insights queries to PAUSED entities as
+    // well as ACTIVE.
+    //
+    // WHY IT IS OPT-IN RATHER THAN ALWAYS ON. The ACTIVE filter is the single
+    // biggest lever on how much data Meta has to assemble for these queries,
+    // and it is load-bearing: a large account with a long tail of paused ads
+    // is exactly the shape that trips "Please reduce the amount of data
+    // you're asking for" (code 100). Only a rule whose action is `resume`
+    // needs paused rows, and most accounts have none, so the cost is paid
+    // only where it buys something.
+    //
+    // WHAT THIS DOES NOT DO. A paused entity that delivered nothing inside
+    // the lookback still has no insights row, and still produces no row here
+    // — deliberately. Synthesising a zero-filled row would make every
+    // `less than` condition (`cpa < 100`, `frequency < 3`) match an entity we
+    // have no evidence about at all, which is the opposite of what a resume
+    // rule is for. Resume therefore reaches entities paused recently enough
+    // to have delivered in the window, and no others.
+    includePaused = false,
   } = options;
   const scopeIds =
     Array.isArray(campaignIds) && campaignIds.length > 0
@@ -838,7 +857,10 @@ async function runAuditForAccount({
       {
         field: `${entityPrefix}.effective_status`,
         operator: "IN",
-        value: ["ACTIVE"],
+        // PAUSED is added only when a rule at this account resumes — see
+        // `includePaused` in the options block above for why this is not
+        // simply always widened.
+        value: includePaused ? ["ACTIVE", "PAUSED"] : ["ACTIVE"],
       },
     ];
     if (scopeIds) {

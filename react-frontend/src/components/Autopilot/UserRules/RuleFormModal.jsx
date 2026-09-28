@@ -429,7 +429,7 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
               {isEdit ? 'Edit rule' : 'New rule'}
             </h2>
             <p className="mt-0.5 text-[11px] text-gray-500 2xl:text-xs dark:text-white/55">
-              Pause campaigns or get alerts when conditions you define match.
+              Pause, resume or get alerts when conditions you define match.
             </p>
           </div>
           <button
@@ -688,6 +688,8 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
                   onChange={(v) => set({ autoResume: v })}
                 />
               )}
+
+              {form.action.type === 'resume' && <ResumeNote />}
 
               {form.action.type === 'scale' && (
                 <ScaleStepEditor
@@ -959,6 +961,47 @@ function AutoResumeToggle({ value, onChange }) {
         </span>
       </span>
     </button>
+  );
+}
+
+// ResumeNote — what a resume rule can and cannot reach.
+//
+// Two things surprise people, and both are cheaper to explain here than to
+// discover from an empty action log.
+//
+// REACHABILITY. Autopilot judges an entity on what it did inside the lookback
+// window. A paused entity stops producing numbers, so one paused longer ago
+// than the window has nothing to be judged on and is invisible to the rule.
+// Resume therefore reaches things paused recently, not the whole archive.
+//
+// ONE-SHOT, NOT A LOOP. The conditions are measured on delivery that already
+// happened, and turning the entity on does not change them. It fires once;
+// the entity then runs and is judged fresh from the next cycle, by whatever
+// pause rules exist. That is also why this pairs badly with a pause rule on
+// the same metric and threshold — see the warning.
+function ResumeNote() {
+  return (
+    <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-white/8 dark:bg-white/3">
+      <p className="text-13 font-semibold text-gray-900 dark:text-white">
+        What this rule can reach
+      </p>
+      <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-4 text-[11px] leading-snug text-gray-500 dark:text-white/55">
+        <li>
+          Only entities that are paused right now. Anything already running is
+          left alone.
+        </li>
+        <li>
+          Only entities that delivered inside this rule&rsquo;s lookback
+          window. Something paused months ago has no recent numbers, so no
+          rule can judge it.
+        </li>
+        <li>
+          It turns the entity on once. From the next cycle it is judged like
+          any other live entity &mdash; so if a pause rule uses the same
+          metric and threshold, the two will fight.
+        </li>
+      </ul>
+    </div>
   );
 }
 
