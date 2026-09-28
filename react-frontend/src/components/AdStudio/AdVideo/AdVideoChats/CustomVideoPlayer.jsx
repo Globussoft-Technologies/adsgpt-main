@@ -11,6 +11,8 @@ import {
   EllipsisVertical,
   Maximize,
   Minimize,
+  Loader2,
+  RotateCw,
 } from 'lucide-react';
 import { handleDownload } from '@/utils/download';
 
@@ -18,8 +20,26 @@ import { handleDownload } from '@/utils/download';
  * @param autoPlay  Start playing as soon as the clip is mounted and its source
  *   is ready. Opt-in, because most places this player appears are lists where
  *   several tiles would all start talking at once.
+ * @param poster    A still to show until the first frame decodes. Without one a
+ *   `<video>` paints nothing at all, which is why an unloaded clip reads as a
+ *   black box rather than as something arriving.
+ * @param overlay   Rendered OVER the video while it is not yet playable, in
+ *   place of the default spinner below. For a caller that already has its own
+ *   waiting language and would look broken if this drew a second, different
+ *   one — see ClipView, where the render's loader simply keeps running through
+ *   the download.
+ * @param onLoadStateChange  `('loading'|'ready'|'error') => void`. The reason
+ *   `overlay` can be a caller's own: it needs to know WHICH of the three to
+ *   draw. Fired on change only, never during render.
  */
-const CustomVideoPlayer = ({ src, aspect, autoPlay = false }) => {
+const CustomVideoPlayer = ({
+  src,
+  aspect,
+  autoPlay = false,
+  poster = '',
+  overlay,
+  onLoadStateChange,
+}) => {
   const videoRef = useRef(null);
   const dropdownRef = useRef(null);
 
@@ -35,6 +55,26 @@ const CustomVideoPlayer = ({ src, aspect, autoPlay = false }) => {
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [lastVolume, setLastVolume] = useState(1);
+
+  // ── Is there anything to play yet? ───────────────────────────────────────
+  //
+  // Until this, the player had no answer to that question and drew the same
+  // thing for all three: a black box with `0:00 / 0:00` and live-looking
+  // controls. A clip still downloading, a clip whose link 404s and a clip that
+  // is simply slow were indistinguishable, so the only way to find out was to
+  // reload the page.
+  //
+  // Tracked AGAINST THE SOURCE rather than as a bare flag: switching clips
+  // must read as `loading` from the very first render, not carry the previous
+  // file's `ready` until the new one happens to fire an event.
+  const [load, setLoad] = useState({ src: '', status: 'loading' });
+  const loadState = load.src === src ? load.status : 'loading';
+
+  // To the caller, on change only — this runs on every render otherwise, and a
+  // parent that sets state from it would loop.
+  useEffect(() => {
+    onLoadStateChange?.(loadState);
+  }, [loadState, onLoadStateChange]);
 
   const formatTime = (time) => {
     if (!time || isNaN(time)) return '0:00';
@@ -126,6 +166,16 @@ const CustomVideoPlayer = ({ src, aspect, autoPlay = false }) => {
     const video = videoRef.current;
     if (video) setDuration(video.duration);
   };
+
+  // `loadeddata`, not `loadedmetadata`: metadata gives the duration but not a
+  // frame, so hiding the wait on it would still leave the user looking at black
+  // — with a running clock under it, which is worse.
+  const handleLoadedData = () => setLoad({ src, status: 'ready' });
+
+  // A `<video>` reports its failure here and NOWHERE else: no exception, no
+  // console entry, nothing in the element's own appearance. Left unhandled it
+  // is the black box that never resolves.
+  const handleError = () => setLoad({ src, status: 'error' });
 
   const handleVolumeChange = (e) => {
     const newVolume = parseFloat(e.target.value);
@@ -255,14 +305,63 @@ const CustomVideoPlayer = ({ src, aspect, autoPlay = false }) => {
       <video
         ref={videoRef}
         src={src}
+        // A clip that has not decoded a frame yet paints NOTHING — the box is
+        // just the container's own black. Where the caller has a still, that is
+        // the difference between "arriving" and "broken".
+        poster={poster || undefined}
         className={videoClass}
         onClick={togglePlay}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
+        onLoadedData={handleLoadedData}
+        // Three ways to learn the same thing, because an overlay that never
+        // lifts would be a worse bug than the one it replaces. `loadeddata` is
+        // the normal one; `canplay` and `playing` are there for the browser or
+        // `preload` setting that reaches a playable state by another route.
+        onCanPlay={handleLoadedData}
+        onPlaying={handleLoadedData}
+        onError={handleError}
         controls={false}
       />
+
+      {/* ── The wait, drawn ───────────────────────────────────────────────
+          ABOVE the controls (z-30 over their z-20), on purpose: a play button
+          and a timestamp under a clip that cannot be played yet are three
+          controls that all do nothing, and that is the state this replaces.
+          A caller with its own waiting language passes `overlay` and gets no
+          second opinion drawn over the top of it. */}
+      {loadState !== 'ready' &&
+        (overlay !== undefined ? (
+          <div className="absolute inset-0 z-30">{overlay}</div>
+        ) : loadState === 'error' ? (
+          <div className="absolute inset-0 z-30 grid place-items-center bg-black/85 px-6 text-center">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-white/90">This video couldn&rsquo;t be loaded</p>
+              <p className="text-xs leading-relaxed text-white/55">
+                The file may still be uploading, or the link has expired.
+              </p>
+              <button
+                type="button"
+                // `load()` re-requests the same source. Enough for the common
+                // cause — a link that was not servable yet at first ask — and
+                // it costs the user nothing to find out.
+                onClick={() => {
+                  setLoad({ src, status: 'loading' });
+                  videoRef.current?.load();
+                }}
+                className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:text-white"
+              >
+                <RotateCw size={13} /> Try again
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="absolute inset-0 z-30 grid place-items-center bg-black/45">
+            <Loader2 className="h-7 w-7 animate-spin text-white/70" />
+          </div>
+        ))}
 
       {/* NO radius of its own. This gradient is opaque black at the bottom, so
           rounding it left the two bottom corners unpainted and the frame behind

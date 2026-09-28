@@ -15,7 +15,15 @@
  *   not enrolled          → /adstudio. Accounts that predate onboarding were
  *                           never offered it; see the enrolment gate in
  *                           ONBOARDING_ENTRY_EXIT_CREDITS.md §4.0.
- *   already completed     → /adstudio. They have had their run.
+ *   completed, nothing
+ *   left to spend         → /adstudio. They have had their run.
+ *   completed, allowance
+ *   still unspent         → ALLOWED. The allowance is onboarding-only budget
+ *                           that expires with the offer, so refusing entry
+ *                           destroys it rather than saving it. A free-plan
+ *                           user is NOT in this case: their credits are a real
+ *                           wallet that works everywhere, so nothing is lost by
+ *                           taking Finish at its word.
  *   skipped, render owed  → ALLOWED. Skipping is not declining for ever: the
  *                           offer bar still shows, and clicking it comes back
  *                           here to the session they left.
@@ -62,7 +70,7 @@ export default function OnboardingRoute({ children }) {
   const signedIn = Boolean(token);
   // Skipped entirely when the guard is off: the call is only ever made to
   // decide something this build has decided not to ask.
-  const { eligibility, loading } = useOnboardingEligibility({
+  const { eligibility, loading, canEnterOnboarding } = useOnboardingEligibility({
     enabled: signedIn && !GUARD_DISABLED,
   });
 
@@ -100,25 +108,33 @@ export default function OnboardingRoute({ children }) {
     );
   }
 
-  // `enrolled === false` is the server saying this account predates onboarding.
-  // Checked explicitly rather than as a falsy read, so an older response that
-  // omits the field does not lock everyone out.
-  if (eligibility.enrolled === false) return <Navigate to="/adstudio" replace />;
-
-  // Finished is the only other way out, and it is deliberately the ONLY other
-  // one — two rules, not five.
+  // The rule itself lives in `useOnboardingEligibility` as `canEnterOnboarding`,
+  // and it lives there rather than here for one reason: the OFFER BAR has to
+  // ask the same question. When the two were written out separately they
+  // drifted, and the bar spent a release offering a door this file then shut —
+  // the URL changed to `/onboarding` for an instant and bounced back, with
+  // nothing said about why.
+  //
+  // What it comes to:
+  //
+  //   not enrolled        refused. The account predates onboarding.
+  //   finished            refused — UNLESS an onboarding allowance still has
+  //                       credits in it. That budget buys nothing anywhere else
+  //                       and expires with the offer, so locking them out does
+  //                       not save it, it burns it.
+  //   everything else     allowed. Mid-brand-run, mid-render, reloaded, skipped
+  //                       with a render still owed — all of it falls through,
+  //                       and the mid-run case is the one this must not get
+  //                       wrong: a reload during a render has no completion and
+  //                       no skip recorded, and refusing it would strand work
+  //                       the user has already paid into.
   //
   // An earlier version also refused when `resumeSessionId` was null or the free
   // render was spent, and both were wrong. `resumeSessionId` is simply the
-  // user's newest session and never goes null once one exists, so those clauses
+  // user's newest session and never goes null once one exists, so that clause
   // could not fire; and "free render spent" is the normal state of a user who
-  // generated a clip and then reloaded, who must obviously be let back in.
-  //
-  // `onboardingCompleted` alone covers every case correctly: it is set only by
-  // Finish, and Finish is the one moment there is genuinely nothing left to
-  // come back to. Everything before it — mid-brand-run, mid-render, reloaded,
-  // skipped with the render still owed — falls through and is allowed.
-  if (eligibility.onboardingCompleted) return <Navigate to="/adstudio" replace />;
+  // generated a clip and then reloaded.
+  if (!canEnterOnboarding) return <Navigate to="/adstudio" replace />;
 
   return children;
 }

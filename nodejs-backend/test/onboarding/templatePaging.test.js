@@ -224,6 +224,58 @@ test("refresh replaces the list, so rotated links are not kept", () => {
   assert.equal(refreshed.result.templates[0].video_url, "new");
 });
 
+// The bug these pin: every session resume kicks a `refresh=1` match, upstream's
+// matcher answers zero for a brand it matched a minute earlier, and `replace`
+// then wrote that nothing over the stored list. The rail was empty for the rest
+// of the session, and the client's sticky list hid it until the dock next
+// remounted — so it read as "going to the clip view deleted my templates".
+test("a refresh that finds NOTHING leaves the stored list alone", () => {
+  const first = mergeTemplatePage(
+    null,
+    { templates: [{ template_id: "a" }, { template_id: "b" }] },
+    { limit: 5 }
+  );
+  const empty = mergeTemplatePage(
+    first.result,
+    { templates: [], image_templates: [] },
+    { limit: 5, skip: 0, replace: true }
+  );
+  assert.deepEqual(
+    empty.result.templates.map((t) => t.template_id),
+    ["a", "b"]
+  );
+});
+
+test("a refresh that DID find something still replaces", () => {
+  // The clause above narrows `replace`; it must not have disabled it. An
+  // answer with content is still the new truth, links and all.
+  const first = mergeTemplatePage(
+    null,
+    { templates: [{ template_id: "a", video_url: "old" }] },
+    { limit: 5 }
+  );
+  const refreshed = mergeTemplatePage(
+    first.result,
+    { templates: [{ template_id: "b", video_url: "new" }] },
+    { limit: 5, skip: 0, replace: true }
+  );
+  assert.deepEqual(
+    refreshed.result.templates.map((t) => t.template_id),
+    ["b"]
+  );
+});
+
+test("an empty FIRST match still stores an honest empty list", () => {
+  // Nothing to protect, so nothing changes: a brand that genuinely has no
+  // matches must not be handed a rail it never earned.
+  const merged = mergeTemplatePage(
+    null,
+    { templates: [], image_templates: [] },
+    { limit: 5, skip: 0, replace: true }
+  );
+  assert.deepEqual(merged.result.templates, []);
+});
+
 console.log("\nSSE parser");
 
 test("parses split chunks and CRLF into frames", () => {

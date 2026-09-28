@@ -3,13 +3,22 @@ import toast from 'react-hot-toast';
 
 const HOST = import.meta.env.VITE_SOCKET_URL;
 
-export const handleDownload = async (fileUrl) => {
+/**
+ * @param fileUrl  What to fetch.
+ * @param options.saveAs  The name to save it under, extension included. Pass it
+ *   whenever the URL's own extension does not describe the bytes: onboarding's
+ *   clips are served from paths ending `.webp` with `Content-Type: video/mp4`
+ *   (see `preferPlayable` in the backend's mediaUrls), so "Download MP4" was
+ *   handing people a file called `….webp` that no player would open by
+ *   double-click. Omitted, the name is taken from the URL exactly as before.
+ */
+export const handleDownload = async (fileUrl, { saveAs } = {}) => {
   if (!fileUrl) return console.error('No file URL provided.');
 
   const videoExtensions = ['mp4', 'mov', 'avi', 'webm', 'mkv', 'flv', 'wmv'];
   const urlWithoutQuery = fileUrl.split('?')[0];
   const urlParts = urlWithoutQuery.split('/');
-  const filename = urlParts.pop() || 'file';
+  const filename = saveAs || urlParts.pop() || 'file';
   const ext = filename.split('.').pop().toLowerCase();
   const isVideo = videoExtensions.includes(ext);
   const fileType = isVideo ? 'video' : 'image';

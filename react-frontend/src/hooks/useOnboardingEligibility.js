@@ -72,6 +72,44 @@ export default function useOnboardingEligibility({ enabled = true } = {}) {
     generationKind: loading ? 'none' : state?.generationKind || 'none',
     resumeSessionId: state?.resumeSessionId || '',
     /**
+     * Would `/onboarding` actually let this user in?
+     *
+     * The ONE rule, read by both `OnboardingRoute` (which enforces it) and the
+     * offer bar (which must not offer what it enforces against). They used to
+     * be written out separately and drifted: the bar keyed on `generationLeft`
+     * alone, which stays true for a free-plan user long after they finish —
+     * their wallet credits are their own and do not go anywhere — so a finished
+     * user was offered "pick up where you left off", pressed it, and watched
+     * the URL turn to `/onboarding` and bounce back to `/adstudio` with no
+     * explanation.
+     *
+     * ── Why finishing is not always the end ─────────────────────────────────
+     * `onboardingCompleted` normally closes the door: Finish is the moment the
+     * user said they were done. But an ALLOWANCE that still has credits in it
+     * is a promise the product has not kept yet. It is onboarding-only budget —
+     * it buys nothing anywhere else in the app, and it expires with the offer —
+     * so refusing entry does not save it for them, it destroys it. A paid user
+     * who finishes with 3 of 35 left is owed those 3 (user decision
+     * 2026-09-28).
+     *
+     * Deliberately `allowanceRemaining` and NOT `generationLeft`. For a
+     * free-plan user `generationLeft` is their own wallet, which survives
+     * onboarding and is spendable everywhere — there is nothing left unkept, so
+     * finishing really is the end for them and the door stays shut.
+     *
+     * The first-run REDIRECT is unaffected and must stay that way: `shouldStart-
+     * Onboarding` still refuses a completed user outright. This is an open door,
+     * not a shove through it.
+     *
+     * False while loading, so the bar does not appear and then vanish for the
+     * users who turn out to be finished.
+     */
+    canEnterOnboarding:
+      !loading &&
+      Boolean(state) &&
+      state.enrolled !== false &&
+      (!state.onboardingCompleted || Number(state.allowanceRemaining) > 0),
+    /**
      * A user who has never engaged with onboarding at all, and still has
      * something to spend there. The first-run redirect's whole condition.
      *

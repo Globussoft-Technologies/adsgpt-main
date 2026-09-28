@@ -37,6 +37,7 @@ const Layout = () => {
     generationLeft,
     generationKind,
     resumeSessionId,
+    canEnterOnboarding,
     shouldStartOnboarding,
     loading: eligibilityLoading,
   } = useOnboardingEligibility();
@@ -262,7 +263,14 @@ const Layout = () => {
                 // user holds no allowance and was seeing no bar at all, which
                 // left the group with the least room to spend the least
                 // informed. See the eligibility controller.
-                available={generationLeft > 0}
+                //
+                // AND the door has to open. A free-plan user's credits are
+                // their own and survive finishing onboarding, so `generationLeft`
+                // alone kept the bar up for people the guard on `/onboarding`
+                // then refused — the URL changed for an instant and bounced
+                // back to /adstudio. `canEnterOnboarding` is that guard's own
+                // rule, read from the same place it reads it.
+                available={generationLeft > 0 && canEnterOnboarding}
                 remaining={generationLeft}
                 total={allowanceTotal}
                 kind={generationKind}

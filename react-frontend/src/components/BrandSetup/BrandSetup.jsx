@@ -377,6 +377,24 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset, onSkip }) => {
     return () => clearInterval(id);
   }, [handedOff, run.status, dispatch]);
 
+  // ── What this screen is currently about ──────────────────────────────────
+  //
+  // Derived once because the HEADING and the panel under it both depend on it,
+  // and they have to agree: for a while they did not, and the screen announced
+  // that it was building a brand it had already given up on.
+  //
+  // A stall is worded apart from a failure on purpose. "Taking too long" is a
+  // thing the user can wait out or retry; "we couldn't read your brand" is a
+  // thing they should probably change the prompt for. Same screen, different
+  // advice.
+  const failed = handedOff && run.status === 'failed';
+  const stalled = run.error === STALLED;
+  const failureTitle = stalled ? 'This is taking too long' : 'We couldn’t finish reading your brand';
+  const failureDetail = stalled
+    ? 'Our analyst seems stuck on your brand. Try again, or skip for now and come back later.'
+    : // Whatever the server actually said, when it said anything useful.
+      run.error || 'The analysis stopped before it finished.';
+
   // ── Glow pulse on each add ───────────────────────────────────────────────
   // Counts links + attachments; when the count GOES UP, bump `pulseCount`,
   // which re-keys the glow overlay on the card and replays its animation.
@@ -428,12 +446,31 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset, onSkip }) => {
             shadows: the flat film above already provides the contrast, and
             shadowed type over video looks smudged rather than crisp. */}
         {/* The heading stays put and only its words change — moving it would
-            make the handoff read as two screens instead of one. */}
+            make the handoff read as two screens instead of one.
+
+            THREE states, not two. A failed run used to leave this saying
+            "Building your brand · Reading the web, then putting it together"
+            in 38px type while the panel below it explained that the analysis
+            had stopped — the two largest words on the screen contradicting the
+            only ones that mattered. The failure owns the heading now, and the
+            panel below keeps just the way out. */}
         <h1 className="text-center text-[32px] leading-tight font-bold tracking-tight text-white sm:text-[38px]">
-          {handedOff ? 'Building your brand' : "Let's set up your brand"}
+          {failed ? failureTitle : handedOff ? 'Building your brand' : "Let's set up your brand"}
         </h1>
-        <p className="mt-3 text-center text-[15px] text-white/90">
-          {handedOff ? 'Reading the web, then putting it together' : 'Tell us about your brand'}
+        <p
+          className={cn(
+            'mt-3 text-center text-[15px] leading-relaxed text-white/90',
+            // `run.error` is whatever the server or upstream said, and it can
+            // be a long sentence. The working copy is short and wants the full
+            // width; this one wants a column it can wrap in.
+            failed && 'mx-auto max-w-md text-white/60'
+          )}
+        >
+          {failed
+            ? failureDetail
+            : handedOff
+              ? 'Reading the web, then putting it together'
+              : 'Tell us about your brand'}
         </p>
 
         {/* One grid cell holds both, so the stack occupies the exact space the
@@ -681,18 +718,8 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset, onSkip }) => {
                 the commonest cause is the prompt, and the form still holds it
                 for editing. A changed prompt mints a fresh idempotency key, so
                 the edit actually takes effect. */}
-            {handedOff && run.status === 'failed' && (
+            {failed && (
               <div className="mx-auto max-w-md text-center">
-                <p className="text-[14px] font-semibold text-white">
-                  {run.error === STALLED
-                    ? 'This is taking too long'
-                    : 'We couldn’t finish reading your brand'}
-                </p>
-                <p className="mt-2 text-[13px] leading-relaxed text-white/55">
-                  {run.error === STALLED
-                    ? 'Our analyst seems stuck on your brand. Try again, or skip for now and come back later.'
-                    : run.error || 'The analysis stopped before it finished.'}
-                </p>
                 <button
                   type="button"
                   onClick={() => {
@@ -705,7 +732,7 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset, onSkip }) => {
                     setSubmitting(false);
                     onFailedReset?.();
                   }}
-                  className="mt-5 rounded-lg bg-[linear-gradient(180deg,#9176ff_0%,#7c5cff_46%,#6148c7_100%)] px-4 py-2 text-[13px] font-bold text-white transition hover:brightness-110"
+                  className="rounded-lg bg-[linear-gradient(180deg,#9176ff_0%,#7c5cff_46%,#6148c7_100%)] px-4 py-2 text-[13px] font-bold text-white transition hover:brightness-110"
                 >
                   Try again
                 </button>
@@ -715,7 +742,7 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset, onSkip }) => {
               </div>
             )}
 
-            {handedOff && run.status !== 'failed' && (
+            {handedOff && !failed && (
               <>
                 <ReasoningStack
                   steps={run.steps}

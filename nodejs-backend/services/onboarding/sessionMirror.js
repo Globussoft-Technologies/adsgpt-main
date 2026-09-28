@@ -80,7 +80,20 @@ function mergeTemplatePage(previous, rawIncoming, requested = {}) {
   // A refresh asks for a NEW match, and upstream's media links rotate between
   // runs — folding would keep the stale link for every id already stored.
   // So a refresh replaces the list outright; only "load more" pages fold.
-  const replace = Boolean(requested.replace);
+  //
+  // ONLY WHEN IT FOUND SOMETHING, and that clause is the whole of a bug.
+  // Upstream's matcher is not deterministic: it returns zero for brands it
+  // matched a minute earlier (the same reason a first run can come back empty
+  // and a later refresh full). Every session resume kicks a refresh, so an
+  // empty answer on page load REPLACED a good stored list with nothing and the
+  // recommendations were gone for that session for good. The client's sticky
+  // list hid it until the dock next remounted — which is why it looked like
+  // visiting the clip view had deleted them.
+  //
+  // An empty refresh means "no match this time", not "you have none". Keeping
+  // the previous list can leave a rotated link behind it; a stale thumbnail is
+  // recoverable by the next refresh, a deleted rail is not.
+  const replace = Boolean(requested.replace) && incomingList.length > 0;
   const previousList =
     !replace && Array.isArray(previous?.templates) ? previous.templates : [];
   const seen = new Set(previousList.map((t) => t?.template_id).filter(Boolean));

@@ -47,19 +47,54 @@
  * The clip arriving at any moment abandons the sequence wherever it is.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Megaphone } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Download, Loader2, Megaphone } from 'lucide-react';
 import { handleDownload } from '@/utils/download';
 import CustomVideoPlayer from '../AdStudio/AdVideo/AdVideoChats/CustomVideoPlayer';
 import PostAdMySpaceModal from '../AdStudio/AdVideoNew/PostAdMySpace/PostAdMySpaceModal';
 import { readPendingPostAd } from '../AdStudio/AdVideoNew/PostAdMySpace/postAdPersistence';
 import { Header } from './Workspace';
-import { ClipSettleLoader, CLIP_LINES } from './FrameLoader';
+import { ClipSettleLoader, CLIP_LINES, useRotatingCopy } from './FrameLoader';
 import RetryCountdownButton from './RetryCountdownButton';
 import OnboardingTour from './OnboardingTour';
 import ClipStrip from './ClipStrip';
 import ImageEditPanel from './ImageEditPanel';
 import { canvasToBlob, downloadBlob, loadCanvasImage } from './QuickImageTools';
+
+/**
+ * What a model is CALLED, for the one row that shows one.
+ *
+ * `clip.model` is the canonical id every other layer keys on —
+ * `gemini-3.1-flash-image`, `veo-3.1-fast` — and it is not a name the user has
+ * met anywhere in the product. The pickers call these models something else, so
+ * printing the id here described a model they had never seen named that.
+ *
+ * Hardcoded, and local to this screen on purpose (user decision 2026-09-28).
+ * The names are not derivable — no amount of title-casing turns
+ * `gemini-3.1-flash-image` into "Nano Banana 2" — and the backend registry that
+ * could answer this properly is not read on the onboarding path, which has only
+ * the raw id to go on. If a third surface ever needs the same answer, that is
+ * the moment to lift this out and back it with the registry rather than to copy
+ * it.
+ *
+ * Anything not listed prints UNCHANGED. A model we have not been told the name
+ * of should show its id, which is at least a string somebody can search for.
+ */
+const MODEL_NAMES = {
+  // Images
+  'gemini-3.1-flash-image': 'Nano Banana 2',
+
+  // Video. Names taken from the AI Assistant's storyboard picker, which is
+  // where a user actually meets them.
+
+  'veo-3.1-fast': 'Veo 3.1 Fast',
+
+};
+
+const modelName = (value) => {
+  const raw = String(value ?? '').trim();
+  return MODEL_NAMES[raw] || raw;
+};
 
 const SURF2 = '#232329';
 const LINE = 'rgba(255,255,255,0.09)';
@@ -80,6 +115,17 @@ const PULSE_AT = 50_000;
 // Design handoff `design_handoff_frame_loaders` (4b), 2026-09-16: three lines,
 // 4.2s apart, each rising into place over 0.9s.
 const SHIMMER_LINES = CLIP_LINES;
+
+/**
+ * The lines for the OTHER wait — the render is done and the file is coming
+ * down the wire.
+ *
+ * Separate from the ones above because they would be a lie here: nothing is
+ * reading the brief or shaping a cut any more. Same loader, same rhythm, so the
+ * screen does not change character at the handover; only the words move on to
+ * what is actually happening.
+ */
+const FETCH_LINES = ['Loading your clip', 'Almost there'];
 
 const LINE_EVERY = 4_200;
 
@@ -181,11 +227,26 @@ function ShimmerStage({ line }) {
 }
 
 function GifStage({ loader }) {
+  // A loader link lives about ten minutes and is served by upstream, so it can
+  // simply not be there: expired early, never written, a bad gateway minute.
+  // An `<img>` that fails paints the browser's broken-image icon in the corner
+  // of a render that is going perfectly well — which is the single most
+  // alarming thing this screen can show, because it looks like the render
+  // itself broke.
+  //
+  // There is nothing to say about it. The GIF is decoration; the sequence falls
+  // through to the stage it would have reached twenty seconds later anyway.
+  // Keyed on the url, so a later loader for a different render is tried afresh
+  // rather than inheriting this one's failure.
+  const [failedUrl, setFailedUrl] = useState('');
+  if (failedUrl && failedUrl === loader.url) return <PulseStage />;
+
   return (
     <>
       <img
         src={loader.url}
         alt=""
+        onError={() => setFailedUrl(loader.url)}
         // The GIF is encoded at 360p and blurred on purpose; letting it fill the
         // box is the whole effect. `cover` rather than `contain` so no letterbox
         // appears if the encoded ratio came back a pixel off 9:16.
@@ -278,6 +339,17 @@ const USER_FACING_RENDER_ERRORS = [
   /could not start this render/i,
 ];
 
+/**
+ * The one failure a retry cannot fix.
+ *
+ * Everything else on this screen is worth pressing again — a service having a
+ * bad minute, keyframes that were not ready, a timeout. Being short of credits
+ * is not: the second attempt is refused by the same check for the same reason,
+ * so offering a twenty-second countdown is the app making someone wait to be
+ * told no again. They need the top-up page, which is what replaces it.
+ */
+const isCreditShortfall = (error) => /enough credits/i.test(String(error || ''));
+
 function friendlyRenderError(error) {
   const raw = String(error || '').trim();
   if (!raw) return RENDER_ERROR_FALLBACK;
@@ -305,6 +377,7 @@ function FailedStage({ error, onRetry, onBack, attempts = 1 }) {
   // Retries are unlimited (user decision 2026-09-15); `attempts` is kept only
   // for callers and no longer gates anything.
   const message = friendlyRenderError(error);
+  const broke = isCreditShortfall(error);
 
   // The raw error, for debugging — once per distinct error, not per render (the
   // view re-renders every second on its loading clock).
@@ -322,7 +395,67 @@ function FailedStage({ error, onRetry, onBack, attempts = 1 }) {
             render (renderBilling), so this is always true on this screen. */}
         <p className="mt-2 text-[12px] font-medium text-[#5CE08A]/90">You haven&rsquo;t been charged.</p>
         <div className="mt-4 flex items-center justify-center gap-2">
-          {onRetry && <RetryCountdownButton onClick={onRetry} />}
+          {broke ? (
+            <button
+              type="button"
+              // The same destination every other out-of-credits surface in the
+              // app uses — see `onUpgrade` on the board's InsufficientCreditsDialog.
+              onClick={() => window.open(import.meta.env.VITE_SIGNUP_URL, '_blank', 'noopener')}
+              className="inline-flex shrink-0 items-center gap-2 rounded-[7px] bg-[linear-gradient(180deg,#9176ff_0%,#7c5cff_46%,#6148c7_100%)] px-3 py-1.5 text-[12px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4),inset_0_-1px_0_rgba(0,0,0,0.28)] transition hover:brightness-110 active:translate-y-px"
+            >
+              Get more credits
+            </button>
+          ) : (
+            onRetry && <RetryCountdownButton onClick={onRetry} />
+          )}
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="rounded-lg border px-3 py-1.5 text-[12px] font-semibold text-white/70 transition hover:text-white"
+              style={{ background: SURF2, borderColor: LINE_STRONG }}
+            >
+              Back to board
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The render worked; the FILE will not play.
+ *
+ * A different failure from `FailedStage` and it has to say so. That one means
+ * nothing was made and nothing was charged. This one means the clip exists, is
+ * paid for, and is sitting in My Space — every link this view knows about has
+ * been tried and none of them served (see `sources` in the view below). The one
+ * thing this must not do is read as "your video failed", because it did not.
+ *
+ * No retry button: the player's sources are exhausted by the time this renders,
+ * so a second press would try the same two links again. A reload is the thing
+ * that can genuinely change the answer, because it re-reads the session and
+ * picks up the durable link once the upload behind it has landed.
+ */
+function UnplayableStage({ onBack }) {
+  return (
+    <div className="absolute inset-0 grid place-items-center px-8 text-center" style={{ background: '#0f1017' }}>
+      <div>
+        <p className="text-[13.5px] font-semibold text-white/90">This clip won&rsquo;t play here</p>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/70">
+          It was made and saved — the file just isn&rsquo;t loading. Reload the page, or find it in
+          My Space.
+        </p>
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-lg border px-3 py-1.5 text-[12px] font-semibold text-white/80 transition hover:text-white"
+            style={{ background: SURF2, borderColor: LINE_STRONG }}
+          >
+            Reload
+          </button>
           {onBack && (
             <button
               type="button"
@@ -446,19 +579,28 @@ function PanelLabel({ children, action }) {
  * has to win attention against two others. In a column of three actions on a
  * dark panel it just reads as a different product.
  */
-function PanelButton({ children, onClick, primary = false, icon: Icon }) {
+function PanelButton({ children, onClick, primary = false, icon: Icon, busy = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] font-semibold transition"
+      // A second press while the first download is still being fetched starts a
+      // second fetch of the same file. Disabled rather than ignored, so the
+      // button also LOOKS like it is already working.
+      disabled={busy}
+      aria-busy={busy}
+      className="flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] font-semibold transition disabled:cursor-default disabled:opacity-70"
       style={{
         background: primary ? 'rgba(21,220,255,0.09)' : SURF2,
         borderColor: primary ? 'rgba(21,220,255,0.35)' : LINE_STRONG,
         color: primary ? '#15DCFF' : 'rgba(255,255,255,0.8)',
       }}
     >
-      {Icon && <Icon size={15} className="shrink-0" />}
+      {busy ? (
+        <Loader2 size={15} className="shrink-0 animate-spin" />
+      ) : (
+        Icon && <Icon size={15} className="shrink-0" />
+      )}
       {children}
     </button>
   );
@@ -488,6 +630,38 @@ const DOWNLOAD_FORMATS = [
   { value: 'jpg', label: 'JPG', mime: 'image/jpeg' },
   { value: 'webp', label: 'WebP', mime: 'image/webp' },
 ];
+
+/**
+ * Download for a clip.
+ *
+ * The work is `handleDownload` either way — it fetches through the CORS proxy
+ * and hands the browser a blob — but the FEEDBACK was only ever a toast at the
+ * top of the screen, while the image path next door put "Preparing…" inside the
+ * button the user just pressed. On a 9:16 clip screen the toast is a long way
+ * from the click, so a slow fetch read as a dead button.
+ *
+ * `saveAs` because the link's own extension lies: upstream serves these from
+ * `.webp` paths with an mp4 content type.
+ */
+function VideoDownload({ src }) {
+  const [busy, setBusy] = useState(false);
+
+  const download = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await handleDownload(src, { saveAs: `adsgpt-ad-${Date.now()}.mp4` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <PanelButton primary icon={Download} busy={busy} onClick={download}>
+      {busy ? 'Preparing…' : 'Download MP4'}
+    </PanelButton>
+  );
+}
 
 function ImageDownload({ src }) {
   const [format, setFormat] = useState('png');
@@ -522,7 +696,7 @@ function ImageDownload({ src }) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <PanelButton primary icon={Download} onClick={download}>
+      <PanelButton primary icon={Download} busy={busy} onClick={download}>
         {busy ? 'Preparing…' : `Download ${DOWNLOAD_FORMATS.find((x) => x.value === format)?.label}`}
       </PanelButton>
       <div className="flex gap-1" role="radiogroup" aria-label="Download format">
@@ -618,9 +792,7 @@ function SidePanel({
               {isStill ? (
                 <ImageDownload src={src} />
               ) : (
-                <PanelButton primary icon={Download} onClick={() => handleDownload(src)}>
-                  Download MP4
-                </PanelButton>
+                <VideoDownload src={src} />
               )}
               <PanelButton icon={Megaphone} onClick={openPostAd}>
                 Post to ad account
@@ -695,7 +867,11 @@ function SidePanel({
                 than not showing one. */}
             {!isStill && <Meta label="Ratio">9:16</Meta>}
             {clip?.duration_s ? <Meta label="Length">{clip.duration_s}s</Meta> : null}
-            {clip?.model ? <Meta label="Model">{clip.model}</Meta> : null}
+            {/* The name the model is offered under, not its id. `clip.model`
+                is the canonical string every other layer keys on
+                (`gemini-3.1-flash-image`, `veo-3.1-fast`) and the user has
+                never seen it written that way anywhere in the product. */}
+            {clip?.model ? <Meta label="Model">{modelName(clip.model)}</Meta> : null}
           </dl>
         </div>
       </aside>
@@ -750,6 +926,55 @@ export default function ClipView({
   // the player does not have to know which of the two exists.
   const src = clip?.src || clip?.url || clip?.local_url || '';
 
+  // ── The links to try, in order ───────────────────────────────────────────
+  //
+  // The server picks ONE (`preferPlayable` in mediaUrls) and it is the right
+  // first choice, but it is a choice made without ever fetching either link.
+  // A clip that lands over the socket is often resolved to the onboarding
+  // service's own copy because the durable upload has not finished yet — and
+  // when that copy will not serve, the player had no second answer and sat
+  // black until a reload re-read the session and found the durable link. These
+  // are the same fields the server chose between, so trying the next one costs
+  // a request and nothing else.
+  //
+  // For DOWNLOAD and POST the server's choice still stands: `src` below is
+  // untouched. Only playback walks the list.
+  const sources = useMemo(
+    () =>
+      [...new Set([src, clip?.url_absolute, clip?.local_url_absolute].filter(Boolean))],
+    [src, clip?.url_absolute, clip?.local_url_absolute]
+  );
+
+  // Which of them is on the player, and how that attempt is going. Keyed on the
+  // first candidate so a different clip starts over rather than inheriting the
+  // previous one's exhausted list.
+  const [play, setPlay] = useState({ key: '', index: 0, status: 'loading' });
+  const playKey = sources[0] || '';
+  const playIndex = play.key === playKey ? play.index : 0;
+  const playStatus = play.key === playKey ? play.status : 'loading';
+  const playSrc = sources[playIndex] || src;
+
+  // Stable, so the player's own change-notify effect does not re-run on every
+  // render of this view — which it would with an inline arrow, and this view
+  // re-renders once a second off the loading clock.
+  const onPlayerLoadState = useCallback(
+    (next) => {
+      setPlay((prev) => {
+        const cur = prev.key === playKey ? prev : { key: playKey, index: 0, status: 'loading' };
+        if (next !== 'error') {
+          return cur.status === next && prev.key === playKey ? prev : { ...cur, status: next };
+        }
+        // Out of links is a real failure; anything else is just the next one to
+        // try, and the loader keeps running while we do.
+        const more = cur.index + 1 < sources.length;
+        return more
+          ? { key: playKey, index: cur.index + 1, status: 'loading' }
+          : { ...cur, status: 'error' };
+      });
+    },
+    [playKey, sources]
+  );
+
   // A recreate from an IMAGE template renders a picture, not a clip. Everything
   // else — the progress copy, the failure states, the exits — is identical,
   // because Node normalises an image result into the same board shape a video
@@ -773,6 +998,10 @@ export default function ClipView({
 
   const stage = useLoadingStage(state.startedAt, Boolean(loader));
   const line = useRotatingLine(status === 'running' && stage === 'shimmer');
+  // The download's own line, rotating only while there is a download to talk
+  // about. Its own hook call and not a branch inside `line`: the two waits have
+  // different copy and one of them can follow the other.
+  const fetchLine = useRotatingCopy(FETCH_LINES, playStatus === 'loading');
 
   // The storyboard is the better source — it also carries the voiceover and the
   // camera move. But the clip payload carries `title` and `angle` of its own,
@@ -869,7 +1098,26 @@ export default function ClipView({
             // The app's player, not a bare `<video>`: play, scrub, speed, PiP,
             // fullscreen and its own download, identical to every other clip in
             // the product.
-            <CustomVideoPlayer src={src} aspect="ASPECT_9_16_FULL" />
+            //
+            // `overlay` is what keeps the download inside the WAIT rather than
+            // after it. A render finishing and the file arriving are two
+            // different events, and the gap between them is seconds of black
+            // box with a dead 0:00 clock under it — the screen looked broken at
+            // the exact moment it had succeeded. The loader that has been
+            // running for the last minute simply carries on until there is a
+            // frame to show.
+            <CustomVideoPlayer
+              src={playSrc}
+              aspect="ASPECT_9_16_FULL"
+              onLoadStateChange={onPlayerLoadState}
+              overlay={
+                playStatus === 'error' ? (
+                  <UnplayableStage onBack={onBack} />
+                ) : (
+                  <ClipSettleLoader line={fetchLine} />
+                )
+              }
+            />
           ) : (
             <Frame ratio={isStill ? 'aspect-square' : 'aspect-9/16'}>
               {status === 'failed' ? (
