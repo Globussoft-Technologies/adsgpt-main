@@ -61,13 +61,37 @@ const initialState = {
   // read by RegenerateVoiceModal to render the editable script box.
   aiAdsTranslateScript: {},
   aiAdsVoicePreview: {},
+  // Recreate Ad Active Session state for background processing & refresh persistence
+  activeRecreateSession: (() => {
+    try {
+      const raw = sessionStorage.getItem('activeRecreateSession');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })(),
 };
 
 const adVideoNewSlice = createSlice({
   name: 'adVideoNew',
   initialState,
   reducers: {
-    resetAdVideoNewSlice: () => ({ ...initialState, activePage: 'home' }),
+    resetAdVideoNewSlice: (state) => {
+      const activeSession = (() => {
+        try {
+          const raw = sessionStorage.getItem('activeRecreateSession');
+          return raw ? JSON.parse(raw) : null;
+        } catch {
+          return state?.activeRecreateSession || null;
+        }
+      })();
+
+      return {
+        ...initialState,
+        activePage: 'home',
+        activeRecreateSession: activeSession,
+      };
+    },
     setActivePage: (state, action) => {
       state.activePage = action.payload;
       if (action.payload === 'myVideos' && state.mySpaceTab === 'images') {
@@ -365,6 +389,46 @@ const adVideoNewSlice = createSlice({
       const { sessionId } = action.payload || {};
       if (sessionId) delete state.aiAdsTranslateScript[sessionId];
     },
+
+    // ── Recreate Ad Active Session (Background Processing & Persistence) ──────
+    setActiveRecreateSession: (state, action) => {
+      state.activeRecreateSession = action.payload;
+      try {
+        if (action.payload) {
+          sessionStorage.setItem('activeRecreateSession', JSON.stringify(action.payload));
+        } else {
+          sessionStorage.removeItem('activeRecreateSession');
+        }
+      } catch {
+        /* best-effort persistence */
+      }
+    },
+    updateActiveRecreateSession: (state, action) => {
+      if (!state.activeRecreateSession && !action.payload?.sessionId) return;
+      const prevInputs = state.activeRecreateSession?.inputs || {};
+      const newInputs = action.payload?.inputs || {};
+      state.activeRecreateSession = {
+        ...(state.activeRecreateSession || {}),
+        ...(action.payload || {}),
+        inputs: {
+          ...prevInputs,
+          ...newInputs,
+        },
+      };
+      try {
+        sessionStorage.setItem('activeRecreateSession', JSON.stringify(state.activeRecreateSession));
+      } catch {
+        /* best-effort persistence */
+      }
+    },
+    clearActiveRecreateSession: (state) => {
+      state.activeRecreateSession = null;
+      try {
+        sessionStorage.removeItem('activeRecreateSession');
+      } catch {
+        /* best-effort */
+      }
+    },
   },
 });
 
@@ -390,6 +454,9 @@ export const {
   setAvatarsPagination,
   setAvatarsLoading,
   setRecreateInputs,
+  setActiveRecreateSession,
+  updateActiveRecreateSession,
+  clearActiveRecreateSession,
   setAvatarStep,
   setCloneStep,
   setAIAdsStep,

@@ -62,6 +62,7 @@ import {
   setAiAdsTranslateScript,
   setAiAdsTranslateScriptError,
   setAiAdsVoicePreview,
+  updateActiveRecreateSession,
 } from '../adStudio/adVideoNewSlice';
 import { updateImage } from '../image/imageSlice';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
@@ -740,12 +741,54 @@ export const initSocket = (url) => (dispatch, getState) => {
       showFailureNotification('video', message);
     });
 
-    // Clone Your Ad events (bridged to central emitter)
+    // Clone Your Ad events (bridged to central emitter & active session store)
     socket.on('cloneAdAnalyzeReady', (data) => {
       emitter.emit('cloneAd:analyzeReady', data);
+      const incomingId = data?.sessionId;
+      dispatch(
+        updateActiveRecreateSession({
+          sessionId: incomingId,
+          status: 'success',
+          progress: 100,
+          analysisResult: data.identification || data,
+          productBrandName: data.productBrandName || data.brandName,
+          recommendedModel: data.recommendedModel,
+          recommendedDurationSeconds: data.recommendedDurationSeconds,
+          recommendedAspectRatio: data.recommendedAspectRatio,
+          recommendationReason: data.recommendationReason,
+        })
+      );
     });
     socket.on('cloneAdAnalyzeFailed', (data) => {
       emitter.emit('cloneAd:analyzeFailed', data);
+      dispatch(
+        updateActiveRecreateSession({
+          sessionId: data?.sessionId,
+          status: 'failed',
+          error: data?.error || data?.message || 'Analysis failed',
+        })
+      );
+    });
+    socket.on('videoProgress', (data) => {
+      emitter.emit('videoProgress', data);
+      const incomingId = data?._id || data?.sessionId || data?.id;
+      const pct =
+        typeof data?.promptPercentage === 'number'
+          ? data.promptPercentage
+          : typeof data?.percentage === 'number'
+          ? data.percentage
+          : typeof data?.progress === 'number'
+          ? data.progress
+          : null;
+      if (incomingId && pct !== null && !isNaN(pct)) {
+        dispatch(
+          updateActiveRecreateSession({
+            sessionId: incomingId,
+            progress: Math.min(100, Math.max(0, Math.round(pct))),
+            stage: data?.stage || data?.message || data?.status,
+          })
+        );
+      }
     });
     socket.on('cloneAdGenerateReady', (data) => {
       emitter.emit('cloneAd:generateReady', data);

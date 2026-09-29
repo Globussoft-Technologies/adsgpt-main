@@ -1,16 +1,16 @@
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
 import UpgradeModal from '../UpgradeModal';
-import { CloudUpload, LinkIcon, Loader2, Video, X, Clock, AlertCircle, AlertTriangle, Sparkles, RotateCcw, ArrowRight, CheckCircle2, Check, Cpu, Layers, Search, FileText, Minus, Plus, ChevronLeft, Clapperboard, ExternalLink } from 'lucide-react';
+import { CloudUpload, LinkIcon, Loader2, Video, X, Clock, AlertCircle, AlertTriangle, Sparkles, RotateCcw, ArrowRight, CheckCircle2, Check, Cpu, Layers, Search, FileText, Minus, Plus, ChevronLeft, Clapperboard, ExternalLink, Eye } from 'lucide-react';
 import SparkleDark from '@/assets/layouts/prompt/sparkle-dark.svg';
 import TimerDarkLogo from '@/assets/layouts/prompt/advideo/timer.svg';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getSocket } from '@/store/reducers/socket/socketSlice';
 import emitter from '@/utils/eventEmitter';
-import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
-import { cloneAdAnalyzeAction, cloneAdGenerateAction } from '@/store/actions/adVideoNew/Advideoactions';
+import { cloneAdAnalyzeAction, cloneAdGenerateAction, getVideoById } from '@/store/actions/adVideoNew/Advideoactions';
 import axios from 'axios';
 import {
   LinkedInEmbed,
@@ -30,7 +30,14 @@ import { getFirstAvailableVideoModel, isVideoModelBlocked } from '@/utils/videoM
 
 import { uploadToS3, uploadUrlToS3, uploadVideoToS3 } from '@/utils/imageUpload';
 import getCookies from '@/utils/getCookies';
-import { setRecreateInputs, setActivePage, setMySpaceTab } from '@/store/reducers/adStudio/adVideoNewSlice';
+import {
+  setRecreateInputs,
+  setActivePage,
+  setMySpaceTab,
+  setActiveRecreateSession,
+  updateActiveRecreateSession,
+  clearActiveRecreateSession,
+} from '@/store/reducers/adStudio/adVideoNewSlice';
 import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import { estimateAdVideoCredits } from '@/utils/creditEstimator';
 
@@ -49,6 +56,8 @@ const ANALYSIS_CHECKLIST_STEPS = [
   { id: 'hook', title: 'Identifying the hook and CTA', min: 70, max: 90 },
   { id: 'product', title: 'Matching scenes to your product', min: 90, max: 100 },
 ];
+
+
 
 // Helper function to extract YouTube video ID from various YouTube URL formats
 const getYouTubeVideoId = (url) => {
@@ -703,45 +712,121 @@ const getSanitizedPrefillErrorMessage = (rawError) => {
 
 
 const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerate: onGenerateProp, registerBackHandler }) => {
-  const [sourceVideoUrl, setSourceVideoUrl] = useState('');
-  const [galleryVideoUrl, setGalleryVideoUrl] = useState('');
+  const { recreateInputs, activeRecreateSession } = useSelector((state) => state.adVideoNew || {});
+  
+  const savedSession = useMemo(() => {
+    if (activeRecreateSession?.sessionId) return activeRecreateSession;
+    try {
+      const raw = sessionStorage.getItem('activeRecreateSession');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, [activeRecreateSession]);
+
+  const initialSessionInputs = savedSession?.inputs || {};
+
+  const [sourceVideoUrl, setSourceVideoUrl] = useState(
+    () => initialSessionInputs.sourceVideoUrl || recreateInputs?.sourceVideoUrl || ''
+  );
+  const [galleryVideoUrl, setGalleryVideoUrl] = useState(
+    () => initialSessionInputs.galleryVideoUrl || recreateInputs?.galleryVideoUrl || ''
+  );
   const [sourceVideoFile, setSourceVideoFile] = useState(null);
   const [localVideoBlobUrl, setLocalVideoBlobUrl] = useState('');
   const [sourceDuration, setSourceDuration] = useState(null); // Isolated source video length in seconds
   const [previewVideoError, setPreviewVideoError] = useState(false);
-  const [productImages, setProductImages] = useState([]);
+  const [productImages, setProductImages] = useState(() => {
+    if (Array.isArray(initialSessionInputs.productImages) && initialSessionInputs.productImages.length > 0) {
+      return initialSessionInputs.productImages;
+    }
+    if (Array.isArray(initialSessionInputs.productImageUrls) && initialSessionInputs.productImageUrls.length > 0) {
+      return initialSessionInputs.productImageUrls.map((u) => ({
+        preview: u,
+        s3Url: u,
+        url: u,
+        name: 'Product Image',
+      }));
+    }
+    return [];
+  });
   const [productUrlInput, setProductUrlInput] = useState('');
-  const [videoModel, setVideoModel] = useState('');
-  const [videoDuration, setVideoDuration] = useState('');
-  const [aspectRatio, setAspectRatio] = useState('');
-  const [detectedVideoAspectRatio, setDetectedVideoAspectRatio] = useState('');
-  const [brandName, setBrandName] = useState('');
-  const [additionalInfo, setAdditionalInfo] = useState('');
-  const [recommendationReason, setRecommendationReason] = useState('');
+  const [videoModel, setVideoModel] = useState(
+    () => initialSessionInputs.model || ''
+  );
+  const [videoDuration, setVideoDuration] = useState(
+    () => initialSessionInputs.duration || ''
+  );
+  const [aspectRatio, setAspectRatio] = useState(
+    () => initialSessionInputs.aspectRatio || ''
+  );
+  const [detectedVideoAspectRatio, setDetectedVideoAspectRatio] = useState(
+    () => initialSessionInputs.aspectRatio || ''
+  );
+  const [brandName, setBrandName] = useState(
+    () => initialSessionInputs.brandName || ''
+  );
+  const [additionalInfo, setAdditionalInfo] = useState(
+    () => initialSessionInputs.additionalInstructions || ''
+  );
+  const [recommendationReason, setRecommendationReason] = useState(
+    () => savedSession?.recommendationReason || ''
+  );
 
   // Step state: 'input' | 'workspace'
-  const { recreateInputs } = useSelector((state) => state.adVideoNew || {});
-  const [currentStep, setCurrentStep] = useState(
-    recreateInputs?.sourceVideoUrl ||
+  const [currentStep, setCurrentStep] = useState(() => {
+    if (savedSession?.sessionId) return 'workspace';
+    if (
+      recreateInputs?.sourceVideoUrl ||
       recreateInputs?.galleryVideoUrl ||
       recreateInputs?.videoSample
-      ? 'workspace'
-      : 'input'
+    ) {
+      return 'workspace';
+    }
+    return 'input';
+  });
+  const [prefillUrl, setPrefillUrl] = useState(
+    () =>
+      initialSessionInputs.sourceVideoUrl ||
+      initialSessionInputs.galleryVideoUrl ||
+      initialSessionInputs.prefillUrl ||
+      recreateInputs?.sourceVideoUrl ||
+      recreateInputs?.galleryVideoUrl ||
+      ''
   );
-  const [prefillUrl, setPrefillUrl] = useState('');
   const [prefillError, setPrefillError] = useState('');
 
   // Analyze & Socket Async State: 'form' | 'analyzing' | 'success' | 'failed' | 'timeout'
-  const [analysisState, setAnalysisState] = useState('form');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisSessionId, setAnalysisSessionId] = useState(null);
-  const [analyzeProgress, setAnalyzeProgress] = useState(0);
+  const [analysisState, setAnalysisState] = useState(() => {
+    if (savedSession?.status === 'success') return 'success';
+    if (savedSession?.status === 'failed') return 'failed';
+    if (savedSession?.status === 'analyzing') return 'analyzing';
+    return 'form';
+  });
+  const [isAnalyzing, setIsAnalyzing] = useState(
+    () => savedSession?.status === 'analyzing'
+  );
+  const [analysisSessionId, setAnalysisSessionId] = useState(
+    () => savedSession?.sessionId || null
+  );
+  const [analyzeProgress, setAnalyzeProgress] = useState(() => {
+    if (savedSession?.status === 'success') return 100;
+    const promptPct = savedSession?.promptPercentage ?? savedSession?.progress;
+    if (typeof promptPct === 'number' && !isNaN(promptPct)) {
+      return Math.min(100, Math.max(0, Math.round(promptPct)));
+    }
+    return 0;
+  });
   const [analyzeStageText, setAnalyzeStageText] = useState('');
   const [analysisCards, setAnalysisCards] = useState([]);
-  const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisResult, setAnalysisResult] = useState(
+    () => savedSession?.analysisResult || null
+  );
   const [analysisError, setAnalysisError] = useState(null);
   const [userSafeError, setUserSafeError] = useState(null);
-  const [editableVisualDescription, setEditableVisualDescription] = useState('');
+  const [editableVisualDescription, setEditableVisualDescription] = useState(
+    () => savedSession?.analysisResult?.visualDescription || ''
+  );
 
   const currentStepRef = useRef(currentStep);
   currentStepRef.current = currentStep;
@@ -758,9 +843,9 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const lastUploadedFileRef = useRef(null);
   const lastPrefilledSourceRef = useRef('');
   const localVideoBlobUrlRef = useRef('');
-  const preferredDurationRef = useRef('');
-  const preferredAspectRatioRef = useRef('');
-  const userSelectedAspectRatioRef = useRef(false);
+  const preferredDurationRef = useRef(initialSessionInputs.duration || '');
+  const preferredAspectRatioRef = useRef(initialSessionInputs.aspectRatio || '');
+  const userSelectedAspectRatioRef = useRef(Boolean(initialSessionInputs.aspectRatio));
   const additionalInfoTextareaRef = useRef(null);
   const summaryTextareaRef = useRef(null);
 
@@ -894,8 +979,24 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [lightboxImages, setLightboxImages] = useState([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [errors, setErrors] = useState({});
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setLightboxOpen(false);
+      } else if (e.key === 'ArrowLeft') {
+        setLightboxIndex((prev) => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        setLightboxIndex((prev) => Math.min(lightboxImages.length - 1, prev + 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxOpen, lightboxImages.length]);
 
   const { connected, userData, credits } = useSelector((state) => state.socket);
   const { modelCredits } = useSelector((state) => state.prompt || {});
@@ -1118,15 +1219,6 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       setGeneratedVideoUrl(null);
       setGenerateError(null);
 
-      if (timeoutTimerRef.current) {
-        clearTimeout(timeoutTimerRef.current);
-      }
-      timeoutTimerRef.current = setTimeout(() => {
-        console.warn('[CloneYourAd] Analysis safety timeout reached (150s). Transitioning to timeout state.');
-        setAnalysisState('timeout');
-        setIsAnalyzing(false);
-      }, 150000);
-
       // 1. Upload Product Images to S3 (caching uploaded URLs to avoid re-uploading)
       const updatedProductImages = [...productImages];
       const finalProductImageUrls = [];
@@ -1233,6 +1325,41 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       if (res && res.sessionId) {
         setAnalysisSessionId(res.sessionId);
         currentSessionIdRef.current = res.sessionId;
+        const finalProductObjects = (
+          finalProductImageUrls.length > 0 ? finalProductImageUrls : productImages
+        ).map((img) => {
+          const url = typeof img === 'string' ? img : img.s3Url || img.preview || img.url || '';
+          return {
+            preview: url,
+            s3Url: url,
+            url: url,
+            name: typeof img === 'object' && img.name ? img.name : 'Product Image',
+          };
+        });
+
+        const sessionPayload = {
+          sessionId: res.sessionId,
+          status: 'analyzing',
+          progress: 0,
+          promptPercentage: 0,
+          inputs: {
+            sourceVideoUrl: finalSourceVidUrl,
+            prefillUrl: finalSourceVidUrl || finalGalleryVidUrl || (sourceVideoFile ? sourceVideoFile.name : ''),
+            galleryVideoUrl: finalGalleryVidUrl,
+            productImages: finalProductObjects,
+            productImageUrls: finalProductImageUrls,
+            brandName: brandName || '',
+            additionalInstructions: additionalInfo || '',
+            model: defaultModel,
+            targetDurationSeconds: defaultDuration,
+            aspectRatio: defaultAspectRatio,
+          },
+        };
+
+        dispatch(setActiveRecreateSession(sessionPayload));
+        try {
+          sessionStorage.setItem('activeRecreateSession', JSON.stringify(sessionPayload));
+        } catch {}
       }
     } catch (err) {
       console.error('[CloneYourAd] Start Analyze error:', err);
@@ -1472,6 +1599,21 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       setAnalysisState('form');
       setAnalyzeProgress(0);
       currentSessionIdRef.current = null;
+
+      const existingVideoSource =
+        prefillUrl ||
+        sourceVideoUrl ||
+        galleryVideoUrl ||
+        (sourceVideoFile ? sourceVideoFile.name : '') ||
+        savedSession?.inputs?.sourceVideoUrl ||
+        savedSession?.inputs?.galleryVideoUrl ||
+        savedSession?.inputs?.prefillUrl ||
+        '';
+      if (existingVideoSource) {
+        setPrefillUrl(existingVideoSource);
+        lastPrefilledSourceRef.current = existingVideoSource;
+      }
+
       setCurrentStep('input');
       return true;
     }
@@ -1664,13 +1806,14 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     setErrors((prevErr) => ({ ...prevErr, videoDuration: '' }));
   };
 
-  // Auto-select first available model from DB when surface models load
+  // Auto-select first available model from DB when surface models load if not already set
   useEffect(() => {
-    if (!videoModel || !videoChatModels.some((m) => m.value === videoModel)) {
-      const defaultVideoModel = getFirstAvailableVideoModel(videoChatModels, userData);
+    if (videoChatModels.length === 0) return;
+    if (!videoModel) {
+      const defaultVideoModel = initialSessionInputs.model || getFirstAvailableVideoModel(videoChatModels, userData);
       if (defaultVideoModel) setVideoModel(defaultVideoModel);
     }
-  }, [userData, videoChatModels, videoModel]);
+  }, [userData, videoChatModels, videoModel, initialSessionInputs.model]);
 
   // Auto-select duration when model or surface data changes:
   // - If the preferred duration is supported by the new model, keep it.
@@ -1808,6 +1951,137 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     };
   }, [dispatch]);
 
+  // Ground-truth active session sync on mount & reconnect
+  useEffect(() => {
+    const activeSid = savedSession?.sessionId || analysisSessionId;
+    if (!activeSid) return;
+
+    let isMounted = true;
+    currentSessionIdRef.current = activeSid;
+
+    dispatch(getVideoById(activeSid))
+      .then((res) => {
+        if (!isMounted || !res?.data) return;
+        const record = res.data;
+        console.log('[CloneYourAd] Synced active session record from DB:', record);
+
+        if (record.inputs) {
+          if (record.inputs.galleryVideoUrl && !galleryVideoUrl) {
+            setGalleryVideoUrl(record.inputs.galleryVideoUrl);
+          }
+          if (record.inputs.sourceVideoUrl && !sourceVideoUrl) {
+            setSourceVideoUrl(record.inputs.sourceVideoUrl);
+          }
+          if (record.inputs.productImageUrls?.length && productImages.length === 0) {
+            setProductImages(
+              record.inputs.productImageUrls.map((u) => ({
+                preview: u,
+                s3Url: u,
+                url: u,
+                name: 'Product Image',
+              }))
+            );
+          }
+        }
+
+        if (record.identification) {
+          setAnalysisResult(record.identification);
+          setAnalyzeProgress(100);
+          setAnalysisState('success');
+          setIsAnalyzing(false);
+          setAnalysisError(null);
+          setUserSafeError(null);
+
+          const detectedBrand =
+            record.identification?.productBrandName ||
+            record.identification?.brandName ||
+            record.inputs?.productBrandName ||
+            record.inputs?.brandName;
+          if (detectedBrand && !brandName && !initialSessionInputs.brandName) {
+            setBrandName(detectedBrand);
+          }
+
+          const recModel = record.identification?.recommendedModel || record.inputs?.model;
+          if (recModel && !videoModel && !initialSessionInputs.model) {
+            setVideoModel(recModel);
+          }
+
+          const recDuration = record.identification?.recommendedDurationSeconds || record.inputs?.duration;
+          if (recDuration && !videoDuration && !initialSessionInputs.duration) {
+            const durNum = parseInt(String(recDuration).replace(/\D/g, ''), 10);
+            if (durNum) {
+              const durStr = `${durNum}s`;
+              preferredDurationRef.current = durStr;
+              setVideoDuration(durStr);
+              setDurationInputText(String(durNum));
+            }
+          }
+
+          const recAspect = record.identification?.recommendedAspectRatio || record.inputs?.aspectRatio;
+          if (recAspect && !aspectRatio && !initialSessionInputs.aspectRatio && !userSelectedAspectRatioRef.current) {
+            preferredAspectRatioRef.current = recAspect;
+            setAspectRatio(recAspect);
+          }
+
+          const updated = {
+            sessionId: activeSid,
+            status: 'success',
+            progress: 100,
+            analysisResult: record.identification,
+          };
+          dispatch(updateActiveRecreateSession(updated));
+          try {
+            const raw = sessionStorage.getItem('activeRecreateSession');
+            const prev = raw ? JSON.parse(raw) : {};
+            sessionStorage.setItem('activeRecreateSession', JSON.stringify({ ...prev, ...updated }));
+          } catch {}
+        } else if (record.status === 'failed') {
+          setAnalysisState('failed');
+          setIsAnalyzing(false);
+          dispatch(updateActiveRecreateSession({ sessionId: activeSid, status: 'failed' }));
+        } else {
+          // Still analyzing in backend
+          setAnalysisState('analyzing');
+          setIsAnalyzing(true);
+        }
+      })
+      .catch((err) => {
+        console.warn('[CloneYourAd] Could not sync active session status from DB:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [savedSession?.sessionId, analysisSessionId, dispatch]);
+
+  // Sync state when activeRecreateSession is updated by the global socket handler
+  useEffect(() => {
+    const session = savedSession;
+    if (!session?.sessionId) return;
+    if (
+      currentSessionIdRef.current &&
+      String(session.sessionId) !== String(currentSessionIdRef.current)
+    ) {
+      return;
+    }
+
+    if (session.status === 'success' && session.analysisResult) {
+      setAnalysisResult(session.analysisResult);
+      setAnalyzeProgress(100);
+      setAnalysisState('success');
+      setIsAnalyzing(false);
+      setAnalysisError(null);
+      setUserSafeError(null);
+    } else if (session.status === 'failed') {
+      setAnalysisState('failed');
+      setIsAnalyzing(false);
+      if (session.error) {
+        setAnalysisError(session.error);
+        setUserSafeError(getSanitizedErrorMessage(session.error));
+      }
+    }
+  }, [savedSession]);
+
   // Socket.io & Event Emitter listeners for asynchronous DS team callback events
   useEffect(() => {
     const socket = getSocket();
@@ -1833,7 +2107,16 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       setAnalysisError(null);
       setUserSafeError(null);
 
-      // Auto-populate detected brand name if returned by DS
+      dispatch(
+        updateActiveRecreateSession({
+          sessionId: incomingId || currentSessionIdRef.current,
+          status: 'success',
+          progress: 100,
+          analysisResult: identification,
+        })
+      );
+
+      // Auto-populate detected brand name if returned by DS and not already set
       const detectedBrand =
         data?.productBrandName ||
         data?.brandName ||
@@ -1841,16 +2124,16 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
         data?.inputs?.brandName ||
         identification?.productBrandName ||
         identification?.brandName;
-      if (detectedBrand) {
+      if (detectedBrand && !brandName && !initialSessionInputs.brandName) {
         setBrandName(detectedBrand);
       }
 
-      // Auto-populate recommended model, duration, and aspect ratio from analysis
+      // Auto-populate recommended model, duration, and aspect ratio from analysis if not set by user
       const recModel =
         data?.recommendedModel ||
         data?.inputs?.model ||
         identification?.recommendedModel;
-      if (recModel) {
+      if (recModel && !videoModel && !initialSessionInputs.model) {
         setVideoModel(recModel);
       }
 
@@ -1858,7 +2141,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
         data?.recommendedDurationSeconds ||
         data?.inputs?.duration ||
         identification?.recommendedDurationSeconds;
-      if (recDuration) {
+      if (recDuration && !videoDuration && !initialSessionInputs.duration) {
         const durNum = parseInt(String(recDuration).replace(/\D/g, ''), 10);
         if (durNum) {
           const durStr = `${durNum}s`;
@@ -1872,10 +2155,8 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
         data?.recommendedAspectRatio ||
         data?.inputs?.aspectRatio ||
         identification?.recommendedAspectRatio;
-      if (recAspect) {
-        if (!preferredAspectRatioRef.current) {
-          preferredAspectRatioRef.current = recAspect;
-        }
+      if (recAspect && !aspectRatio && !initialSessionInputs.aspectRatio && !userSelectedAspectRatioRef.current) {
+        preferredAspectRatioRef.current = recAspect;
         setAspectRatio(recAspect);
       }
 
@@ -1927,7 +2208,15 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
             ? progressData.progress
             : null;
         if (pct !== null && !isNaN(pct)) {
-          setAnalyzeProgress(Math.min(100, Math.max(0, Math.round(pct))));
+          const roundedPct = Math.min(100, Math.max(0, Math.round(pct)));
+          setAnalyzeProgress(roundedPct);
+          dispatch(
+            updateActiveRecreateSession({
+              sessionId: currentSessionIdRef.current,
+              progress: roundedPct,
+              promptPercentage: roundedPct,
+            })
+          );
         }
       }
     };
@@ -1985,15 +2274,72 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     };
   }, [connected]);
 
-  // Clean up timers on unmount
+  // Persist user adjustments (model, duration, aspect ratio, brand, instructions, summary) so navigating away & returning preserves user selections
   useEffect(() => {
+    if (analysisState !== 'success' && !analysisResult) return;
+    const sid = analysisSessionId || savedSession?.sessionId;
+    if (!sid) return;
+
+    dispatch(
+      updateActiveRecreateSession({
+        sessionId: sid,
+        status: 'success',
+        inputs: {
+          brandName,
+          model: videoModel,
+          duration: videoDuration,
+          aspectRatio,
+          additionalInstructions: additionalInfo,
+          visualDescription: editableVisualDescription,
+        },
+      })
+    );
+  }, [
+    videoModel,
+    videoDuration,
+    aspectRatio,
+    brandName,
+    additionalInfo,
+    editableVisualDescription,
+    analysisState,
+    analysisResult,
+    analysisSessionId,
+    savedSession?.sessionId,
+    dispatch,
+  ]);
+
+  // Background Safety Timeout for Analysis
+  useEffect(() => {
+    if (analysisState !== 'analyzing' || !analysisSessionId) return;
+
+    const startedAt = savedSession?.startedAt || Date.now();
+    const elapsedMs = Date.now() - startedAt;
+    const remainingTimeoutMs = Math.max(1000, 150000 - elapsedMs);
+
+    if (elapsedMs >= 150000) {
+      console.warn('[CloneYourAd] Analysis safety timeout already elapsed on mount.');
+      setAnalysisState('timeout');
+      setIsAnalyzing(false);
+      return;
+    }
+
+    if (timeoutTimerRef.current) {
+      clearTimeout(timeoutTimerRef.current);
+    }
+
+    timeoutTimerRef.current = setTimeout(() => {
+      console.warn('[CloneYourAd] Analysis safety timeout reached. Transitioning to timeout state.');
+      setAnalysisState('timeout');
+      setIsAnalyzing(false);
+    }, remainingTimeoutMs);
+
     return () => {
       if (timeoutTimerRef.current) {
         clearTimeout(timeoutTimerRef.current);
         timeoutTimerRef.current = null;
       }
     };
-  }, []);
+  }, [analysisState, analysisSessionId, savedSession?.startedAt]);
 
   // Fallback Polling Status Check (if socket is delayed or missed)
   useEffect(() => {
@@ -2035,7 +2381,15 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
             ? record.progress
             : null;
         if (pollPct !== null && !isNaN(pollPct)) {
-          setAnalyzeProgress(Math.min(100, Math.max(0, Math.round(pollPct))));
+          const roundedPct = Math.min(100, Math.max(0, Math.round(pollPct)));
+          setAnalyzeProgress(roundedPct);
+          dispatch(
+            updateActiveRecreateSession({
+              sessionId: analysisSessionId,
+              progress: roundedPct,
+              promptPercentage: roundedPct,
+            })
+          );
         }
         if (record?.identification && (record?.status === 'completed' || record?.status === 'copy')) {
           if (timeoutTimerRef.current) {
@@ -2530,6 +2884,44 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       clearTimeout(timeoutTimerRef.current);
       timeoutTimerRef.current = null;
     }
+    currentSessionIdRef.current = null;
+    setAnalysisSessionId(null);
+    setAnalysisState('form');
+    setIsAnalyzing(false);
+    setAnalysisResult(null);
+    setAnalysisError(null);
+    setUserSafeError(null);
+    setAnalyzeProgress(0);
+    setAnalyzeStageText('');
+    setAnalysisCards([]);
+    setIsGenerating(false);
+    setGeneratedVideoUrl(null);
+    setGenerateError(null);
+    setRecommendationReason('');
+    userSelectedAspectRatioRef.current = false;
+
+    const existingVideoSource =
+      prefillUrl ||
+      sourceVideoUrl ||
+      galleryVideoUrl ||
+      (sourceVideoFile ? sourceVideoFile.name : '') ||
+      '';
+    if (existingVideoSource) {
+      setPrefillUrl(existingVideoSource);
+      lastPrefilledSourceRef.current = existingVideoSource;
+    }
+
+    setCurrentStep('input');
+    dispatch(clearActiveRecreateSession());
+  };
+
+  const handleModalClose = () => {
+    if (timeoutTimerRef.current) {
+      clearTimeout(timeoutTimerRef.current);
+      timeoutTimerRef.current = null;
+    }
+    currentSessionIdRef.current = null;
+    setAnalysisSessionId(null);
     setAnalysisState('form');
     setIsAnalyzing(false);
     setAnalysisResult(null);
@@ -2544,6 +2936,11 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     setRecommendationReason('');
     userSelectedAspectRatioRef.current = false;
     setCurrentStep('input');
+    dispatch(clearActiveRecreateSession());
+
+    if (typeof onClose === 'function') {
+      onClose();
+    }
   };
 
   const handleResetAnalysis = () => {
@@ -2572,25 +2969,127 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       };
 
       await dispatch(cloneAdGenerateAction(payload));
+      dispatch(clearActiveRecreateSession());
 
-      // Trigger genie animation + switch to My Space tab (myVideos) exactly like all other modules
-      const triggerMySpace = onGenerateSuccess || onGenerateProp;
-      if (triggerMySpace) {
-        await triggerMySpace('video');
-      } else {
-        dispatch(setMySpaceTab('videos'));
-        dispatch(setActivePage('myVideos'));
-      }
-    } catch (err) {
-      console.error('[CloneYourAd] Generate API error:', err);
-      setIsGenerating(false);
-      const errorMsg =
-        err.response?.data?.error ||
-        err.message ||
-        'Failed to start video generation';
-      setGenerateError(errorMsg);
+    // Trigger genie animation + switch to My Space tab (myVideos) exactly like all other modules
+    const triggerMySpace = onGenerateSuccess || onGenerateProp;
+    if (triggerMySpace) {
+      await triggerMySpace('video');
+    } else {
+      dispatch(setMySpaceTab('videos'));
+      dispatch(setActivePage('myVideos'));
     }
-  };
+  } catch (err) {
+    console.error('[CloneYourAd] Generate API error:', err);
+    setIsGenerating(false);
+    const errorMsg =
+      err.response?.data?.error ||
+      err.message ||
+      'Failed to start video generation';
+    setGenerateError(errorMsg);
+  }
+};
+
+const renderLightboxModal = () => {
+  if (!lightboxOpen || typeof document === 'undefined') return null;
+  return createPortal(
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        onClick={() => setLightboxOpen(false)}
+        className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 sm:p-6"
+      >
+        <motion.div
+          initial={{ scale: 0.94, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.94, opacity: 0 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+          onClick={(e) => e.stopPropagation()}
+          className="relative flex flex-col items-center justify-center max-h-[85vh] max-w-[90vw]"
+        >
+          {/* Close Button positioned directly on the top-right corner of the preview image */}
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(false)}
+            className="absolute -top-3 -right-3 z-30 flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 text-white hover:bg-zinc-800 shadow-xl border border-white/20 transition-transform active:scale-95 cursor-pointer backdrop-blur-md"
+            title="Close preview"
+            aria-label="Close preview"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          {/* Main Image Container displaying natural image dimensions without extra dark boxes */}
+          <div className="relative flex items-center justify-center">
+            {/* Previous Button (if multiple images) */}
+            {lightboxImages.length > 1 && lightboxIndex > 0 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((prev) => Math.max(0, prev - 1));
+                }}
+                className="absolute -left-4 sm:-left-12 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/90 shadow-md backdrop-blur-md transition hover:scale-105 active:scale-95 cursor-pointer"
+                title="Previous image"
+                aria-label="Previous image"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            )}
+
+            <img
+              src={lightboxImages[lightboxIndex] || lightboxImage}
+              alt="Product Preview"
+              className="h-auto max-h-[78vh] w-auto max-w-[85vw] rounded-2xl object-contain shadow-2xl select-none"
+            />
+
+            {/* Next Button (if multiple images) */}
+            {lightboxImages.length > 1 && lightboxIndex < lightboxImages.length - 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((prev) => Math.min(lightboxImages.length - 1, prev + 1));
+                }}
+                className="absolute -right-4 sm:-right-12 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/90 shadow-md backdrop-blur-md transition hover:scale-105 active:scale-95 cursor-pointer"
+                title="Next image"
+                aria-label="Next image"
+              >
+                <ChevronLeft className="h-5 w-5 rotate-180" />
+              </button>
+            )}
+          </div>
+
+          {/* Thumbnails strip (if multiple images) */}
+          {lightboxImages.length > 1 && (
+            <div className="mt-3.5 flex items-center gap-2 rounded-xl bg-black/60 px-3 py-1.5 backdrop-blur-md border border-white/10 shadow-lg">
+              {lightboxImages.map((img, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLightboxIndex(idx);
+                  }}
+                  className={`relative h-10 w-10 overflow-hidden rounded-lg border-2 transition-all cursor-pointer ${
+                    idx === lightboxIndex
+                      ? 'border-[#5D5FEF] scale-105 shadow-md ring-2 ring-[#5D5FEF]/40'
+                      : 'border-transparent opacity-60 hover:opacity-100'
+                  }`}
+                >
+                  <img src={img} alt={`Thumb ${idx + 1}`} className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>,
+    document.body
+  );
+};
 
   if (currentStep === 'input') {
     const isVideoValid = Boolean(sourceVideoFile || (prefillUrl?.trim() && isValidVideoSourceUrl(prefillUrl)));
@@ -2620,7 +3119,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
         >
           {/* Close button */}
           <button
-            onClick={onClose}
+            onClick={handleModalClose}
             type="button"
             className="absolute top-6 right-6 rounded-full p-1 text-zinc-400 transition hover:bg-black/5 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-white/10 dark:hover:text-white cursor-pointer"
           >
@@ -2907,30 +3406,48 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
               {productImages.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {productImages.map((img, index) => (
-                    <div
-                      key={index}
-                      className="group relative h-14 w-14 overflow-hidden rounded-lg border border-zinc-200 dark:border-white/10 shadow-sm"
-                    >
-                      <img
-                        src={img.preview}
-                        alt={`Product ${index + 1}`}
-                        className="h-full w-full cursor-pointer object-cover"
+                  {productImages.map((img, index) => {
+                    const previewSrc = typeof img === 'string' ? img : img?.preview || img?.url || img?.s3Url || '';
+                    return (
+                      <div
+                        key={index}
                         onClick={() => {
-                          setLightboxImages(productImages.map((i) => i.preview));
-                          setLightboxImage(img.preview);
+                          const previews = productImages
+                            .map((i) => (typeof i === 'string' ? i : i?.preview || i?.url || i?.s3Url || ''))
+                            .filter(Boolean);
+                          setLightboxImages(previews);
+                          setLightboxIndex(index);
+                          setLightboxImage(previewSrc);
                           setLightboxOpen(true);
                         }}
-                      />
-                      <button
-                        type="button"
-                        className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition duration-200 group-hover:opacity-100 cursor-pointer"
-                        onClick={() => removeProductImage(index)}
+                        title="Click to preview image"
+                        className="group relative h-14 w-14 cursor-pointer overflow-hidden rounded-lg border border-zinc-200 dark:border-white/10 shadow-xs transition-all duration-200 hover:scale-105 hover:border-[#5D5FEF] dark:hover:border-[#6366F1] bg-zinc-100 dark:bg-zinc-800"
                       >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
+                        <img
+                          src={previewSrc}
+                          alt={`Product ${index + 1}`}
+                          className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-110 select-none"
+                        />
+                        {/* Hover Overlay with Eye Preview Icon */}
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                          <Eye className="h-4 w-4 text-white drop-shadow-md" />
+                        </div>
+                        {/* Delete Button with StopPropagation */}
+                        <button
+                          type="button"
+                          className="absolute top-1 right-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-all duration-200 group-hover:opacity-100 cursor-pointer hover:bg-red-600 hover:scale-110 active:scale-95"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeProductImage(index);
+                          }}
+                          title="Remove image"
+                          aria-label="Remove image"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2956,6 +3473,15 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
             </button>
           </div>
         </div>
+        {renderLightboxModal()}
+        <UpgradeModal
+          isOpen={isUpgradeModalOpen}
+          onClose={() => setIsUpgradeModalOpen(false)}
+          onUpgrade={() => {
+            setIsUpgradeModalOpen(false);
+            window.open(SIGNUP_URL, '_blank');
+          }}
+        />
       </div>
     );
   }
@@ -2990,7 +3516,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       <div className={`relative flex flex-col justify-center w-full overflow-hidden rounded-[28px] border border-black/5 dark:border-white/10 bg-white/95 dark:bg-[#18181B] shadow-2xl ${cardHeightAndPaddingClass} transition-all duration-300`}>
         {/* Top Right Close Button */}
         <button
-          onClick={onClose}
+          onClick={handleModalClose}
           type="button"
           className="absolute top-4 right-4 z-30 rounded-full p-2 text-zinc-500 transition hover:bg-black/5 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white cursor-pointer"
           aria-label="Close"
@@ -3054,14 +3580,41 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                 </div>
               ) : sourceType === 'direct-video' ? (
                 <video
+                  ref={(el) => {
+                    if (el) {
+                      el.muted = true;
+                      el.defaultMuted = true;
+                      if (el.paused) {
+                        const p = el.play();
+                        if (p && typeof p.catch === 'function') p.catch(() => {});
+                      }
+                    }
+                  }}
                   key={effectiveMediaUrl}
                   src={effectiveMediaUrl}
                   autoPlay
                   muted
+                  defaultMuted
                   loop
                   playsInline
+                  preload="auto"
                   referrerPolicy="no-referrer"
-                  onLoadedMetadata={handleVideoMetadataLoaded}
+                  onLoadedMetadata={(e) => {
+                    handleVideoMetadataLoaded(e);
+                    const v = e.currentTarget;
+                    v.muted = true;
+                    if (v.paused) v.play().catch(() => {});
+                  }}
+                  onLoadedData={(e) => {
+                    const v = e.currentTarget;
+                    v.muted = true;
+                    if (v.paused) v.play().catch(() => {});
+                  }}
+                  onCanPlay={(e) => {
+                    const v = e.currentTarget;
+                    v.muted = true;
+                    if (v.paused) v.play().catch(() => {});
+                  }}
                   onError={() => setPreviewVideoError(true)}
                   className="absolute inset-0 z-0 h-full w-full object-cover bg-black"
                 />
@@ -3099,24 +3652,63 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                 </div>
               ) : effectiveMediaUrl ? (
                 <video
+                  ref={(el) => {
+                    if (el) {
+                      el.muted = true;
+                      el.defaultMuted = true;
+                      if (el.paused) {
+                        const p = el.play();
+                        if (p && typeof p.catch === 'function') p.catch(() => {});
+                      }
+                    }
+                  }}
                   key={effectiveMediaUrl}
                   src={effectiveMediaUrl}
                   autoPlay
                   muted
+                  defaultMuted
                   loop
                   playsInline
+                  preload="auto"
                   referrerPolicy="no-referrer"
-                  onLoadedMetadata={handleVideoMetadataLoaded}
+                  onLoadedMetadata={(e) => {
+                    handleVideoMetadataLoaded(e);
+                    const v = e.currentTarget;
+                    v.muted = true;
+                    if (v.paused) v.play().catch(() => {});
+                  }}
+                  onLoadedData={(e) => {
+                    const v = e.currentTarget;
+                    v.muted = true;
+                    if (v.paused) v.play().catch(() => {});
+                  }}
+                  onCanPlay={(e) => {
+                    const v = e.currentTarget;
+                    v.muted = true;
+                    if (v.paused) v.play().catch(() => {});
+                  }}
                   onError={() => setPreviewVideoError(true)}
                   className="absolute inset-0 z-0 h-full w-full object-cover bg-black"
                 />
               ) : CLONE_YOUR_AD_DEMO_URL?.match(/\.(mp4|webm|mov)(\?.*)?$/i) ? (
                 <video
+                  ref={(el) => {
+                    if (el) {
+                      el.muted = true;
+                      el.defaultMuted = true;
+                      if (el.paused) {
+                        const p = el.play();
+                        if (p && typeof p.catch === 'function') p.catch(() => {});
+                      }
+                    }
+                  }}
                   src={CLONE_YOUR_AD_DEMO_URL}
                   autoPlay
                   muted
+                  defaultMuted
                   loop
                   playsInline
+                  preload="auto"
                   className="absolute inset-0 z-0 h-full w-full object-cover bg-black"
                 />
               ) : (
@@ -3163,14 +3755,35 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
             {productImages.length > 0 && (
               <div className="mt-3 flex items-center gap-2.5 self-start pl-1">
                 <div className="flex items-center gap-1.5">
-                  {productImages.map((img, idx) => (
-                    <div
-                      key={idx}
-                      className="h-8 w-8 overflow-hidden rounded-lg border border-black/10 dark:border-white/10 shadow-xs bg-zinc-100 dark:bg-zinc-800"
-                    >
-                      <img src={img.preview} alt="" className="h-full w-full object-cover" />
-                    </div>
-                  ))}
+                  {productImages.map((img, idx) => {
+                    const previewSrc = typeof img === 'string' ? img : img?.preview || img?.url || img?.s3Url || '';
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          const allPreviews = productImages
+                            .map((i) => (typeof i === 'string' ? i : i?.preview || i?.url || i?.s3Url || ''))
+                            .filter(Boolean);
+                          setLightboxImages(allPreviews);
+                          setLightboxIndex(idx);
+                          setLightboxImage(previewSrc);
+                          setLightboxOpen(true);
+                        }}
+                        title="Click to preview image"
+                        className="group/thumb relative h-8 w-8 cursor-pointer overflow-hidden rounded-lg border border-black/10 transition-all duration-200 hover:scale-105 hover:border-[#5D5FEF] dark:border-white/10 dark:hover:border-[#6366F1] shadow-xs bg-zinc-100 dark:bg-zinc-800"
+                      >
+                        <img
+                          src={previewSrc}
+                          alt={`Product ${idx + 1}`}
+                          className="h-full w-full object-cover transition-transform duration-200 group-hover/thumb:scale-110 select-none"
+                        />
+                        {/* Hover Overlay with Eye Preview Icon */}
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover/thumb:opacity-100">
+                          <Eye className="h-3.5 w-3.5 text-white drop-shadow-md" />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
                 <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   Your product · {productImages.length} image{productImages.length > 1 ? 's' : ''}
@@ -3513,6 +4126,24 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
                     <span>{analyzeProgress >= 100 ? 'Done' : ''}</span>
                   </div>
                 </div>
+
+                {/* Run in Background Notice & Action Button */}
+                <div className="flex items-center justify-between gap-3 pt-2 mt-1 border-t border-black/5 dark:border-white/5">
+                  <p className="text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400 leading-normal">
+                    You can leave this page. We'll save the result to this page.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof onClose === 'function') {
+                        onClose();
+                      }
+                    }}
+                    className="shrink-0 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-800/90 px-3.5 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs transition hover:bg-zinc-50 dark:hover:bg-white/10 hover:border-zinc-300 dark:hover:border-white/20 active:scale-95 cursor-pointer"
+                  >
+                    Run in background
+                  </button>
+                </div>
               </div>
             ) : analysisState === 'failed' ? (
               /* ── ANALYSIS FAILED STATE ─────────────────────────────────────── */
@@ -3579,15 +4210,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
         </div>
       </div>
 
-      <AnimatePresence>
-        {lightboxOpen && (
-          <ShowLightBox
-            images={lightboxImages}
-            lightboxImage={lightboxImage}
-            closeLightbox={() => setLightboxOpen(false)}
-          />
-        )}
-      </AnimatePresence>
+      {renderLightboxModal()}
       <UpgradeModal
         isOpen={isUpgradeModalOpen}
         onClose={() => setIsUpgradeModalOpen(false)}
