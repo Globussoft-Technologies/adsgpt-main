@@ -571,25 +571,11 @@ async function matchAmemberFreeTrialProduct() {
   const prods = await getAmemberProducts();
   const trialPlanId = process.env.TRIAL_PLAN_ID || "8";
 
-  let matched = prods.find(
+  const matched = prods.find(
     (product) =>
       product &&
-      product.is_disabled !== "1" &&
-      product.is_archived !== "1" &&
-      String(product.product_id) === String(trialPlanId),
+      String(product.product_id) === String(trialPlanId)
   );
-
-  if (!matched) {
-    matched = prods.find((product) => {
-      if (!product || product.is_disabled === "1" || product.is_archived === "1") return false;
-      const titleWords = String(product.title || "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-      return titleWords.includes("free");
-    });
-  }
-
-  if (!matched && prods.length > 0) {
-    matched = prods[0];
-  }
 
   const amemberProductId = matched ? parseInt(matched.product_id, 10) : parseInt(trialPlanId, 10);
   const title = matched?.title || "Free Trial";
