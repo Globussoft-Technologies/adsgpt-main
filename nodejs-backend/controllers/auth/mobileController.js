@@ -569,7 +569,7 @@ async function matchAmemberProduct(storeProductId, basePlanId = null) {
 
 async function matchAmemberFreeTrialProduct() {
   const prods = await getAmemberProducts();
-  const trialPlanId = process.env.TRIAL_PLAN_ID || "8";
+  const trialPlanId = process.env.FREE_PLAN_ID || "8";
 
   const matched = prods.find(
     (product) =>
