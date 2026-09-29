@@ -5,6 +5,7 @@ const dayjs = require('dayjs');
 const { v4: uuidv4 } = require('uuid'); // make sure to run: npm install uuid
 const { getFromAmemberUserDetails, fetchUserDataByName, fetchUserDataByName_Email } = require('./authController');
 const UserProfile = require('../../Module/user/userProfileModel');
+const MobileStoreTransaction = require('../../Module/mobilePayments/mobileStoreTransactionModel');
 
 const APIKEY = process.env.AMEMBER_API_KEY;
 const AMEMBER_URL = process.env.AMEMBER_BASE_API_URL;
@@ -535,6 +536,15 @@ const deleteUserAccount = async (req, res) => {
             console.warn(
                 `[delete-account] no local profile for ${mongoKey}; aMember user deleted anyway`,
             );
+        }
+
+        try {
+            await MobileStoreTransaction.updateMany(
+                { platform: "ios", amember_user_id: String(amemberId), lineage_owner: true },
+                { $set: { lineage_owner: false, "meta.released_reason": "owner_deleted", "meta.released_at": new Date() } }
+            );
+        } catch (updateErr) {
+            console.error(`[delete-account] failed to release Apple ownership for ${amemberId}:`, updateErr);
         }
 
         return res.status(200).json({

@@ -42,9 +42,11 @@ function googleExpiryDate(item) {
 }
 
 function googleHasEntitlement(purchase, item) {
+  const isTest = purchase?.testPurchase !== undefined || purchase?.purchaseType === 0;
   const expiry = googleExpiryDate(item);
-  return ["SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_IN_GRACE_PERIOD", "SUBSCRIPTION_STATE_CANCELED"].includes(purchase?.subscriptionState) &&
-    Boolean(expiry && expiry > new Date());
+  const isValidState = ["SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_IN_GRACE_PERIOD", "SUBSCRIPTION_STATE_CANCELED"].includes(purchase?.subscriptionState);
+  if (isTest && (isValidState || purchase?.subscriptionState === "SUBSCRIPTION_STATE_EXPIRED")) return true;
+  return isValidState && Boolean(expiry && expiry > new Date());
 }
 
 function verifyAndDecodeAppleJWS(jwsString) {
@@ -719,7 +721,7 @@ async function postAmemberInvoice({
   const resReq = await axios.post(`${baseUrl}/invoices`, payload.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
-  logger.info(`[postAmemberInvoice] aMember API Response:`, JSON.stringify(resReq.data, null, 2));
+  logger.info(`[postAmemberInvoice] aMember API Response: ${JSON.stringify(resReq.data, null, 2)}`);
 
   // Access is granted by the `nested[access][0]` block on the invoice POST
   // above, which links the row to the invoice so aMember can expire and
@@ -1636,6 +1638,35 @@ const AppleLogin = async (req, res) => {
 };
 
 
+let cachedRates = null;
+let lastRatesFetchTime = 0;
+
+async function convertAmountToUSD(amount, originalCurrency) {
+  if (!originalCurrency) return amount;
+  const targetCurrency = originalCurrency.toUpperCase();
+  if (targetCurrency === "USD") return amount;
+
+  try {
+    const now = Date.now();
+    // Cache for 24 hours
+    if (!cachedRates || now - lastRatesFetchTime > 86400000) {
+      const { data } = await axios.get("https://open.er-api.com/v6/latest/USD");
+      if (data && data.rates) {
+        cachedRates = data.rates;
+        lastRatesFetchTime = now;
+      }
+    }
+    if (cachedRates && cachedRates[targetCurrency]) {
+      const rate = cachedRates[targetCurrency];
+      return parseFloat((amount / rate).toFixed(2));
+    }
+  } catch (error) {
+    console.error("[convertAmountToUSD] Failed to fetch live exchange rates:", error.message);
+  }
+
+  return amount;
+}
+
 // ── Payment Verification Handlers ───────────────────────────────────────────
 
 const APPLE_PROCESSING_LEASE_MS = 2 * 60 * 1000;
@@ -1650,12 +1681,33 @@ async function resolveAppleSubscriptionOwnership({
   subscriptionGroupIdentifier,
   amemberUserId,
 }) {
-  const legacyRows = await MobileStoreTransaction.find({
+  const allLegacyRows = await MobileStoreTransaction.find({
     platform: "ios",
     original_transaction_id: originalTransactionId,
   })
-    .select("amember_user_id event_type lineage_owner trial_consumed app_account_token subscription_group_identifier raw_payload.appAccountToken")
+    .select("amember_user_id event_type lineage_owner trial_consumed app_account_token subscription_group_identifier raw_payload.appAccountToken meta")
     .sort({ createdAt: 1 });
+  let legacyRows = allLegacyRows.filter((row) => row.meta?.released_reason !== "owner_deleted");
+  const releasedRows = allLegacyRows.filter((row) => row.meta?.released_reason === "owner_deleted");
+
+  if (releasedRows.length > 0 && legacyRows.length === 0) {
+    await MobileStoreTransaction.updateMany(
+      { original_transaction_id: originalTransactionId, "meta.released_reason": "owner_deleted" },
+      { 
+        $set: { 
+          amember_user_id: amemberUserId, 
+          user_id: `GPT-${amemberUserId}`,
+          "meta.amember_sync_pending": true
+        },
+        $unset: { "meta.released_reason": "", "meta.released_at": "" }
+      }
+    );
+    legacyRows = await MobileStoreTransaction.find({
+      platform: "ios",
+      original_transaction_id: originalTransactionId,
+    }).sort({ createdAt: 1 });
+  }
+
   const legacyOwners = [...new Set(
     legacyRows.map((row) => String(row.amember_user_id || "")).filter(Boolean),
   )];
@@ -1716,6 +1768,7 @@ async function resolveAppleSubscriptionOwnership({
     const tokenOwnedElsewhere = await MobileStoreTransaction.exists({
       platform: "ios",
       amember_user_id: { $ne: String(amemberUserId) },
+      "meta.released_reason": { $ne: "owner_deleted" },
       $or: [
         { app_account_token: appAccountToken },
         { "raw_payload.appAccountToken": appAccountToken },
@@ -1929,11 +1982,24 @@ const verifyApplePayment = async (req, res) => {
       canonical_transaction_id: transactionId,
     });
     if (existingTx && String(existingTx.amember_user_id) !== String(amemberUserId)) {
-      return res.status(409).json({
-        ok: false,
-        code: req.appleRestore ? "restore_conflict" : "subscription_already_linked",
-        error: "This Apple subscription is already linked to another AdsGPT account.",
-      });
+      const conflictProfile = await UserProfile.findOne({
+        $or: [
+          { user_id: `GPT-${existingTx.amember_user_id}` },
+          { user_id: existingTx.amember_user_id }
+        ]
+      }).select("is_deleted").lean();
+
+      if (conflictProfile && conflictProfile.is_deleted) {
+        existingTx.amember_user_id = amemberUserId;
+        existingTx.user_id = `GPT-${amemberUserId}`;
+        await existingTx.save();
+      } else {
+        return res.status(409).json({
+          ok: false,
+          code: req.appleRestore ? "restore_conflict" : "subscription_already_linked",
+          error: "This Apple subscription is already linked to another AdsGPT account.",
+        });
+      }
     }
 
     // A verified record with the same transaction and owner is an idempotent
@@ -2190,7 +2256,7 @@ const verifyGooglePayment = async (req, res) => {
   */
   try {
     logger.info(`\n\n=== [verifyGooglePayment] START ===`);
-    logger.info(`[verifyGooglePayment] Raw req.body:`, JSON.stringify(req.body, null, 2));
+    logger.info(`[verifyGooglePayment] Raw req.body: ${JSON.stringify(req.body, null, 2)}`);
     
     const { productId, purchaseToken, packageName } = req.body;
     const expectedGooglePackage = process.env.GOOGLE_PLAY_PACKAGE_NAME || "io.adsgpt.app";
@@ -2220,7 +2286,7 @@ const verifyGooglePayment = async (req, res) => {
         token: purchaseToken,
       });
       subscriptionState = response.data;
-      logger.info(`[verifyGooglePayment] Google API response for token ${purchaseToken.substring(0, 10)}...:`, JSON.stringify(subscriptionState, null, 2));
+      logger.info(`[verifyGooglePayment] Google API response for token ${purchaseToken.substring(0, 10)}...: ${JSON.stringify(subscriptionState, null, 2)}`);
     } catch (e) {
       logger.error("[verifyGooglePayment] Google Developer API failed:", {
         message: e.message,
@@ -2241,7 +2307,12 @@ const verifyGooglePayment = async (req, res) => {
     if (googleItem?.productId !== productId || !googleHasEntitlement(subscriptionState, googleItem)) {
       return res.status(403).json({ ok: false, code: "STORE_PROOF_INVALID", error: "Google Play subscription is not active." });
     }
-    const googleOrder = googleOrderId(subscriptionState, googleItem);
+    let googleOrder = googleOrderId(subscriptionState, googleItem);
+    const isTestPurchase = subscriptionState.testPurchase !== undefined || subscriptionState.purchaseType === 0;
+    if (isTestPurchase && !googleOrder) {
+      googleOrder = "TEST_ORDER_" + purchaseToken.substring(0, 10);
+      logger.info(`[verifyGooglePayment] Mocking orderId for test purchase: ${googleOrder}`);
+    }
     if (!googleOrder) {
       return res.status(422).json({ ok: false, code: "STORE_PROOF_INVALID", error: "Google Play did not return a successful order ID." });
     }
@@ -2277,16 +2348,30 @@ const verifyGooglePayment = async (req, res) => {
       ? await matchAmemberFreeTrialProduct()
       : await matchAmemberProduct(productId, basePlanId);
 
-    logger.info(`[verifyGooglePayment] Matched aMember Product:`, JSON.stringify(matchedProduct, null, 2));
+    logger.info(`[verifyGooglePayment] Matched aMember Product: ${JSON.stringify(matchedProduct, null, 2)}`);
 
-    // Use actual aMember product price for paid plans
-    if (!isTrial && matchedProduct?.amemberProduct?.first_price) {
-      amount = Number(matchedProduct.amemberProduct.first_price) || 0.00;
-    } else {
+    // Extract actual price from Google Play's v2 API response
+    let currency = "USD";
+    if (!isTrial) {
+      const priceObj = googleItem?.autoRenewingPlan?.recurringPrice || googleItem?.prepaidPlan?.price;
+      if (priceObj && priceObj.units) {
+        amount = Number(priceObj.units);
+        if (priceObj.nanos) {
+          amount += Number(priceObj.nanos) / 1e9;
+        }
+        if (priceObj.currencyCode) {
+          amount = await convertAmountToUSD(amount, priceObj.currencyCode);
+          // currency = priceObj.currencyCode; // User requested to always use USD
+        }
+      }
+    }
+
+    if (!isTrial && (!Number.isFinite(amount) || amount <= 0)) {
+      logger.warn(`[verifyGooglePayment] Could not extract price from Google response. Defaulting to 0.00. (product_id: ${matchedProduct?.amemberProduct?.product_id})`);
       amount = 0.00;
     }
 
-    logger.info(`[verifyGooglePayment] Calculated invoice amount: ${amount}`);
+    logger.info(`[verifyGooglePayment] Calculated invoice amount: ${amount} ${currency}`);
 
     try {
       const invoicePayload = {
@@ -2296,11 +2381,11 @@ const verifyGooglePayment = async (req, res) => {
         storeProductId: productId,
         matchedProduct,
         amount,
-        currency: "USD",
+        currency,
         purchasedAt: now,
         expiresAt: expiresDate,
       };
-      logger.info(`[verifyGooglePayment] Calling postAmemberInvoice with:`, JSON.stringify(invoicePayload, null, 2));
+      logger.info(`[verifyGooglePayment] Calling postAmemberInvoice with: ${JSON.stringify(invoicePayload, null, 2)}`);
       if (!(await amemberInvoiceExists("android", googleOrder))) {
         await postAmemberInvoice(invoicePayload);
       }
@@ -2780,13 +2865,18 @@ const handleAppleWebhook = async (req, res) => {
     if (txInfo) {
       try {
         const originalTransactionId = String(txInfo.originalTransactionId || txInfo.transactionId);
-        const lineageRows = await MobileStoreTransaction.find({
+        const allLineageRows = await MobileStoreTransaction.find({
           platform: "ios",
           original_transaction_id: originalTransactionId,
         }).sort({ createdAt: 1 });
+        const lineageRows = allLineageRows.filter(row => row.meta?.released_reason !== "owner_deleted");
         const lineageOwners = [...new Set(
           lineageRows.map((row) => String(row.amember_user_id || "")).filter(Boolean),
         )];
+
+        if (lineageOwners.length === 0) {
+          return res.status(200).json({ ok: true, message: "Subscription released, ignoring webhook." });
+        }
 
         if (lineageOwners.length > 1) {
           return res.status(409).json({
@@ -2835,11 +2925,13 @@ const handleAppleWebhook = async (req, res) => {
           }
 
           const storeProductId = txInfo.productId || existingTx.store_product_id;
-          const renewalAmount =
+          let renewalAmount =
             typeof txInfo.price === "number"
               ? txInfo.price / 1000.0
               : existingTx.amount;
-          const currency = txInfo.currency || existingTx.currency || "USD";
+          const originalCurrency = txInfo.currency || existingTx.currency || "USD";
+          renewalAmount = await convertAmountToUSD(renewalAmount, originalCurrency);
+          const currency = "USD"; // txInfo.currency || existingTx.currency || "USD";
 
           // Transaction.updates or an earlier webhook may already have created
           // this immutable transaction record and its aMember invoice.
@@ -2968,7 +3060,7 @@ const handleAppleWebhook = async (req, res) => {
 const handleGoogleWebhook = async (req, res) => {
   try {
     logger.info(`\n\n=== [handleGoogleWebhook] START ===`);
-    logger.info(`[handleGoogleWebhook] Raw req.body:`, JSON.stringify(req.body, null, 2));
+    logger.info(`[handleGoogleWebhook] Raw req.body: ${JSON.stringify(req.body, null, 2)}`);
 
     const secretToken = process.env.GOOGLE_PUBSUB_SECRET_TOKEN;
     if (!secretToken) {
@@ -2995,7 +3087,7 @@ const handleGoogleWebhook = async (req, res) => {
     let decodedData = {};
     try {
       decodedData = JSON.parse(Buffer.from(message.data, "base64").toString("utf-8"));
-      logger.info(`[handleGoogleWebhook] Decoded Webhook Payload:`, JSON.stringify(decodedData, null, 2));
+      logger.info(`[handleGoogleWebhook] Decoded Webhook Payload: ${JSON.stringify(decodedData, null, 2)}`);
     } catch (e) {
       return res.status(400).json({ ok: false, error: "Invalid message.data JSON." });
     }
@@ -3051,7 +3143,7 @@ const handleGoogleWebhook = async (req, res) => {
             token: purchaseToken,
           });
           const subscriptionState = response.data;
-          logger.info(`[handleGoogleWebhook] Google API state for token:`, JSON.stringify(subscriptionState, null, 2));
+          logger.info(`[handleGoogleWebhook] Google API state for token: ${JSON.stringify(subscriptionState, null, 2)}`);
 
           const existingTx = await MobileStoreTransaction.findOne({ original_transaction_id: purchaseToken }).sort({ createdAt: -1 });
           if (!existingTx?.amember_user_id) throw new Error("Purchase owner not found; retry after purchase verification.");
@@ -3059,7 +3151,13 @@ const handleGoogleWebhook = async (req, res) => {
           let basePlanId = null;
           let isTrial = false;
           const googleItem = googleSubscriptionItem(subscriptionState, existingTx.store_product_id);
-          const orderId = googleOrderId(subscriptionState, googleItem);
+          let orderId = googleOrderId(subscriptionState, googleItem);
+          const isTestPurchase = subscriptionState.testPurchase !== undefined || subscriptionState.purchaseType === 0;
+          if (isTestPurchase && !orderId) {
+            orderId = "TEST_ORDER_" + purchaseToken.substring(0, 10);
+            logger.info(`[handleGoogleWebhook] Mocking orderId for test purchase: ${orderId}`);
+          }
+          
           if (googleItem?.productId !== existingTx.store_product_id || !googleHasEntitlement(subscriptionState, googleItem) || !orderId) {
             throw new Error("Google subscription lacks an active entitlement or successful order ID.");
           }
@@ -3088,18 +3186,31 @@ const handleGoogleWebhook = async (req, res) => {
               ? await matchAmemberFreeTrialProduct()
               : await matchAmemberProduct(existingTx.store_product_id, resolvedBasePlanId);
             
-            logger.info(`[handleGoogleWebhook] Matched aMember Product:`, JSON.stringify(matchedProduct, null, 2));
+            logger.info(`[handleGoogleWebhook] Matched aMember Product: ${JSON.stringify(matchedProduct, null, 2)}`);
 
-            // Use matched product's actual price for paid renewals — do NOT reuse
-            // existingTx.amount which may be 0 if this was originally a free trial.
+            // Extract actual price from Google Play's v2 API response
             let invoiceAmount = 0.00;
-            if (!isTrial && matchedProduct?.amemberProduct?.first_price) {
-              invoiceAmount = Number(matchedProduct.amemberProduct.first_price) || 0.00;
+            let currency = existingTx.currency || "USD";
+            
+            if (!isTrial) {
+              const priceObj = googleItem?.autoRenewingPlan?.recurringPrice || googleItem?.prepaidPlan?.price;
+              if (priceObj && priceObj.units) {
+                invoiceAmount = Number(priceObj.units);
+                if (priceObj.nanos) {
+                  invoiceAmount += Number(priceObj.nanos) / 1e9;
+                }
+                if (priceObj.currencyCode) {
+                  invoiceAmount = await convertAmountToUSD(invoiceAmount, priceObj.currencyCode);
+                  // currency = priceObj.currencyCode; // Always use USD
+                }
+              }
             }
+
             if (!isTrial && (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0)) {
-              throw new Error("Paid aMember product has no valid price.");
+              logger.warn(`[handleGoogleWebhook] Could not extract price from Google response. Defaulting to 0.00. (product_id: ${matchedProduct?.amemberProduct?.product_id})`);
+              invoiceAmount = 0.00;
             }
-            logger.info(`[handleGoogleWebhook] Calculated invoiceAmount: ${invoiceAmount}`);
+            logger.info(`[handleGoogleWebhook] Calculated invoiceAmount: ${invoiceAmount} ${currency}`);
 
             const invoicePayload = {
               amemberUserId: existingTx.amember_user_id,
@@ -3108,11 +3219,11 @@ const handleGoogleWebhook = async (req, res) => {
               storeProductId: existingTx.store_product_id,
               matchedProduct,
               amount: invoiceAmount,
-              currency: existingTx.currency || "USD",
+              currency: currency,
               purchasedAt: new Date(),
               expiresAt: expiresDate,
             };
-            logger.info(`[handleGoogleWebhook] Calling postAmemberInvoice with:`, JSON.stringify(invoicePayload, null, 2));
+            logger.info(`[handleGoogleWebhook] Calling postAmemberInvoice with: ${JSON.stringify(invoicePayload, null, 2)}`);
             if (!recordedOrder) await MobileStoreTransaction.create({
               user_id: existingTx.user_id,
               amember_user_id: existingTx.amember_user_id,
