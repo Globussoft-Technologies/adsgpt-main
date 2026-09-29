@@ -381,6 +381,9 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
     };
   }, [savedCount, activePage, dispatch]);
 
+  // HIDE-MARK — only caller was the header back chevron (hidden). Kept so the
+  // generation/discard guards come back intact if the chevron is restored.
+  // eslint-disable-next-line no-unused-vars
   const handleBackNavigation = () => {
     if (activePage === 'clone-ad') {
       let handled = false;
@@ -718,13 +721,12 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
         <>
           {/* Header */}
           <div className={`${activePage === 'clone-ad' ? 'absolute top-4 left-4 z-20 p-0' : 'flex items-center gap-2 p-4'} text-zinc-900 dark:text-white`}>
-            <button
-              onClick={handleBackNavigation}
-              className="flex items-center gap-2 text-xl 2xl:text-3xl"
-            >
-              <ChevronLeft className="h-6.5 w-6.5 2xl:h-9 2xl:w-9" />
-              {page.title}
-            </button>
+            {/* HIDE-MARK — header back chevron removed; every page has its own
+                in-card back/close. To restore, swap this <h2> back to:
+                <button onClick={handleBackNavigation} className="flex items-center gap-2 text-xl 2xl:text-3xl">
+                  <ChevronLeft className="h-6.5 w-6.5 2xl:h-9 2xl:w-9" />{page.title}
+                </button> */}
+            <h2 className="flex items-center gap-2 text-xl 2xl:text-3xl">{page.title}</h2>
             {/* Hidden genie target — zero-size, positioned top-right to match My Space in sidebar */}
             <span
               ref={mySpaceIconRef}
