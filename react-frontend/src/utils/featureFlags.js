@@ -21,6 +21,17 @@ export const IS_AUTOMATION_ENABLED =
 export const IS_AD_FACTORY_V2 =
   import.meta.env.VITE_FEATURE_AD_FACTORY_V2 === 'true';
 
+// Ad Studio UI version. OFF (unset) = V1, the UI production shipped before the
+// 2026-09 redesign: category-card homes for Ad Creative and Ad Video, and no
+// brand switcher in the Ad Studio header except on Ad Library. ON = V2, the
+// redesigned homes + the header brand switcher on every Ad Studio tab.
+// Only the UI forks here — Redux, APIs and the flows behind the cards are
+// shared, so both versions generate the same way. V1 lives in
+// components/AdStudio/v1/ and can be deleted once V2 ships.
+// Set VITE_FEATURE_ADSTUDIO_UI_V2=true to expose V2.
+export const IS_ADSTUDIO_UI_V2 =
+  import.meta.env.VITE_FEATURE_ADSTUDIO_UI_V2 === 'true';
+
 // Landing Page Analyzer — hidden in prod (flag unset) while the BE ships; set
 // VITE_FEATURE_LANDING_ANALYZER=true in an environment to expose the FE there.
 export const IS_LANDING_ANALYZER_ENABLED =

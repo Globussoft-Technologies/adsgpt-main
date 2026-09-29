@@ -331,6 +331,9 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [selectedImages, setSelectedImages] = useState([]);
+  // URLs whose file failed to load (deleted from S3 / expired). Kept out of
+  // Select All and the ZIP download — the record is still "completed".
+  const [missingUrls, setMissingUrls] = useState(() => new Set());
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const containerRef = useRef(null);
@@ -558,9 +561,16 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
       items
         .map((item) => deriveDisplayItem(item, now))
         .filter((item) => item.status === 'completed' && item.results?.[0]?.url)
-        .map((item) => item.results[0].url),
-    [items, now],
+        .map((item) => item.results[0].url)
+        .filter((url) => !missingUrls.has(url)),
+    [items, now, missingUrls],
   );
+
+  const handleImageMissing = (url) => {
+    if (!url) return;
+    setMissingUrls((prev) => (prev.has(url) ? prev : new Set(prev).add(url)));
+    setSelectedImages((prev) => prev.filter((selectedUrl) => selectedUrl !== url));
+  };
 
   const displayedItems = useMemo(
     () => items.map((item) => deriveDisplayItem(item, now)),
@@ -775,6 +785,7 @@ export default function MyAllImagesPage({ startDate = '', endDate = '' }) {
                 enableRecreate={imageItem._source === 'adCreative'}
                 showGeneratingProgress={false}
                 onLogoSaved={(newUrl) => handleLogoSaved(newUrl, imageItem)}
+                onImageError={handleImageMissing}
                 onOpenRecreateAdsModal={(tailored) => {
                   setRecreateAdsState({
                     open: true,

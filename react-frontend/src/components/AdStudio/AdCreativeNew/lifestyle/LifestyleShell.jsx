@@ -1,6 +1,7 @@
-import { ChevronLeft } from 'lucide-react';
-
-export function LifestyleShell({ title = 'Lifestyle Ads', onClose, children }) {
+// The header is a plain title — its back chevron was removed. Every step has
+// its own back arrow inside the card, so that is the one way out. Callers
+// still pass `onClose`; it is simply ignored here.
+export function LifestyleShell({ title = 'Lifestyle Ads', children }) {
   return (
     <div className="relative flex h-[calc(100svh-16px)] w-full flex-col overflow-hidden text-gray-900 dark:text-white">
       {/* <div
@@ -13,18 +14,7 @@ export function LifestyleShell({ title = 'Lifestyle Ads', onClose, children }) {
       /> */}
 
       <div className="relative flex items-center gap-2 p-4 text-gray-900 dark:text-white">
-        {onClose ? (
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center gap-2 text-xl 2xl:text-3xl"
-          >
-            <ChevronLeft className="mt-1 h-6.5 w-6.5 2xl:h-9 2xl:w-9" />
-            {title}
-          </button>
-        ) : (
-          <h2 className="flex items-center gap-2 text-xl 2xl:text-3xl">{title}</h2>
-        )}
+        <h2 className="flex items-center gap-2 text-xl 2xl:text-3xl">{title}</h2>
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden px-5 pb-7 sm:px-8 md:px-10 md:pb-9 lg:px-[60px] lg:pb-[41px]">

@@ -1,0 +1,123 @@
+// V1 (pre-redesign) Ad Video home — copied from origin/production (b833a71b,
+// 2026-09-10). Rendered by AdVideoLayout only when IS_ADSTUDIO_UI_V2 is off;
+// the V2 home is AdVideoNew/AdVideoHomeNew.jsx.
+//
+// One deliberate addition over the production copy: the RECREATE AD card
+// (Clone Your Ad, activePage 'clone-ad') ships in V1 too. With six cards the
+// production "first card spans two rows" grid leaves a hole, so the grid is a
+// plain 3×2 here.
+//
+// This card list is a duplicate of V2's on purpose — V1 is temporary and must
+// not move when V2's home is reworked. Delete this folder when V2 ships.
+import React, { useEffect } from 'react';
+import AdVideoCardV1 from './AdVideoCardV1';
+import { motion } from 'framer-motion';
+import { fadeUpVariants, containerFadeUpVariants } from '@/utils/ui/framerMotionVariants';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
+
+const cards = [
+  {
+    title: 'AI ADS',
+    desc: 'Create full length AI Ad videos',
+    img: '/static/adVideo/ai_ads_thumb.jpg',
+    gif: '/static/adVideo/ai_ads.gif',
+    type: 'ai-ads',
+  },
+  {
+    title: 'AI UGC ADS',
+    desc: 'Create AI UGC Ad videos',
+    img: '/static/adVideo/ai-ugc-ads-photo.jpg',
+    gif: '/static/adVideo/ai-ugc-ads-gif.gif',
+    type: 'ugc',
+  },
+  {
+    title: 'PRODUCT B-ROLLS',
+    desc: 'Create cinematic b-rolls for your products',
+    img: '/static/adVideo/product-b-rolls-photo.jpg',
+    gif: '/static/adVideo/b-rolls-gif-1.gif',
+    type: 'b-roll',
+  },
+  {
+    title: 'RECREATE AD',
+    desc: 'Create a new ad from an existing video',
+    img: 'https://dqv0cqkoy5oj7.cloudfront.net/marketing_studio_video_preset/4dcc2a50-47de-46a1-b7e6-d5bd378bb5d1-91841e48382ec5af.mp4',
+    gif: 'https://dqv0cqkoy5oj7.cloudfront.net/marketing_studio_video_preset/4dcc2a50-47de-46a1-b7e6-d5bd378bb5d1-91841e48382ec5af.mp4',
+    type: 'clone-ad',
+  },
+  {
+    title: 'AI AVATARS',
+    desc: 'Create ad videos with custom avatars',
+    img: '/static/adVideo/ai-avatars-photo.jpg',
+    gif: '/static/adVideo/ai-avatars-gif.gif',
+    type: 'avatar',
+  },
+  {
+    title: 'CLONE YOURSELF',
+    desc: 'Create AI ad videos with your face and voice',
+    img: '/static/adVideo/clone-yourself-photo.jpg',
+    gif: '/static/adVideo/clone-yourself-gif.gif',
+    type: 'clone',
+    premium: true,
+  },
+];
+
+const AdVideoHomeV1 = () => {
+  const { userData } = useSelector((state) => state.socket);
+  const userName = userData?.user_name || 'User';
+  const dispatch = useDispatch();
+  const { savedCount } = useSelector((state) => state.adVideoNew);
+
+  useEffect(() => {
+    dispatch(fetchProcessingCount());
+  }, [dispatch, savedCount]);
+
+  return (
+    <div className="layout_for_chat mx-auto h-full min-h-[55vh] w-full sm:p-0 2xl:min-h-[60vh]">
+      <div>
+        <div className="welcome_ad_copy_container flex h-full w-full items-center justify-center">
+          <motion.div
+            variants={containerFadeUpVariants}
+            initial="hidden"
+            animate="visible"
+            className="mt-3 flex w-full flex-col items-center justify-center 2xl:mt-14"
+          >
+            {/* Heading */}
+            <motion.h1
+              variants={fadeUpVariants}
+              custom={0}
+              className="mb-2 bg-gradient-to-t from-[#15DCFF] to-[#6b72f8] bg-clip-text text-2xl font-semibold text-transparent 2xl:mb-4 2xl:text-4xl"
+            >
+              Hello, {userName}
+            </motion.h1>
+
+            <motion.p
+              variants={fadeUpVariants}
+              custom={1}
+              className="mb-6 text-center text-sm text-zinc-600 2xl:mb-8 2xl:text-base dark:text-[#BEBEBE]"
+            >
+              Create scroll-stopping Video ads with AI <br />
+              that understands your business.
+            </motion.p>
+
+            <motion.div
+              variants={fadeUpVariants}
+              custom={2}
+              className="flex w-full items-center justify-center pb-4 lg:h-[48vh] xl:h-[52vh] 2xl:h-[55vh]"
+            >
+              <div className="grid h-full w-full max-w-[650px] gap-2 grid-cols-2 lg:max-w-[1000px] lg:grid-cols-3 2xl:max-w-[1240px]">
+                {cards.map((card) => (
+                  <div key={card.title}>
+                    <AdVideoCardV1 {...card} />
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AdVideoHomeV1;

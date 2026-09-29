@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
 import AdCreativeNewHome from './AdCreativeNewHome';
+import AdCreativeHomeV1 from '../v1/AdCreativeHomeV1';
+import { IS_ADSTUDIO_UI_V2 } from '@/utils/featureFlags';
 import { LifestyleAdsFlow } from './lifestyle/LifestyleAdsFlow';
 import { AiCreativesCustom } from './ai-creatives/AiCreativesCustom';
 import {
@@ -86,7 +88,10 @@ const AdCreativeNewLayout = () => {
   };
 
   if (route === 'home') {
-    return <AdCreativeNewHome onSelectCategory={handleSelectCategory} />;
+    // Only the landing screen forks by UI version; both call the same
+    // handleSelectCategory, so the flows behind the cards are shared.
+    const Home = IS_ADSTUDIO_UI_V2 ? AdCreativeNewHome : AdCreativeHomeV1;
+    return <Home onSelectCategory={handleSelectCategory} />;
   }
 
   return (

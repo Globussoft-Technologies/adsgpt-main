@@ -97,7 +97,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import ThemeToggle from './ThemeToggle';
 import AIAssistantHeaderActions from '@/components/AIAssistant/AIAssistantHeaderActions';
 import ModeSwitch from '@/components/AdFactory/ModeSwitch';
-import { IS_AD_FACTORY_V2 } from '@/utils/featureFlags';
+import { IS_AD_FACTORY_V2, IS_ADSTUDIO_UI_V2 } from '@/utils/featureFlags';
 import {
   selectUiMode as selectAdFactoryUiMode,
   setUiMode,
@@ -859,8 +859,11 @@ export default function TopHeader() {
               </>
             )}
 
-            {/* Brand Switcher for all AdStudio sections (Ad Copy, Ad Creative, Ad Video, Ad Library) */}
-            {currentRoute === '/adstudio' && (
+            {/* Brand Switcher for all AdStudio sections (Ad Copy, Ad Creative, Ad Video, Ad Library).
+                UI V1 (production before the redesign) had no switcher here; it is
+                kept on Ad Library only, whose competitor feed reads the selected brand. */}
+            {currentRoute === '/adstudio' &&
+              (IS_ADSTUDIO_UI_V2 || activeAdStudioTabId === 'adLibrary') && (
               <BrandsDropdown
                 compact
                 singleAvatar

@@ -3,6 +3,7 @@ import {
   Download,
   Edit,
   Info,
+  ImageOff,
   ChevronLeft,
   ChevronRight,
   Megaphone,
@@ -102,6 +103,46 @@ const resolveImageUrl = (url) => {
   return url.startsWith('http') ? url : `${S3_BASE_URL}${url}`;
 };
 
+// An <img> error doesn't say why it failed, so a network blip looks the same
+// as a deleted object. Ask the image proxy instead: it fetches server-side and,
+// when S3 refuses, returns the upstream status in its error body. A public
+// bucket answers a missing key with 403 (no ListBucket) or 404. Anything else —
+// proxy unreachable, 5xx, a 200 — is not treated as deleted.
+const S3_DELETED_STATUSES = new Set([403, 404]);
+const deletedCheckCache = new Map();
+
+function isDeletedFromS3(url) {
+  if (!url) return Promise.resolve(false);
+  if (deletedCheckCache.has(url)) return deletedCheckCache.get(url);
+
+  const check = (async () => {
+    const controller = new AbortController();
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SOCKET_URL}/adsgpt/img/preview?url=${encodeURIComponent(url)}`,
+        { signal: controller.signal },
+      );
+      if (res.ok) {
+        // The file exists — stop the proxy streaming the whole image.
+        controller.abort();
+        return false;
+      }
+      const body = await res.json().catch(() => null);
+      return S3_DELETED_STATUSES.has(body?.statusCode);
+    } catch {
+      return false;
+    }
+  })();
+
+  deletedCheckCache.set(url, check);
+  // Only a confirmed delete is remembered; a "not deleted" answer may have
+  // been a transient failure, so the next error re-checks.
+  check.then((deleted) => {
+    if (!deleted) deletedCheckCache.delete(url);
+  });
+  return check;
+}
+
 export default function ImageCard({
   item,
   isSelected,
@@ -126,6 +167,9 @@ export default function ImageCard({
   // the save-edited endpoint (needs generation inputs). Slim-row hosts pass
   // this to own the save instead.
   onLogoSaved,
+  // Called with the result URL when the image fails to load (object removed
+  // from S3). Lets the host drop it from selection / Select All.
+  onImageError,
 }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -135,6 +179,11 @@ export default function ImageCard({
   const infoTimeout = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  // The record says "completed" but its S3 object has been deleted. Without
+  // this the <img> never fires onLoad and the card sits on the pulse skeleton
+  // forever. Set only on a confirmed delete — see isDeletedFromS3.
+  const [imageMissing, setImageMissing] = useState(false);
+  const activeImageUrlRef = useRef('');
   const [activeNavIndex, setActiveNavIndex] = useState(imageIndex);
   const [activeImageUrl, setActiveImageUrl] = useState(item?.results?.[0]?.url ?? '');
   const { editInCanva, isCanvaLoading } = useCanvaEdit();
@@ -214,6 +263,23 @@ export default function ImageCard({
       setActiveImageUrl(url);
     }
   }, [item?.results?.[0]?.url]);
+
+  // A new URL gets a fresh chance to load.
+  useEffect(() => {
+    activeImageUrlRef.current = activeImageUrl;
+    setImageMissing(false);
+  }, [activeImageUrl]);
+
+  const handleImageError = async () => {
+    // activeImageUrl, not results[0].url: while the lightbox is navigating,
+    // this card's <img> is showing another card's URL.
+    const failedUrl = activeImageUrl;
+    const deleted = await isDeletedFromS3(resolveImageUrl(failedUrl));
+    // Ignore the answer if the card has moved on to another URL meanwhile.
+    if (!deleted || activeImageUrlRef.current !== failedUrl) return;
+    setImageMissing(true);
+    onImageError?.(failedUrl);
+  };
 
   // Switched away from the browser's `requestFullscreen()` API to a
   // CSS-based modal lightbox (fixed inset-0 overlay) — keeps the same
@@ -386,14 +452,13 @@ export default function ImageCard({
               <p>
                 <span className="text-gray-500 dark:text-gray-400">Type:</span>{' '}
                 {(() => {
-                  const t = item?.creativeType || item?.inputs?.type || '-';
-                  const lower = String(t).toLowerCase();
+                  const t = item?.creativeType || item?.inputs?.type;
+                  const lower = String(t || '').toLowerCase();
                   if (lower === 'clone_your_ad' || lower === 'clone-ad' || lower === 'clone_ad' || lower === 'clone_video' || lower === 'clone your ad') {
                     return 'Recreate Ad';
                   }
-                  return t;
+                  return IMAGE_TYPE_LABEL(t);
                 })()}
-                {IMAGE_TYPE_LABEL(item?.creativeType || item?.inputs?.type)}
               </p>
               <p>
                 <span className="text-gray-500 dark:text-gray-400">Model:</span>{' '}
@@ -542,12 +607,23 @@ export default function ImageCard({
 
           {/* Centered image — stop propagation so clicking the image
               doesn't bubble up to the backdrop's close handler. */}
-          <img
-            src={resolveImageUrl(activeImageUrl)}
-            alt="Generated"
-            onClick={(e) => e.stopPropagation()}
-            className="max-h-[88vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl ring-1 ring-white/10"
-          />
+          {imageMissing ? (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/40 px-8 py-10 text-center text-white/80"
+            >
+              <ImageOff size={32} strokeWidth={1.5} />
+              <p className="text-sm">This image is no longer available.</p>
+            </div>
+          ) : (
+            <img
+              src={resolveImageUrl(activeImageUrl)}
+              alt="Generated"
+              onClick={(e) => e.stopPropagation()}
+              onError={handleImageError}
+              className="max-h-[88vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl ring-1 ring-white/10"
+            />
+          )}
         </div>
       )}
 
@@ -555,7 +631,7 @@ export default function ImageCard({
       {enableInfo && <InfoTooltip />}
 
       {/* Selection Checkbox */}
-      {item?.status === 'completed' && (
+      {item?.status === 'completed' && !imageMissing && (
         <div
           className={`absolute top-3 left-3 z-30 transition-opacity duration-300 ${
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
@@ -610,6 +686,26 @@ export default function ImageCard({
           </div>
           )}
         </>
+      ) : item?.status === 'completed' && imageMissing ? (
+        // The record is completed but its file is gone (deleted from S3 or
+        // expired). Download / Edit / Canva / Post would all act on a dead
+        // URL, so only Recreate is offered — it runs off the stored inputs.
+        <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center gap-2 p-4 text-center text-gray-500 dark:text-gray-400">
+          <ImageOff size={28} strokeWidth={1.5} />
+          <p className="text-xs">This image is no longer available.</p>
+
+          {showRecreate && (
+            <div className="absolute right-0 bottom-0 left-0 z-20 flex items-center justify-end gap-1 bg-linear-to-t from-black/90 via-black/40 to-transparent p-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+              <button
+                className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+                onClick={handleRecreate}
+                title="Recreate Image"
+              >
+                <Repeat size={18} />
+              </button>
+            </div>
+          )}
+        </div>
       ) : item?.status === 'completed' ? (
         <div ref={containerRef} className="relative h-full w-full bg-black">
           {!imageLoaded && <div className="absolute inset-0 z-10 animate-pulse bg-gray-200 dark:bg-[#1a1a1a]" />}
@@ -627,6 +723,7 @@ export default function ImageCard({
               imageLoaded ? 'opacity-100' : 'opacity-0'
             }`}
             onLoad={() => setImageLoaded(true)}
+            onError={handleImageError}
           />
 
           {/* Lightbox lives as a separate fixed overlay further down in
