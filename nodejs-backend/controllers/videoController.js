@@ -4481,28 +4481,28 @@ exports.cloneAdAnalyze = async (req, res) => {
 
     const visualDescriptionStr = inputs.visualDescription || inputs.analysisSummary || "";
 
-    const creditPerSecond = UnifiedCreditController.getModelDeduction(modelStr);
-    const totalRequiredCredits = targetDurationNum * creditPerSecond;
+    // const creditPerSecond = UnifiedCreditController.getModelDeduction(modelStr);
+    // const totalRequiredCredits = targetDurationNum * creditPerSecond;
 
-    const unifiedCheck = await UnifiedCreditController.checkCredits(
-      userId,
-      totalRequiredCredits
-    );
+    // const unifiedCheck = await UnifiedCreditController.checkCredits(
+    //   userId,
+    //   totalRequiredCredits
+    // );
 
-    if (!unifiedCheck.isAllowed) {
-      if (!unifiedCheck.totalAllowed) {
-        return res.status(403).json({
-          success: false,
-          error: "An active subscription plan is required to analyze ad.",
-        });
-      }
-      return res.status(402).json({
-        success: false,
-        error: "Insufficient credits",
-        required: totalRequiredCredits,
-        remaining: unifiedCheck.remainingCredits,
-      });
-    }
+    // if (!unifiedCheck.isAllowed) {
+    //   if (!unifiedCheck.totalAllowed) {
+    //     return res.status(403).json({
+    //       success: false,
+    //       error: "An active subscription plan is required to analyze ad.",
+    //     });
+    //   }
+    //   return res.status(402).json({
+    //     success: false,
+    //     error: "Insufficient credits",
+    //     required: totalRequiredCredits,
+    //     remaining: unifiedCheck.remainingCredits,
+    //   });
+    // }
 
     const videoData = {
       userId,

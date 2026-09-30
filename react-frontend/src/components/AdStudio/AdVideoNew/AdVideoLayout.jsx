@@ -28,6 +28,7 @@ import {
   setAiAdsSceneData,
   setImageAndScript,
   setRecreateInputs,
+  clearActiveRecreateSession,
 } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { setFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -228,6 +229,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const exitRecreateToMySpace = () => {
     setSearchParams({}, { replace: true });
     dispatch(setRecreateInputs(null));
+    dispatch(clearActiveRecreateSession());
     dispatch(setImageAndScript(null));
     dispatch(setAvatarStep('options'));
     dispatch(setCloneStep('upload'));
@@ -239,6 +241,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const exitToAdVideoHome = () => {
     setSearchParams({}, { replace: true });
     dispatch(setRecreateInputs(null));
+    dispatch(clearActiveRecreateSession());
     dispatch(setImageAndScript(null));
     dispatch(setAvatarStep('options'));
     dispatch(setCloneStep('upload'));
@@ -721,12 +724,17 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
         <>
           {/* Header */}
           <div className={`${activePage === 'clone-ad' ? 'absolute top-4 left-4 z-20 p-0' : 'flex items-center gap-2 p-4'} text-zinc-900 dark:text-white`}>
-            {/* HIDE-MARK — header back chevron removed; every page has its own
-                in-card back/close. To restore, swap this <h2> back to:
-                <button onClick={handleBackNavigation} className="flex items-center gap-2 text-xl 2xl:text-3xl">
-                  <ChevronLeft className="h-6.5 w-6.5 2xl:h-9 2xl:w-9" />{page.title}
-                </button> */}
-            <h2 className="flex items-center gap-2 text-xl 2xl:text-3xl">{page.title}</h2>
+            {activePage === 'clone-ad' ? (
+              <h2 className="flex items-center gap-2 text-xl 2xl:text-3xl font-semibold">{page?.title}</h2>
+            ) : (
+              <button
+                onClick={handleBackNavigation}
+                className="flex items-center gap-2 text-xl 2xl:text-3xl hover:opacity-80 transition-opacity"
+              >
+                <ChevronLeft className="h-6.5 w-6.5 2xl:h-9 2xl:w-9" />
+                {page?.title}
+              </button>
+            )}
             {/* Hidden genie target — zero-size, positioned top-right to match My Space in sidebar */}
             <span
               ref={mySpaceIconRef}

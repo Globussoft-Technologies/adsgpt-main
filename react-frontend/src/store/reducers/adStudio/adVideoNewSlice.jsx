@@ -425,6 +425,7 @@ const adVideoNewSlice = createSlice({
       state.activeRecreateSession = null;
       try {
         sessionStorage.removeItem('activeRecreateSession');
+        localStorage.removeItem('activeRecreateSession');
       } catch {
         /* best-effort */
       }

@@ -1598,16 +1598,30 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       setIsAnalyzing(false);
       setAnalysisState('form');
       setAnalyzeProgress(0);
+      setAnalyzeStageText('');
+      setAnalysisCards([]);
+      setAnalysisResult(null);
+      setAnalysisError(null);
+      setUserSafeError(null);
+      setGenerateError(null);
+      setGeneratedVideoUrl(null);
+      setRecommendationReason('');
+      setAnalysisSessionId(null);
       currentSessionIdRef.current = null;
+      userSelectedAspectRatioRef.current = false;
+
+      // Full termination: Clear stored session from Redux & storage so the previous analysis is terminated and never restored on refresh
+      dispatch(clearActiveRecreateSession());
+      try {
+        sessionStorage.removeItem('activeRecreateSession');
+        localStorage.removeItem('activeRecreateSession');
+      } catch {}
 
       const existingVideoSource =
         prefillUrl ||
         sourceVideoUrl ||
         galleryVideoUrl ||
         (sourceVideoFile ? sourceVideoFile.name : '') ||
-        savedSession?.inputs?.sourceVideoUrl ||
-        savedSession?.inputs?.galleryVideoUrl ||
-        savedSession?.inputs?.prefillUrl ||
         '';
       if (existingVideoSource) {
         setPrefillUrl(existingVideoSource);
@@ -2937,6 +2951,10 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     userSelectedAspectRatioRef.current = false;
     setCurrentStep('input');
     dispatch(clearActiveRecreateSession());
+    try {
+      sessionStorage.removeItem('activeRecreateSession');
+      localStorage.removeItem('activeRecreateSession');
+    } catch {}
 
     if (typeof onClose === 'function') {
       onClose();
@@ -3523,8 +3541,25 @@ const renderLightboxModal = () => {
     ? 'min-h-[390px] sm:min-h-[430px] lg:min-h-[460px] py-6 sm:py-7 lg:py-8 px-5 sm:px-6 lg:px-7'
     : 'py-4.5 sm:py-5 px-5 sm:px-6 lg:px-7';
 
+  const durationErrorMsg =
+    errors.sourceVideo ||
+    (sourceDuration > 60
+      ? `Video is too long (${formatDuration(sourceDuration)}). Please select a video that is 60 seconds or less.`
+      : '');
+
   return (
-    <div className={`flex flex-col w-full ${containerMaxWidthClass} items-start gap-1 my-auto mx-auto transition-all duration-300`}>
+    <div className={`flex flex-col w-full ${containerMaxWidthClass} items-start gap-0 my-auto mx-auto transition-all duration-300`}>
+      {/* Top Left Back Chevron Button positioned directly above the analyze form / workspace card */}
+      <button
+        onClick={doStepBack}
+        type="button"
+        className="-ml-1.5 flex items-center justify-center p-0 leading-none text-zinc-700 dark:text-zinc-200 hover:text-black dark:hover:text-white transition-all cursor-pointer active:scale-95"
+        title="Go back to change input"
+        aria-label="Go back to change input"
+      >
+        <ChevronLeft className="h-6 w-6 2xl:h-7 2xl:w-7" />
+      </button>
+
       {/* Main Unified Workspace Card */}
       <div className={`relative flex flex-col justify-center w-full overflow-hidden rounded-[28px] border border-black/5 dark:border-white/10 bg-white/95 dark:bg-[#18181B] shadow-2xl ${cardHeightAndPaddingClass} transition-all duration-300`}>
         {/* Top Right Close Button */}
@@ -3803,16 +3838,6 @@ const renderLightboxModal = () => {
                 </span>
               </div>
             )}
-
-            {/* Error overlay if video exceeds 60 seconds */}
-            {sourceDuration > 60 && (
-              <div className="absolute bottom-3 left-4 right-4 z-20 flex items-center gap-2 rounded-xl bg-red-600/90 p-2.5 text-xs font-medium text-white shadow-lg backdrop-blur-md">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>
-                  Video is too long ({formatDuration(sourceDuration)}). Please select a video that is 60 seconds or less.
-                </span>
-              </div>
-            )}
           </div>
 
           {/* Right side — Form Controls */}
@@ -4076,6 +4101,14 @@ const renderLightboxModal = () => {
             ) : analysisState === 'analyzing' || isAnalyzing ? (
               /* ── NEW ANALYSIS VIEW (Matching Photo 2 Reference) ──────────────── */
               <div className={`flex flex-col justify-center ${isHorizontalVideo ? 'gap-6 sm:gap-7 py-4 sm:py-6' : 'gap-5 sm:gap-6 py-4'} px-2 sm:px-4 text-left h-full my-auto ${isVerticalVideo ? 'max-w-[340px] sm:max-w-[370px]' : 'max-w-md lg:max-w-lg'}`}>
+                {/* Duration warning if video is too long */}
+                {durationErrorMsg && (
+                  <div className="flex items-center gap-2 rounded-xl bg-red-500/10 dark:bg-red-500/15 px-4 py-2 text-xs font-medium text-red-600 dark:text-red-400 max-w-md shadow-xs">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                    <span>{durationErrorMsg}</span>
+                  </div>
+                )}
+
                 {/* Header */}
                 <div className="flex flex-col gap-1">
                   <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
@@ -4196,6 +4229,14 @@ const renderLightboxModal = () => {
                   <RotateCcw className="h-4 w-4" />
                   Try Again
                 </button>
+
+                {/* Duration warning downwards of the try again button */}
+                {durationErrorMsg && (
+                  <div className="mt-1 flex items-center gap-2 rounded-xl bg-red-500/10 dark:bg-red-500/15 px-4 py-2 text-xs font-medium text-red-600 dark:text-red-400 max-w-md shadow-xs">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                    <span>{durationErrorMsg}</span>
+                  </div>
+                )}
               </div>
             ) : analysisState === 'timeout' ? (
               /* ── ANALYSIS TIMEOUT STATE ───────────────────────────────────── */
@@ -4221,6 +4262,14 @@ const renderLightboxModal = () => {
                   <RotateCcw className="h-4 w-4" />
                   Try Again
                 </button>
+
+                {/* Duration warning downwards of the try again button */}
+                {durationErrorMsg && (
+                  <div className="mt-1 flex items-center gap-2 rounded-xl bg-red-500/10 dark:bg-red-500/15 px-4 py-2 text-xs font-medium text-red-600 dark:text-red-400 max-w-md shadow-xs">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                    <span>{durationErrorMsg}</span>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
