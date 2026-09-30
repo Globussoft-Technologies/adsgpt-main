@@ -92,6 +92,31 @@ export const PICKER_ITEM_INACTIVE =
 export const BRAND_VOICE_ROW =
   'flex min-w-0 items-center gap-2 rounded-full bg-[var(--ws-surface-control)] dark:bg-[#909294]/10 border border-[var(--ws-border)] dark:border-white/5 p-1';
 
+const BRAND_AVATAR_COLORS = [
+  'bg-red-700',
+  'bg-orange-700',
+  'bg-emerald-700',
+  'bg-teal-700',
+  'bg-cyan-700',
+  'bg-blue-700',
+  'bg-indigo-700',
+  'bg-violet-700',
+  'bg-fuchsia-700',
+  'bg-rose-700',
+];
+
+/** Stable, accessible fallback color for saved brands without a logo. */
+export function getBrandAvatarColor(brandName = '') {
+  const normalizedName = String(brandName).trim().toLowerCase();
+  let hash = 0;
+
+  for (let index = 0; index < normalizedName.length; index += 1) {
+    hash = (hash * 31 + normalizedName.charCodeAt(index)) >>> 0;
+  }
+
+  return BRAND_AVATAR_COLORS[hash % BRAND_AVATAR_COLORS.length];
+}
+
 // ── Image chip / thumbnail ──────────────────────────────────────────────────
 
 export const CHIP_SELECTED =

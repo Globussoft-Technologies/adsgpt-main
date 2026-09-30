@@ -917,27 +917,17 @@ html:not(.dark) {
 }
 
 html:not(.dark) .lm-sidebar-surface {
-  --sidebar-nav-active-bg: linear-gradient(
-    100deg,
-    rgba(2, 168, 164, 0.11) 0%,
-    rgba(88, 103, 235, 0.10) 100%
-  );
+  --sidebar-nav-active-bg: rgba(88, 103, 235, 0.1);
   --sidebar-nav-hover-bg: color-mix(in srgb, var(--ws-surface-hover) 76%, rgba(88, 103, 235, 0.05));
-  --sidebar-nav-accent: linear-gradient(180deg, #15dcff 0%, #5e66f5 100%);
+  --sidebar-nav-accent: #5867eb;
   color: var(--ws-text-primary);
   font-family: 'Public Sans', sans-serif;
-  /* Subtle warm-white gradient so it's not a flat rectangle */
-  background: linear-gradient(
-    175deg,
-    #ffffff 0%,
-    #faf9f7 55%,
-    #f5f3f0 100%
-  ) !important;
+  /* Flat neutral surface shared with the Light Mode workspace. */
+  background: var(--ws-surface) !important;
   /* Right-edge shadow removed so the divider line is crisp without extra thickness or blur */
   box-shadow: none;
-  /* Top accent highlight — thin indigo-cyan shimmer at the top edge */
-  border-top: 2px solid transparent;
-  background-clip: padding-box;
+  /* No decorative top accent in the flat Light Mode treatment. */
+  border-top: 0;
   position: relative;
 }
 
@@ -1035,6 +1025,7 @@ html:not(.dark) .lm-sidebar-surface :is(a, button):focus-visible {
   .lm-sidebar-surface a,
   .lm-sidebar-surface button,
   .lm-sidebar-surface .sidebar-profile-button,
+  .lm-sidebar-surface .sidebar-nav-active-dot,
   [data-slot='tooltip-content'],
   [data-slot='sheet-content'] {
     animation: none !important;
@@ -1044,6 +1035,91 @@ html:not(.dark) .lm-sidebar-surface :is(a, button):focus-visible {
 }
 
 /* ── Light Mode — inactive ────────────────────────────────────────────────── */
+/* Shared sidebar geometry. Themes may change color and elevation only. */
+.lm-sidebar-surface .sidebar-nav-item--expanded {
+  height: 48px;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+}
+
+.lm-sidebar-surface .sidebar-nav-label--expanded {
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.lm-sidebar-surface .sidebar-nav-item--expanded .sidebar-nav-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.7;
+}
+
+.lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar {
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+}
+
+.lm-sidebar-surface .sidebar-nav-active-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: #16d9ff;
+  box-shadow:
+    0 0 5px rgba(22, 217, 255, 0.95),
+    0 0 10px rgba(22, 217, 255, 0.45);
+  transform-origin: center;
+  transition:
+    opacity 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s linear;
+}
+
+.lm-sidebar-surface .sidebar-nav-active-dot--visible {
+  visibility: visible;
+  opacity: 1;
+  transform: scale(1);
+}
+
+.lm-sidebar-surface .sidebar-nav-active-dot--hidden {
+  visibility: hidden;
+  opacity: 0;
+  transform: scale(0.75);
+  box-shadow: 0 0 0 rgba(22, 217, 255, 0);
+  transition-delay: 0s, 0s, 0s, 280ms;
+}
+
+.lm-sidebar-surface .sidebar-nav-item--compact {
+  height: 60px;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+}
+
+.lm-sidebar-surface .sidebar-nav-label--compact {
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.7;
+}
+
+.lm-sidebar-surface .sidebar-nav-item--compact .nav-accent-bar {
+  top: calc(50% - 12px);
+  bottom: auto;
+  height: 24px;
+  width: 3px;
+}
+
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--inactive {
   color: #1F2937;
   font-weight: 550;
@@ -1087,21 +1163,6 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--active .nav-accent-bar {
   background: var(--sidebar-nav-accent);
 }
 
-/* Expanded navigation uses the application's normal body typography and icon scale. */
-html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded {
-  height: 48px;
-  gap: 12px;
-  padding: 9px 12px;
-  border-radius: 12px;
-}
-
-html:not(.dark) .lm-sidebar-surface .sidebar-nav-label--expanded {
-  font-size: 14px;
-  font-weight: 550;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
-
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item--inactive {
   color: #1F2937;
 }
@@ -1117,17 +1178,8 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded .sidebar-nav-icon {
-  width: 18px;
-  height: 18px;
   color: #111827;
   opacity: 1;
-  stroke-width: 1.7;
-}
-
-html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar {
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
 }
 /* ── Dark Mode — inactive ─────────────────────────────────────────────────── */
 
@@ -1195,60 +1247,6 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar 
   right: 5px;
 }
 
-/* Dark Mode — keep navigation dimensions aligned with the Light Mode sidebar. */
-.dark .lm-sidebar-surface .sidebar-nav-item--expanded {
-  height: 48px;
-  gap: 12px;
-  padding: 9px 12px;
-  border-radius: 12px;
-}
-
-.dark .lm-sidebar-surface .sidebar-nav-label--expanded {
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
-
-.dark .lm-sidebar-surface .sidebar-nav-item--expanded .sidebar-nav-icon {
-  width: 18px;
-  height: 18px;
-  stroke-width: 1.7;
-}
-
-.dark .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar {
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-}
-
-.dark .lm-sidebar-surface .sidebar-nav-item--compact {
-  height: 60px;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 12px;
-}
-
-.dark .lm-sidebar-surface .sidebar-nav-label--compact {
-  font-size: 12px;
-  font-weight: 550;
-  line-height: 1.1;
-  letter-spacing: 0;
-}
-
-.dark .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon {
-  width: 24px;
-  height: 24px;
-  stroke-width: 1.7;
-}
-
-.dark .lm-sidebar-surface .sidebar-nav-item--compact .nav-accent-bar {
-  top: calc(50% - 12px);
-  bottom: auto;
-  height: 24px;
-  width: 3px;
-}
-
 /* Sidebar profile */
 .sidebar-profile-avatar {
   display: flex !important;
@@ -1259,6 +1257,24 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar 
   height: 100% !important;
   line-height: 1 !important;
   border-radius: 9999px !important;
+}
+
+.sidebar-profile-status {
+  position: absolute;
+  right: -1px;
+  bottom: 0;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid #191919;
+  border-radius: 9999px;
+  background: #16d9ff;
+  box-shadow:
+    0 0 5px rgba(22, 217, 255, 0.95),
+    0 0 8px rgba(22, 217, 255, 0.45);
+}
+
+html:not(.dark) .sidebar-profile-status {
+  border-color: #ffffff;
 }
 
 html:not(.dark) .sidebar-profile-button {
@@ -1322,6 +1338,18 @@ html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active .sidebar-p
   border-radius: 9999px !important;
 }
 
+html:not(.dark) .sidebar-profile-button,
+.dark .sidebar-profile-button {
+  border: 2px solid #6f73f2 !important;
+}
+
+html:not(.dark) .sidebar-profile-button span.sidebar-profile-avatar,
+.dark .sidebar-profile-button span.sidebar-profile-avatar,
+.dark .sidebar-profile-button.sidebar-profile-button-active span.sidebar-profile-avatar {
+  background: linear-gradient(145deg, #6366f1 0%, #7657e8 52%, #9333ea 100%) !important;
+  color: #ffffff !important;
+}
+
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item--active .sidebar-nav-icon {
   color: var(--lm-accent-violet);
 }
@@ -1336,22 +1364,9 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded.sidebar-nav-item
   background: var(--sidebar-nav-accent);
 }
 
-/* Compact rail retains its labeled navigation with refined, proportional sizing. */
-/* Compact rail retains its labeled navigation but uses the app's type scale. */
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact {
-  height: 60px;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 12px;
   color: #1F2937;
   font-weight: 500;
-}
-
-html:not(.dark) .lm-sidebar-surface .sidebar-nav-label--compact {
-  font-size: 12px;
-  font-weight: 550;
-  line-height: 1.1;
-  letter-spacing: 0;
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item--inactive:hover {
@@ -1366,17 +1381,8 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item-
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon {
-  width: 24px;
-  height: 24px;
   color: #111827;
   opacity: 1;
-  stroke-width: 1.7;
-}
-
-html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact .nav-accent-bar {
-  top: calc(50% - 12px);
-  bottom: auto;
-  height: 24px;
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item--active .sidebar-nav-icon {
@@ -1385,15 +1391,6 @@ html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item-
 
 html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact.sidebar-nav-item--active .nav-accent-bar {
   background: var(--sidebar-nav-accent);
-}
-
-/* Stroke-based tab icons need a small optical-size adjustment to match the Ad Factory SVG mark. */
-html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded svg.sidebar-nav-icon,
-html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact svg.sidebar-nav-icon,
-.dark .lm-sidebar-surface .sidebar-nav-item--expanded svg.sidebar-nav-icon,
-.dark .lm-sidebar-surface .sidebar-nav-item--compact svg.sidebar-nav-icon {
-  width: 24px;
-  height: 24px;
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-badge--numeric {
@@ -1446,6 +1443,68 @@ html:not(.dark) .lm-sidebar-surface .sidebar-header-control:hover {
   color: var(--lm-accent-violet);
 }
 
+html:not(.dark) .lm-sidebar-surface .sidebar-collapse-handle {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  color: #77736c;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-collapse-handle:hover {
+  border-color: rgba(88, 103, 235, 0.24);
+  background: #ffffff;
+  color: var(--lm-accent-violet);
+}
+
+.dark .lm-sidebar-surface .sidebar-collapse-handle {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1e1e1e;
+  color: #9ca3af;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.dark .lm-sidebar-surface .sidebar-collapse-handle:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: #282828;
+  color: #ffffff;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-expand-handle {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #f5f3ee;
+  color: #6b7280;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-expand-hitarea,
+html:not(.dark) .lm-sidebar-surface .sidebar-expand-hitarea:hover {
+  background: transparent;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-expand-hitarea:hover .sidebar-expand-handle {
+  border-color: rgba(88, 103, 235, 0.28);
+  background: #ffffff;
+  color: var(--lm-accent-violet);
+}
+
+.dark .lm-sidebar-surface .sidebar-expand-handle {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1e1e1e;
+  color: #9ca3af;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.38);
+}
+
+.dark .lm-sidebar-surface .sidebar-expand-hitarea,
+.dark .lm-sidebar-surface .sidebar-expand-hitarea:hover {
+  background: transparent;
+}
+
+.dark .lm-sidebar-surface .sidebar-expand-hitarea:hover .sidebar-expand-handle {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: #282828;
+  color: #ffffff;
+}
+
 html:not(.dark) .lm-sidebar-surface .sidebar-logo-shell {
   box-shadow:
     0 3px 10px rgba(36, 33, 29, 0.13),
@@ -1460,7 +1519,7 @@ html:not(.dark) .lm-sidebar-surface .sidebar-logo-shell--light-mark {
 }
 
 html:not(.dark) .lm-sidebar-surface :is(.sidebar-compact-logo-mark, .sidebar-expanded-logo-mark) {
-  filter: drop-shadow(0 2px 3px rgba(190, 132, 20, 0.16));
+  filter: brightness(0.72) saturate(1.9) contrast(1.38) drop-shadow(0 1px 1px rgba(111, 67, 0, 0.4));
 }
 
 .dark .lm-sidebar-surface :is(.sidebar-compact-logo-mark, .sidebar-expanded-logo-mark) {
@@ -1489,32 +1548,6 @@ html:not(.dark) .lm-sidebar-surface .sidebar-profile-role {
   width: 1px;
   height: 100%;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.05) 30px,
-    rgba(0, 0, 0, 0.35) 70px,
-    rgba(0, 0, 0, 0.75) 110px,
-    rgba(0, 0, 0, 1) 150px,
-    rgba(0, 0, 0, 1) calc(100% - 150px),
-    rgba(0, 0, 0, 0.75) calc(100% - 110px),
-    rgba(0, 0, 0, 0.35) calc(100% - 70px),
-    rgba(0, 0, 0, 0.05) calc(100% - 30px),
-    rgba(0, 0, 0, 0) 100%
-  );
-  mask-image: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.05) 30px,
-    rgba(0, 0, 0, 0.35) 70px,
-    rgba(0, 0, 0, 0.75) 110px,
-    rgba(0, 0, 0, 1) 150px,
-    rgba(0, 0, 0, 1) calc(100% - 150px),
-    rgba(0, 0, 0, 0.75) calc(100% - 110px),
-    rgba(0, 0, 0, 0.35) calc(100% - 70px),
-    rgba(0, 0, 0, 0.05) calc(100% - 30px),
-    rgba(0, 0, 0, 0) 100%
-  );
 }
 
 html:not(.dark) .lm-sidebar-surface .sidebar-edge-divider {
@@ -1525,36 +1558,357 @@ html:not(.dark) .lm-sidebar-surface .sidebar-edge-divider {
   background: rgba(255, 255, 255, 0.16);
 }
 
-/* Keep sidebar navigation proportional on laptop-sized viewports. */
-@media (max-width: 1440px) {
-  html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded svg.sidebar-nav-icon,
-  html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--compact svg.sidebar-nav-icon,
-  .dark .lm-sidebar-surface .sidebar-nav-item--expanded svg.sidebar-nav-icon,
-  .dark .lm-sidebar-surface .sidebar-nav-item--compact svg.sidebar-nav-icon {
+/* Reference sidebar: a padded 68px icon rail and a compact 160px labeled panel. */
+.sidebar-collapsed-header-divider,
+.sidebar-collapsed-group-divider,
+[data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-collapsed-header-divider,
+[data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-collapsed-group-divider {
+  background: rgba(15, 23, 42, 0.1);
+}
+
+.dark .sidebar-collapsed-header-divider,
+.dark .sidebar-collapsed-group-divider,
+.dark [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-collapsed-header-divider,
+.dark [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-collapsed-group-divider {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+[data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--compact {
+  height: 44px;
+  min-height: 44px;
+  gap: 0;
+  padding: 4px;
+  border-radius: 9px;
+}
+
+[data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-label--compact {
+  display: none;
+}
+
+[data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.6;
+}
+
+[data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--compact .nav-accent-bar {
+  top: 11px;
+  bottom: 11px;
+  height: auto;
+  width: 2px;
+}
+
+[data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-badge--compact {
+  right: 0;
+  top: -1px;
+  transform: scale(0.88);
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-nav-item--expanded {
+  height: 40px;
+  gap: 10px;
+  padding: 8px 11px;
+  border-radius: 9px;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-nav-label--expanded {
+  font-size: 13.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--inactive .sidebar-adfactory-icon {
+  filter: brightness(0) saturate(100%);
+  opacity: 0.82;
+}
+
+html:not(.dark) [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--inactive .sidebar-adfactory-icon {
+  opacity: 0.72;
+}
+
+[data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-adfactory-icon {
+  width: 20px;
+  height: 20px;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-nav-item--expanded .sidebar-nav-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.6;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar {
+  display: block;
+  top: 8px;
+  bottom: 8px;
+  left: -12px !important;
+  width: 2px;
+  border-radius: 0 9999px 9999px 0;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-section-label {
+  color: rgba(15, 23, 42, 0.48);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-section-label-divider {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-section-label {
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-section-label-divider {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-nav-item--active {
+  background: #252525;
+}
+
+.dark [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--active {
+  background: #252525;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-card {
+  min-height: 72px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+html:not(.dark) [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-card {
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: #191919;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.28);
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-profile-name {
+  font-size: 14px;
+}
+
+html:not(.dark) [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-profile-name,
+.dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-profile-name {
+  font-size: 14px;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-profile-role {
+  font-size: 11px;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-badge--label {
+  font-size: 9px;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-badge--numeric {
+  font-size: 10px;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-plan {
+  max-width: 40px;
+  border-radius: 4px;
+  padding: 2px 4px;
+  background: rgba(197, 175, 65, 0.18);
+  color: #8f7a14;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-plan {
+  border: 1px solid rgba(220, 199, 72, 0.18);
+  background: rgba(196, 174, 47, 0.14);
+  color: #d1bd4c;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-progress {
+  height: 5px;
+  background: rgba(15, 23, 42, 0.14);
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-progress > span {
+  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-credits {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-credits > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-credits > span:first-child {
+  flex-shrink: 0;
+}
+
+.dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-progress {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-credits {
+  color: #a3a3a3;
+}
+
+/* Desktop sidebar geometry mirrors the balanced proportions seen at 90% zoom
+   without scaling the component or shrinking its interactive coordinate space. */
+@media (min-width: 768px) {
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-header-expanded {
+    height: 50px;
+    padding-left: 7px;
+    padding-right: 15px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-expanded-logo-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-expanded-brand-name {
+    font-size: 18px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-collapse-handle {
+    width: 25px;
+    height: 25px;
+  }
+
+  [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-header-compact {
+    height: 54px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-compact-logo-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-expand-hitarea {
+    width: 36px;
+    height: 36px;
+  }
+
+  [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-expand-handle {
+    width: 20px;
+    height: 24px;
+  }
+
+  [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--compact {
+    height: 40px;
+    min-height: 40px;
+    padding: 3px;
+    border-radius: 8px;
+  }
+
+  [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-nav-icon {
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.6;
+  }
+
+  [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--compact .sidebar-adfactory-icon {
     width: 18px;
     height: 18px;
   }
 
-
-
-  html:not(.dark) .lm-sidebar-surface .sidebar-section-label,
-  .dark .lm-sidebar-surface .sidebar-section-label {
-    font-size: 7px;
+  [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--compact .nav-accent-bar {
+    top: 10px;
+    bottom: 10px;
   }
 
-  html:not(.dark) .lm-sidebar-surface .sidebar-nav-item--expanded,
-  .dark .lm-sidebar-surface .sidebar-nav-item--expanded {
-    height: auto;
-    gap: 8px;
-    padding: 8px;
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-nav-item--expanded {
+    height: 36px;
+    gap: 9px;
+    padding: 7px 10px;
+    border-radius: 8px;
   }
 
-  .sidebar-brand-title {
-    font-size: 14px;
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-nav-label--expanded {
+    font-size: 12px;
   }
 
-  .sidebar-brand-subtitle {
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-nav-item--expanded .sidebar-nav-icon {
+    width: 16px;
+    height: 16px;
+    stroke-width: 1.6;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-nav-item--expanded .nav-accent-bar {
+    top: 7px;
+    bottom: 7px;
+    left: -11px !important;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-section-label {
+    font-size: 9px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-nav-active-dot {
+    width: 5px;
+    height: 5px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-card {
+    min-height: 65px;
+    gap: 9px;
+    padding: 8px 9px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-profile-name,
+  html:not(.dark) [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-profile-name,
+  .dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-profile-name {
+    font-size: 12.5px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-profile-role {
     font-size: 10px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-plan {
+    max-width: 36px;
+    padding: 2px 3px;
+    font-size: 8px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-progress {
+    height: 4px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-credits {
+    gap: 10px;
+    font-size: 10px;
+  }
+
+  [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-profile-footer {
+    height: 79px;
+    padding: 4px 9px 9px;
+  }
+
+  [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-profile-footer {
+    height: 58px;
+    padding-bottom: 14px;
+  }
+
+  .lm-sidebar-surface .sidebar-profile-button {
+    width: 36px;
+    height: 36px;
   }
 }
 
@@ -2268,8 +2622,8 @@ html:not(.dark) [data-slot="tooltip-content"] [fill] {
 }
 
 /* ── Native Input / Textarea ──────────────────────────────────────────── */
-html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.bg-transparent):not([class*="bg-transparent"]):not(.adfactory-brand-field):not(.adfactory-objectives-input):not(.adfactory-services-input):not(.adfactory-start-input):not(.adfactory-automation-input):not(.adfactory-campaign-dialog-input),
-html:not(.dark) textarea {
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.bg-transparent):not([class*="bg-transparent"]):not(.bg-white):not([class*="bg-white"]):not(.adcreative-white-input):not(.templates-search-input):not(.adfactory-brand-field):not(.adfactory-objectives-input):not(.adfactory-services-input):not(.adfactory-start-input):not(.adfactory-automation-input):not(.adfactory-campaign-dialog-input),
+html:not(.dark) textarea:not(.bg-transparent):not([class*="bg-transparent"]):not(.bg-white):not([class*="bg-white"]):not(.adcreative-white-input) {
   background: var(--lm-surface-input-bg) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -2278,8 +2632,8 @@ html:not(.dark) textarea {
   transition: border-color 180ms ease, box-shadow 180ms ease !important;
 }
 
-html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.bg-transparent):not([class*="bg-transparent"]):not(.adfactory-brand-field):not(.adfactory-objectives-input):not(.adfactory-services-input):not(.adfactory-start-input):not(.adfactory-automation-input):not(.adfactory-campaign-dialog-input):focus,
-html:not(.dark) textarea:focus {
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(.bg-transparent):not([class*="bg-transparent"]):not(.bg-white):not([class*="bg-white"]):not(.adcreative-white-input):not(.templates-search-input):not(.adfactory-brand-field):not(.adfactory-objectives-input):not(.adfactory-services-input):not(.adfactory-start-input):not(.adfactory-automation-input):not(.adfactory-campaign-dialog-input):focus,
+html:not(.dark) textarea:not(.bg-transparent):not([class*="bg-transparent"]):not(.bg-white):not([class*="bg-white"]):not(.adcreative-white-input):focus {
   border-color: var(--ws-border-strong) !important;
   box-shadow:
     0 0 0 3px var(--ws-input-focus-ring),
@@ -3602,63 +3956,62 @@ html:not(.dark) body .adfactory-brand-select-popover [data-slot='command-item']:
   background: var(--ws-surface-hover) !important;
 }
 
-/* AI Creatives custom form: keep light-mode fields and panel edges neutral.
-   The upload rows are one control, so their embedded URL input stays clear. */
+/* AI Creatives custom form: keep light-mode fields and panel edges crisp white. */
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-shell {
-  background: var(--ws-surface) !important;
+  background: #ffffff !important;
   border: 1px solid var(--ws-border) !important;
   box-shadow: var(--ws-shadow-md) !important;
   --tw-ring-shadow: 0 0 #0000 !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-prompt-card {
-  background: var(--ws-surface-control) !important;
-  border: 1px solid var(--ws-border) !important;
-  box-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  background: #ffffff !important;
+  border: 1px solid #CFCDD9 !important;
+  box-shadow: none !important;
   --tw-ring-shadow: 0 0 #0000 !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-reference-card {
-  background: var(--ws-surface) !important;
+  background: #ffffff !important;
   border: 1px solid var(--ws-border) !important;
   box-shadow: var(--ws-shadow-sm) !important;
   --tw-ring-shadow: 0 0 #0000 !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-prompt-card:focus-within {
-  border-color: var(--ws-border-strong) !important;
-  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), inset 0 1px 3px rgba(80, 70, 58, 0.05) !important;
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
 }
 
 html:not(.dark) body .adcreative-custom-form {
-  --adcreative-text-field-bg: var(--ws-surface-control);
-  --adcreative-text-field-border: var(--ws-border);
-  --adcreative-text-field-focus-border: var(--ws-border-strong);
+  --adcreative-text-field-bg: #ffffff;
+  --adcreative-text-field-border: #CFCDD9;
+  --adcreative-text-field-focus-border: #5867EB;
   --adcreative-text-field-shadow: none;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-text-input {
-  color: var(--ws-text-primary) !important;
-  caret-color: var(--ws-text-primary) !important;
-  background: var(--adcreative-text-field-bg) !important;
-  border: 1px solid var(--adcreative-text-field-border) !important;
-  box-shadow: var(--adcreative-text-field-shadow) !important;
+  color: #1F1D29 !important;
+  caret-color: #1F1D29 !important;
+  background: #ffffff !important;
+  border: 1px solid #CFCDD9 !important;
+  box-shadow: none !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-text-input:focus {
-  background: var(--adcreative-text-field-bg) !important;
-  border-color: var(--adcreative-text-field-focus-border) !important;
-  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), var(--adcreative-text-field-shadow) !important;
+  background: #ffffff !important;
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-upload-field {
-  background: var(--ws-surface-control) !important;
-  border: 1px solid var(--ws-border) !important;
+  background: #ffffff !important;
+  border: 1px solid #CFCDD9 !important;
   box-shadow: none !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-competitor {
-  background: var(--ws-surface-control) !important;
+  background: #ffffff !important;
   box-shadow: none !important;
 }
 
@@ -3666,60 +4019,49 @@ html:not(.dark) body .adcreative-custom-form .adcreative-custom-competitor:hover
   background: var(--ws-surface-hover) !important;
 }
 
-html:not(.dark) body .templates-search-input,
-html:not(.dark) body input.templates-search-input,
-html:not(.dark) body input[placeholder*="Search all templates"] {
-  background: var(--ws-surface-control) !important;
-  border: 1px solid var(--ws-border) !important;
-  color: var(--ws-text-primary) !important;
-  caret-color: var(--ws-text-primary) !important;
-}
-
-/* Ad Creative field system: every card uses the same neutral text-field
-   tokens. Composed upload/URL rows deliberately expose one outer surface,
-   matching the Model Reference Images control. */
+/* Ad Creative field system: clean white fields with no inner tint */
 html:not(.dark) body .adcreative-field-system {
-  --adcreative-field-bg: var(--ws-surface-control);
-  --adcreative-field-border: var(--ws-border);
-  --adcreative-field-focus-border: var(--ws-border-strong);
-  --adcreative-field-shadow: inset 0 1px 3px rgba(80, 70, 58, 0.05);
+  --adcreative-field-bg: #ffffff;
+  --adcreative-field-border: #CFCDD9;
+  --adcreative-field-focus-border: #5867EB;
+  --adcreative-field-shadow: none;
 }
 
 html:not(.dark) body .adcreative-field-system input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([class*='bg-transparent']),
 html:not(.dark) body .adcreative-field-system textarea:not(.bg-transparent):not([class*='bg-transparent']),
 html:not(.dark) body .adcreative-field-system select {
-  color: var(--ws-text-primary) !important;
-  caret-color: var(--ws-text-primary) !important;
-  background: var(--adcreative-field-bg) !important;
-  border: 1px solid var(--adcreative-field-border) !important;
-  box-shadow: var(--adcreative-field-shadow) !important;
+  color: #1F1D29 !important;
+  caret-color: #1F1D29 !important;
+  background: #ffffff !important;
+  border: 1px solid #CFCDD9 !important;
+  box-shadow: none !important;
   --tw-ring-shadow: 0 0 #0000 !important;
 }
 
 html:not(.dark) body .adcreative-field-system input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([class*='bg-transparent']):focus,
 html:not(.dark) body .adcreative-field-system textarea:not(.bg-transparent):not([class*='bg-transparent']):focus,
 html:not(.dark) body .adcreative-field-system select:focus {
-  background: var(--adcreative-field-bg) !important;
-  border-color: var(--adcreative-field-focus-border) !important;
-  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), var(--adcreative-field-shadow) !important;
+  background: #ffffff !important;
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
 }
 
 html:not(.dark) body .adcreative-field-system .adcreative-composed-field {
-  background: var(--adcreative-field-bg) !important;
-  border: 1px solid var(--adcreative-field-border) !important;
-  box-shadow: var(--adcreative-field-shadow) !important;
+  background: #ffffff !important;
+  border: 1px solid #CFCDD9 !important;
+  box-shadow: none !important;
   --tw-ring-shadow: 0 0 #0000 !important;
 }
 
 html:not(.dark) body .adcreative-field-system .adcreative-composed-field:focus-within {
-  border-color: var(--adcreative-field-focus-border) !important;
-  box-shadow: 0 0 0 2px var(--ws-input-focus-ring), var(--adcreative-field-shadow) !important;
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
 }
 
 html:not(.dark) body .adcreative-field-system .adcreative-composed-field-input,
 html:not(.dark) body .adcreative-field-system .adcreative-composed-field-input:focus {
-  color: var(--ws-text-primary) !important;
-  caret-color: var(--ws-text-primary) !important;
+  color: #1F1D29 !important;
+  caret-color: #1F1D29 !important;
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
@@ -3728,7 +4070,7 @@ html:not(.dark) body .adcreative-field-system .adcreative-composed-field-input:f
 }
 
 html:not(.dark) body .adcreative-field-system .adcreative-composed-field-input::placeholder {
-  color: var(--ws-text-secondary) !important;
+  color: #85829A !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3844,16 +4186,12 @@ html:not(.dark) .light-ambient-ui-layer {
   position: relative;
   z-index: 0;
   isolation: isolate;
-  background: transparent !important;
+  background: var(--ws-bg) !important;
 }
 
 html:not(.dark) .light-ambient-ui-layer::before,
 html:not(.dark) .light-ambient-ui-layer::after {
-  content: '';
-  position: fixed;
-  z-index: 0;
-  pointer-events: none;
-  border-radius: 9999px;
+  display: none;
 }
 
 /* Ads Manager keeps its cyan/indigo upper glow and lavender lower wave. */
@@ -4340,6 +4678,14 @@ html:not(.dark) .describe-brand-popover .describe-brand-cta-input:focus {
   box-shadow: 0 0 0 3px var(--ws-input-focus-ring) !important;
 }
 
+/* Flat Light Mode canvas: decorative page and chrome gradients are disabled.
+   Functional gradients in actions, progress, data, and media remain intact. */
+html:not(.dark) .lm-sidebar-surface::before,
+html:not(.dark) .adfactory-v2-surface::before,
+html:not(.dark) .lm-greeting-ambient::before {
+  display: none;
+}
+
 /* Keep the active Ad Copy CTA popover aligned with the workspace Light Mode controls. */
 html:not(.dark) .adcopy-cta-popover .adcopy-cta-input {
   background: var(--ws-surface-control) !important;
@@ -4618,3 +4964,134 @@ html:not(.dark) .product-broll-form .product-broll-placeholder-dropdown span {
 }
 
 
+
+
+/* ── AdCreative Setup Modal Scrollbar Hiding ─────────────────────────────── */
+.adcreative-setup-modal textarea,
+.adcreative-setup-modal input,
+.adcreative-setup-modal .overflow-y-auto,
+.adcreative-setup-modal [class*="overflow-y-auto"],
+.templates-picker-container textarea,
+.templates-picker-container [class*="overflow-y-auto"] {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.adcreative-setup-modal textarea::-webkit-scrollbar,
+.adcreative-setup-modal input::-webkit-scrollbar,
+.adcreative-setup-modal .overflow-y-auto::-webkit-scrollbar,
+.adcreative-setup-modal [class*="overflow-y-auto"]::-webkit-scrollbar,
+.templates-picker-container textarea::-webkit-scrollbar,
+.templates-picker-container [class*="overflow-y-auto"]::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+
+/* ── AdCreative Setup Modal Fields & Theming ────────────────────────────── */
+/* Light Mode: Crisp White Fields */
+html:not(.dark) .adcreative-setup-modal input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([class*='bg-transparent']),
+html:not(.dark) .adcreative-setup-modal textarea:not(.bg-transparent):not([class*='bg-transparent']),
+html:not(.dark) .adcreative-setup-modal .adcreative-white-input,
+html:not(.dark) .adcreative-setup-modal .adcreative-field-white,
+html:not(.dark) .adcreative-setup-modal .adcreative-prompt-card,
+html:not(.dark) .templates-search-input,
+html:not(.dark) input.templates-search-input,
+html:not(.dark) input[placeholder*="Search all templates"],
+html:not(.dark) input[placeholder*="Search all templates…"],
+html:not(.dark) input[placeholder*="Enter your Product Name"],
+html:not(.dark) input[placeholder*="Enter your Brand Name"],
+html:not(.dark) textarea[placeholder*="Enter your Product Description"],
+html:not(.dark) textarea[placeholder*="Enter your Brand Description"] {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  border-color: #CFCDD9 !important;
+  color: #1F1D29 !important;
+  caret-color: #1F1D29 !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) .templates-search-input,
+html:not(.dark) input.templates-search-input,
+html:not(.dark) input[placeholder*="Search all templates"],
+html:not(.dark) input[placeholder*="Search all templates…"] {
+  border-color: #E2E1E8 !important;
+}
+
+html:not(.dark) .adcreative-setup-modal input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([class*='bg-transparent']):focus,
+html:not(.dark) .adcreative-setup-modal textarea:not(.bg-transparent):not([class*='bg-transparent']):focus,
+html:not(.dark) .adcreative-setup-modal .adcreative-white-input:focus,
+html:not(.dark) .templates-search-input:focus,
+html:not(.dark) input.templates-search-input:focus,
+html:not(.dark) input[placeholder*="Search all templates"]:focus,
+html:not(.dark) input[placeholder*="Search all templates…"]:focus {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
+}
+
+html:not(.dark) .adcreative-setup-modal .adcreative-field-white:focus-within,
+html:not(.dark) .adcreative-setup-modal .adcreative-prompt-card:focus-within {
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
+}
+
+html:not(.dark) .adcreative-setup-modal textarea.bg-transparent,
+html:not(.dark) .adcreative-setup-modal textarea[class*="bg-transparent"] {
+  background-color: transparent !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Dark Mode: Sleek Dark Fields */
+html.dark .adcreative-setup-modal input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([type='checkbox']):not([type='radio']):not([class*='bg-transparent']),
+html.dark .adcreative-setup-modal textarea:not(.bg-transparent):not([class*='bg-transparent']),
+html.dark .adcreative-setup-modal .adcreative-white-input,
+html.dark .adcreative-setup-modal .adcreative-field-white,
+html.dark .adcreative-setup-modal .adcreative-prompt-card,
+html.dark .templates-search-input,
+html.dark input.templates-search-input,
+html.dark input[placeholder*="Search all templates"],
+html.dark input[placeholder*="Search all templates…"],
+html.dark input[placeholder*="Enter your Product Name"],
+html.dark input[placeholder*="Enter your Brand Name"],
+html.dark textarea[placeholder*="Enter your Product Description"],
+html.dark textarea[placeholder*="Enter your Brand Description"] {
+  background-color: #1a1a1f !important;
+  background: #1a1a1f !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  color: #ffffff !important;
+  caret-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html.dark .adcreative-setup-modal input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([class*='bg-transparent']):focus,
+html.dark .adcreative-setup-modal textarea:not(.bg-transparent):not([class*='bg-transparent']):focus,
+html.dark .adcreative-setup-modal .adcreative-white-input:focus,
+html.dark .templates-search-input:focus,
+html.dark input.templates-search-input:focus,
+html.dark input[placeholder*="Search all templates"]:focus,
+html.dark input[placeholder*="Search all templates…"]:focus {
+  background-color: #1a1a1f !important;
+  background: #1a1a1f !important;
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.25) !important;
+}
+
+html.dark .adcreative-setup-modal .adcreative-field-white:focus-within,
+html.dark .adcreative-setup-modal .adcreative-prompt-card:focus-within {
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.25) !important;
+}
+
+html.dark .adcreative-setup-modal textarea.bg-transparent,
+html.dark .adcreative-setup-modal textarea[class*="bg-transparent"] {
+  background-color: transparent !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+}

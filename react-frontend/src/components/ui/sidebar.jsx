@@ -20,15 +20,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-function getSidebarDimensions(viewportWidth) {
-  const width = viewportWidth ?? (typeof window === 'undefined' ? 1441 : window.innerWidth);
-  const isLaptop = width <= 1400;
-
-  return {
-    sidebarWidth: isLaptop ? '11.75rem' : '14.75rem',
-    sidebarWidthIcon: isLaptop ? '4.5rem' : '6rem',
-  };
-}
+const SIDEBAR_WIDTH = '13rem';
+const SIDEBAR_WIDTH_ICON = '3.875rem';
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b';
 
 const SidebarContext = React.createContext(null);
@@ -54,40 +47,43 @@ function SidebarProvider({
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
   const [openHistory, setOpenHistory] = React.useState(false);
-  const [sidebarDimensions, setSidebarDimensions] = React.useState(getSidebarDimensions);
-  const { sidebarWidth, sidebarWidthIcon } = sidebarDimensions;
-  // Collapsed icon width is a fixed constant — no resize needed.
-  React.useEffect(() => {
-    const updateSidebarDimensions = () => {
-      const nextDimensions = getSidebarDimensions(window.innerWidth);
-      setSidebarDimensions((currentDimensions) =>
-        currentDimensions.sidebarWidth === nextDimensions.sidebarWidth &&
-        currentDimensions.sidebarWidthIcon === nextDimensions.sidebarWidthIcon
-          ? currentDimensions
-          : nextDimensions
-      );
-    };
 
-    updateSidebarDimensions();
-    window.addEventListener('resize', updateSidebarDimensions);
-    return () => window.removeEventListener('resize', updateSidebarDimensions);
-  }, []);
-
-  // ── Nav expand / collapse permanently disabled ──────────────────────────────
-  const [internalNavExpanded, setInternalNavExpanded] = React.useState(false);
-  const isNavExpanded = false;
+  // ── Nav expand / collapse — independent of chat-history panel ──────────────
+  // Persisted to localStorage so the state survives page refreshes.
+  const [internalNavExpanded, setInternalNavExpanded] = React.useState(() => {
+    try {
+      const persisted = localStorage.getItem('adsgpt_sidebar_collapsed');
+      return persisted === null ? defaultOpen : persisted !== 'true';
+    } catch {
+      return defaultOpen;
+    }
+  });
+  const isNavExpanded = openProp ?? internalNavExpanded;
 
   // This is the internal state of the sidebar.
+  // We use openProp and setOpenProp for control from outside the component.
   const setOpen = React.useCallback(
-    (_value) => {
-      // Navigation sidebar never opens; keep in collapsed mode
+    (value) => {
+      const openState = typeof value === 'function' ? value(isNavExpanded) : value;
+      if (setOpenProp) {
+        setOpenProp(openState);
+      } else {
+        setInternalNavExpanded(openState);
+      }
+
+      try {
+        localStorage.setItem('adsgpt_sidebar_collapsed', String(!openState));
+      } catch (_e) {
+        // Storage can be unavailable in private or restricted browser contexts.
+      }
+      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     },
-    []
+    [isNavExpanded, setOpenProp]
   );
 
   const toggleNavExpanded = React.useCallback(() => {
-    // Navigation sidebar never opens; keep in collapsed mode
-  }, []);
+    setOpen((expanded) => !expanded);
+  }, [setOpen]);
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
@@ -169,8 +165,8 @@ function SidebarProvider({
           data-slot="sidebar-wrapper"
           data-sidebar-nav-expanded={isNavExpanded ? 'true' : 'false'}
           style={{
-            '--sidebar-width': sidebarWidth,
-            '--sidebar-width-icon': sidebarWidthIcon,
+            '--sidebar-width': SIDEBAR_WIDTH,
+            '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
             ...style,
           }}
           className={cn(
@@ -248,7 +244,7 @@ function Sidebar({
       <div
         data-slot="sidebar-gap"
         className={cn(
-          'relative w-(--sidebar-width) shrink-0 bg-transparent transition-[width] duration-[220ms] ease-in-out motion-reduce:transition-none',
+          'relative w-(--sidebar-width) shrink-0 bg-transparent transition-[width] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none',
           'group-data-[collapsible=offcanvas]:w-0',
           'group-data-[side=right]:rotate-180',
           variant === 'floating' || variant === 'inset'
@@ -259,7 +255,8 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          'fixed inset-y-0 z-10 flex h-svh w-(--sidebar-width) border-none transition-[left,right,width] duration-[220ms] ease-in-out motion-reduce:transition-none',
+          'fixed inset-y-0 flex h-svh w-(--sidebar-width) border-none transition-[left,right,width] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none',
+          !isNavExpanded && !openHistory ? 'z-[60]' : 'z-10',
           side === 'left'
             ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
             : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',

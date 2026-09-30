@@ -38,7 +38,7 @@ const HeaderTabs = ({
   return (
     <div
       ref={tabsRef}
-      className="brand-iq-tabs flex items-center gap-3 overflow-x-auto scroll-smooth pt-1 pb-2 select-none no-scrollbar sm:gap-4 md:gap-5 2xl:gap-6"
+      className="brand-iq-tabs flex items-center gap-2 overflow-x-auto scroll-smooth pt-1 pb-1.5 select-none no-scrollbar sm:gap-2.5 md:gap-3 2xl:gap-3.5"
     >
       {tabs.map((tab) => {
         const Icon = tab.icon;
@@ -57,7 +57,7 @@ const HeaderTabs = ({
                 onTabChange(tab.id);
               }
             }}
-            className={`relative flex shrink-0 items-center justify-start py-1 text-xs font-medium whitespace-nowrap transition-colors select-none cursor-pointer sm:text-[13px] 2xl:text-[14.5px] ${
+            className={`relative flex shrink-0 items-center justify-start py-0.5 px-0.5 text-xs font-medium whitespace-nowrap transition-colors select-none cursor-pointer sm:text-[13px] 2xl:text-[14px] ${
               isActive
                 ? 'font-semibold text-zinc-950 dark:text-white'
                 : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white'

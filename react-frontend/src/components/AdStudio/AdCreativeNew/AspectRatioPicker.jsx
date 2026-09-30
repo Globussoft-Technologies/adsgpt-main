@@ -199,8 +199,8 @@ export default function AspectRatioTiles({
                   }}
                   className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-[12px] transition-colors ${
                     selected
-                      ? 'bg-[#3ad0c8]/15 font-semibold text-gray-900 dark:text-white'
-                      : 'text-gray-600 hover:bg-black/5 dark:text-white/70 dark:hover:bg-white/5'
+                      ? 'bg-[#3ad0c8]/15 font-semibold text-gray-900 dark:text-[#3ad0c8]'
+                      : 'text-gray-600 hover:bg-black/5 dark:text-white/70 dark:hover:bg-white/10'
                   }`}
                 >
                   <span>{optionLabel(n)}</span>

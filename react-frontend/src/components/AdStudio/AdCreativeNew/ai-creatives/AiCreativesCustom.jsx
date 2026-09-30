@@ -12,11 +12,13 @@ import {
   LinkIcon,
   ArrowLeft,
   Proportions,
+  Sparkles,
 } from 'lucide-react';
 import { SiOpenai } from 'react-icons/si';
 import { LifestyleShell } from '../lifestyle/LifestyleShell';
 import { TemplatesPanel, TemplatesTrigger, TemplatesResizer } from '../components/PromptTemplatesPicker';
 import { usePromptTemplates } from '../components/usePromptTemplates';
+import { getBrandAvatarColor } from '../components/AdStudioPrimitives';
 import geminiIcon from '@/assets/layouts/profile/Google_Gemini_icon_2025.svg.png';
 import seedanceIcon from '@/assets/layouts/profile/seedance_logo_transparent.png';
 import chatResponseDark from '@/assets/layouts/adstudio/chat-response-dark.svg';
@@ -978,18 +980,20 @@ export function AiCreativesCustom({ onClose, onComplete }) {
         />
       ) : (
         <>
-      <form onSubmit={handleSubmit} className="relative w-full min-w-[420px] max-w-[1100px]">
-        <div className="2xl:max-h-[calc(100svh-140px)] max-h-[calc(100svh-80px)] overflow-y-auto rounded-[30px] bg-white dark:bg-[#303030]/30 p-6 ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md lg:px-8 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin]">
-          <div className="relative mb-6 flex items-center justify-center">
+      <form onSubmit={handleSubmit} className="relative w-full max-w-[1043px]">
+        <div className="adcreative-setup-modal relative w-full max-w-[1043px] max-h-[calc(100svh-40px)] overflow-y-auto rounded-[24px] bg-[#F5F5F8] dark:bg-[#1e1e24] p-[22px_26px] border border-[#E2E1E8] dark:border-white/10 shadow-[0_30px_70px_-30px_rgba(31,29,41,0.35),0_2px_8px_rgba(31,29,41,0.05)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="relative flex items-center justify-center min-h-[40px] mb-4">
             <button
               type="button"
               onClick={onClose}
               aria-label="Back"
-              className="absolute left-0 flex h-7 w-7 items-center justify-center text-gray-500 dark:text-white/70 transition-colors hover:text-black dark:hover:text-white"
+              className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center h-10 w-10 text-[#4A4758] hover:text-[#1F1D29] transition-colors rounded-full hover:bg-black/5 dark:text-gray-400 dark:hover:text-white dark:hover:bg-white/10"
             >
-              <ArrowLeft size={24} strokeWidth={2} />
+              <ArrowLeft size={20} strokeWidth={2.2} />
             </button>
-            <h3 className="text-[16px] font-medium text-gray-900 dark:text-white">Create Custom Ads</h3>
+            <h3 className="text-[17px] font-bold text-[#1F1D29] dark:text-white text-center">
+              Create Custom Ads
+            </h3>
           </div>
 
           {(view.kind === 'error' || imageState.status === 'failed') && (
@@ -1007,46 +1011,32 @@ export function AiCreativesCustom({ onClose, onComplete }) {
             </div>
           )}
 
-          <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-[455fr_443fr] lg:gap-6">
-            <div className="flex min-h-0 min-w-0 flex-col">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-[16px] font-medium text-gray-900 dark:text-white">
-                  Prompt<span>*</span>
-                </p>
+          <div className="grid grid-cols-1 lg:min-h-[360px] lg:grid-cols-[minmax(0,455fr)_minmax(0,443fr)] gap-[22px] items-stretch">
+            {/* Left: Prompt */}
+            <div className="flex flex-1 min-w-0 flex-col h-full">
+              <div className="flex items-center justify-between gap-3 mb-[7px]">
+                <span className="text-[13px] font-semibold text-[#1F1D29] dark:text-white">
+                  Prompt<span className="text-[#5867EB] ml-0.5">*</span>
+                </span>
                 <TemplatesTrigger controller={templates} />
               </div>
 
-              {/* Shared min-height container — panel + textarea-wrapper
-                  trade space inside it. 480 px is the floor so the prompt
-                  card never collapses below its natural minimum, and
-                  `flex-1` lets it stretch to match the References column
-                  when brand chips push that side taller. The wrapper uses
-                  `flex-1 min-h-0` so it can actually shrink below its
-                  natural content size when the panel takes its share. */}
-              <div className="flex min-h-[480px] flex-1 flex-col">
-                <TemplatesPanel controller={templates} />
+              <TemplatesPanel controller={templates} />
+              <TemplatesResizer controller={templates} />
 
-                {/* Drag handle to repartition height between the templates
-                    picker and the prompt box. Only present while the panel
-                    is open. */}
-                <TemplatesResizer controller={templates} />
-
-                <div
-                  className="relative flex flex-1 min-h-0 flex-col rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 ring-1 ring-black/10 dark:ring-white/10 focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/20"
-                >
+              <div
+                className="adcreative-prompt-card relative flex flex-1 flex-col rounded-[16px] border bg-white dark:bg-[#1a1a1f] min-h-[140px] transition-colors border-[#CFCDD9] focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:border-white/10"
+              >
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="write your prompt..."
                   required
-                  className="flex-1 resize-none rounded-t-[24px] bg-transparent px-6 pt-5 pb-2 text-[16px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]"
+                  style={{ backgroundColor: 'transparent' }}
+                  className="flex-1 min-h-[60px] resize-none border-0 !bg-transparent bg-transparent px-[18px] pt-4 pb-2 text-[14px] leading-[1.6] text-[#1F1D29] placeholder:text-[#85829A] outline-none dark:text-white dark:placeholder:text-gray-500 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 />
 
                 {(() => {
-                  // Build the combined preview: every reference + the chosen
-                  // competitor visual (if any). Hard-capped at 5; the limit
-                  // is also enforced where items are added so we should
-                  // never have to truncate here.
                   const promptThumbs = [
                     ...referenceImages.map((it, refIndex) => ({
                       kind: 'ref',
@@ -1068,15 +1058,13 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                     <div className="flex flex-nowrap items-end justify-end gap-2 overflow-x-auto px-3 pb-2">
                       {promptThumbs.map((t, i) => (
                         <div
-                          key={`prompt-preview-${t.kind}-${i}-${t.preview}`}
-                          className="relative h-[160px] w-[90px] shrink-0 overflow-hidden rounded-10 ring-1 ring-white/10"
+                          key={'prompt-preview-' + t.kind + '-' + i + '-' + t.preview}
+                          className="relative h-[160px] w-[90px] shrink-0 overflow-hidden rounded-[10px] ring-1 ring-black/10 dark:ring-white/10"
                         >
                           <img
                             src={t.preview}
-                            alt={`${t.kind} ${i + 1}`}
-                            onClick={() =>
-                              openLightbox(promptThumbs, i)
-                            }
+                            alt={t.kind + ' ' + (i + 1)}
+                            onClick={() => openLightbox(promptThumbs, i)}
                             className="h-full w-full cursor-pointer object-cover"
                           />
                           <div
@@ -1085,23 +1073,17 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                           />
                           <button
                             type="button"
-                            aria-label={`Remove ${t.kind}`}
+                            aria-label={'Remove ' + t.kind}
                             onClick={() => {
                               if (t.kind === 'competitor') {
                                 setCompetitorAdRef('');
                               } else if (t.kind === 'brand-pool') {
-                                // Mirrors deselection of the chip below.
-                                setBrandImagesPicked((prev) =>
-                                  prev.filter((u) => u !== t.preview),
-                                );
+                                setBrandImagesPicked((prev) => prev.filter((u) => u !== t.preview));
                               } else {
                                 setReferenceImages((prev) =>
                                   prev.filter((_, index) => index !== t.refIndex),
                                 );
                               }
-                              // Removing any contributor frees a slot — clear
-                              // the cap warning so the user sees they can add
-                              // again.
                               setImagesError('');
                             }}
                             className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-transform hover:scale-105"
@@ -1114,587 +1096,333 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                   );
                 })()}
 
-                <div className="flex flex-wrap items-center justify-end gap-2 px-3 pb-3">
-                  {/* Improve prompt with Gemini — same icon + behaviour as
-                      the Ad Studio chat-bar wand. Sits immediately to the
-                      left of the model picker. */}
+                <div className="flex items-center gap-1.5 p-[8px_10px] bg-[#FAFAFC] border-t border-[#E2E1E8] rounded-b-[16px] dark:bg-white/5 dark:border-white/10">
                   <button
                     type="button"
                     onClick={handleImprovePrompt}
                     disabled={!prompt.trim() || isSuggestingPrompt}
-                    title="Improve with Gemini"
-                    className="flex h-8 w-8 items-center justify-center rounded-full transition-all hover:scale-110 disabled:cursor-not-allowed disabled:opacity-40"
+                    title="Enhance prompt"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#ECEEFD] hover:bg-[#C9CEF8] text-[#5867EB] transition-colors disabled:opacity-40 mr-auto dark:bg-indigo-950/60 dark:text-indigo-300"
                   >
                     {isSuggestingPrompt ? (
-                      <Loader2 size={20} className="animate-spin text-gray-900 dark:text-white" />
+                      <Loader2 size={16} className="animate-spin" />
                     ) : (
-                      <img
-                        src={chatResponseDark}
-                        alt="Improve with Gemini"
-                        className="h-5 w-5 2xl:h-6 2xl:w-6"
-                      />
+                      <Sparkles size={16} />
                     )}
                   </button>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                  {SHOW_QUALITY_PICKER && (
-                  <div ref={qualityPickerWrapperRef} className="relative">
-                    <PillButton
-                      label={qualityLabel(quality)}
-                      onClick={() => {
-                        setShowQualityPicker((v) => !v);
-                        setShowModelPicker(false);
-                        setShowAspectPicker(false);
-                        setShowBrandIqPicker(false);
-                      }}
-                    />
-                    {showQualityPicker && (
-                      <div className="absolute bottom-full left-0 z-40 mb-2 min-w-[140px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-                        {(selectedModel?.qualities || []).map((q, i) => {
-                          const selected = q === quality;
-                          return (
-                            <button
-                              key={q}
-                              type="button"
-                              onClick={() => {
-                                setQuality(q);
-                                setShowQualityPicker(false);
-                              }}
-                              className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
-                                i === 0 ? 'rounded-tl-[14px] rounded-tr-[14px]' : ''
-                              } ${
-                                selected
-                                  ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                                  : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
-                              }`}
-                            >
-                              <span className="flex-1">{qualityLabel(q)}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                  <div className="flex items-center gap-1.5">
+                    {SHOW_QUALITY_PICKER && (
+                      <QualityPickerPill value={quality} onChange={setQuality} model={model} />
                     )}
-                  </div>
-                  )}
-                  <div ref={modelPickerWrapperRef} className="relative">
-                    <PillButton
-                      icon={<ModelIcon apiId={selectedModel?.apiId} icon={selectedModel?.icon} />}
-                      label={selectedModel?.label || 'Select model'}
-                      onClick={() => {
-                        setShowModelPicker((v) => !v);
-                        setShowQualityPicker(false);
-                        setShowAspectPicker(false);
-                        setShowBrandIqPicker(false);
-                      }}
-                    />
-                    {showModelPicker && (
-                      <div className="absolute bottom-full left-0 z-40 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-                        {configModels.map((opt) => {
-                          const selected = opt.apiId === model;
-                          return (
-                            <button
-                              key={opt.apiId}
-                              type="button"
-                              onClick={() => {
-                                setModel(opt.apiId);
-                                setShowModelPicker(false);
-                              }}
-                              className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ${
-                                selected
-                                  ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                                  : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
-                              }`}
-                            >
-                              <span
-                                aria-hidden
-                                className="flex h-4 w-4 shrink-0 items-center justify-center"
-                              >
-                                <ModelIcon apiId={opt.apiId} icon={opt.icon} />
-                              </span>
-                              <span className="flex-1">{opt.label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  <div ref={aspectPickerWrapperRef} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAspectPicker((v) => !v);
-                        setShowModelPicker(false);
-                        setShowQualityPicker(false);
-                        setShowBrandIqPicker(false);
-                      }}
-                      className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/80 px-4 py-2.5 font-light text-gray-500 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
-                    >
-                      <Proportions size={16} strokeWidth={1.8} className="text-gray-600 dark:text-white/70" />
-                      <span className="h-3 w-px bg-black/10 dark:bg-white/20" />
-                      <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-500 dark:text-white/50" />
-                      <span className="text-[14px]">
-                        {total} Image{total !== 1 ? 's' : ''}
-                      </span>
-                      <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
-                    </button>
-
-                    <AnimatedPanel
-                      open={showAspectPicker}
-                      className="absolute right-0 bottom-full z-40 mb-2 w-[300px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-4 shadow-2xl ring-1 ring-black/10 dark:ring-white/10"
-                    >
-                      <AspectRatioTiles
-                        counts={aspectCounts}
-                        onChange={setAspectCounts}
-                        ratios={selectedModel?.aspectRatios || []}
-                        creditsPerImage={creditsPerImage}
-                      />
-                    </AnimatedPanel>
-                  </div>
+                    <ModelPickerPill value={model} onChange={setModel} />
+                    <RatioPickerPill counts={aspectCounts} onChange={setAspectCounts} model={model} quality={quality} />
                   </div>
                 </div>
-              </div>
               </div>
             </div>
 
-            <div className="flex flex-col">
-              <p className="mb-3 text-[16px] font-medium text-gray-900 dark:text-white">References</p>
-
-              <div className="flex flex-1 flex-col gap-4 rounded-[30px] bg-gray-50 dark:bg-[#202121] p-6">
-                <div className="mb-5">
-                  <p className="mb-2.5 text-[14px] font-medium text-gray-900 dark:text-white">
-                    Attach your Brand Voice
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <div ref={brandIqPickerWrapperRef} className="relative min-w-0">
-                      <button
-                        type="button"
-                        onClick={openBrandIqPicker}
-                        className={`flex min-w-0 items-center gap-2 rounded-full px-4 py-2.5 text-[12px] font-light ring-1 transition-colors ${
-                          brandSource.kind === 'list'
-                            ? 'bg-black/5 text-gray-900 ring-black/10 dark:bg-white/15 dark:text-white dark:ring-white/5'
-                            : 'bg-gray-100 text-gray-600 ring-black/10 hover:bg-black/5 dark:bg-[#909294]/10 dark:text-[#f0f0f0] dark:ring-white/5 dark:hover:bg-[#33333a]'
-                        }`}
-                      >
-                        <img src={brandIqIcon} alt="" className="h-4 w-4" />
-                        <span className="min-w-0 max-w-[165px] 2xl:max-w-[200px] truncate">
-                          {brandSource.kind === 'list' ? brandSource.item.name : 'Brand IQ'}
-                        </span>
-                        <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
-                      </button>
-                      {showBrandIqPicker && (
-                        <div className="absolute top-full left-0 z-40 mt-2 w-[280px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-                          <div className="max-h-[280px] overflow-y-auto">
-                            {brandListState === 'loading' && (
-                              <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-gray-500 dark:text-white/60">
-                                <Loader2 size={12} className="animate-spin" />
-                                Loading brands…
-                              </div>
-                            )}
-                            {brandListState === 'error' && (
-                              <div className="px-4 py-3 text-[12px] text-red-600 dark:text-red-300">
-                                {brandListError || 'Failed to load.'}
-                              </div>
-                            )}
-                            {brandListState === 'loaded' && brandList.length === 0 && (
-                              <div className="px-4 py-3 text-[12px] text-gray-500 dark:text-white/50">
-                                No brands found.
-                              </div>
-                            )}
-                            {brandListState === 'loaded' &&
-                              brandList.map((b) => {
-                                const selected =
-                                  brandSource.kind === 'list' && brandSource.item.id === b.id;
-                                return (
-                                  <button
-                                    key={b.id}
-                                    type="button"
-                                    onClick={() => handleBrandIqSelect(b)}
-                                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
-                                      selected
-                                        ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                                        : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
-                                    }`}
-                                  >
-                                    {b.logoUrls?.[0] ? (
-                                      <img
-                                        src={b.logoUrls[0]}
-                                        alt=""
-                                        className="h-7 w-7 shrink-0 rounded-full bg-black/5 dark:bg-white/10 object-cover"
-                                      />
-                                    ) : (
-                                      <span className="h-7 w-7 shrink-0 rounded-full bg-black/5 dark:bg-white/10" />
-                                    )}
-                                    <span className="min-w-0 flex-1">
-                                      <span className="block truncate text-[13px] font-medium">
-                                        {b.name}
-                                      </span>
-                                      <span className="block truncate text-[11px] text-gray-500 dark:text-white/50">
-                                        {b.websiteUrl || b.description}
-                                      </span>
-                                    </span>
-                                    {selected && (
-                                      <Check size={14} className="shrink-0 text-emerald-400" />
-                                    )}
-                                  </button>
-                                );
-                              })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <span className="shrink-0 text-[16px] text-gray-500 dark:text-white/60">or</span>
-                    <div className="relative min-w-0 flex-1">
-                      <input
-                        // text (not "url") so the browser doesn't reject inputs
-                        // without a scheme like "www.google.com" — handleAutofill
-                        // normalises the URL before sending.
-                        type="text"
-                        inputMode="url"
-                        value={websiteUrl}
-                        onChange={(e) => {
-                          setWebsiteUrl(e.target.value);
-                          if (autofillState !== 'idle') setAutofillState('idle');
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAutofill();
-                          }
-                        }}
-                        placeholder="Enter your website URL..."
-                        className={`${inputCls} pr-20`}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAutofill}
-                        disabled={!websiteUrl.trim() || autofillState === 'loading'}
-                        className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-black/5 dark:bg-white/20 px-4 py-1.5 text-[12px] font-medium text-gray-900 dark:text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                      >
-                        {autofillState === 'loading' ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : null}
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                  {autofillState === 'ok' && brandSource.kind === 'autofill' && (
-                    <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-400/90">
-                      <Check size={11} /> Brand added successfully
-                    </p>
-                  )}
-                  {autofillState === 'error' && (
-                    <p className="mt-1.5 text-[11px] text-red-600 dark:text-red-300">{autofillError}</p>
-                  )}
-                </div>
-
-                <div className="mb-4">
-                  <p className="mb-2 text-[14px] font-medium text-gray-900 dark:text-white">
-                    Upload your own reference Images
-                  </p>
-                  <div
-                    onPaste={handleRefPaste}
-                    onDragOver={preventDefaultDragOver}
-                    onDrop={handleRefDrop}
-                    className="relative w-full"
-                  >
-                    <input
-                      // text (not "url") so the browser doesn't block inputs
-                      // without a scheme — we accept any string here.
-                      type="text"
-                      inputMode="url"
-                      value={referenceImageUrl}
-                      onChange={(e) => setReferenceImageUrl(e.target.value)}
-                      onKeyDown={(e) =>
-                        e.key === 'Enter' && (e.preventDefault(), handleRefImageUrlAdd())
-                      }
-                      onDragOver={preventDefaultDragOver}
-                      onDrop={handleRefDrop}
-                      placeholder="Paste your image URL or upload"
-                      className={`${inputCls} pr-36`}
-                    />
-                    <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={handleRefImageUrlAdd}
-                        disabled={!referenceImageUrl.trim()}
-                        aria-label="Add image URL"
-                        className="shrink-0 px-1 text-gray-500 transition-colors hover:text-black disabled:opacity-30 dark:text-[#909294] dark:hover:text-white"
-                      >
-                        <LinkIcon className="h-3.5 w-3.5" />
-                      </button>
-                      <label
-                        htmlFor="ref-image-upload"
-                        className="flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-3 py-1.5 text-[11px] font-medium text-gray-900 ring-1 ring-black/10 transition-colors hover:bg-black/10 dark:bg-white/20 dark:text-white dark:ring-white/10 dark:hover:bg-white/25"
-                      >
-                        <UploadCloud className="h-3.5 w-3.5 text-current" />
-                        <span className="whitespace-nowrap">Upload Image</span>
-                      </label>
-                    </div>
-                    <input
-                      id="ref-image-upload"
-                      ref={refImgInputRef}
-                      type="file"
-                      accept={ALLOWED_IMAGE_ACCEPT}
-                      multiple
-                      aria-label="Upload reference images"
-                      className="hidden"
-                      onChange={(e) => {
-                        handleRefImageFiles(e.target.files);
-                        // Reset so the same file can be picked again.
-                        e.target.value = '';
-                      }}
-                    />
-                  </div>
-                  {/* User-added refs (uploads + URL pastes + double-clicked
-                      brand-pool items). All are sent to the payload and shown
-                      in the prompt-area preview. */}
-                  {referenceImages.length > 0 && (
-                    <div className="mt-2">
-                      <div className="flex flex-wrap gap-2 2xl:gap-3">
-                        {referenceImages.map((it, i) => (
-                          <div
-                            key={`ref-${i}-${it.preview}`}
-                            className="group relative h-12 w-12 shrink-0 rounded-md border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40 2xl:h-16 2xl:w-16"
-                          >
-                            <img
-                              src={it.preview}
-                              alt={`ref-${i}`}
-                              title="Click to preview"
-                              onClick={() => openLightbox(referenceImages, i)}
-                              className="h-full w-full cursor-pointer rounded-md object-cover"
-                            />
-                            <button
-                              type="button"
-                              aria-label={`Remove reference image ${i + 1}`}
-                              onClick={() => {
-                                setReferenceImages((p) => p.filter((_, idx) => idx !== i));
-                                setImagesError('');
-                              }}
-                              className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md group-hover:opacity-100"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Brand-IQ scrape pool — display only by default. Click
-                      to toggle selection (selected items get a cyan border
-                      and start flowing into the prompt-area + payload). The
-                      eye icon on hover opens the lightbox preview without
-                      affecting selection. */}
-                  {brandImagePool.length > 0 && (
-                    <ChipRow
-                      label="Brand images — click to select, double-click to preview"
-                      options={brandImagePool.map((it) => it.preview)}
-                      isSelected={(u) => brandImagesPicked.includes(u)}
-                      onPick={(u) => {
-                        setBrandImagesPicked((prev) => {
-                          // Deselecting always succeeds and frees a slot.
-                          if (prev.includes(u)) {
-                            setImagesError('');
-                            return prev.filter((x) => x !== u);
-                          }
-                          // Selecting: respect the combined 5-cap (refs +
-                          // brand picks + competitor).
-                          if (remainingRefSlots() <= 0) {
-                            setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
-                            return prev;
-                          }
-                          setImagesError('');
-                          return [...prev, u];
-                        });
-                      }}
-                      onDoubleClick={(u) => {
-                        const urls = brandImagePool.map((it) => it.preview);
-                        setLightboxImages(urls);
-                        setLightboxImage(u);
-                        setLightboxOpen(true);
-                      }}
-                    />
-                  )}
-                  {imagesError && (
-                    <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">{imagesError}</p>
-                  )}
-                </div>
-
-                <div className="mb-5">
-                  <p className="mb-2 text-[14px] font-medium text-gray-900 dark:text-white">Brand logo</p>
-                  <div
-                    onPaste={(e) => {
-                      // Clipboard image → push as upload (strict type check).
-                      // Clipboard text URL → treat as a typed URL.
-                      const files = e.clipboardData?.files;
-                      if (files && files.length > 0) {
-                        e.preventDefault();
-                        const f = Array.from(files).find(isAllowedImageFile);
-                        if (f) {
-                          setBrandLogoFile(f);
-                          setBrandLogoUrl('');
-                          setLogoError('');
-                        } else {
-                          setLogoError(IMAGE_TYPE_ERROR);
-                        }
-                        return;
-                      }
-                      const text = e.clipboardData?.getData('text');
-                      if (text && /^https?:\/\//i.test(text.trim())) {
-                        e.preventDefault();
-                        setBrandLogoFile(null);
-                        setBrandLogoUrl(text.trim());
-                        setLogoError('');
-                      }
-                    }}
-                    onDragOver={preventDefaultDragOver}
-                    onDrop={handleLogoDrop}
-                    className="relative w-full"
-                  >
-                    <input
-                      // text (not "url") so the browser doesn't reject inputs
-                      // without a scheme — the field is for image URLs but
-                      // some users paste host-relative paths.
-                      type="text"
-                      inputMode="url"
-                      value={brandLogoUrl}
-                      onChange={(e) => {
-                        // Typing/pasting clears any previously-uploaded file —
-                        // the typed URL takes precedence.
-                        setBrandLogoUrl(e.target.value);
-                        if (brandLogoFile) setBrandLogoFile(null);
-                      }}
-                      onDragOver={preventDefaultDragOver}
-                      onDrop={handleLogoDrop}
-                      placeholder="Paste your image URL or upload"
-                      className={`${inputCls} pr-36`}
-                    />
-                    <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1.5">
-                      <LinkIcon className="h-3.5 w-3.5 text-gray-500 dark:text-[#909294]" />
-                      <label
-                        htmlFor="brand-logo-upload"
-                        className="flex cursor-pointer items-center gap-1 rounded-full bg-black/5 px-3 py-1.5 text-[11px] font-medium text-gray-900 ring-1 ring-black/10 transition-colors hover:bg-black/10 dark:bg-white/20 dark:text-white dark:ring-white/10 dark:hover:bg-white/25"
-                      >
-                        <UploadCloud className="h-3.5 w-3.5 text-current" />
-                        <span className="whitespace-nowrap">Upload Image</span>
-                      </label>
-                    </div>
-                    <input
-                      id="brand-logo-upload"
-                      ref={logoImgInputRef}
-                      type="file"
-                      accept={ALLOWED_IMAGE_ACCEPT}
-                      aria-label="Upload brand logo"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) {
-                          if (isAllowedImageFile(f)) {
-                            setBrandLogoFile(f);
-                            setBrandLogoUrl('');
-                            setLogoError('');
-                          } else {
-                            // Defensive — the accept attribute should already
-                            // filter the picker, but DnD into the picker can
-                            // still leak through in some browsers.
-                            setLogoError(IMAGE_TYPE_ERROR);
-                          }
-                        }
-                        e.target.value = '';
-                      }}
-                    />
-                  </div>
-                  {/* Uploaded logo preview — a local file shows here as a
-                      compact thumbnail (mirrors the Product Shots upload row)
-                      instead of dumping a blob: URL into the text input. */}
-                  {brandLogoFile && brandLogoFilePreview && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <div className="group relative h-[40px] w-[40px] shrink-0 cursor-pointer rounded-md border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40">
-                        <img
-                          src={brandLogoFilePreview}
-                          alt="Brand logo preview"
-                          onClick={() => {
-                            setLightboxImages([brandLogoFilePreview]);
-                            setLightboxImage(brandLogoFilePreview);
-                            setLightboxOpen(true);
-                          }}
-                          className="h-full w-full rounded-sm object-cover"
-                        />
-                        <button
-                          type="button"
-                          aria-label="Remove brand logo"
-                          onClick={() => {
-                            setBrandLogoFile(null);
-                            setLogoError('');
-                          }}
-                          className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100"
-                        >
-                          <X size={10} strokeWidth={2.5} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {/* Scraped/BrandIQ logo options — unselected by default.
-                      Single click picks; double-click opens the lightbox.
-                      Selection goes to brandLogoPicked so the URL input
-                      above stays clean (user-typed only). */}
-                  {brandLogoOptions.length > 0 && (
-                    <ChipRow
-                      label="Brand logos — click to select, double-click to preview"
-                      options={brandLogoOptions}
-                      isSelected={(u) => u === brandLogoPicked}
-                      onPick={(u) => {
-                        // Picking here clears any uploaded file — submit
-                        // precedence is file > typed URL > picked.
-                        setBrandLogoFile(null);
-                        setBrandLogoPicked((cur) => (cur === u ? '' : u));
-                      }}
-                      onDoubleClick={(u) => {
-                        setLightboxImages(brandLogoOptions);
-                        setLightboxImage(u);
-                        setLightboxOpen(true);
-                      }}
-                      rounded
-                    />
-                  )}
-                  {logoError && (
-                    <p className="mt-2 text-[11px] text-red-600 dark:text-red-300">{logoError}</p>
-                  )}
-                </div>
-
-                <div className="mb-6">
-                  <p className="mb-2 text-[16px] font-medium text-gray-900 dark:text-white">
-                    Attach a Competitor Ad Reference
-                  </p>
-                  <div className="rounded-full max-w-90 p-px [background:linear-gradient(90deg,#02C8C4_0%,#5867EB_78%)]">
+            {/* Right: References Fields */}
+            <div className="min-w-0 grid grid-cols-2 gap-x-[14px] gap-y-4 content-start">
+              {/* 1. Brand Voice */}
+              <div className="col-span-2">
+                <span className="text-[13px] font-semibold text-[#1F1D29] dark:text-white block mb-[7px]">
+                  Attach your Brand Voice
+                </span>
+                <div className="adcreative-field-white flex items-center gap-1.5 h-[44px] p-1 bg-white border border-[#CFCDD9] rounded-[12px] focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:bg-[#1a1a1f] dark:border-white/10 transition-all">
+                  <div ref={brandIqPickerWrapperRef} className="relative shrink-0">
                     <button
                       type="button"
-                      onClick={() => setShowCompetitorModal(true)}
-                      className="flex w-full max-w-90 items-center justify-center gap-2 rounded-full bg-white dark:bg-[#2f2f30] py-2.5 text-[14px] 2xl:text-base font-semibold text-gray-900 dark:text-[#ebebeb] transition-colors hover:bg-gray-50 dark:hover:bg-[#363637]"
+                      onClick={openBrandIqPicker}
+                      className="flex items-center gap-1.5 h-[34px] px-2.5 rounded-[8px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#1F1D29] text-[12px] font-medium max-w-[190px] transition-colors dark:bg-white/10 dark:text-white"
                     >
-                      <Search size={18} strokeWidth={2} />
-                      Search competitors ads
+                      {brandSource.kind === 'list' && (brandSource.item.logoUrls?.[0] || brandSource.item.logoUrl || brandSource.item.logo) ? (
+                        <img
+                          src={brandSource.item.logoUrls?.[0] || brandSource.item.logoUrl || brandSource.item.logo}
+                          alt=""
+                          className="h-4 w-4 shrink-0 rounded-[4px] object-cover"
+                        />
+                      ) : brandSource.kind === 'autofill' && brandSource.data?.brandInfo?.brandLogo?.[0] ? (
+                        <img
+                          src={brandSource.data.brandInfo.brandLogo[0]}
+                          alt=""
+                          className="h-4 w-4 shrink-0 rounded-[4px] object-cover"
+                        />
+                      ) : (
+                        <img src={brandIqIcon} alt="" className="h-4 w-4 shrink-0" />
+                      )}
+                      <span className="truncate">
+                        {brandSource.kind === 'list'
+                          ? brandSource.item.name
+                          : brandSource.kind === 'autofill'
+                            ? brandSource.data?.brandInfo?.brandName || 'Brand IQ'
+                            : 'Brand IQ'}
+                      </span>
+                      <ChevronDown size={13} className={'transition-transform ' + (showBrandIqPicker ? 'rotate-180' : '')} />
                     </button>
+                    {showBrandIqPicker && (
+                      <div className="absolute top-[calc(100%+6px)] left-0 z-40 w-[360px] p-1.5 rounded-[14px] bg-white dark:bg-[#1f1f1f] shadow-[0_25px_50px_-12px_rgba(31,29,41,0.28)] border border-black/[0.08] dark:border-white/10">
+                        <div className="grid grid-cols-2 gap-0.5 max-h-[260px] overflow-y-auto">
+                          {brandListState === 'loading' && (
+                            <div className="col-span-2 flex items-center gap-2 px-3 py-2 text-xs text-gray-500">
+                              <Loader2 size={12} className="animate-spin" /> Loading brands…
+                            </div>
+                          )}
+                          {brandListState === 'loaded' && brandList.map((item) => {
+                            const itemId = item.id || item._id;
+                            const selected = brandSource.kind === 'list' && (brandSource.item.id || brandSource.item._id) === itemId;
+                            const brandLogoSrc =
+                              item.logoUrls?.[0] ||
+                              item.logoUrl ||
+                              item.iconUrl ||
+                              item.brandLogoUrl ||
+                              item.logo ||
+                              (Array.isArray(item.brandLogo) ? item.brandLogo[0] : item.brandLogo) ||
+                              (Array.isArray(item.imageUrl) ? item.imageUrl[0] : item.imageUrl);
+
+                            return (
+                              <button
+                                key={itemId}
+                                type="button"
+                                onClick={() => handleBrandIqSelect(item)}
+                                className={'flex items-center gap-2 p-[6px_8px] rounded-[9px] text-[12.5px] text-left transition-colors min-w-0 ' + (
+                                  selected
+                                    ? 'bg-[#ECEEFD] text-[#5867EB] font-medium dark:bg-[#5867EB]/20 dark:text-[#8D99FF]'
+                                    : 'text-[#1F1D29] hover:bg-[#EFEEF3] dark:text-white dark:hover:bg-white/10'
+                                )}
+                              >
+                                {brandLogoSrc ? (
+                                  <img
+                                    src={brandLogoSrc}
+                                    alt=""
+                                    className="h-[22px] w-[22px] shrink-0 rounded-[6px] object-cover bg-white border border-black/10 dark:border-white/10"
+                                  />
+                                ) : (
+                                  <span
+                                    className={`h-[22px] w-[22px] shrink-0 rounded-[6px] ${getBrandAvatarColor(item.name)} text-white text-[9.5px] font-bold flex items-center justify-center`}
+                                  >
+                                    {item.name ? item.name.slice(0, 2).toUpperCase() : 'B'}
+                                  </span>
+                                )}
+                                <span className="truncate">{item.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="border-t border-[#E2E1E8] mt-1 pt-1 dark:border-white/10">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBrandSource({ kind: 'none' });
+                              brandSourceLogoRef.current = '';
+                              setBrandLogoOptions([]);
+                              setReferenceImages((prev) =>
+                                prev.filter((it) => !brandSourceImagesRef.current.includes(it.preview)),
+                              );
+                              setBrandImagePool([]);
+                              brandSourceImagesRef.current = [];
+                              setBrandLogoPicked('');
+                              setBrandImagesPicked([]);
+                              setShowBrandIqPicker(false);
+                            }}
+                            className="w-full flex items-center gap-2 p-[6px_8px] rounded-[9px] text-[12.5px] text-[#85829A] hover:bg-[#EFEEF3] dark:text-gray-400 dark:hover:bg-white/10"
+                          >
+                            <X size={14} /> No brand voice
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {competitorAdRef && (
-                    <p className="mt-2 text-[12px] text-gray-500 dark:text-white/50">✓ Reference added</p>
-                  )}
+                  <span className="text-[11px] text-[#85829A] px-0.5">or</span>
+                  <input
+                    type="text"
+                    value={websiteUrl}
+                    onChange={(e) => {
+                      setWebsiteUrl(e.target.value);
+                      if (autofillState === 'error' || autofillState === 'ok') {
+                        setAutofillState('idle');
+                        setAutofillError('');
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAutofill();
+                      }
+                    }}
+                    placeholder="Enter your website URL..."
+                    className="flex-1 min-w-0 border-0 bg-transparent px-1 text-[13px] text-[#1F1D29] placeholder:text-[#85829A] outline-none dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAutofill}
+                    disabled={!websiteUrl.trim() || autofillState === 'loading'}
+                    className="h-[34px] px-[14px] rounded-[8px] bg-[#1F1D29] hover:bg-black text-white text-[12px] font-semibold transition-opacity disabled:bg-[#C9C7D4] disabled:cursor-default dark:disabled:border dark:disabled:border-white/10 dark:disabled:bg-[#34343B] dark:disabled:text-[#8F8D99]"
+                  >
+                    {autofillState === 'loading' ? <Loader2 size={12} className="animate-spin" /> : 'Add'}
+                  </button>
                 </div>
+                {autofillState === 'error' && (
+                  <p className="mt-2 flex items-center gap-1.5 text-[11px] text-red-400">
+                    <AlertCircle size={12} /> {autofillError}
+                  </p>
+                )}
+                {autofillState === 'ok' && brandSource.kind === 'autofill' && (
+                  <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-500">
+                    <Check size={11} /> Brand added successfully
+                  </p>
+                )}
+              </div>
+
+              {/* 2. Upload your own reference Images */}
+              <div className="col-span-2">
+                <FileUploadField
+                  label="Upload your own reference Images"
+                  placeholder="Paste your image URL or upload"
+                  url={referenceImageUrl}
+                  onUrlChange={(v) => {
+                    setReferenceImageUrl(v);
+                    if (v.trim()) setImagesError('');
+                  }}
+                  files={referenceImages}
+                  onAddFiles={(items) => {
+                    const slots = remainingRefSlots();
+                    if (slots <= 0) {
+                      setImagesError('You can attach up to ' + MAX_REFS_TOTAL + ' images.');
+                      return;
+                    }
+                    const incoming = items.slice(0, slots);
+                    setReferenceImages((prev) => [...prev, ...incoming]);
+                    if (items.length > slots) {
+                      setImagesError('You can attach up to ' + MAX_REFS_TOTAL + ' images.');
+                    } else {
+                      setImagesError('');
+                    }
+                  }}
+                  onRemoveFile={(i) => {
+                    setReferenceImages((p) => p.filter((_, idx) => idx !== i));
+                    setImagesError('');
+                  }}
+                  onPreview={(i) => openLightbox(referenceImages, i)}
+                  onInvalidType={() => setImagesError(IMAGE_TYPE_ERROR)}
+                />
+                {imagesError && <FieldError message={imagesError} />}
+                {brandImagePool.length > 0 && (
+                  <BrandImageChipRow
+                    options={brandImagePool.map((it) => it.preview)}
+                    isSelected={(u) => brandImagesPicked.includes(u)}
+                    onPick={(u) => {
+                      setBrandImagesPicked((prev) => {
+                        if (prev.includes(u)) {
+                          setImagesError('');
+                          return prev.filter((x) => x !== u);
+                        }
+                        if (remainingRefSlots() <= 0) {
+                          setImagesError('You can attach up to ' + MAX_REFS_TOTAL + ' images.');
+                          return prev;
+                        }
+                        setImagesError('');
+                        return [...prev, u];
+                      });
+                    }}
+                    onDoubleClick={(u) => {
+                      const urls = brandImagePool.map((it) => it.preview);
+                      setLightboxImages(urls);
+                      setLightboxImage(u);
+                      setLightboxOpen(true);
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* 3. Brand logo */}
+              <div className="col-span-2">
+                <FileUploadField
+                  label="Brand logo"
+                  placeholder="Paste your image URL or upload"
+                  url={brandLogoUrl}
+                  onUrlChange={(v) => {
+                    setBrandLogoUrl(v);
+                    if (brandLogoFile) setBrandLogoFile(null);
+                    if (v.trim()) setLogoError('');
+                  }}
+                  files={brandLogoFile ? [{ file: brandLogoFile, preview: brandLogoFilePreview }] : []}
+                  onAddFiles={(items) => {
+                    if (items[0]?.file) {
+                      setBrandLogoFile(items[0].file);
+                      setBrandLogoUrl('');
+                      setLogoError('');
+                    } else if (items[0]?.preview) {
+                      setBrandLogoFile(null);
+                      setBrandLogoUrl(items[0].preview);
+                      setLogoError('');
+                    }
+                  }}
+                  onRemoveFile={() => {
+                    setBrandLogoFile(null);
+                    setLogoError('');
+                  }}
+                  onPreview={() => {
+                    if (brandLogoFilePreview) {
+                      setLightboxImages([brandLogoFilePreview]);
+                      setLightboxImage(brandLogoFilePreview);
+                      setLightboxOpen(true);
+                    }
+                  }}
+                  onInvalidType={() => setLogoError(IMAGE_TYPE_ERROR)}
+                  multiple={false}
+                />
+                {logoError && <FieldError message={logoError} />}
+                {brandLogoOptions.length > 0 && (
+                  <BrandImageChipRow
+                    options={brandLogoOptions}
+                    isSelected={(u) => u === brandLogoPicked}
+                    onPick={(u) => {
+                      setBrandLogoFile(null);
+                      setBrandLogoPicked((cur) => (cur === u ? '' : u));
+                    }}
+                    onDoubleClick={(u) => {
+                      setLightboxImages(brandLogoOptions);
+                      setLightboxImage(u);
+                      setLightboxOpen(true);
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* 4. Attach a Competitor Ad Reference */}
+              <div className="col-span-2">
+                <span className="text-[13px] font-semibold text-[#1F1D29] dark:text-white block mb-[7px]">
+                  Attach a Competitor Ad Reference
+                </span>
+                <div className="group rounded-full max-w-90 p-px [background:linear-gradient(90deg,rgba(2,200,196,0.5)_0%,rgba(88,103,235,0.5)_78%)] transition-all hover:[background:linear-gradient(90deg,rgba(2,200,196,0.75)_0%,rgba(88,103,235,0.75)_78%)]">
+                  <button
+                    type="button"
+                    onClick={() => setShowCompetitorModal(true)}
+                    className="flex w-full max-w-90 items-center justify-center gap-2 rounded-full bg-white dark:bg-[#1a1a1f] py-2 text-[13px] font-semibold text-[#1F1D29] dark:text-[#ebebeb] transition-colors hover:bg-gray-50 dark:hover:bg-[#25252d]"
+                  >
+                    <Search size={16} strokeWidth={2.2} />
+                    Search competitors ads
+                  </button>
+                </div>
+                {competitorAdRef && (
+                  <p className="mt-1.5 text-[12px] text-emerald-600 dark:text-emerald-400 font-medium">✓ Reference added</p>
+                )}
               </div>
             </div>
           </div>
-          <div className="mt-4 flex items-center justify-end gap-3">
+
+          <div className="flex justify-end items-center gap-[10px] mt-[18px] pt-[14px] border-t border-[#E2E1E8] dark:border-white/10">
             {total > 0 && (
-              <span className="rounded-full bg-gray-100 dark:bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-gray-500 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/5">
-                –{total * creditsPerImage} credits
+              <span className="text-[12px] text-[#85829A] font-medium border border-[#E2E1E8] bg-white rounded-full px-[9px] py-[3px] dark:bg-[#1a1a1f] dark:border-white/10 dark:text-gray-300">
+                ~{total * creditsPerImage} credits
               </span>
             )}
             <button
               type="submit"
               disabled={!prompt.trim() || total === 0 || isSubmittingLocal}
-              className="flex items-center gap-2 rounded-full bg-gray-900 text-white dark:bg-white px-8 py-2.5 text-base font-medium dark:text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-[42px] px-[26px] rounded-[11px] bg-[#5867EB] hover:bg-[#4755D9] text-white font-semibold text-[14px] shadow-[0_8px_18px_-8px_rgba(88,103,235,0.6)] transition-all disabled:bg-[#B9C0F5] disabled:shadow-none disabled:cursor-default dark:disabled:border dark:disabled:border-white/10 dark:disabled:bg-[#353442] dark:disabled:text-[#9692AB] flex items-center gap-2"
             >
-              {isSubmittingLocal && <Loader2 size={14} className="animate-spin" />}
+              {isSubmittingLocal && <Loader2 size={16} className="animate-spin" />}
               {isSubmittingLocal ? 'Generating…' : 'Generate'}
             </button>
           </div>
@@ -1718,18 +1446,184 @@ export function AiCreativesCustom({ onClose, onComplete }) {
 // clicks don't fire on the first half of a double-click. Active chip gets
 // a cyan ring + check. `rounded` switches between square (images) and
 // pill-shaped (logos) chips.
-function ChipRow({ label, options, isSelected, onPick, onDoubleClick, rounded }) {
+function FieldLabel({ children, required }) {
+  return (
+    <span className="block text-[13px] font-semibold text-[#1F1D29] dark:text-white mb-[7px]">
+      {children}
+      {required && <span className="text-[#5867EB] ml-0.5">*</span>}
+    </span>
+  );
+}
+
+function FieldError({ message, prominent = false }) {
+  if (!message) return null;
+  if (prominent) {
+    return (
+      <div
+        className="mt-3 flex items-start gap-2.5 rounded-xl border border-red-500/35 bg-red-500/10 px-3.5 py-3 text-[13px] font-medium leading-5 text-red-700 shadow-sm dark:border-red-400/35 dark:bg-red-500/15 dark:text-red-200"
+        role="alert"
+        aria-live="assertive"
+      >
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden="true" />
+        <span>{message}</span>
+      </div>
+    );
+  }
+  return (
+    <p className="mt-1.5 text-[12px] text-red-400" role="alert">
+      {message}
+    </p>
+  );
+}
+
+function FileUploadField({
+  label,
+  placeholder,
+  url,
+  onUrlChange,
+  files,
+  onAddFiles,
+  onRemoveFile,
+  onPreview,
+  onInvalidType,
+  multiple = true,
+  hidePreview = false,
+  className,
+}) {
+  const inputRef = useRef(null);
+  const [isDrag, setIsDrag] = useState(false);
+
+  const acceptFiles = (fileList) => {
+    const arr = Array.from(fileList || []);
+    const valid = arr.filter(isAllowedImageFile);
+    const rejected = arr.length - valid.length;
+    if (valid.length > 0) {
+      onAddFiles(valid.map((f) => ({ file: f, preview: URL.createObjectURL(f) })));
+    }
+    if (rejected > 0) onInvalidType?.();
+  };
+
+  return (
+    <div className={className}>
+      {label && <FieldLabel>{label}</FieldLabel>}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ALLOWED_IMAGE_ACCEPT}
+        multiple={multiple}
+        className="hidden"
+        onChange={(e) => {
+          acceptFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+      <div
+        onPaste={(e) => {
+          const dtFiles = e.clipboardData?.files;
+          if (dtFiles && dtFiles.length > 0) {
+            e.preventDefault();
+            acceptFiles(dtFiles);
+            return;
+          }
+          const text = e.clipboardData?.getData('text');
+          if (text && /^https?:\/\//i.test(text.trim())) {
+            e.preventDefault();
+            onAddFiles([{ file: null, preview: text.trim() }]);
+            onUrlChange('');
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDrag(true);
+        }}
+        onDragLeave={() => setIsDrag(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDrag(false);
+          const dtFiles = e.dataTransfer?.files;
+          if (dtFiles && dtFiles.length > 0) {
+            acceptFiles(dtFiles);
+            return;
+          }
+          const dragged = e.dataTransfer?.getData('text/uri-list') || e.dataTransfer?.getData('text/plain') || '';
+          const trimmed = dragged.trim();
+          if (trimmed && /^https?:\/\//i.test(trimmed)) {
+            onAddFiles([{ file: null, preview: trimmed }]);
+            onUrlChange('');
+          }
+        }}
+        className={'adcreative-field-white flex items-center gap-1.5 h-[42px] pl-3 pr-1 bg-white border rounded-[10px] transition-all ' + (
+          isDrag
+            ? 'border-solid border-[#5867EB] ring-[3px] ring-[#5867EB]/16'
+            : 'border-dashed border-[#CFCDD9] focus-within:border-solid focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16'
+        ) + ' dark:bg-[#1a1a1f] dark:border-white/10'}
+      >
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => onUrlChange(e.target.value)}
+          placeholder={placeholder}
+          className="flex-1 min-w-0 border-0 bg-transparent text-[13px] text-[#1F1D29] placeholder:text-[#85829A] outline-none dark:text-white"
+        />
+        <LinkIcon size={14} className="text-[#85829A] shrink-0" />
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          title="Upload image"
+          className="h-[34px] w-[34px] shrink-0 rounded-[8px] bg-[#ECEEFD] hover:bg-[#C9CEF8] text-[#5867EB] flex items-center justify-center transition-colors dark:bg-indigo-950/60 dark:text-indigo-300"
+        >
+          <UploadCloud size={16} strokeWidth={2} />
+        </button>
+      </div>
+
+      {!hidePreview && (files.length > 0 || url?.trim()) && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {files.map((it, i) => (
+            <div
+              key={it.preview + '-' + i}
+              className="relative h-[34px] w-[34px] shrink-0 rounded-[8px] border border-[#3AD0C8] bg-white transition-transform hover:-translate-y-0.5"
+            >
+              <img
+                src={it.preview}
+                alt=""
+                onClick={() => onPreview?.(i)}
+                className="h-full w-full rounded-[7px] object-cover cursor-pointer"
+              />
+              <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#3AD0C8] text-white border-2 border-white text-[10px]">
+                <Check size={10} strokeWidth={3} />
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveFile(i);
+                }}
+                className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white shadow"
+              >
+                <X size={10} strokeWidth={2.5} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BrandImageChipRow({ options, isSelected, onPick, onDoubleClick }) {
   const clickTimers = useRef({});
   return (
-    <div className="mt-3">
-      <p className="mb-1.5 text-[11px] text-gray-500 dark:text-white/50">{label}</p>
-      <div className="flex flex-wrap gap-2 2xl:gap-3">
-        {options.map((url, i) => {
+    <div className="mt-2">
+      <p className="text-[10.5px] font-medium text-[#85829A] mb-[5px]">
+        From your brand · double-click to preview
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((item, i) => {
+          const url = typeof item === 'string' ? item : item?.preview || '';
+          if (!url) return null;
           const selected = isSelected?.(url);
-          const shape = rounded ? 'rounded-full' : 'rounded-md';
-          const sizing = rounded
-            ? 'h-12 w-12 2xl:h-14 2xl:w-14'
-            : 'h-12 w-12 2xl:h-16 2xl:w-16';
           const handleSingle = () => {
             clearTimeout(clickTimers.current[url]);
             clickTimers.current[url] = setTimeout(() => {
@@ -1744,34 +1638,189 @@ function ChipRow({ label, options, isSelected, onPick, onDoubleClick, rounded })
           };
           return (
             <div
-              key={`chip-${i}-${url}`}
+              key={'bp-' + i + '-' + url}
               onClick={handleSingle}
               onDoubleClick={handleDouble}
-              title={
-                selected
-                  ? 'Click to remove · double-click to preview'
-                  : 'Click to select · double-click to preview'
-              }
-              className={`relative shrink-0 cursor-pointer ${sizing} ${shape} transition ${
-                selected
-                  ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
-                  : 'border border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30'
-              }`}
+              title={selected ? 'Click to remove · double-click to preview' : 'Click to select · double-click to preview'}
+              className={'relative h-[34px] w-[34px] shrink-0 rounded-[8px] border bg-white cursor-pointer transition-transform hover:-translate-y-0.5 ' + (
+                selected ? 'border-[#3AD0C8]' : 'border-[#E2E1E8]'
+              )}
             >
-              <img
-                src={url}
-                alt=""
-                className={`h-full w-full ${shape} object-cover`}
-              />
+              <img src={url} alt="" className="h-full w-full rounded-[7px] object-cover" />
               {selected && (
-                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow">
-                  <Check className="h-3 w-3" strokeWidth={3} />
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#3AD0C8] text-white border-2 border-white text-[10px]">
+                  <Check size={10} strokeWidth={3} />
                 </span>
               )}
             </div>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function QualityPickerPill({ value, onChange, model }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const { models } = useAdCreativeConfig();
+  const qualities = models.find((m) => m.apiId === model)?.qualities || [];
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (e.target?.closest?.('[data-aspect-quantity-menu]')) return;
+      if (!ref.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const activeLabel = qualityLabel(value);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
+      >
+        {activeLabel}
+        <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[140px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+          {qualities.map((q) => {
+            const selected = q === value;
+            return (
+              <button
+                key={q}
+                type="button"
+                onClick={() => {
+                  onChange(q);
+                  setOpen(false);
+                }}
+                className={'flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ' + (
+                  selected
+                    ? 'bg-[#ECEEFD] text-[#5867EB] font-medium dark:bg-[#5867EB]/20 dark:text-[#8D99FF]'
+                    : 'text-gray-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white'
+                )}
+              >
+                <span className="flex-1">{qualityLabel(q)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModelPickerPill({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const { models } = useAdCreativeConfig();
+  const selectedModel = models.find((m) => m.apiId === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (e.target?.closest?.('[data-aspect-quantity-menu]')) return;
+      if (!ref.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
+      >
+        <span aria-hidden className="flex h-3.5 w-3.5 items-center justify-center">
+          <ModelIcon apiId={value} icon={selectedModel?.icon} />
+        </span>
+        {selectedModel?.label || value}
+        <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+          {models.map((opt) => {
+            const selected = opt.apiId === value;
+            return (
+              <button
+                key={opt.apiId}
+                type="button"
+                onClick={() => {
+                  onChange(opt.apiId);
+                  setOpen(false);
+                }}
+                className={'flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ' + (
+                  selected
+                    ? 'bg-[#ECEEFD] text-[#5867EB] font-medium dark:bg-[#5867EB]/20 dark:text-[#8D99FF]'
+                    : 'text-gray-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white'
+                )}
+              >
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
+                  <ModelIcon apiId={opt.apiId} icon={opt.icon} />
+                </span>
+                <span className="flex-1">{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RatioPickerPill({ counts, onChange, model, quality }) {
+  const { models } = useAdCreativeConfig();
+  const selectedModel = models.find((m) => m.apiId === model);
+  const creditsPerImage =
+    selectedModel?.creditsByQuality?.[quality] ?? selectedModel?.creditsPerImage ?? 7;
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const total = totalImages(counts);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (e.target?.closest?.('[data-aspect-quantity-menu]')) return;
+      if (!ref.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
+      >
+        <Proportions size={16} strokeWidth={1.8} className="text-gray-600 dark:text-white/70" />
+        <span className="h-3 w-px bg-black/20 dark:bg-white/20" />
+        <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-500 dark:text-white/50" />
+        <span className="text-xs font-medium">
+          {total} Image{total !== 1 ? 's' : ''}
+        </span>
+        <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
+      </button>
+      <AnimatedPanel
+        open={open}
+        className="absolute right-0 bottom-full z-30 mb-2 w-[300px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-4 shadow-2xl ring-1 ring-black/10 dark:ring-white/10"
+      >
+        <AspectRatioTiles
+          counts={counts}
+          onChange={onChange}
+          ratios={selectedModel?.aspectRatios || []}
+          creditsPerImage={creditsPerImage}
+        />
+      </AnimatedPanel>
     </div>
   );
 }

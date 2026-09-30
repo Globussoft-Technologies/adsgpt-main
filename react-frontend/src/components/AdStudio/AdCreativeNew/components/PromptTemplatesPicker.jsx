@@ -286,31 +286,30 @@ function TokenInput({ name, value, onChange }) {
       onKeyDown={handleKeyDown}
       data-ph={`{${name}}`}
       title={`Up to ${MAX_TOKEN_LENGTH} characters`}
-      className={`pt-token mx-0.5 rounded-md border px-1.5 text-[12px] outline-none transition-colors ${
+      className={`inline mx-0.5 px-1.5 py-0.5 rounded-[6px] text-[12px] outline-none transition-colors whitespace-pre-wrap ${
         empty
-          ? 'pt-token-empty pt-token-glow border-transparent py-0.5 bg-cyan-200/50 font-medium text-cyan-900 focus:border-cyan-400/60 dark:bg-cyan-300/15 dark:text-cyan-100'
-          : 'border-transparent bg-cyan-500/10 font-semibold text-cyan-800 dark:bg-cyan-300/10 dark:text-cyan-100'
+          ? 'bg-[#FFFBEB] border border-dashed border-[#F59E0B] text-[#B45309] pt-token-empty'
+          : 'bg-[#CFFAFE] text-[#0E7490] border border-transparent focus:border-[#22D3EE] focus:bg-[#ECFEFF]'
       }`}
     />
   );
 }
 
-// Pill button in the Prompt label row that toggles the panel.
+// Compact sparkle icon button in the Prompt label row that toggles the panel.
 export function TemplatesTrigger({ controller }) {
   const { open, setOpen } = controller;
   return (
     <button
       type="button"
       onClick={() => setOpen((v) => !v)}
-      className="flex shrink-0 items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-[12px] font-light text-gray-600 ring-1 ring-black/10 transition-colors hover:bg-black/5 dark:bg-[#909294]/10 dark:text-[#f0f0f0] dark:ring-white/5 dark:hover:bg-[#33333a]"
+      className={`flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border transition-colors ${
+        open
+          ? 'bg-[#ECEEFD] border-[#C9CEF8] text-[#5867EB]'
+          : 'bg-white border-[#E2E1E8] text-[#5867EB] hover:bg-[#ECEEFD] hover:border-[#C9CEF8] dark:bg-white/5 dark:border-white/10 dark:text-indigo-300'
+      }`}
+      title="Templates"
     >
-      <Sparkles size={14} className="text-gray-500 dark:text-white/60" />
-      Templates
-      <ChevronDown
-        size={16}
-        strokeWidth={2}
-        className={`text-gray-500 transition-transform dark:text-white/40 ${open ? 'rotate-180' : ''}`}
-      />
+      <Sparkles size={16} />
     </button>
   );
 }
@@ -318,8 +317,8 @@ export function TemplatesTrigger({ controller }) {
 // How far the panel can shrink / grow when dragged. The floor keeps the
 // filter bar + a couple of rows visible; the ceiling stops it from ballooning
 // into a mostly-empty box and shoving the prompt below the fold.
-const MIN_PANEL_HEIGHT = 180;
-const MAX_PANEL_HEIGHT = 420;
+const MIN_PANEL_HEIGHT = 150;
+const MAX_PANEL_HEIGHT = 360;
 
 // Drag handle rendered between the panel and the prompt box. Dragging DOWN
 // grows the templates picker (and shrinks the prompt box); dragging UP does
@@ -328,8 +327,6 @@ const MAX_PANEL_HEIGHT = 420;
 export function TemplatesResizer({ controller }) {
   const { open, panelHeight, setPanelHeight } = controller;
   const dragRef = useRef(null);
-
-  if (!open) return null;
 
   const onPointerDown = (e) => {
     dragRef.current = { startY: e.clientY, startH: panelHeight };
@@ -357,21 +354,29 @@ export function TemplatesResizer({ controller }) {
   };
 
   return (
-    <div
-      role="separator"
-      aria-orientation="horizontal"
-      aria-label="Resize templates panel"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      /* -mt-3 cancels the panel's own mb-3 so the handle sits INSIDE the
-         existing gap instead of adding a second one; mb-1 leaves just a
-         small space above the prompt box. */
-      className="group -mt-3 mb-1 flex h-3 shrink-0 cursor-row-resize touch-none items-center justify-center"
-    >
-      <div className="h-1 w-10 rounded-full bg-black/15 transition-colors group-hover:bg-black/30 dark:bg-white/20 dark:group-hover:bg-white/40" />
-    </div>
+    <AnimatePresence>
+      {open && (
+        <Motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 12 }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.2 }}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize templates panel"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          /* -mt-3 cancels the panel's own mb-3 so the handle sits INSIDE the
+             existing gap instead of adding a second one; mb-1 leaves just a
+             small space above the prompt box. */
+          className="group -mt-3 mb-1 flex shrink-0 cursor-row-resize touch-none items-center justify-center overflow-hidden"
+        >
+          <div className="h-1 w-10 rounded-full bg-black/15 transition-colors group-hover:bg-black/30 dark:bg-white/20 dark:group-hover:bg-white/40" />
+        </Motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -439,12 +444,15 @@ export function TemplatesPanel({ controller }) {
               — instead of being a separately-animated marginBottom on the
               Motion.div, which can finish a frame off from the height
               animation and produce a tiny "settle" at the end. */}
-          <div className="rounded-20 mb-3 overflow-hidden bg-gray-100 ring-1 ring-black/10 dark:bg-[#909294]/10 dark:ring-white/10">
+          <div
+            className="mb-3 overflow-hidden rounded-[20px] border border-[#CFCDD9] bg-[#F3F3F6] dark:border-white/10 dark:bg-[#1a1a1f]"
+            style={{ height: panelHeight }}
+          >
             {state !== 'loaded' && (
-              <div className="px-4 py-3">
+              <div className="flex h-full items-center justify-center px-4 py-3">
                 {state === 'loading' && (
                   <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-white/60">
-                    <Loader2 size={12} className="animate-spin" />
+                    <Loader2 size={16} className="animate-spin text-[#5867EB]" />
                     Loading templates…
                   </div>
                 )}
@@ -454,58 +462,49 @@ export function TemplatesPanel({ controller }) {
                   </div>
                 )}
                 {state === 'idle' && (
-                  <div className="text-[12px] text-gray-500 dark:text-white/50">Preparing…</div>
+                  <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-white/60">
+                    <Loader2 size={16} className="animate-spin text-[#5867EB]" />
+                    Preparing…
+                  </div>
                 )}
               </div>
             )}
 
             {state === 'loaded' && templates.length === 0 && (
-              <div className="px-4 py-3 text-[12px] text-gray-500 dark:text-white/50">
+              <div className="flex h-full items-center justify-center px-4 py-3 text-[12px] text-gray-500 dark:text-white/50">
                 No templates available.
               </div>
             )}
 
             {state === 'loaded' && templates.length > 0 && (
-              <div className="flex flex-col" style={{ height: panelHeight }}>
-                {/* Filter bar — single full-width search. The category is no
-                    longer picked here: it's auto-selected from the chosen
-                    brand (or defaults to General) and shown as the rail
-                    heading below. Searching spans every loaded category.
-                    (hidden until VITE_FEATURE_PROMPT_CATEGORIES=true) */}
-                {IS_PROMPT_CATEGORIES_ENABLED && (
-                <div className="flex shrink-0 items-center px-3 py-2.5">
-                  <div className="relative min-w-0 flex-1">
-                    <Search
-                      size={15}
-                      className="absolute top-1/2 left-3 -translate-y-1/2 text-gray-400 dark:text-white/40"
-                    />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search all templates…"
-                      className="h-9 w-full min-w-0 rounded-full bg-white pr-3 pl-9 text-[12.5px] text-gray-700 outline-none ring-1 ring-black/10 placeholder:text-gray-400 focus:ring-1 focus:ring-black/10 dark:bg-[#1f1f23] dark:text-white/90 dark:ring-white/10 dark:placeholder:text-white/40 dark:focus:ring-white/20"
-                    />
-                  </div>
+              <div className="flex flex-col h-full">
+                {/* Filter bar — single full-width search. */}
+                <div className="p-[7px_12px] shrink-0 relative">
+                  <Search
+                    size={14}
+                    className="absolute top-1/2 left-6 -translate-y-1/2 text-[#9CA3AF]"
+                  />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search all templates…"
+                    className="templates-search-input adcreative-white-input h-[32px] w-full rounded-full border border-[#E2E1E8] !bg-white pl-8 pr-3 text-[12px] text-[#1F1D29] placeholder:text-[#85829A] outline-none transition-all focus:border-[#5867EB] focus:ring-[3px] focus:ring-[#5867EB]/16 dark:border-white/10 dark:!bg-[#1a1a1f] dark:text-white"
+                  />
                 </div>
-                )}
 
                 {/* Two-column content area — fills remaining height */}
-                <div className="min-h-0 flex-1 flex">
+                <div className="min-h-0 flex flex-1">
                   {/* Left rail — template list (scrollable) */}
-                  <div className="flex w-43 flex-col border-r border-black/10 p-2 sm:w-47 dark:border-white/10">
-                    {/* Heading reflects what the list is showing:
-                        • searching → the result count for the query
-                        • classifying a brand → a "finding" spinner
-                        • otherwise → the active category (brand-derived or
-                          the General default). */}
+                  <div className="w-[176px] shrink-0 border-r border-[#E2E1E8] p-2 flex flex-col dark:border-white/10">
+                    {/* Heading reflects what the list is showing */}
                     {(() => {
                       const searching = Boolean(searchQuery?.trim());
                       const base =
-                        'flex items-center gap-1.5 px-2 pt-1 pb-2 text-[11px] font-semibold tracking-wide uppercase';
+                        'flex items-center gap-1.5 px-2 pt-0.5 pb-1.5 text-[10.5px] font-semibold tracking-wider uppercase';
                       if (searching) {
                         return (
-                          <div className={`${base} text-gray-500 dark:text-white/60`}>
+                          <div className={`${base} text-gray-400 dark:text-white/50`}>
                             <Search size={11} className="shrink-0" />
                             <span className="truncate">
                               {filteredTemplates.length} result
@@ -516,7 +515,7 @@ export function TemplatesPanel({ controller }) {
                       }
                       if (categoryResolving) {
                         return (
-                          <div className={`${base} text-cyan-600 dark:text-cyan-300`}>
+                          <div className={`${base} text-indigo-600 dark:text-indigo-400`}>
                             <Loader2 size={11} className="shrink-0 animate-spin" />
                             <span className="truncate">Finding category…</span>
                           </div>
@@ -524,22 +523,22 @@ export function TemplatesPanel({ controller }) {
                       }
                       return (
                         <div
-                          className={`${base} text-gray-500 dark:text-white/60`}
+                          className={`${base} text-gray-400 dark:text-white/50`}
                           title={selectedCategory}
                         >
-                          <LayoutGrid size={11} className="shrink-0 text-cyan-500 dark:text-cyan-300" />
-                          <span className="truncate">{selectedCategory || 'General'}</span>
+                          <LayoutGrid size={13} className="shrink-0 text-[#06B6D4]" />
+                          <span className="truncate">{selectedCategory || 'GENERAL'}</span>
                         </div>
                       );
                     })()}
                     <div
                       onScroll={onRailScroll}
-                      className={`min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1 scrollbar-auto-hide ${
+                      className={`min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
                         railScrolling ? 'is-scrolling' : ''
                       }`}
                     >
                       {filteredTemplates.length === 0 && (
-                        <div className="px-2 py-3 text-[11px] text-gray-500 dark:text-white/50">
+                        <div className="px-2 py-3 text-[11px] text-gray-400 dark:text-white/50">
                           No matching templates.
                         </div>
                       )}
@@ -554,33 +553,18 @@ export function TemplatesPanel({ controller }) {
                               <button
                                 type="button"
                                 onClick={() => previewTemplate(t)}
-                                className={`flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] transition-colors ${
+                                className={`flex w-full items-center gap-2 rounded-[8px] p-[6px_8px] text-left text-[12px] mb-0.5 transition-colors ${
                                   isPreviewed
-                                    ? 'bg-gray-900 text-white dark:bg-white/20 dark:text-white'
-                                    : 'text-gray-800 hover:bg-black/5 dark:text-white/90 dark:hover:bg-white/10'
+                                    ? 'bg-[#111827] text-white'
+                                    : 'text-[#1F2937] hover:bg-black/5 dark:text-white/80 dark:hover:bg-white/10'
                                 }`}
                               >
                                 <RowIcon
-                                  size={13}
-                                  className={`shrink-0 ${isPreviewed ? 'text-white/90' : rowColor}`}
+                                  size={12}
+                                  className={`shrink-0 ${isPreviewed ? 'text-white' : rowColor}`}
                                 />
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate">{label}</span>
-                                  {/* During a global search, show which category
-                                      each result came from. */}
-                                  {searchQuery?.trim() && t._category && (
-                                    <span
-                                      className={`block truncate text-[10px] ${
-                                        isPreviewed
-                                          ? 'text-white/60'
-                                          : 'text-gray-400 dark:text-white/40'
-                                      }`}
-                                    >
-                                      {t._category}
-                                    </span>
-                                  )}
-                                </span>
-                                {isActive && <Check size={14} className="shrink-0 text-emerald-400" />}
+                                <span className="min-w-0 flex-1 truncate">{label}</span>
+                                {isPreviewed && <Check size={12} className="shrink-0 text-white" />}
                               </button>
                             </TooltipTrigger>
                             <TooltipContent
@@ -592,34 +576,26 @@ export function TemplatesPanel({ controller }) {
                             </TooltipContent>
                           </Tooltip>
                         );
-                      })}                      
+                      })}
                     </div>
                   </div>
 
                   {/* Right detail — fixed-height preview column */}
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col p-4">
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col p-[10px_14px]">
                     {!previewedTemplate ? (
-                      <div className="flex flex-1 items-center justify-center text-center text-[12px] text-gray-500 dark:text-white/50">
+                      <div className="flex flex-1 items-center justify-center text-center text-[12px] text-gray-400 dark:text-white/50">
                         Pick a template on the left to preview it.
                       </div>
                     ) : (
                       <>
-                        <div className="mb-2 shrink-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[13.5px] font-semibold text-gray-900 dark:text-white">
-                              {previewedTemplate.title || 'Template'}
-                            </span>
-                            {(previewedTemplate._category || previewedTemplate.category) && (
-                              <span className="flex shrink-0 items-center gap-1 text-[10.5px] text-gray-400 dark:text-white/40">
-                                <LayoutGrid size={10} className="shrink-0" />
-                                {previewedTemplate._category || previewedTemplate.category}
-                              </span>
-                            )}
-                          </div>
+                        <div className="mb-1.5 shrink-0">
+                          <h4 className="text-[13px] font-semibold text-[#111827] dark:text-white mb-1 shrink-0">
+                            {previewedTemplate.title || 'Template'}
+                          </h4>
                         </div>
                         <div
                           onScroll={onPreviewScroll}
-                          className={`min-h-0 flex-1 overflow-y-auto px-1 py-2 text-[12.5px] leading-relaxed text-gray-700 scrollbar-auto-hide dark:text-white/80 ${
+                          className={`min-h-0 flex-1 overflow-y-auto p-[2px_4px_6px] text-[12px] leading-[1.65] text-[#374151] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden dark:text-white/80 ${
                             previewScrolling ? 'is-scrolling' : ''
                           }`}
                         >
@@ -630,11 +606,7 @@ export function TemplatesPanel({ controller }) {
                           )}
                         </div>
                         {(() => {
-                          // Button is gated until the brand picker has surfaced a
-                          // brand name. Target audience is optional — its token
-                          // stays as a yellow chip if missing.
                           const canUse = true;
-                          // const canUse = Boolean(brandName);
                           const missing = [];
                           if (!brandName) missing.push('brand');
                           const skippedLabel = skippedPlaceholders
@@ -642,13 +614,13 @@ export function TemplatesPanel({ controller }) {
                             .join(', ');
 
                           return (
-                            <div className="mt-2 flex shrink-0 items-center justify-between gap-2">
-                              {IS_PROMPT_CATEGORIES_ENABLED && skippedPlaceholders.length > 0 ? (
+                            <div className="mt-2 flex shrink-0 items-center justify-between gap-2 pt-1 border-t border-gray-100 dark:border-white/10">
+                              {skippedPlaceholders.length > 0 ? (
                                 <span
                                   title={`Fill in the highlighted field${skippedPlaceholders.length > 1 ? 's' : ''}: ${skippedLabel}`}
-                                  className="flex min-w-0 items-center gap-1 text-[10.5px] text-amber-600 dark:text-amber-300/90"
+                                  className="flex min-w-0 items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400"
                                 >
-                                  <AlertCircle size={11} className="shrink-0" />
+                                  <AlertCircle size={12} className="shrink-0 text-amber-500" />
                                   <span className="truncate">
                                     {skippedPlaceholders.length} field
                                     {skippedPlaceholders.length > 1 ? 's' : ''} to fill
@@ -660,9 +632,7 @@ export function TemplatesPanel({ controller }) {
                               <button
                                 type="button"
                                 onClick={useTemplate}
-                                // disabled={!canUse}
-                                title={canUse ? undefined : `Add a ${missing.join(' and ')} first`}
-                                className="shrink-0 rounded-full bg-gray-900 px-4 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40 dark:bg-white dark:text-gray-900"
+                                className="shrink-0 rounded-full bg-black px-4 py-1.5 text-[12px] font-semibold text-white transition-opacity hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black dark:hover:bg-gray-200"
                               >
                                 Use this prompt →
                               </button>

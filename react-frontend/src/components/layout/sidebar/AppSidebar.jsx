@@ -3,6 +3,8 @@ import {
   Bot,
   ChartNoAxesColumn,
   ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   History,
   Library,
   LogOut,
@@ -13,9 +15,7 @@ import {
 } from 'lucide-react';
 import AdsGPTLogoDarkLogo from '@/assets/layouts/adsgpt-dark-mode-logo.svg';
 import AdsGPTLogo from '@/assets/layouts/adsgpt-logo.webp';
-import AdsGPTLightModeLogo from '@/assets/layouts/adsgpt-light-mode-logo.png';
 import brandIQDarkLogo from '@/assets/layouts/appsidebar/brand-iq-dark.svg';
-import adStudioDarkLogo from '@/assets/layouts/appsidebar/ad-studio-dark.svg';
 import adFactoryDarkLogo from '@/assets/layouts/appsidebar/ad-factory-dark.svg';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
@@ -68,8 +68,7 @@ const NAV_GROUPS_STATIC = [
         label: 'Ad Studio',
         compactLabel: 'AdStudio',
         link: '/adstudio',
-        icon: adStudioDarkLogo,
-        lightIcon: Sparkles,
+        lucideIcon: Sparkles,
         featureKey: 'adStudio',
       },
       IS_LANDING_ANALYZER_ENABLED && {
@@ -123,7 +122,7 @@ const AppSidebar = () => {
   const location = useLocation();
   const currentRoute = location.pathname;
   const dispatch = useDispatch();
-  const { userData } = useSelector((state) => state.socket);
+  const { userData, credits } = useSelector((state) => state.socket);
 
   const workspacePayload = sessionPayload();
   const memberSession = isWorkspaceMember(workspacePayload);
@@ -132,8 +131,21 @@ const AppSidebar = () => {
   const profileDisplayName = memberSession
     ? workspacePayload.actorUserName || workspacePayload.actorUserEmail || 'Workspace member'
     : userData?.user_name || 'User';
+  const formattedProfileDisplayName = profileDisplayName
+    ? `${profileDisplayName.charAt(0).toUpperCase()}${profileDisplayName.slice(1)}`
+    : 'User';
   const profileFooterLabel = memberSession ? 'Workspace account' : 'Account';
   const profileImage = memberSession ? '' : userData?.profileImage;
+  const planName = userData?.featureObject?.planDetails?.name;
+  const totalCredits = Number(credits?.totalCredits);
+  const creditsUsed = Number(credits?.creditsUsed);
+  const hasCreditSummary = Number.isFinite(totalCredits) && totalCredits > 0;
+  const remainingCredits = hasCreditSummary
+    ? Math.max(0, totalCredits - (Number.isFinite(creditsUsed) ? creditsUsed : 0))
+    : null;
+  const creditUsagePercentage = hasCreditSummary
+    ? Math.min(100, Math.max(0, ((totalCredits - remainingCredits) / totalCredits) * 100))
+    : 0;
 
   const profileInitials = (() => {
     if (memberSession) return profileDisplayName.slice(0, 2).toUpperCase();
@@ -147,11 +159,6 @@ const AppSidebar = () => {
     if (lastName) return lastName.slice(0, 2).toUpperCase();
     return userName.slice(0, 2).toUpperCase();
   })();
-
-  // Workspace subtitle shown in expanded header
-  const workspaceSubtitle = memberSession
-    ? workspacePayload.workspaceName || 'Workspace'
-    : userData?.company_name || userData?.login || 'Personal';
 
   const activeAdStudioTabId = useSelector((state) => state.adStudioTabs.activeAdStudioTabId);
   const { activePage, savedCount } = useSelector((state) => state.adVideoNew);
@@ -205,7 +212,6 @@ const AppSidebar = () => {
     if (isMobile) setOpenMobile(false);
   };
 
-  // ── Logo click: navigate to Ad Studio Ad Creative ───────────────────────
   const handleLogoClick = () => {
     dispatch(setActiveAdStudioTab('adCreativeNew'));
     dispatch(setAdCreativeNewActivePage('home'));
@@ -227,8 +233,7 @@ const AppSidebar = () => {
   const showLibraryGroup = showWorkspace || showMySpace;
 
   // ── Layout mode: showExpanded = wide nav with labels ───────────────────
-  // Sidebar expansion is permanently disabled; the sidebar remains in compact mode.
-  const showExpanded = false;
+  const showExpanded = isNavExpanded;
 
   // ── Badge renderer ─────────────────────────────────────────────────────
   const renderBadge = (badge) => {
@@ -239,10 +244,10 @@ const AppSidebar = () => {
         className={`sidebar-badge inline-flex flex-shrink-0 items-center justify-center font-bold leading-none ${
           isNumeric
             ? showExpanded
-              ? 'sidebar-badge--numeric h-[20px] min-w-[20px] rounded-full px-1.5 text-[9px] text-white dark:w-[18px] dark:px-0 dark:text-[9px] dark:bg-[#5E66F5]'
+              ? 'sidebar-badge--numeric h-[20px] min-w-[20px] rounded-full px-1.5 text-[9px] text-white dark:bg-[#5E66F5]'
               : 'sidebar-badge--numeric h-[18px] w-[18px] rounded-full text-[7px] 2xl:text-[9px] text-white dark:bg-[#5E66F5]'
             : showExpanded
-              ? 'sidebar-badge--label rounded-full px-[8px] py-[2.5px] text-[8px] uppercase tracking-[0.06em] dark:rounded-[4px] dark:bg-[#2A2A2A] dark:px-[5px] dark:py-[2px] dark:text-[8.5px] dark:tracking-wide dark:text-[#AFAFAF]'
+              ? 'sidebar-badge--label rounded-full px-[8px] py-[2.5px] text-[8px] uppercase tracking-[0.06em] dark:bg-[#2A2A2A] dark:text-[#AFAFAF]'
               : 'sidebar-badge--label rounded-[4px] px-[5px] py-[2px] text-[6px] 2xl:text-[8.5px] uppercase tracking-wide dark:bg-[#2A2A2A] dark:text-[#AFAFAF]'
         }`}
       >
@@ -251,44 +256,63 @@ const AppSidebar = () => {
     );
   };
 
-  // ── Icon renderer ──────────────────────────────────────────────────────
-  const renderIcon = (item, expanded) => {
-    const cls = expanded ? 'h-[26px] w-[26px] flex-shrink-0' : 'h-[24px] w-[24px] flex-shrink-0';
-    const LightIcon = item.lightIcon;
-
-    // Ad Studio keeps its Sparkles mark in both themes for a consistent identity.
-    if (item.id === 'adstudio' && LightIcon) {
-      return <LightIcon className={`${cls} sidebar-nav-icon`} aria-hidden="true" />;
+  // ── Icon renderer (Lucide vs SVG image) ──────────────────────────────────
+  const renderIcon = (item, expanded = false) => {
+    if (item.lucideIcon) {
+      const LucideIcon = item.lucideIcon;
+      return (
+        <LucideIcon
+          className={`sidebar-nav-icon ${
+            expanded
+              ? 'h-[26px] w-[26px] flex-shrink-0'
+              : 'h-[24px] w-[24px]'
+          }`}
+          aria-hidden="true"
+        />
+      );
     }
-
-    if (LightIcon && item.icon) {
+    if (item.lightIcon) {
+      const LightIcon = item.lightIcon;
       return (
         <>
-          <LightIcon className={`${cls} sidebar-nav-icon dark:hidden`} aria-hidden="true" />
           <img
             src={item.icon}
-            className={`${cls} sidebar-nav-icon hidden object-contain dark:block dark:invert dark:opacity-70`}
             alt=""
+            aria-hidden="true"
+            className={`sidebar-nav-icon hidden dark:block ${
+              expanded
+                ? 'h-[26px] w-[26px] flex-shrink-0 object-contain'
+                : 'h-[24px] w-[24px] object-contain'
+            }`}
+          />
+          <LightIcon
+            className={`sidebar-nav-icon dark:hidden ${
+              expanded
+                ? 'h-[26px] w-[26px] flex-shrink-0'
+                : 'h-[24px] w-[24px]'
+            }`}
             aria-hidden="true"
           />
         </>
       );
     }
-
-    if (item.lucideIcon) {
-      return <item.lucideIcon className={`${cls} sidebar-nav-icon`} aria-hidden="true" />;
-    }
     return (
       <img
         src={item.icon}
-        className={`${cls} sidebar-nav-icon${item.id === 'adfactory' ? ' sidebar-adfactory-icon' : ''} object-contain brightness-0 dark:invert dark:opacity-70`}
         alt=""
         aria-hidden="true"
+        className={`sidebar-nav-icon ${
+          item.id === 'adfactory' ? 'sidebar-adfactory-icon' : ''
+        } ${
+          expanded
+            ? 'h-[26px] w-[26px] flex-shrink-0 object-contain'
+            : 'h-[24px] w-[24px] object-contain'
+        }`}
       />
     );
   };
 
-  // ── Single nav item (collapsed column layout) ──────────────────────────
+  // ── Collapsed (icon-only rail) item ─────────────────────────────────────
   const CollapsedNavItem = ({ item, isActive, onClick }) => (
     <ShadcnTooltip label={item.label} side="right">
       <NavLink
@@ -296,14 +320,14 @@ const AppSidebar = () => {
         onClick={onClick}
         aria-label={item.label}
         aria-current={isActive ? 'page' : undefined}
-        className={`sidebar-nav-item sidebar-nav-item--compact${isActive ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 ${
-          item.badge ? 'h-[90px]' : 'h-[76px]'
-        }`}
+        className={`sidebar-nav-item sidebar-nav-item--compact${
+          isActive ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'
+        } relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[76px]`}
       >
         {isActive && (
           <span
             aria-hidden="true"
-            className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full dark:left-0 dark:top-2 dark:bottom-2"
+            className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full"
           />
         )}
         <div className="flex h-7 w-7 items-center justify-center">
@@ -313,7 +337,7 @@ const AppSidebar = () => {
           {item.compactLabel || item.label}
         </span>
         {item.badge && (
-          <div className="sidebar-nav-badge--compact absolute right-0 2xl:right-2 -top-2">
+          <div className="sidebar-nav-badge--compact absolute right-1.5 2xl:right-5 -top-2">
             {renderBadge(item.badge)}
           </div>
         )}
@@ -321,47 +345,74 @@ const AppSidebar = () => {
     </ShadcnTooltip>
   );
 
-  // ── Single nav item (expanded row layout) ─────────────────────────────
+  // ── Expanded (icon + label) item ─────────────────────────────────────────
   const ExpandedNavItem = ({ item, isActive, onClick }) => (
     <NavLink
       to={item.link}
       onClick={onClick}
       aria-current={isActive ? 'page' : undefined}
-      className={`sidebar-nav-item sidebar-nav-item--expanded${isActive ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
+      className={`sidebar-nav-item sidebar-nav-item--expanded${
+        isActive ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'
+      } relative flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2`}
     >
       {isActive && (
         <span
           aria-hidden="true"
-          className="nav-accent-bar absolute left-0 top-[12px] bottom-[12px] w-[2.5px] rounded-r-full"
+          className="nav-accent-bar absolute left-0 top-[10px] bottom-[10px] w-[2.5px] rounded-r-full"
         />
       )}
-      <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
+      <div className="flex w-6 flex-shrink-0 items-center justify-center">
         {renderIcon(item, true)}
       </div>
-      <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1">{item.label}</span>
-      {item.badge && renderBadge(item.badge)}
+      {item.badge ? (
+        <>
+          <div className="flex min-w-0 flex-none items-center">
+            <span className="sidebar-nav-label sidebar-nav-label--expanded min-w-0 flex-none whitespace-nowrap">
+              {item.label}
+            </span>
+            <span className="inline-flex flex-none items-center" style={{ marginLeft: '12px' }}>
+              {renderBadge(item.badge)}
+            </span>
+            <span
+              className={`sidebar-nav-active-dot ml-[2px] flex-shrink-0 ${
+                isActive
+                  ? 'sidebar-nav-active-dot--visible'
+                  : 'sidebar-nav-active-dot--hidden'
+              }`}
+              aria-hidden="true"
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <span className="sidebar-nav-label sidebar-nav-label--expanded min-w-0 flex-1 whitespace-nowrap">
+            {item.label}
+          </span>
+          {isActive && <span className="sidebar-nav-active-dot flex-shrink-0" aria-hidden="true" />}
+        </>
+      )}
     </NavLink>
   );
 
   // ── Section group header ────────────────────────────────────────────────────────────
-  const SectionHeader = ({ label, first = false }) => (
-    <div
-      className={`${
-        showExpanded
-          ? `px-4.5 pb-2 ${first ? 'pt-3.5' : 'pt-5.5'}`
-          : `flex flex-col items-center justify-center px-1 pb-2 2xl:pb-3 ${
-              first ? 'pt-3.5 2xl:pt-4.5' : 'pt-3 2xl:pt-3.5'
-            }`
-      }`}
-    >
-      {!showExpanded && !first && (
-        <div className="sidebar-section-divider mb-3 2xl:mb-3.5 h-px w-9 dark:bg-white/15" />
-      )}
-      <span className="sidebar-section-label uppercase dark:leading-normal dark:text-[#999]">
-        {label}
-      </span>
-    </div>
-  );
+  const SectionHeader = ({ label, first = false }) => {
+    if (!showExpanded) {
+      return isMobile || first ? null : (
+        <div className="flex items-center justify-center py-1.5">
+          <div className="sidebar-collapsed-group-divider h-[1px] w-5" />
+        </div>
+      );
+    }
+
+    return (
+      <div className={`flex items-center gap-2.5 px-3 pb-1.5 ${first ? 'pt-2' : 'pt-3.5'}`}>
+        <span className="sidebar-section-label uppercase dark:leading-normal dark:text-[#999]">
+          {label}
+        </span>
+        <span className="sidebar-section-label-divider h-px min-w-0 flex-1" aria-hidden="true" />
+      </div>
+    );
+  };
 
   // ── Logo box (dark rounded square with icon) ───────────────────────────
   const SidebarLogoMark = ({ className = '' }) => (
@@ -372,18 +423,6 @@ const AppSidebar = () => {
       aria-hidden="true"
     />
   );
-
-  const LogoIconBox = ({ size = 'md' }) => {
-    const cls =
-      size === 'md'
-        ? 'sidebar-logo-shell sidebar-logo-shell--light-mark flex h-[38px] w-[38px] flex-shrink-0 items-center justify-center rounded-[11px] dark:h-8 dark:w-8 dark:rounded-[9px] dark:bg-[#2A2A2A]'
-        : 'sidebar-logo-shell sidebar-logo-shell--light-mark flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[9px] dark:bg-[#2A2A2A]';
-    return (
-      <div className={cls}>
-        <SidebarLogoMark className="h-[30px] w-[30px] dark:h-[22px] dark:w-[22px]" />
-      </div>
-    );
-  };
 
   return (
     <Sidebar
@@ -398,60 +437,98 @@ const AppSidebar = () => {
         <div className="flex-shrink-0">
           {openHistory ? (
             /* History open — full brand logo covering the space + close history button */
-            <div className="flex h-[60px] 2xl:h-[68px] items-center justify-between gap-3 pl-5 pr-3.5">
+            <div className="flex h-[60px] 2xl:h-[68px] items-center justify-between gap-3 pl-3 pr-3.5">
               <Link
                 to="/adstudio"
                 onClick={handleLogoClick}
                 aria-label="Home - Ad Studio Ad Creative"
-                className="flex min-w-0 flex-1 items-center cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98] focus:outline-none"
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-md focus:outline-none"
               >
-                {/* Light mode full logo */}
-                <img
-                  src={AdsGPTLightModeLogo}
-                  alt="AdsGPT"
-                  className="h-8 2xl:h-9 w-auto max-w-[150px] 2xl:max-w-[165px] object-contain object-left dark:hidden"
-                />
-                {/* Dark mode full logo */}
                 <img
                   src={AdsGPTLogo}
                   alt="AdsGPT"
-                  className="hidden h-8 2xl:h-9 w-auto max-w-[150px] 2xl:max-w-[165px] object-contain object-left dark:block"
+                  className="h-8 w-auto max-w-[132px] object-contain object-left"
                 />
               </Link>
-              <ShadcnTooltip label="Close history">
+              <ShadcnTooltip label="Close chat history" side="right">
                 <button
                   type="button"
                   onClick={() => setOpenHistory(false)}
                   aria-label="Close history"
-                  className="sidebar-header-control flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-neutral-500 hover:text-neutral-900 transition-all hover:bg-black/5 dark:text-[#888888] dark:hover:text-white dark:hover:bg-white/10"
+                  className="sidebar-header-control flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full transition-all dark:text-[#5A5A5A] dark:hover:text-[#AFAFAF]"
                 >
                   <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 </button>
               </ShadcnTooltip>
             </div>
-          ) : (
-            /* Collapsed — logo icon mark navigation to Ad Studio Ad Creative (Home button) */
-            <div className="relative flex h-[60px] 2xl:h-[62px] items-center justify-center">
+          ) : showExpanded ? (
+            <div className="sidebar-header-expanded flex h-[56px] items-center justify-between pl-2 pr-[17px]">
               <Link
                 to="/adstudio"
                 onClick={handleLogoClick}
                 aria-label="Home - Ad Studio Ad Creative"
-                className="group relative flex h-12 w-12 items-center justify-center rounded-xl transition-transform hover:scale-105 active:scale-95 focus:outline-none cursor-pointer"
+                className="flex min-w-0 flex-1 items-center justify-start gap-[9px] rounded-md focus:outline-none"
               >
-                <SidebarLogoMark className="sidebar-compact-logo-mark h-[43px] w-[43px] 2xl:h-[51px] 2xl:w-[51px] object-contain" />
+                <SidebarLogoMark className="sidebar-expanded-logo-mark h-9 w-9 flex-shrink-0" />
+                <span className="sidebar-expanded-brand-name truncate text-[20px] font-bold leading-none text-[#1F1D29] dark:text-white">
+                  AdsGPT
+                </span>
               </Link>
+              <ShadcnTooltip label="Collapse sidebar" side="right">
+                <button
+                  type="button"
+                  onClick={toggleNavExpanded}
+                  aria-label="Collapse sidebar"
+                  className="sidebar-header-control sidebar-collapse-handle flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md transition-colors"
+                >
+                  <ChevronsLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </ShadcnTooltip>
+            </div>
+          ) : (
+            <div
+              className={`sidebar-header-compact relative flex items-center justify-center ${
+                isMobile ? 'h-[48px]' : 'h-[60px] pt-[10px] pb-[10px]'
+              }`}
+            >
+              <Link
+                to="/adstudio"
+                onClick={handleLogoClick}
+                aria-label="Home - Ad Studio Ad Creative"
+                className={`flex items-center justify-center rounded-lg focus:outline-none ${isMobile ? 'h-8 w-8' : 'h-11 w-11'}`}
+              >
+                <SidebarLogoMark
+                  className={`sidebar-compact-logo-mark object-contain ${isMobile ? 'h-6 w-6' : 'h-10 w-10'}`}
+                />
+              </Link>
+              <ShadcnTooltip label="Expand sidebar" side="right">
+                <button
+                  type="button"
+                  onClick={toggleNavExpanded}
+                  aria-label="Expand sidebar"
+                  className={`sidebar-header-control absolute top-1/2 z-20 flex -translate-y-1/2 items-center justify-center transition-colors ${
+                    isMobile
+                      ? 'right-0 h-6 w-4 rounded-l-md'
+                      : 'sidebar-expand-hitarea -right-5 h-10 w-10 rounded-md'
+                  }`}
+                >
+                  {isMobile ? (
+                    <ChevronsRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <span className="sidebar-expand-handle flex h-[26px] w-[22px] items-center justify-center rounded-md">
+                      <ChevronsRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    </span>
+                  )}
+                </button>
+              </ShadcnTooltip>
             </div>
           )}
         </div>
 
         {/* ── DIVIDER ────────────────────────────────────────────────────────── */}
-        <div
-          className={
-            openHistory
-              ? 'sidebar-divider mx-4 flex-shrink-0 border-t border-black/10 dark:border-white/15'
-              : 'sidebar-section-divider mx-auto h-px w-9 flex-shrink-0 dark:bg-white/15'
-          }
-        />
+        {!openHistory && !showExpanded && (
+          <div className="sidebar-section-divider sidebar-collapsed-header-divider mx-auto h-[1px] w-5 flex-shrink-0" />
+        )}
 
         {/* ── CHAT HISTORY SECTION (only when open) ─────────────────────────── */}
         {openHistory && activeAdStudioTabId === 'adCopy' && (
@@ -465,14 +542,16 @@ const AppSidebar = () => {
           <nav
             id="app-sidebar-navigation"
             aria-label="Primary navigation"
-            className={`flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-hide pb-2`}
+            className={`flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-hide pb-2 ${
+              !showExpanded && !isMobile ? 'pt-1' : ''
+            }`}
           >
 
             {/* Main nav groups: CREATE, MEASURE */}
             {visibleNavGroups.map((group, index) => (
-              <div key={group.id}>
+              <div key={group.id} className={!showExpanded && index > 0 ? 'mt-1' : undefined}>
                 <SectionHeader label={group.label} first={index === 0} />
-                <div className={showExpanded ? 'space-y-1 px-2.5' : 'space-y-1 2xl:space-y-2 px-2'}>
+                <div className={showExpanded ? 'space-y-1.5 px-3' : 'space-y-1 px-2'}>
                   {group.items.map((item) => {
                     const active = isItemActive(item);
                     const onClick = () => handleNavClick(item.link);
@@ -486,58 +565,8 @@ const AppSidebar = () => {
               </div>
             ))}
 
-
-
-            {/* LIBRARY group & Chat History */}
-            <div className="mt-auto">
-              {/* Ad Copy — Chat History button top of library */}
-              {currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (
-                <div className={showExpanded ? 'px-2.5 pb-1' : 'px-2'}>
-                  {showExpanded ? (
-                    <button
-                      type="button"
-                      onClick={() => setOpenHistory(!openHistory)}
-                      aria-label="Chat History"
-                      className={`sidebar-nav-item sidebar-nav-item--expanded ${
-                        openHistory ? 'sidebar-nav-item--active' : 'sidebar-nav-item--inactive'
-                      } relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
-                    >
-                      {openHistory && (
-                        <span
-                          aria-hidden="true"
-                          className="nav-accent-bar absolute left-0 top-[12px] bottom-[12px] w-[2.5px] rounded-r-full"
-                        />
-                      )}
-                      <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
-                        <History className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" aria-hidden="true" />
-                      </div>
-                      <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1 text-left">Chat History</span>
-                    </button>
-                  ) : (
-                    <ShadcnTooltip label="Chat History" side="right">
-                      <button
-                        type="button"
-                        onClick={() => setOpenHistory(!openHistory)}
-                        aria-label="Chat History"
-                        className={`sidebar-nav-item sidebar-nav-item--compact ${
-                          openHistory ? 'sidebar-nav-item--active' : 'sidebar-nav-item--inactive'
-                        } relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[76px]`}
-                      >
-                        {openHistory && (
-                          <span
-                            aria-hidden="true"
-                            className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full dark:left-0 dark:top-2 dark:bottom-2"
-                          />
-                        )}
-                        <div className="flex h-7 w-7 items-center justify-center">
-                          <History className="sidebar-nav-icon h-[24px] w-[24px]" aria-hidden="true" />
-                        </div>
-                        <span className="sidebar-nav-label sidebar-nav-label--compact whitespace-nowrap dark:text-[#AFAFAF]">History</span>
-                      </button>
-                    </ShadcnTooltip>
-                  )}
-                </div>
-              )}
+            {/* LIBRARY group */}
+            <div className="mt-1">
 
               {/* Logout (members only) — placed top of the library dividing line */}
               {memberSession && (
@@ -585,7 +614,7 @@ const AppSidebar = () => {
               {showLibraryGroup && (
                 <div>
                   <SectionHeader label="LIBRARY" />
-                  <div className={showExpanded ? 'space-y-1 px-2.5' : 'space-y-2 px-2'}>
+                  <div className={showExpanded ? 'space-y-1.5 px-3' : 'space-y-1 px-2'}>
 
                     {/* Workspace (owner only) */}
                     {showWorkspace && (() => {
@@ -601,18 +630,19 @@ const AppSidebar = () => {
                             to="/workspace/members"
                             onClick={doNav}
                             aria-current={active ? 'page' : undefined}
-                            className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
+                            className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2`}
                           >
                             {active && (
                               <span
                                 aria-hidden="true"
-                                className="nav-accent-bar absolute left-0 top-[12px] bottom-[12px] w-[2.5px] rounded-r-full"
+                                className="nav-accent-bar absolute left-0 top-[10px] bottom-[10px] w-[2.5px] rounded-r-full"
                               />
                             )}
-                            <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
+                            <div className="flex w-6 flex-shrink-0 items-center justify-center">
                               <Users className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" />
                             </div>
-                            <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1">Workspace</span>
+                            <span className="sidebar-nav-label sidebar-nav-label--expanded min-w-0 flex-1 whitespace-nowrap">Workspace</span>
+                            {active && <span className="sidebar-nav-active-dot ml-auto flex-shrink-0" aria-hidden="true" />}
                           </Link>
                         );
                       }
@@ -628,7 +658,7 @@ const AppSidebar = () => {
                             {active && (
                               <span
                                 aria-hidden="true"
-                                className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full dark:left-0 dark:top-2 dark:bottom-2"
+                                className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full"
                               />
                             )}
                             <div className="flex h-7 w-7 items-center justify-center">
@@ -658,19 +688,22 @@ const AppSidebar = () => {
                             to="/my-space"
                             onClick={doNav}
                             aria-current={active ? 'page' : undefined}
-                            className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5`}
+                            className={`sidebar-nav-item sidebar-nav-item--expanded${active ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'} relative flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2`}
                           >
                             {active && (
                               <span
                                 aria-hidden="true"
-                                className="nav-accent-bar absolute left-0 top-[12px] bottom-[12px] w-[2.5px] rounded-r-full"
+                                className="nav-accent-bar absolute left-0 top-[10px] bottom-[10px] w-[2.5px] rounded-r-full"
                               />
                             )}
-                            <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
+                            <div className="flex w-6 flex-shrink-0 items-center justify-center">
                               <Library className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" />
                             </div>
-                            <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1 text-left">My Space</span>
-                            {savedCount > 0 && renderBadge(savedCount)}
+                            <span className="sidebar-nav-label sidebar-nav-label--expanded min-w-0 flex-1 text-left whitespace-nowrap">My Space</span>
+                            <div className="flex flex-shrink-0 items-center gap-2 ml-auto">
+                              {savedCount > 0 && renderBadge(savedCount)}
+                              {active && <span className="sidebar-nav-active-dot" aria-hidden="true" />}
+                            </div>
                           </Link>
                         );
                       }
@@ -690,7 +723,7 @@ const AppSidebar = () => {
                             {active && (
                               <span
                                 aria-hidden="true"
-                                className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full dark:left-0 dark:top-2 dark:bottom-2"
+                                className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full"
                               />
                             )}
                             <div className="flex h-7 w-7 items-center justify-center">
@@ -708,7 +741,6 @@ const AppSidebar = () => {
                         </ShadcnTooltip>
                       );
                     })()}
-
                   </div>
                 </div>
               )}
@@ -717,104 +749,176 @@ const AppSidebar = () => {
           </nav>
         )}
 
-        {/* Ad Copy — Chat History button (when history drawer is open) */}
-        {openHistory && currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (
-          <div className="px-2.5 pb-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setOpenHistory(!openHistory)}
-              aria-label="Chat History"
-              className="sidebar-nav-item sidebar-nav-item--expanded sidebar-nav-item--inactive relative flex w-full items-center gap-4 rounded-[15px] px-4 py-2.5"
-            >
-              <div className="flex w-6.5 flex-shrink-0 items-center justify-center">
-                <History className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" aria-hidden="true" />
-              </div>
-              <span className="sidebar-nav-label sidebar-nav-label--expanded flex-1 text-left">Chat History</span>
-            </button>
+        {/* Ad Copy — Chat History button placed directly above account/profile tab */}
+        {currentRoute === '/adstudio' && activeAdStudioTabId === 'adCopy' && (
+          <div className={showExpanded || openHistory ? 'px-3 pb-1 pt-1 flex-shrink-0' : 'px-2 pb-1 pt-1 flex-shrink-0'}>
+            {showExpanded || openHistory ? (
+              <button
+                type="button"
+                onClick={() => setOpenHistory(!openHistory)}
+                aria-label="Chat History"
+                className={`sidebar-nav-item sidebar-nav-item--expanded${
+                  openHistory ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'
+                } relative flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2`}
+              >
+                {openHistory && (
+                  <span
+                    aria-hidden="true"
+                    className="nav-accent-bar absolute left-0 top-[10px] bottom-[10px] w-[2.5px] rounded-r-full"
+                  />
+                )}
+                <div className="flex w-6 flex-shrink-0 items-center justify-center">
+                  <History className="sidebar-nav-icon h-[26px] w-[26px] flex-shrink-0" aria-hidden="true" />
+                </div>
+                <span className="sidebar-nav-label sidebar-nav-label--expanded min-w-0 flex-1 text-left whitespace-nowrap">
+                  Chat History
+                </span>
+                {openHistory && <span className="sidebar-nav-active-dot flex-shrink-0" aria-hidden="true" />}
+              </button>
+            ) : (
+              <ShadcnTooltip label="Chat History" side="right">
+                <button
+                  type="button"
+                  onClick={() => setOpenHistory(!openHistory)}
+                  aria-label="Chat History"
+                  className={`sidebar-nav-item sidebar-nav-item--compact${
+                    openHistory ? ' sidebar-nav-item--active' : ' sidebar-nav-item--inactive'
+                  } relative flex w-full flex-col items-center justify-center gap-1.5 rounded-[14px] py-2 h-[76px]`}
+                >
+                  {openHistory && (
+                    <span
+                      aria-hidden="true"
+                      className="nav-accent-bar absolute -left-2 top-3.5 bottom-3.5 w-[3px] rounded-r-full"
+                    />
+                  )}
+                  <div className="flex h-7 w-7 items-center justify-center">
+                    <History className="sidebar-nav-icon h-[24px] w-[24px]" aria-hidden="true" />
+                  </div>
+                  <span className="sidebar-nav-label sidebar-nav-label--compact whitespace-nowrap dark:text-[#AFAFAF]">
+                    History
+                  </span>
+                </button>
+              </ShadcnTooltip>
+            )}
           </div>
-        )}
-
-        {/* Divider above profile */}
-        {(!memberSession || (memberSession && canUseWorkspaceFeature('profile', workspacePayload))) && (
-          <div
-            className={
-              showExpanded || openHistory
-                ? 'sidebar-divider mx-3.5 flex-shrink-0 border-t dark:border-white/15'
-                : 'sidebar-section-divider mx-auto mb-1.5 h-px w-9 flex-shrink-0 dark:bg-white/15'
-            }
-          />
         )}
 
         {/* ── PROFILE FOOTER (anchored at bottom) ───────────────────────────── */}
         {(!memberSession || (memberSession && canUseWorkspaceFeature('profile', workspacePayload))) ? (
           <div
-            className={`relative flex flex-shrink-0 items-center justify-center ${
-              openHistory ? 'h-[76px] px-2.5' : 'h-[64px] 2xl:h-[72px] pb-2 pt-1'
+            className={`sidebar-profile-footer relative flex flex-shrink-0 items-center justify-center ${
+              showExpanded
+                ? 'h-[88px] px-2.5 pb-2.5 pt-1'
+                : openHistory
+                  ? 'h-[58px] px-2 pb-2 pt-1'
+                  : isMobile
+                    ? 'h-[54px] pb-2 pt-1'
+                    : 'h-[64px] pb-4 pt-1'
             }`}
           >
-            {currentRoute === '/profile' && !openHistory && (
+            {currentRoute === '/profile' && !openHistory && !showExpanded && (
               <span
                 aria-hidden="true"
                 className="nav-accent-bar absolute left-0 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-r-full"
               />
             )}
-            <ShadcnTooltip label={openHistory ? undefined : 'User Profile'} side="right">
+            <ShadcnTooltip label={openHistory || showExpanded ? undefined : 'User Profile'} side="right">
               <Link
                 to="/profile"
                 onClick={() => {
                   setOpenHistory(false);
                   if (isMobile) setOpenMobile(false);
                 }}
-                aria-label={openHistory ? undefined : 'User Profile'}
+                aria-label={openHistory || showExpanded ? undefined : 'User Profile'}
                 aria-current={currentRoute === '/profile' ? 'page' : undefined}
                 className={
-                  openHistory
+                  openHistory || showExpanded
                     ? `sidebar-nav-item sidebar-nav-item--expanded${
                         currentRoute === '/profile'
                           ? ' sidebar-nav-item--active'
                           : ' sidebar-nav-item--inactive'
-                      } relative flex w-full items-center gap-3 rounded-[15px] px-3 py-2 transition-all`
+                      } ${showExpanded ? 'sidebar-account-card' : ''} relative flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2.5 transition-all`
                     : 'group relative flex items-center justify-center rounded-full focus:outline-none cursor-pointer'
                 }
               >
-                {currentRoute === '/profile' && openHistory && (
+                {currentRoute === '/profile' && (openHistory || showExpanded) && (
                   <span
                     aria-hidden="true"
                     className="nav-accent-bar absolute left-0 top-[11px] bottom-[11px] w-[2px] rounded-r-full"
                   />
                 )}
                 {/* Avatar */}
-                <div
-                  className={`sidebar-profile-button ${
-                    currentRoute === '/profile' ? 'sidebar-profile-button-active' : ''
-                  } relative flex h-10 w-10 2xl:h-11 2xl:w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full shadow-xs transition-transform duration-200 group-hover:scale-105 active:scale-95`}
-                >
-                  {profileImage ? (
-                    <img
-                      src={profileImage}
-                      alt=""
-                      aria-hidden="true"
-                      className="sidebar-profile-avatar h-full w-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="sidebar-profile-avatar flex h-full w-full items-center justify-center text-center text-xs 2xl:text-[13px] font-bold">
-                      {profileInitials}
-                    </span>
-                  )}
+                <div className="sidebar-profile-avatar-shell relative flex-shrink-0">
+                  <div
+                    className={`sidebar-profile-button ${
+                      currentRoute === '/profile' ? 'sidebar-profile-button-active' : ''
+                    } relative flex ${showExpanded ? 'h-10 w-10' : openHistory ? 'h-8 w-8' : isMobile ? 'h-9 w-9' : 'h-10 w-10'} items-center justify-center overflow-hidden rounded-full shadow-xs transition-transform duration-200 group-hover:scale-105 active:scale-95`}
+                  >
+                    {profileImage ? (
+                      <img
+                        src={profileImage}
+                        alt=""
+                        aria-hidden="true"
+                        className="sidebar-profile-avatar h-full w-full rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="sidebar-profile-avatar flex h-full w-full items-center justify-center text-center text-xs 2xl:text-[13px] font-bold">
+                        {profileInitials}
+                      </span>
+                    )}
+                  </div>
+                  <span className="sidebar-profile-status" aria-hidden="true" />
                 </div>
 
                 {/* Name + role */}
-                {openHistory && (
-                  <div className="flex min-w-0 flex-1 flex-col justify-center">
-                    <span
-                      className="sidebar-profile-name truncate dark:text-white"
-                      title={profileDisplayName}
-                    >
-                      {profileDisplayName}
-                    </span>
-                    <span className="sidebar-profile-role dark:text-[#5A5A5A]">
-                      {memberSession ? 'Member' : 'Owner'}
-                    </span>
+                {(openHistory || showExpanded) && (
+                  <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+                    <div className="flex min-w-0 items-center gap-1">
+                      <span
+                        className="sidebar-profile-name min-w-0 flex-1 truncate dark:text-white"
+                        title={formattedProfileDisplayName}
+                      >
+                        {formattedProfileDisplayName}
+                      </span>
+                      {showExpanded && planName && (
+                        <span className="sidebar-account-plan flex-shrink-0 truncate" title={planName}>
+                          {planName}
+                        </span>
+                      )}
+                    </div>
+                    {showExpanded && hasCreditSummary ? (
+                      <>
+                        <div className="sidebar-account-progress h-[2px] w-full overflow-hidden rounded-full">
+                          <span
+                            className="block h-full rounded-full"
+                            style={{ width: `${creditUsagePercentage}%` }}
+                          />
+                        </div>
+                        <div className="sidebar-account-credits">
+                          <span title={`${totalCredits.toLocaleString()} total credits`}>
+                            {totalCredits.toLocaleString('en', {
+                              notation: 'compact',
+                              maximumFractionDigits: 1,
+                            })}{' '}
+                            total
+                          </span>
+                          <span
+                            className="text-right"
+                            title={`${remainingCredits.toLocaleString()} credits left`}
+                          >
+                            {remainingCredits.toLocaleString('en', {
+                              notation: 'compact',
+                              maximumFractionDigits: 1,
+                            })}{' '}
+                            left
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <span className="sidebar-profile-role truncate dark:text-[#5A5A5A]">
+                        {showExpanded ? profileFooterLabel : memberSession ? 'Member' : 'Owner'}
+                      </span>
+                    )}
                   </div>
                 )}
               </Link>

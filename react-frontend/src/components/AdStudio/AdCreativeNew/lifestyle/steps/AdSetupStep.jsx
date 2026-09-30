@@ -11,6 +11,7 @@ import {
   Proportions,
   LinkIcon,
   Loader2,
+  Sparkles,
   UploadCloud,
   X,
 } from 'lucide-react';
@@ -20,6 +21,7 @@ import { toast } from 'react-toastify';
 import { LifestyleShell } from '../LifestyleShell';
 import { TemplatesPanel, TemplatesTrigger, TemplatesResizer } from '../../components/PromptTemplatesPicker';
 import { usePromptTemplates } from '../../components/usePromptTemplates';
+import { getBrandAvatarColor } from '../../components/AdStudioPrimitives';
 import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import geminiIcon from '@/assets/layouts/profile/Google_Gemini_icon_2025.svg.png';
 import seedanceIcon from '@/assets/layouts/profile/seedance_logo_transparent.png';
@@ -143,8 +145,8 @@ const VARIANT_CONFIG = {
     nameField: { label: 'Product Name', placeholder: 'Enter your Product Name', key: 'productName' },
     descLabel: 'Product Description',
     descPlaceholder: 'Enter your Product Description',
-    images: { label: 'Product Images:', placeholder: 'Upload your Product images' },
-    logo: { label: 'Brand Logo:', placeholder: 'Paste your Brand logo URL' },
+    images: { label: 'Product Images:', placeholder: 'Paste image URL' },
+    logo: { label: 'Brand Logo:', placeholder: 'Paste logo URL' },
   },
   'apps-saas': {
     title: 'Create your App/Saas ads',
@@ -900,21 +902,20 @@ export function AdSetupStep({
 
   return (
     <LifestyleShell title={title} onClose={onClose}>
-      <div className="relative w-full min-w-[420px] max-w-[1100px] max-h-[calc(100svh-80px)] overflow-y-auto rounded-[30px] bg-white dark:bg-[#303030]/30 p-6 ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md lg:px-8 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin] 2xl:max-h-[calc(100svh-140px)]">
-        {/* Back arrow always shows. With the single-step flow, there's no
-            prior step to return to — so falls back to `onClose`, which
-            exits the module (same as AI Creatives Custom). */}
-        {(onBack || onClose) && (
-          <button
-            type="button"
-            onClick={onBack ?? onClose}
-            aria-label="Back"
-            className="absolute top-4 left-4 z-10 flex h-12 w-12 items-center justify-center text-gray-500 dark:text-white/70 transition-colors hover:text-black dark:hover:text-white"
-          >
-            <ArrowLeft size={26} strokeWidth={2} />
-          </button>
-        )}
-        <h3 className="mb-3 text-center text-[16px] font-semibold text-gray-900 dark:text-white">{cfg.title}</h3>
+      <div className="adcreative-setup-modal relative w-full max-w-[1043px] max-h-[calc(100svh-40px)] overflow-y-auto rounded-[24px] bg-[#F5F5F8] dark:bg-[#1e1e24] p-[22px_26px] border border-[#E2E1E8] dark:border-white/10 shadow-[0_30px_70px_-30px_rgba(31,29,41,0.35),0_2px_8px_rgba(31,29,41,0.05)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="relative h-[30px] flex items-center justify-center mb-[18px]">
+          {(onBack || onClose) && (
+            <button
+              type="button"
+              onClick={onBack ?? onClose}
+              aria-label="Back"
+              className="absolute -left-2 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-[10px] text-[#4A4758] hover:text-black dark:text-white/70 dark:hover:text-white transition-colors"
+            >
+              <ArrowLeft size={24} strokeWidth={2} />
+            </button>
+          )}
+          <h3 className="text-[17px] font-bold tracking-[-0.01em] text-[#1F1D29] dark:text-white">{cfg.title}</h3>
+        </div>
 
         {errorMessage && (
           <div className="mb-4 flex items-center gap-2 rounded-2xl bg-red-500/10 px-4 py-3 text-[13px] text-red-700 ring-1 ring-red-500/30 dark:text-red-200">
@@ -933,13 +934,13 @@ export function AdSetupStep({
           </div>
         )}
 
-        <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-[455fr_443fr] lg:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,455fr)_minmax(0,443fr)] gap-[22px] items-stretch">
           {/* Left — Instructions textarea + model + ratio pills */}
-          <div className={`flex min-h-0 min-w-0 flex-col ${isLifestyle ? '' : 'mb-6 2xl:mb-2'}`}>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="text-[16px] text-gray-900 dark:text-white">
+          <div className="flex flex-1 min-w-0 flex-col h-full">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[13.5px] font-semibold text-gray-900 dark:text-white">
                 {/* Instructions<span>*</span> */}
-                Prompt<span>*</span>
+                Prompt<span className="text-[#3b82f6] font-semibold ml-0.5">*</span>
               </p>
               <TemplatesTrigger controller={templates} />
             </div>
@@ -948,10 +949,10 @@ export function AdSetupStep({
                 and the prompt box (only present while the panel is open). */}
             <TemplatesResizer controller={templates} />
             <div
-              className={`relative flex flex-1 flex-col rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 ring-1 focus-within:ring-2 focus-within:ring-black/10 dark:focus-within:ring-white/20 transition-[min-height] duration-[250ms] ease-out ${
-                templates.open ? 'min-h-[200px]' : 'min-h-[380px]'
-              } ${
-                errors.instructions ? 'ring-2 ring-red-500/60' : 'ring-black/10 dark:ring-white/10'
+              className={`adcreative-prompt-card relative flex flex-1 flex-col rounded-[16px] border bg-white dark:bg-[#1a1a1f] min-h-[140px] transition-colors ${
+                errors.instructions
+                  ? 'border-red-500 ring-1 ring-red-500/30'
+                  : 'border-[#CFCDD9] focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:border-white/10'
               }`}
             >
               <textarea
@@ -961,7 +962,8 @@ export function AdSetupStep({
                   clearError('instructions');
                 }}
                 placeholder="How would you like your creatives....."
-                className="min-h-0 flex-1 resize-none rounded-t-[24px] bg-transparent px-6 pt-5 pb-2 text-[15px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf]/80"
+                style={{ backgroundColor: 'transparent' }}
+                className="flex-1 min-h-[60px] resize-none border-0 !bg-transparent bg-transparent px-[18px] pt-4 pb-2 text-[14px] leading-[1.6] text-[#1F1D29] placeholder:text-[#85829A] outline-none dark:text-white dark:placeholder:text-gray-500 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               />
               {/* Prompt-box preview row — selected images (key visuals +
                   model refs for Lifestyle; product/reference images
@@ -1017,33 +1019,28 @@ export function AdSetupStep({
                   ))}
                 </div>
               )}
-              <div className="flex flex-wrap items-center justify-end gap-2 px-3 pb-3">
-                {/* Improve prompt with Gemini — same icon + behaviour as
-                    Ad Studio's chat-bar wand. Sits immediately to the left
-                    of the model picker. */}
+              <div className="flex items-center gap-1.5 p-[8px_10px] bg-[#FAFAFC] border-t border-[#E2E1E8] rounded-b-[16px] dark:bg-white/5 dark:border-white/10">
                 <button
                   type="button"
                   onClick={handleImprovePrompt}
                   disabled={!instructions.trim() || isSuggestingPrompt}
-                  title="Improve with Gemini"
-                  className="flex h-8 w-8 items-center justify-center rounded-full transition-all hover:scale-110 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Enhance prompt"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#ECEEFD] hover:bg-[#C9CEF8] text-[#5867EB] transition-colors disabled:opacity-40 mr-auto dark:bg-indigo-950/60 dark:text-indigo-300"
                 >
                   {isSuggestingPrompt ? (
-                    <Loader2 size={20} className="animate-spin text-gray-900 dark:text-white" />
+                    <Loader2 size={16} className="animate-spin" />
                   ) : (
-                    <img
-                      src={chatResponseDark}
-                      alt="Improve with Gemini"
-                      className="h-5 w-5 2xl:h-6 2xl:w-6"
-                    />
+                    <Sparkles size={16} />
                   )}
                 </button>
-                {/* HIDE-MARK — Quality picker hidden. Unhide: flip SHOW_QUALITY_PICKER to true. */}
-                {SHOW_QUALITY_PICKER && (
-                  <QualityPickerPill value={quality} onChange={setQuality} model={model} />
-                )}
-                <ModelPickerPill value={model} onChange={setModel} />
-                <RatioPickerPill counts={ratioCounts} onChange={setRatioCounts} model={model} quality={quality} />
+                <div className="flex items-center gap-1.5">
+                  {/* HIDE-MARK — Quality picker hidden. Unhide: flip SHOW_QUALITY_PICKER to true. */}
+                  {SHOW_QUALITY_PICKER && (
+                    <QualityPickerPill value={quality} onChange={setQuality} model={model} />
+                  )}
+                  <ModelPickerPill value={model} onChange={setModel} />
+                  <RatioPickerPill counts={ratioCounts} onChange={setRatioCounts} model={model} quality={quality} />
+                </div>
               </div>
             </div>
             {errors.instructions && (
@@ -1057,184 +1054,192 @@ export function AdSetupStep({
               structure: column flows naturally, outer modal's overflow-y-auto
               handles scroll. No flex-1/overflow-y-auto here so the grid row
               doesn't pin to this column's height. */}
-          <div className={`flex flex-col ${isLifestyle ? '' : 'mt-10'}`}>
-            <div className="space-y-6 p-1">
-              {/* Inline brand-voice picker — replaces the standalone
-                  BrandInfoStep. Picking from BrandIQ or hitting Add on a
-                  URL autofills the form below. */}
-              <div className="relative lg:mr-3">
-                <FieldLabel>Attach your Brand Voice</FieldLabel>
-                <div className="mt-3 flex min-w-0 items-center gap-2 rounded-full bg-[var(--ws-surface-control)] dark:bg-[#909294]/10 p-1 border border-[var(--ws-border)] dark:border-white/5">
-                  <div ref={brandIqWrapperRef} className="relative min-w-0">
-                    <button
-                      type="button"
-                      onClick={handleBrandIqOpen}
-                      className={`flex min-w-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-[#24211D] dark:text-white transition-colors ${
-                        brandSource.kind === 'list' || brandSource.kind === 'autofill'
-                          ? 'bg-[var(--ws-surface-header)] border border-[var(--ws-border)] dark:border-transparent dark:bg-white/15'
-                          : 'bg-white border border-[var(--ws-border)] hover:bg-[var(--ws-surface-header)] dark:bg-[#303030] dark:border-transparent dark:hover:bg-[#3a3a3a]'
-                      }`}
-                    >
-                      <img src={brandIqIcon} alt="" className="h-3.5 w-3.5" />
-                      <span className="min-w-0 max-w-[200px] truncate">
-                        {brandSource.kind === 'list'
-                          ? brandSource.item.name
-                          : brandSource.kind === 'autofill'
-                            ? brandSource.data?.brandInfo?.brandName || 'Brand IQ'
-                            : 'Brand IQ'}
-                      </span>
-                      <ChevronDown
-                        size={12}
-                        className={`transition-transform ${showBrandIqPicker ? 'rotate-180' : ''}`}
-                      />
-                    </button>
-                    {/* BrandIQ dropdown */}
-                    {showBrandIqPicker && (
-                      <div className="absolute top-full left-0 z-40 mt-2 w-[280px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-                        <div
-                          className="max-h-[280px] overflow-y-auto overscroll-contain [scrollbar-width:thin]"
-                          onWheel={(e) => e.stopPropagation()}
-                        >
-                          {brandListState === 'loading' && (
-                            <div className="flex items-center gap-2 px-4 py-3 text-[12px] text-gray-500 dark:text-white/60">
-                              <Loader2 size={12} className="animate-spin" />
-                              Loading brands…
-                            </div>
-                          )}
-                          {brandListState === 'error' && (
-                            <div className="px-4 py-3 text-[12px] text-red-600 dark:text-red-300">
-                              {brandListError || 'Failed to load brands'}
-                            </div>
-                          )}
-                          {brandListState === 'loaded' && brandList.length === 0 && (
-                            <div className="px-4 py-3 text-[12px] text-gray-500 dark:text-white/50">
-                              No brands saved yet.
-                            </div>
-                          )}
-                          {brandListState === 'loaded' &&
-                            brandList.map((item) => {
-                              const itemId = item.id || item._id;
-                              const sourceId =
-                                brandSource.kind === 'list'
-                                  ? brandSource.item.id || brandSource.item._id
-                                  : null;
-                              const selected = sourceId && itemId && sourceId === itemId;
-                              return (
-                                <button
-                                  type="button"
-                                  key={itemId || item.name}
-                                  onClick={() => handleBrandIqSelect(item)}
-                                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
-                                    selected
-                                      ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                                      : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
-                                  }`}
-                                >
-                                  {item.logoUrls?.[0] ? (
-                                    <img
-                                      src={item.logoUrls[0]}
-                                      alt=""
-                                      className="h-7 w-7 shrink-0 rounded-full bg-black/5 dark:bg-white/10 object-cover"
-                                    />
-                                  ) : (
-                                    <span className="h-7 w-7 shrink-0 rounded-full bg-black/5 dark:bg-white/10" />
-                                  )}
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-[13px] font-medium text-gray-900 dark:text-white">
-                                      {item.name}
-                                    </span>
-                                    <span className="block truncate text-[11px] text-gray-500 dark:text-white/50">
-                                      {item.websiteUrl || item.description}
-                                    </span>
-                                  </span>
-                                  {selected && (
-                                    <Check size={14} className="shrink-0 text-emerald-400" />
-                                  )}
-                                </button>
-                              );
-                            })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-gray-500 dark:text-white/40">or</span>
-                  <input
-                    type="text"
-                    inputMode="url"
-                    value={bvWebsiteUrl}
-                    onChange={(e) => {
-                      setBvWebsiteUrl(e.target.value);
-                      if (autofillState === 'error' || autofillState === 'ok') {
-                        setAutofillState('idle');
-                        setAutofillError('');
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAutofill();
-                      }
-                    }}
-                    placeholder="Enter your website URL..."
-                    className="min-w-0 flex-1 border-0 border-none bg-transparent px-2 text-[13px] font-light text-gray-900 shadow-none outline-none ring-0 placeholder:text-gray-500 focus:border-0 focus:outline-none focus:ring-0 dark:text-white dark:placeholder:text-[#afafaf]/80"
-                  />
+          <div className="min-w-0 grid grid-cols-2 gap-x-[14px] gap-y-4 content-start">
+            {/* 1. Brand Voice */}
+            <div className="col-span-2">
+              <span className="text-[13px] font-semibold text-[#1F1D29] dark:text-white block mb-[7px]">Attach your Brand Voice</span>
+              <div
+              className="adcreative-field-white flex items-center gap-1.5 h-[44px] p-1 bg-white border border-[#CFCDD9] rounded-[12px] focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:bg-[#1a1a1f] dark:border-white/10 transition-all">
+                <div ref={brandIqWrapperRef} className="relative shrink-0">
                   <button
                     type="button"
-                    onClick={handleAutofill}
-                    disabled={!bvWebsiteUrl.trim() || autofillState === 'loading'}
-                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-gray-700 dark:bg-[#606060] px-4 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+                    onClick={handleBrandIqOpen}
+                    className="flex items-center gap-1.5 h-[34px] px-2.5 rounded-[8px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#1F1D29] text-[12px] font-medium max-w-[190px] transition-colors dark:bg-white/10 dark:text-white"
                   >
-                    {autofillState === 'loading' && (
-                      <Loader2 size={12} className="animate-spin" />
+                    {brandSource.kind === 'list' && (brandSource.item.logoUrls?.[0] || brandSource.item.logoUrl || brandSource.item.logo) ? (
+                      <img
+                        src={brandSource.item.logoUrls?.[0] || brandSource.item.logoUrl || brandSource.item.logo}
+                        alt=""
+                        className="h-4 w-4 shrink-0 rounded-[4px] object-cover"
+                      />
+                    ) : brandSource.kind === 'autofill' && brandSource.data?.brandInfo?.brandLogo?.[0] ? (
+                      <img
+                        src={brandSource.data.brandInfo.brandLogo[0]}
+                        alt=""
+                        className="h-4 w-4 shrink-0 rounded-[4px] object-cover"
+                      />
+                    ) : (
+                      <img src={brandIqIcon} alt="" className="h-4 w-4 shrink-0" />
                     )}
-                    Add
+                    <span className="truncate">
+                      {brandSource.kind === 'list'
+                        ? brandSource.item.name
+                        : brandSource.kind === 'autofill'
+                          ? brandSource.data?.brandInfo?.brandName || 'Brand IQ'
+                          : 'Brand IQ'}
+                    </span>
+                    <ChevronDown size={13} className={`transition-transform ${showBrandIqPicker ? 'rotate-180' : ''}`} />
                   </button>
-                </div>
+                  {showBrandIqPicker && (
+                    <div className="absolute top-[calc(100%+6px)] left-0 z-40 w-[360px] p-1.5 rounded-[14px] bg-white dark:bg-[#1f1f1f] shadow-[0_25px_50px_-12px_rgba(31,29,41,0.28)] border border-black/[0.08] dark:border-white/10">
+                      <div className="grid grid-cols-2 gap-0.5 max-h-[260px] overflow-y-auto">
+                        {brandListState === 'loading' && (
+                          <div className="col-span-2 flex items-center gap-2 px-3 py-2 text-xs text-gray-500">
+                            <Loader2 size={12} className="animate-spin" /> Loading brands…
+                          </div>
+                        )}
+                        {brandListState === 'loaded' && brandList.map((item) => {
+                          const itemId = item.id || item._id;
+                          const selected = brandSource.kind === 'list' && (brandSource.item.id || brandSource.item._id) === itemId;
+                          const brandLogoSrc =
+                            item.logoUrls?.[0] ||
+                            item.logoUrl ||
+                            item.iconUrl ||
+                            item.brandLogoUrl ||
+                            item.logo ||
+                            (Array.isArray(item.brandLogo) ? item.brandLogo[0] : item.brandLogo) ||
+                            (Array.isArray(item.imageUrl) ? item.imageUrl[0] : item.imageUrl);
 
-                {/* Selection feedback now lives inside the Brand IQ pill
-                    itself (matches AiCreativesCustom), so the "Using {name}"
-                    / "Brand added successfully" status rows are intentionally
-                    omitted. Only the failure case still surfaces below. */}
-                {autofillState === 'error' && (
-                  <p className="mt-2 flex items-center gap-1.5 text-[11px] text-red-400">
-                    <AlertCircle size={12} /> {autofillError}
-                  </p>
-                )}
+                          return (
+                            <button
+                              key={itemId}
+                              type="button"
+                              onClick={() => handleBrandIqSelect(item)}
+                              className={`flex items-center gap-2 p-[6px_8px] rounded-[9px] text-[12.5px] text-left transition-colors min-w-0 ${
+                                selected
+                                  ? 'bg-[#ECEEFD] text-[#5867EB] font-medium dark:bg-[#5867EB]/20 dark:text-[#8D99FF]'
+                                  : 'text-[#1F1D29] hover:bg-[#EFEEF3] dark:text-white dark:hover:bg-white/10'
+                              }`}
+                            >
+                              {brandLogoSrc ? (
+                                <img
+                                  src={brandLogoSrc}
+                                  alt=""
+                                  className="h-[22px] w-[22px] shrink-0 rounded-[6px] object-cover bg-white border border-black/10 dark:border-white/10"
+                                />
+                              ) : (
+                                <span
+                                  className={`h-[22px] w-[22px] shrink-0 rounded-[6px] ${getBrandAvatarColor(item.name)} text-white text-[9.5px] font-bold flex items-center justify-center`}
+                                >
+                                  {item.name ? item.name.slice(0, 2).toUpperCase() : 'B'}
+                                </span>
+                              )}
+                              <span className="truncate">{item.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="border-t border-[#E2E1E8] mt-1 pt-1 dark:border-white/10">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBrandSource({ kind: 'none' });
+                            fillFromBrand({ name: '', description: '', logoUrls: [], imageUrls: [] });
+                            setShowBrandIqPicker(false);
+                          }}
+                          className="w-full flex items-center gap-2 p-[6px_8px] rounded-[9px] text-[12.5px] text-[#85829A] hover:bg-[#EFEEF3] dark:text-gray-400 dark:hover:bg-white/10"
+                        >
+                          <X size={14} /> No brand voice
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <span className="text-[11px] text-[#85829A] px-0.5">or</span>
+                <input
+                  type="text"
+                  value={bvWebsiteUrl}
+                  onChange={(e) => {
+                    setBvWebsiteUrl(e.target.value);
+                    if (autofillState === 'error' || autofillState === 'ok') {
+                      setAutofillState('idle');
+                      setAutofillError('');
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAutofill();
+                    }
+                  }}
+                  placeholder="Enter your website URL..."
+                  className="flex-1 min-w-0 border-0 bg-transparent px-1 text-[13px] text-[#1F1D29] placeholder:text-[#85829A] outline-none dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={handleAutofill}
+                  disabled={!bvWebsiteUrl.trim() || autofillState === 'loading'}
+                  className="h-[34px] px-[14px] rounded-[8px] bg-[#1F1D29] hover:bg-black text-white text-[12px] font-semibold transition-opacity disabled:bg-[#C9C7D4] disabled:cursor-default dark:disabled:border dark:disabled:border-white/10 dark:disabled:bg-[#34343B] dark:disabled:text-[#8F8D99]"
+                >
+                  {autofillState === 'loading' ? <Loader2 size={12} className="animate-spin" /> : 'Add'}
+                </button>
               </div>
 
-              {cfg.nameField && (
-                <LabeledInput
-                  label={cfg.nameField.label}
-                  required
+              {autofillState === 'error' && (
+                <p className="mt-2 flex items-center gap-1.5 text-[11px] text-red-400">
+                  <AlertCircle size={12} /> {autofillError}
+                </p>
+              )}
+            </div>
+
+            {/* 2. Product Name */}
+            {cfg.nameField && (
+              <div className="col-span-2">
+                <FieldLabel required>{cfg.nameField.label}</FieldLabel>
+                <input
+                  type="text"
                   value={nameValue}
-                  onChange={(v) => {
-                    setNameValue(v);
+                  onChange={(e) => {
+                    setNameValue(e.target.value);
                     clearError('name');
                   }}
                   placeholder={cfg.nameField.placeholder}
-                  error={errors.name}
-                  className="lg:mr-3"
+                  aria-invalid={Boolean(errors.name) || undefined}
+                  className={`adcreative-white-input h-[42px] w-full rounded-[10px] border !bg-white px-[14px] text-[14px] text-[#1F1D29] placeholder:text-[#85829A] outline-none transition-all dark:border-white/10 dark:!bg-[#1a1a1f] dark:text-white ${
+                    errors.name
+                      ? 'border-red-500 ring-1 ring-red-500/30'
+                      : 'border-[#CFCDD9] focus:border-[#5867EB] focus:ring-[3px] focus:ring-[#5867EB]/16'
+                  }`}
                 />
-              )}
+                <FieldError message={errors.name} />
+              </div>
+            )}
 
-              <LabeledInput
-                label={cfg.descLabel}
-                required={isLifestyle}
+            {/* 3. Product Description */}
+            <div className="col-span-2">
+              <FieldLabel required={isLifestyle}>{cfg.descLabel}</FieldLabel>
+              <textarea
                 value={productDescription}
-                onChange={(v) => {
-                  setProductDescription(v);
+                onChange={(e) => {
+                  setProductDescription(e.target.value);
                   clearError('productDescription');
                 }}
                 placeholder={cfg.descPlaceholder}
-                error={errors.productDescription}
-                className="lg:mr-3"
+                aria-invalid={Boolean(errors.productDescription) || undefined}
+                className={`adcreative-white-input h-[78px] w-full resize-none rounded-[12px] border bg-white p-[10px_14px] text-[14px] leading-[1.5] text-[#1F1D29] placeholder:text-[#85829A] outline-none transition-all [scrollbar-width:none] [&::-webkit-scrollbar]:hidden dark:border-white/10 dark:bg-[#1a1a1f] dark:text-white ${
+                  errors.productDescription
+                    ? 'border-red-500 ring-1 ring-red-500/30'
+                    : 'border-[#CFCDD9] focus:border-[#5867EB] focus:ring-[3px] focus:ring-[#5867EB]/16'
+                }`}
               />
+              <FieldError message={errors.productDescription} />
+            </div>
 
               {isLifestyle && (
-                <div className="space-y-3 lg:mr-3">
+                <div className="col-span-2 space-y-2.5">
                   <FieldLabel>Model Description</FieldLabel>
-                  <div className="rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 p-4 ring-1 ring-black/10 dark:ring-white/5 sm:p-5">
-                    <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:gap-x-8">
+                  <div className="rounded-[16px] bg-white border border-[#CFCDD9] p-3.5 dark:bg-[#1a1a1f] dark:border-white/10">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5">
                       <PillDropdown
                         label="Age"
                         value={age}
@@ -1272,7 +1277,7 @@ export function AdSetupStep({
                         options={WARDROBE_OPTIONS}
                       />
                     </div>
-                    <div className="mt-8">
+                    <div className="mt-3.5 pt-3 border-t border-[#E2E1E8] dark:border-white/10">
                       <FileUploadField
                         label="Model Reference Images (If any):"
                         placeholder="Upload your model Image or URL"
@@ -1294,7 +1299,7 @@ export function AdSetupStep({
                 </div>
               )}
 
-              <div className="lg:mr-3">
+              <div className={cfg.logo ? "col-span-1" : "col-span-2"}>
                 <FileUploadField
                   label={cfg.images.label}
                   placeholder={cfg.images.placeholder}
@@ -1359,7 +1364,7 @@ export function AdSetupStep({
               </div>
 
               {cfg.logo && (
-                <div className="lg:mr-3">
+                <div className="col-span-1">
                   <FileUploadField
                     label={cfg.logo.label}
                     placeholder={cfg.logo.placeholder}
@@ -1407,19 +1412,17 @@ export function AdSetupStep({
             </div>
           </div>
 
-        </div>
-
-        <div className="mt-2 flex items-center justify-end gap-3">
+        <div className="flex justify-end items-center gap-[10px] mt-[18px] pt-[14px] border-t border-[#E2E1E8] dark:border-white/10">
           {total > 0 && (
-            <span className="rounded-full bg-gray-100 dark:bg-[#909294]/15 px-4 py-2 text-[13px] font-medium text-gray-500 dark:text-white/70 ring-1 ring-black/10 dark:ring-white/5">
-              –{total * creditsPerImage} credits
+            <span className="text-[12px] text-[#85829A] font-medium border border-[#E2E1E8] bg-white rounded-full px-[9px] py-[3px] dark:bg-[#1a1a1f] dark:border-white/10 dark:text-gray-300">
+              ~{total * creditsPerImage} credits
             </span>
           )}
           <button
             type="button"
             onClick={handleGenerate}
             disabled={!canGenerate}
-            className="flex items-center justify-center rounded-full bg-gray-900 text-white dark:bg-white px-8 py-2.5 text-base font-semibold dark:text-black transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-[42px] px-[26px] rounded-[11px] bg-[#5867EB] hover:bg-[#4755D9] text-white font-semibold text-[14px] shadow-[0_8px_18px_-8px_rgba(88,103,235,0.6)] transition-all disabled:bg-[#B9C0F5] disabled:shadow-none disabled:cursor-default dark:disabled:border dark:disabled:border-white/10 dark:disabled:bg-[#353442] dark:disabled:text-[#9692AB]"
           >
             Generate
           </button>
@@ -1438,12 +1441,65 @@ export function AdSetupStep({
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
+function PillDropdown({ label, value, onChange, options = [] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
+  const display = value || options[0] || 'Select';
+
+  return (
+    <div ref={ref} className="relative flex items-center justify-between gap-1.5 min-w-0">
+      <span className="text-[12px] text-[#85829A] dark:text-gray-400 font-medium shrink-0">{label}</span>
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="inline-flex items-center justify-between gap-1.5 h-[30px] px-2 rounded-[8px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-white"
+        >
+          <span className="max-w-[75px] truncate">{display}</span>
+          <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {open && (
+          <div className="absolute top-[calc(100%+4px)] right-0 z-40 min-w-[130px] max-h-[180px] overflow-y-auto rounded-[12px] bg-white dark:bg-[#1f1f1f] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.2)] border border-[#E2E1E8] dark:border-white/10 p-1">
+            {options.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => {
+                  onChange(opt);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-left ${
+                  opt === value
+                    ? 'bg-[#ECEEFD] text-[#5867EB] font-medium dark:bg-[#5867EB]/20 dark:text-[#8D99FF]'
+                    : 'text-gray-700 hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10'
+                }`}
+              >
+                <span>{opt}</span>
+                {opt === value && <Check size={12} className="text-[#5867EB] dark:text-[#8D99FF]" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FieldLabel({ children, required }) {
   return (
-    <p className="text-[14px] text-gray-900 dark:text-white">
+    <span className="block text-[13px] font-semibold text-[#1F1D29] dark:text-white mb-[7px]">
       {children}
-      {required && <span>*</span>}
-    </p>
+      {required && <span className="text-[#5867EB] ml-0.5">*</span>}
+    </span>
   );
 }
 
@@ -1468,7 +1524,7 @@ function FieldError({ message, prominent = false }) {
   );
 }
 
-function LabeledInput({ label, required, value, onChange, placeholder, error, className="" }) {
+function LabeledInput({ label, required, value, onChange, placeholder, error, className = "col-span-1" }) {
   return (
     <div className={className}>
       <FieldLabel required={required}>{label}</FieldLabel>
@@ -1478,7 +1534,11 @@ function LabeledInput({ label, required, value, onChange, placeholder, error, cl
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-invalid={Boolean(error) || undefined}
-        className={`mt-3 h-[50px] w-full rounded-full bg-[var(--ws-surface-control)] dark:bg-[#909294]/10 px-5 text-[14px] font-light text-[#24211D] dark:text-white outline-none border border-[var(--ws-border)] dark:border-white/5 placeholder:text-[#948C80] dark:placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-[#02C8C4]/20 focus-visible:border-[#02C8C4] transition-all ${error ? 'border-red-500 ring-2 ring-red-500/60' : ''}`}
+        className={`adcreative-white-input h-[42px] w-full rounded-[10px] border bg-white px-[14px] text-[14px] text-[#1F1D29] placeholder:text-[#85829A] outline-none transition-all dark:border-white/10 dark:bg-[#1a1a1f] dark:text-white ${
+          error
+            ? 'border-red-500 ring-1 ring-red-500/30'
+            : 'border-[#CFCDD9] focus:border-[#5867EB] focus:ring-[3px] focus:ring-[#5867EB]/16'
+        }`}
       />
       <FieldError message={error} />
     </div>
@@ -1487,24 +1547,24 @@ function LabeledInput({ label, required, value, onChange, placeholder, error, cl
 
 function LabeledTextarea({ label, required, value, onChange, placeholder, error }) {
   return (
-    <div>
+    <div className="col-span-2">
       <FieldLabel required={required}>{label}</FieldLabel>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-invalid={Boolean(error) || undefined}
-        className={`mt-2 min-h-[80px] w-full resize-none rounded-[24px] bg-[var(--ws-surface-control)] dark:bg-[#909294]/10 px-5 py-4 text-[14px] font-light text-[#24211D] dark:text-white outline-none border border-[var(--ws-border)] dark:border-white/5 placeholder:text-[#948C80] dark:placeholder:text-[#afafaf]/80 focus-visible:ring-2 focus-visible:ring-[#02C8C4]/20 focus-visible:border-[#02C8C4] transition-all ${error ? 'border-red-500 ring-2 ring-red-500/60' : ''}`}
+        className={`adcreative-white-input h-[78px] w-full resize-none rounded-[12px] border bg-white p-[10px_14px] text-[14px] leading-[1.5] text-[#1F1D29] placeholder:text-[#85829A] outline-none transition-all [scrollbar-width:none] [&::-webkit-scrollbar]:hidden dark:bg-[#1a1a1f] dark:text-white ${
+          error
+            ? 'border-red-500 ring-1 ring-red-500/30'
+            : 'border-[#CFCDD9] focus:border-[#5867EB] focus:ring-[3px] focus:ring-[#5867EB]/16 dark:border-white/10'
+        }`}
       />
       <FieldError message={error} />
     </div>
   );
 }
 
-// `files` are objects: { file: File | null, preview: string }. `file` is set
-// when the user uploaded a local image — the parent uploads to S3 at submit
-// time and replaces preview with the hosted URL. URL pastes / brand-sourced
-// items have file = null.
 function FileUploadField({
   label,
   placeholder,
@@ -1520,29 +1580,26 @@ function FileUploadField({
   className,
 }) {
   const inputRef = useRef(null);
-  // Strict-type forwarder for file entry points. Splits a FileList into the
-  // accepted subset (JPG/JPEG/PNG/WebP) and reports rejections so the caller
-  // can surface a type-error message.
+  const [isDrag, setIsDrag] = useState(false);
+
   const acceptFiles = (fileList) => {
     const arr = Array.from(fileList || []);
     const valid = arr.filter(isAllowedImageFile);
     const rejected = arr.length - valid.length;
     if (valid.length > 0) {
-      onAddFiles(
-        valid.map((f) => ({ file: f, preview: URL.createObjectURL(f) })),
-      );
+      onAddFiles(valid.map((f) => ({ file: f, preview: URL.createObjectURL(f) })));
     }
     if (rejected > 0) onInvalidType?.();
   };
+
   return (
     <div className={className}>
-      <FieldLabel>{label}</FieldLabel>
+      {label && <FieldLabel>{label}</FieldLabel>}
       <input
         ref={inputRef}
         type="file"
         accept={ALLOWED_IMAGE_ACCEPT}
         multiple={multiple}
-        aria-label={label}
         className="hidden"
         onChange={(e) => {
           acceptFiles(e.target.files);
@@ -1551,12 +1608,10 @@ function FileUploadField({
       />
       <div
         onPaste={(e) => {
-          // Clipboard file(s) → strict-type forward. Pasted URL → file=null
-          // entry directly (no extension check).
-          const files = e.clipboardData?.files;
-          if (files && files.length > 0) {
+          const dtFiles = e.clipboardData?.files;
+          if (dtFiles && dtFiles.length > 0) {
             e.preventDefault();
-            acceptFiles(files);
+            acceptFiles(dtFiles);
             return;
           }
           const text = e.clipboardData?.getData('text');
@@ -1566,135 +1621,94 @@ function FileUploadField({
             onUrlChange('');
           }
         }}
-        // Drag and drop: file(s) go through the strict filter; dragged URLs
-        // become file=null entries. preventDefault on both dragover AND
-        // drop is required — without it the browser drops the URL into the
-        // focused input field.
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          setIsDrag(true);
         }}
+        onDragLeave={() => setIsDrag(false)}
         onDrop={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          const dt = e.dataTransfer;
-          const files = dt?.files;
-          if (files && files.length > 0) {
-            acceptFiles(files);
+          setIsDrag(false);
+          const dtFiles = e.dataTransfer?.files;
+          if (dtFiles && dtFiles.length > 0) {
+            acceptFiles(dtFiles);
             return;
           }
-          const dragged = dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
+          const dragged = e.dataTransfer?.getData('text/uri-list') || e.dataTransfer?.getData('text/plain') || '';
           const trimmed = dragged.trim();
           if (trimmed && /^https?:\/\//i.test(trimmed)) {
             onAddFiles([{ file: null, preview: trimmed }]);
             onUrlChange('');
           }
         }}
-        className="mt-2 flex h-[50px] items-center gap-2 rounded-full bg-[var(--ws-surface-control)] dark:bg-[#909294]/10 pl-5 pr-1.5 border border-[var(--ws-border)] dark:border-white/5"
+        className={`adcreative-field-white flex items-center gap-1.5 h-[42px] pl-3 pr-1 bg-white border rounded-[10px] transition-all ${
+          isDrag
+            ? 'border-solid border-[#5867EB] ring-[3px] ring-[#5867EB]/16'
+            : 'border-dashed border-[#CFCDD9] focus-within:border-solid focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16'
+        } dark:bg-[#1a1a1f] dark:border-white/10`}
       >
         <input
           type="url"
           value={url}
           onChange={(e) => onUrlChange(e.target.value)}
-          // The inner input also needs handlers because dropping directly
-          // on it bypasses the parent unless we cancel the default here.
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const dt = e.dataTransfer;
-            const files = dt?.files;
-            if (files && files.length > 0) {
-              acceptFiles(files);
-              return;
-            }
-            const dragged = dt?.getData('text/uri-list') || dt?.getData('text/plain') || '';
-            const trimmed = dragged.trim();
-            if (trimmed && /^https?:\/\//i.test(trimmed)) {
-              onAddFiles([{ file: null, preview: trimmed }]);
-              onUrlChange('');
-            }
-          }}
           placeholder={placeholder}
-          className="min-w-0 flex-1 border-0 border-none bg-transparent text-[14px] font-light text-[#24211D] shadow-none outline-none ring-0 placeholder:text-[#948C80] focus:border-0 focus:outline-none focus:ring-0 dark:text-white dark:placeholder:text-[#afafaf]/80"
+          className="flex-1 min-w-0 border-0 bg-transparent text-[13px] text-[#1F1D29] placeholder:text-[#85829A] outline-none dark:text-white"
         />
-        <LinkIcon size={14} strokeWidth={1.6} className="shrink-0 text-[#7A7369] dark:text-white/40" />
+        <LinkIcon size={14} className="text-[#85829A] shrink-0" />
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-[var(--ws-surface-header)] dark:bg-white/20 px-4 text-[12px] font-medium text-[#24211D] dark:text-white border border-[var(--ws-border)] dark:border-transparent transition-colors hover:bg-[var(--ws-surface-muted)] dark:hover:bg-white/25"
+          title="Upload image"
+          className="h-[34px] w-[34px] shrink-0 rounded-[8px] bg-[#ECEEFD] hover:bg-[#C9CEF8] text-[#5867EB] flex items-center justify-center transition-colors dark:bg-indigo-950/60 dark:text-indigo-300"
         >
-          <UploadCloud size={14} strokeWidth={1.8} />
-          Upload Image
+          <UploadCloud size={16} strokeWidth={2} />
         </button>
       </div>
+
       {!hidePreview && (files.length > 0 || url?.trim()) && (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap gap-1.5">
           {files.map((it, i) => (
             <div
               key={`${it.preview}-${i}`}
-              className="group relative h-[40px] w-[40px] cursor-pointer shrink-0 rounded-md border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40"
+              className="relative h-[34px] w-[34px] shrink-0 rounded-[8px] border border-[#3AD0C8] bg-white transition-transform hover:-translate-y-0.5"
             >
               <img
                 src={it.preview}
                 alt=""
                 onClick={() => onPreview?.(i)}
-                className="h-full w-full rounded-sm object-cover"
+                className="h-full w-full rounded-[7px] object-cover cursor-pointer"
               />
+              <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#3AD0C8] text-white border-2 border-white text-[10px]">
+                <Check size={10} strokeWidth={3} />
+              </span>
               <button
                 type="button"
-                aria-label={`Remove ${label} ${i + 1}`}
-                onClick={() => onRemoveFile(i)}
-                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveFile(i);
+                }}
+                className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white shadow"
               >
                 <X size={10} strokeWidth={2.5} />
               </button>
             </div>
           ))}
-          {url?.trim() && (
-            // Mirror the file thumbnails for a URL the user pasted (or that
-            // came from autofill). The X clears the URL field; preview is
-            // a separate concern.
-            <div
-              key="url-preview"
-              className="group relative h-[40px] w-[40px] shrink-0 rounded-md border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40"
-            >
-              <img
-                src={url.trim()}
-                alt=""
-                className="h-full w-full rounded-sm object-cover"
-              />
-              <button
-                type="button"
-                aria-label="Clear URL"
-                onClick={() => onUrlChange('')}
-                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100"
-              >
-                <X size={10} strokeWidth={2.5} />
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>
   );
 }
 
-// Brand-image chips below the Brand Voice section. Single click toggles
-// selection, double-click opens the lightbox. 220ms delay disambiguates
-// the two so a single-click handler doesn't fire on the first half of a
-// double-click.
 function BrandImageChipRow({ options, isSelected, onPick, onDoubleClick }) {
   const clickTimers = useRef({});
   return (
-    <div className="mt-3">
-      <p className="mb-1.5 text-[11px] text-gray-500 dark:text-white/50">
-        Brand images — click to select, double-click to preview
+    <div className="mt-2">
+      <p className="text-[10.5px] font-medium text-[#85829A] mb-[5px]">
+        From your brand · double-click to preview
       </p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5">
         {options.map((url, i) => {
           const selected = isSelected?.(url);
           const handleSingle = () => {
@@ -1714,130 +1728,21 @@ function BrandImageChipRow({ options, isSelected, onPick, onDoubleClick }) {
               key={`bp-${i}-${url}`}
               onClick={handleSingle}
               onDoubleClick={handleDouble}
-              title={
-                selected
-                  ? 'Click to remove · double-click to preview'
-                  : 'Click to select · double-click to preview'
-              }
-              className={`relative h-10 w-10 shrink-0 cursor-pointer rounded-md transition ${
-                selected
-                  ? 'border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40'
-                  : 'border border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30'
+              title={selected ? 'Click to remove · double-click to preview' : 'Click to select · double-click to preview'}
+              className={`relative h-[34px] w-[34px] shrink-0 rounded-[8px] border bg-white cursor-pointer transition-transform hover:-translate-y-0.5 ${
+                selected ? 'border-[#3AD0C8]' : 'border-[#E2E1E8]'
               }`}
             >
-              <img src={url} alt="" className="h-full w-full rounded-md object-cover" />
+              <img src={url} alt="" className="h-full w-full rounded-[7px] object-cover" />
               {selected && (
-                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow">
-                  <Check className="h-3 w-3" strokeWidth={3} />
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#3AD0C8] text-white border-2 border-white text-[10px]">
+                  <Check size={10} strokeWidth={3} />
                 </span>
               )}
             </div>
           );
         })}
       </div>
-    </div>
-  );
-}
-
-function ThumbList({ items }) {
-  if (items.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-2">
-      {items.map(({ src, onRemove, label }, i) => (
-        <div
-          key={`${src}-${i}`}
-          className="group relative h-[56px] w-[56px] shrink-0 overflow-hidden rounded-md ring-1 ring-black/10 dark:ring-white/10"
-        >
-          <img src={src} alt="" className="h-full w-full object-cover" />
-          <button
-            type="button"
-            aria-label={`Remove ${label}`}
-            onClick={onRemove}
-            className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100"
-          >
-            <X size={10} strokeWidth={2.5} />
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function PillDropdown({ label, value, onChange, options }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
-  const triggerRef = useRef(null);
-  const panelRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (triggerRef.current?.contains(e.target)) return;
-      if (panelRef.current?.contains(e.target)) return;
-      setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return;
-    const update = () => {
-      const r = triggerRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + 4, left: r.left, width: r.width });
-    };
-    update();
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
-    return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
-    };
-  }, [open]);
-
-  return (
-    <div className="relative flex items-center justify-between gap-4">
-      <span className="min-w-16 shrink-0 text-[13px] text-gray-500 dark:text-white/85">{label}</span>
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-3 py-1.5 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#909294]/20"
-      >
-        <span className="truncate text-[12px] font-light text-gray-900 dark:text-white/85">{value || 'Select…'}</span>
-        <ChevronDown size={18} strokeWidth={2} className="shrink-0 text-gray-500 dark:text-white/50" />
-      </button>
-      {open &&
-        createPortal(
-          <div
-            ref={panelRef}
-            style={{
-              position: 'fixed',
-              top: pos.top,
-              left: pos.left,
-              width: Math.max(pos.width, 100),
-              zIndex: 9999,
-            }}
-            className="scale-85 -translate-y-2 -translate-x-2 2xl:translate-0 2xl:scale-100 2xl:max-h-[180px] max-h-[120px] overflow-y-auto rounded-[14px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#0D0D0D]/50 py-1 shadow-2xl backdrop-blur-[100px]"
-          >
-            {options.map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => {
-                  onChange(opt);
-                  setOpen(false);
-                }}
-                className={`block w-full px-3 py-2 text-left 2xl:text-[12px] text-[10px] transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${
-                  opt === value ? 'bg-gray-100 text-gray-900 dark:bg-[#3d3d3d] dark:text-white' : 'text-gray-500 dark:text-white/80'
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>,
-          document.body
-        )}
     </div>
   );
 }
@@ -1866,7 +1771,7 @@ function QualityPickerPill({ value, onChange, model }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-3 py-3 text-[12px] font-light text-gray-500 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
       >
         {activeLabel}
         <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
@@ -1885,8 +1790,8 @@ function QualityPickerPill({ value, onChange, model }) {
                 }}
                 className={`flex w-full items-center px-3 py-2.5 text-left text-[13px] transition-colors ${
                   selected
-                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                    : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                    ? 'bg-[#ECEEFD] text-[#5867EB] font-medium dark:bg-[#5867EB]/20 dark:text-[#8D99FF]'
+                    : 'text-gray-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white'
                 }`}
               >
                 <span className="flex-1">{qualityLabel(q)}</span>
@@ -1921,7 +1826,7 @@ function ModelPickerPill({ value, onChange }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-3 py-3 text-[12px] font-light text-gray-500 dark:text-white/80 ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
       >
         <span aria-hidden className="flex h-3.5 w-3.5 items-center justify-center">
           <ModelIcon apiId={value} icon={selectedModel?.icon} />
@@ -1943,8 +1848,8 @@ function ModelPickerPill({ value, onChange }) {
                 }}
                 className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] transition-colors ${
                   selected
-                    ? 'bg-gray-100 text-gray-900 dark:bg-[#373839] dark:text-white'
-                    : 'text-gray-500 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white'
+                    ? 'bg-[#ECEEFD] text-[#5867EB] font-medium dark:bg-[#5867EB]/20 dark:text-[#8D99FF]'
+                    : 'text-gray-700 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white'
                 }`}
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
@@ -1987,12 +1892,12 @@ function RatioPickerPill({ counts, onChange, model, quality }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full bg-gray-100 dark:bg-[#2b2a2a]/50 px-4 py-2.5 font-light text-gray-500 dark:text-[#afafaf] ring-1 ring-black/10 dark:ring-white/5 transition-colors hover:bg-black/5 dark:hover:bg-[#33333a]"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
       >
         <Proportions size={16} strokeWidth={1.8} className="text-gray-600 dark:text-white/70" />
         <span className="h-3 w-px bg-black/20 dark:bg-white/20" />
         <LayoutGrid size={11} strokeWidth={1.8} className="text-gray-500 dark:text-white/50" />
-        <span className="text-[14px]">
+        <span className="text-xs font-medium">
           {total} Image{total !== 1 ? 's' : ''}
         </span>
         <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />

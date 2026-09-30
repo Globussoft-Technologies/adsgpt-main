@@ -551,7 +551,7 @@ export default function TopHeader() {
                 {(currentRoute === '/adstudio' ||
                   currentRoute === '/adfactory' ||
                   (currentRoute === '/brandiq' && visibleBrandIqTabs?.length > 0)) && (
-                  <div className="mx-2 sm:mx-3 md:mx-4 h-5 sm:h-6 w-[1.5px] shrink-0 bg-zinc-300 dark:bg-zinc-700" />
+                  <div className="mx-2 sm:mx-2.5 md:mx-3 h-5 sm:h-6 w-[1.5px] shrink-0 bg-zinc-300 dark:bg-zinc-700" />
                 )}
               </div>
             )}

@@ -8,9 +8,7 @@ import { IS_PROMPT_CATEGORIES_ENABLED } from '@/utils/featureFlags';
 
 const GENERAL_CATEGORY = 'General';
 
-// Original panel height — the size the picker opens at and resets back to
-// whenever it's closed (so a prior drag doesn't carry over to the next open).
-const DEFAULT_PANEL_HEIGHT = IS_PROMPT_CATEGORIES_ENABLED ? 320 : 279;
+const DEFAULT_PANEL_HEIGHT = 210;
 
 // Replace every {placeholder} in a template prompt. Tokens with no value
 // (or only whitespace) are stripped out so the literal placeholder text never
@@ -98,12 +96,11 @@ export function usePromptTemplates({
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
-  // Lazy load the distinct categories for this type on first open and on
+  // Lazy load the distinct categories for this type on mount and on
   // type change. Skipped when IS_PROMPT_CATEGORIES_ENABLED is off — categories
   // stays empty, so only General templates load (prod behaviour).
   useEffect(() => {
     if (!IS_PROMPT_CATEGORIES_ENABLED) return undefined;
-    if (!open) return undefined;
     if (loadedTypeRef.current === type) return undefined;
 
     categoryAbortRef.current?.abort();
@@ -122,7 +119,7 @@ export function usePromptTemplates({
       });
 
     return () => ctrl.abort();
-  }, [open, type]);
+  }, [type]);
 
   // Load templates for every category (plus General) incrementally as soon
   // as the category list is known. Each category is cached independently so
@@ -130,8 +127,6 @@ export function usePromptTemplates({
   // while the rest continue loading in the background. Switching categories
   // after that is instant.
   useEffect(() => {
-    if (!open) return undefined;
-
     const catsToLoad =
       categories.length > 0
         ? [GENERAL_CATEGORY, ...categories]
@@ -164,18 +159,17 @@ export function usePromptTemplates({
     });
 
     return () => controllers.forEach((c) => c.abort());
-  }, [open, type, categories]);
+  }, [type, categories]);
 
   // Sync the visible templates + state with the selected category cache.
   useEffect(() => {
-    if (!open) return;
     if (loadedCategories.has(selectedCategory)) {
       setTemplates(templatesByCategory[selectedCategory] || []);
       setState('loaded');
     } else {
       setState('loading');
     }
-  }, [open, selectedCategory, templatesByCategory, loadedCategories]);
+  }, [selectedCategory, templatesByCategory, loadedCategories]);
 
   // Search behaviour:
   //  - No term  → show only the selected category's templates (browse mode).
