@@ -4837,7 +4837,28 @@ exports.cloneAdGenerate = async (req, res) => {
     const inputOverrides = value.inputs || req.body.inputs || {};
     const sourceVidUrl = existingRecord.inputs?.sourceVideoUrl || "";
     const galleryVidUrl = existingRecord.inputs?.galleryVideoUrl || "";
-    const imagesArr = existingRecord.inputs?.productImageUrls || existingRecord.inputs?.images || [];
+
+    const rawImages =
+      (Array.isArray(inputOverrides.productImageUrls) && inputOverrides.productImageUrls.length > 0 ? inputOverrides.productImageUrls : null) ||
+      (Array.isArray(inputOverrides.productImages) && inputOverrides.productImages.length > 0 ? inputOverrides.productImages : null) ||
+      (Array.isArray(inputOverrides.images) && inputOverrides.images.length > 0 ? inputOverrides.images : null) ||
+      (Array.isArray(req.body.productImageUrls) && req.body.productImageUrls.length > 0 ? req.body.productImageUrls : null) ||
+      (Array.isArray(existingRecord.inputs?.productImageUrls) && existingRecord.inputs.productImageUrls.length > 0 ? existingRecord.inputs.productImageUrls : null) ||
+      (Array.isArray(existingRecord.inputs?.images) && existingRecord.inputs.images.length > 0 ? existingRecord.inputs.images : null) ||
+      (Array.isArray(existingRecord.inputs?.productImages) && existingRecord.inputs.productImages.length > 0 ? existingRecord.inputs.productImages : null) ||
+      (existingRecord.inputs?.image ? [existingRecord.inputs.image] : []) ||
+      [];
+
+    const imagesArr = rawImages
+      .map((img) => (typeof img === "string" ? img : img?.s3Url || img?.preview || img?.url || ""))
+      .filter(Boolean);
+
+    if (imagesArr.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "At least 1 product image URL is required to generate the recreated ad.",
+      });
+    }
 
     const hasBrandOverride =
       inputOverrides.productBrandName !== undefined ||
@@ -4984,15 +5005,29 @@ exports.cloneAdGenerate = async (req, res) => {
       await UnifiedCreditController.releaseCredits(sessionId).catch(() => {});
 
       if (pythonErr.response) {
-        const errorMsg =
-          pythonErr.response.data?.error ||
-          pythonErr.response.data?.message ||
-          pythonErr.response.data?.detail ||
-          "Failed to start video generation with Python service";
+        let errorMsg = "Failed to start video generation with Python service";
+        const rawData = pythonErr.response.data;
+        if (rawData) {
+          if (typeof rawData.error === "string") {
+            errorMsg = rawData.error;
+          } else if (typeof rawData.message === "string") {
+            errorMsg = rawData.message;
+          } else if (typeof rawData.detail === "string") {
+            errorMsg = rawData.detail;
+          } else if (Array.isArray(rawData.detail)) {
+            errorMsg = rawData.detail.map((d) => d?.msg || d?.message || JSON.stringify(d)).join("; ");
+          } else if (Array.isArray(rawData.error)) {
+            errorMsg = rawData.error.map((d) => d?.msg || d?.message || JSON.stringify(d)).join("; ");
+          } else if (typeof rawData.detail === "object" && rawData.detail !== null) {
+            errorMsg = rawData.detail?.msg || rawData.detail?.message || JSON.stringify(rawData.detail);
+          } else if (typeof rawData.error === "object" && rawData.error !== null) {
+            errorMsg = rawData.error?.msg || rawData.error?.message || JSON.stringify(rawData.error);
+          }
+        }
         return res.status(pythonErr.response.status || 400).json({
           success: false,
           error: errorMsg,
-          details: pythonErr.response.data,
+          details: rawData,
         });
       }
 

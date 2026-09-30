@@ -2954,10 +2954,15 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       setIsGenerating(true);
       setGenerateError(null);
 
+      const finalProductImageUrls = (productImages || [])
+        .map((img) => (typeof img === 'string' ? img : img?.s3Url || img?.preview || img?.url || ''))
+        .filter(Boolean);
+
       const targetDurationNum = parseInt(selectedVideoDuration || videoDuration, 10) || 8;
       const payload = {
         sessionId: analysisSessionId,
         inputs: {
+          productImageUrls: finalProductImageUrls,
           targetDurationSeconds: targetDurationNum,
           aspectRatio: aspectRatio || '9:16',
           brandName: brandName || '',
@@ -2971,24 +2976,32 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       await dispatch(cloneAdGenerateAction(payload));
       dispatch(clearActiveRecreateSession());
 
-    // Trigger genie animation + switch to My Space tab (myVideos) exactly like all other modules
-    const triggerMySpace = onGenerateSuccess || onGenerateProp;
-    if (triggerMySpace) {
-      await triggerMySpace('video');
-    } else {
-      dispatch(setMySpaceTab('videos'));
-      dispatch(setActivePage('myVideos'));
+      // Trigger genie animation + switch to My Space tab (myVideos) exactly like all other modules
+      const triggerMySpace = onGenerateSuccess || onGenerateProp;
+      if (triggerMySpace) {
+        await triggerMySpace('video');
+      } else {
+        dispatch(setMySpaceTab('videos'));
+        dispatch(setActivePage('myVideos'));
+      }
+    } catch (err) {
+      console.error('[CloneYourAd] Generate API error:', err);
+      setIsGenerating(false);
+
+      let errorMsg = 'Failed to start video generation';
+      const raw = err.response?.data?.error || err.response?.data?.message || err.response?.data?.detail || err.message;
+      if (typeof raw === 'string') {
+        errorMsg = raw;
+      } else if (Array.isArray(raw)) {
+        errorMsg = raw
+          .map((d) => (typeof d === 'string' ? d : d?.msg || d?.message || JSON.stringify(d)))
+          .join('; ');
+      } else if (raw && typeof raw === 'object') {
+        errorMsg = raw.msg || raw.message || JSON.stringify(raw);
+      }
+      setGenerateError(errorMsg);
     }
-  } catch (err) {
-    console.error('[CloneYourAd] Generate API error:', err);
-    setIsGenerating(false);
-    const errorMsg =
-      err.response?.data?.error ||
-      err.message ||
-      'Failed to start video generation';
-    setGenerateError(errorMsg);
-  }
-};
+  };
 
 const renderLightboxModal = () => {
   if (!lightboxOpen || typeof document === 'undefined') return null;
@@ -3864,7 +3877,11 @@ const renderLightboxModal = () => {
                 {generateError && (
                   <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-500">
                     <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span>{generateError}</span>
+                    <span>
+                      {typeof generateError === 'string'
+                        ? generateError
+                        : (generateError?.message || generateError?.msg || JSON.stringify(generateError))}
+                    </span>
                   </div>
                 )}
 
