@@ -1,7 +1,7 @@
-// V1 (pre-redesign) Ad Creative category card — copied unchanged from
-// origin/production (b833a71b, 2026-09-10): chevron instead of V2's
-// CreateCardButton. Used only by AdCreativeHomeV1.
-import { ChevronRight } from 'lucide-react';
+// V1 (pre-redesign) Ad Creative category card — copied from origin/production
+// (b833a71b, 2026-09-10). Used only by AdCreativeHomeV1. The production chevron
+// was swapped for the shared CreateCardButton so it matches the Ad Video cards.
+import CreateCardButton from '@/components/AdStudio/CreateCardButton';
 
 export function CategoryCard({ category, onClick, className }) {
   return (
@@ -38,9 +38,7 @@ export function CategoryCard({ category, onClick, className }) {
           )}
         </div>
 
-        <div className="flex h-8 w-8 items-center justify-center rounded-full">
-          <ChevronRight className="h-6.5 w-6.5 2xl:h-8 2xl:w-8 text-white" />
-        </div>
+        <CreateCardButton />
       </div>
     </div>
   );
