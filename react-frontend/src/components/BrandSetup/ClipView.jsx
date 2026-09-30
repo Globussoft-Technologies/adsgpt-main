@@ -325,8 +325,13 @@ function PulseStage() {
  * 2026-09-15): known causes get a specific friendly line, anything else a
  * general one. The original is logged for debugging.
  */
-const RENDER_ERROR_FALLBACK =
-  'Something went wrong while making this video. Try again, or pick another idea from the board.';
+// What this render was FOR, in the user's words. A recreate from an image
+// template produces a picture, and telling someone their "video" failed when
+// they asked for an image reads as the app having done something else entirely.
+const renderNoun = (isStill) => (isStill ? 'image' : 'video');
+
+const renderErrorFallback = (isStill) =>
+  `Something went wrong while making this ${renderNoun(isStill)}. Try again, or pick another idea from the board.`;
 
 // Our own user-facing messages from brandSetupSlice.videoRejected — shown as-is.
 const USER_FACING_RENDER_ERRORS = [
@@ -350,14 +355,16 @@ const USER_FACING_RENDER_ERRORS = [
  */
 const isCreditShortfall = (error) => /enough credits/i.test(String(error || ''));
 
-function friendlyRenderError(error) {
+function friendlyRenderError(error, isStill = false) {
   const raw = String(error || '').trim();
-  if (!raw) return RENDER_ERROR_FALLBACK;
+  if (!raw) return renderErrorFallback(isStill);
   if (USER_FACING_RENDER_ERRORS.some((re) => re.test(raw))) return raw;
-  if (/keyframe|no clips could be rendered/i.test(raw)) {
+  // Storyboard-only by nature: keyframes are what a CLIP is built from, and a
+  // recreate has none. Worded for a video because nothing else can reach it.
+  if (!isStill && /keyframe|no clips could be rendered/i.test(raw)) {
     return 'Some images for this storyboard weren’t ready, so the video couldn’t be made. Try again, or pick another idea from the board.';
   }
-  return RENDER_ERROR_FALLBACK;
+  return renderErrorFallback(isStill);
 }
 
 /**
@@ -373,10 +380,10 @@ function friendlyRenderError(error) {
  *   is offered; past that the honest advice is a different concept, not the
  *   same one again. See ONBOARDING_FAILURE_HANDLING.md §2.
  */
-function FailedStage({ error, onRetry, onBack, attempts = 1 }) {
+function FailedStage({ error, onRetry, onBack, attempts = 1, isStill = false }) {
   // Retries are unlimited (user decision 2026-09-15); `attempts` is kept only
   // for callers and no longer gates anything.
-  const message = friendlyRenderError(error);
+  const message = friendlyRenderError(error, isStill);
   const broke = isCreditShortfall(error);
 
   // The raw error, for debugging — once per distinct error, not per render (the
@@ -389,7 +396,9 @@ function FailedStage({ error, onRetry, onBack, attempts = 1 }) {
   return (
     <div className="absolute inset-0 grid place-items-center px-8 text-center">
       <div>
-        <p className="text-[13.5px] font-semibold text-white/90">We couldn&rsquo;t create this video</p>
+        <p className="text-[13.5px] font-semibold text-white/90">
+          We couldn&rsquo;t create this {renderNoun(isStill)}
+        </p>
         <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/70">{message}</p>
         {/* A failed render releases its credit hold and never spends the free
             render (renderBilling), so this is always true on this screen. */}
@@ -1010,8 +1019,15 @@ export default function ClipView({
   // point: while the render is running there is no result yet, so a check on
   // `mime_type` alone would show the video loading stages for the whole wait and
   // only correct itself at the very end. The board knows from the 202.
+  // Three sources, in order of how long they survive. `board.kind` is this
+  // tab's own answer from the 202 and is the earliest. `state.kind` is the
+  // server's billing record, folded in by `videosHydrated`, and is the only one
+  // left after a reload. `mime_type` is the finished render's own word, which
+  // arrives last and never at all for a render that failed.
   const isStill =
-    board?.kind === 'image' || String(clip?.mime_type || '').startsWith('image/');
+    board?.kind === 'image' ||
+    state.kind === 'image' ||
+    String(clip?.mime_type || '').startsWith('image/');
 
   const loader = useMemo(() => {
     if (!state.loader?.url) return null;
@@ -1154,6 +1170,9 @@ export default function ClipView({
                   onRetry={onRetry}
                   onBack={onBack}
                   attempts={state.attempts}
+                  // A recreate from an image template renders a picture. Its
+                  // failure has to say so — see `renderNoun`.
+                  isStill={isStill}
                 />
               ) : isStill ? (
                 // One state, start to finish — see `StillStage`.

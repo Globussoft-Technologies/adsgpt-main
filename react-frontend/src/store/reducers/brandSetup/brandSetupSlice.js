@@ -598,6 +598,15 @@ const brandSetupSlice = createSlice({
           status: status === 'ready' && !playable ? 'running' : status,
           video: clip || existing?.video || null,
           error: entry?.error || existing?.error || '',
+          // 'image' | 'video' — what this render was FOR, from the billing
+          // record the server wrote when it started (`markBoardStarted`).
+          //
+          // It is the only copy that survives a reload. The client's own answer
+          // lives in `recreateBoards`, which is not persisted, and the result's
+          // `mime_type` does not exist until the render lands — and never, for
+          // one that failed. So a reloaded FAILED image recreate had nothing
+          // left saying it was an image, and the screen called it a video.
+          kind: entry?.billing?.kind || existing?.kind || '',
           // The server's count wins. It is the only copy that survived the
           // reload this hydration is answering.
           attempts: Number(entry?.attempts) || existing?.attempts || 1,

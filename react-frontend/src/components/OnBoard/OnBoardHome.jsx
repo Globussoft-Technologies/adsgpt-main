@@ -1035,6 +1035,9 @@ const OnBoardHome = () => {
           // once the render has landed, and the card exists before that.
           isImage:
             recreated?.kind === 'image' ||
+            // The server's billing record, which is what a reload still has —
+            // `recreateBoards` is not persisted. See `videosHydrated`.
+            st?.kind === 'image' ||
             String(c?.mime_type || '').startsWith('image/'),
           // The SERVER's timestamp when there is one, this tab's clock only as
           // a fallback for a render started in this session that the server has
