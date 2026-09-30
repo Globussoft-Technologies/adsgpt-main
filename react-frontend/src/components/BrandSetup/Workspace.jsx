@@ -514,7 +514,7 @@ function useFitScale(deps) {
  * stretched the card to hold them. Capped at `calc(50% - 4px)` the pair adds up
  * to exactly the strip available, so the card's padding survives on both edges.
  */
-function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, tourAnchor = false, framesExhausted, showPrice }) {
+function ConceptCard({ board, index, onGenerate, onOpen, onTopUp, videoState, anchorId, tourAnchor = false, framesExhausted, showPrice }) {
   const frames = (board.images || [])
     .filter((img) => img.status === 'ready' && img.src)
     .slice(0, 2);
@@ -648,6 +648,7 @@ function ConceptCard({ board, index, onGenerate, onOpen, videoState, anchorId, t
         onGenerate={onGenerate}
         onWatch={() => setWatching(true)}
         showPrice={showPrice}
+        onTopUp={onTopUp}
         // Nothing to render until the keyframes exist.
         disabled={framesPending}
         // Only used by the exhausted-retry state, to send the user somewhere
@@ -777,9 +778,31 @@ function InlineClip({ src, board, onClose, onOpen }) {
  * for a board that already has one, and a button still offering it would be a
  * promise nothing keeps.
  */
-function ConceptAction({ board, state, onGenerate, onWatch, onOpen, showPrice = false, disabled = false }) {
+function ConceptAction({
+  board,
+  state,
+  onGenerate,
+  onWatch,
+  onOpen,
+  onTopUp,
+  showPrice = false,
+  disabled = false,
+}) {
   const status = state?.status;
   const open = () => onGenerate?.(board);
+
+  // ── The two refusals a retry cannot fix ──────────────────────────────────
+  //
+  // `videoRejected` already tells these apart from a genuine failure — its own
+  // comment says "'Try again' is the right advice for exactly one of these" —
+  // and then this component threw that away and offered the countdown to all of
+  // them. So a user with an empty wallet waited twenty seconds to be refused
+  // again, by the same check, for the same reason.
+  //
+  // Matched on the copy because that is what the board carries; the server's
+  // `reason` (INSUFFICIENT / NO_BASE_PLAN) is consumed by the reducer and not
+  // stored. Same test ClipView's failure screen uses, deliberately.
+  const needsMoney = /enough credits|active plan/i.test(String(state?.error || ''));
 
   // Failed: Retry (unlimited) + View. User decision 2026-09-15 — retries are no
   // longer capped at one, and a failed render is never charged (the credit hold
@@ -789,7 +812,11 @@ function ConceptAction({ board, state, onGenerate, onWatch, onOpen, showPrice = 
   if (status === 'failed') {
     return (
       <div className="flex shrink-0 items-center gap-2 self-end">
-        <p className="text-[11.5px] leading-tight text-white/60">Didn&rsquo;t render.</p>
+        {/* "Didn't render" is wrong for a refusal: nothing was attempted, and
+            nothing was charged. Say which it was. */}
+        <p className="text-[11.5px] leading-tight text-white/60">
+          {needsMoney ? 'Not enough credits.' : 'Didn’t render.'}
+        </p>
         {onOpen && (
           <button
             type="button"
@@ -799,7 +826,20 @@ function ConceptAction({ board, state, onGenerate, onWatch, onOpen, showPrice = 
             View
           </button>
         )}
-        <RetryCountdownButton onClick={open} />
+        {needsMoney ? (
+          // Opens the same breakdown dialog a first refusal shows — the one
+          // that names the gap and offers the top-up — rather than starting a
+          // render the server is certain to refuse.
+          <button
+            type="button"
+            onClick={() => onTopUp?.(board)}
+            className="inline-flex shrink-0 items-center gap-2 rounded-[7px] bg-[linear-gradient(180deg,#9176ff_0%,#7c5cff_46%,#6148c7_100%)] px-3 py-1.5 text-[12px] font-bold whitespace-nowrap text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4),inset_0_-1px_0_rgba(0,0,0,0.28)] transition hover:brightness-110 active:translate-y-px"
+          >
+            Get credits
+          </button>
+        ) : (
+          <RetryCountdownButton onClick={open} />
+        )}
       </div>
     );
   }
@@ -2756,6 +2796,14 @@ export default function Workspace({
   const [shortAsk, setShortAsk] = useState(null);
   const walletIsTheWholeBalance = eligibility?.generationKind === 'wallet';
 
+  // The last breakdown the SERVER sent, kept past the dialog being dismissed.
+  //
+  // It is the only thing that knows a paid user's wallet — this screen counts
+  // down an allowance and cannot work the gap out for itself. Without holding
+  // on to it, re-opening the dialog from a card that was already refused could
+  // only say "not enough", to someone who may be holding most of the price.
+  const lastShortfall = useRef(null);
+
   // Every route to a render goes through here, so the confirmation cannot be
   // bypassed by whichever card or button is added next.
   const requestVideo = useCallback(
@@ -2770,6 +2818,7 @@ export default function Workspace({
         // knows a PAID user's wallet. Falling back to this screen's own numbers
         // covers the free-plan case, where the balance IS what the bar counts.
         const gap = result.shortfall;
+        if (gap) lastShortfall.current = gap;
         setShortAsk(
           gap
             ? {
@@ -2804,8 +2853,50 @@ export default function Workspace({
     [onGenerateVideo, walletIsTheWholeBalance, bannerLeft]
   );
 
+  /**
+   * The credits dialog, opened from a card that has ALREADY been refused.
+   *
+   * Not a second attempt: the server said no, and asking again to be told the
+   * same thing is what the retry countdown used to do. This just re-states the
+   * gap and offers the way out of it.
+   */
+  const showShortfall = useCallback(() => {
+    const gap = lastShortfall.current;
+    setShortAsk(
+      gap
+        ? {
+            cost: Number(gap.total) || VIDEO_RENDER_COST,
+            allowance: Number(gap.allowance) || 0,
+            walletNeeded: Number(gap.walletNeeded) || 0,
+            balance: Number(gap.walletBalance) || 0,
+          }
+        : {
+            cost: VIDEO_RENDER_COST,
+            // `null` means "refused, but we were not told by how much" — see
+            // InsufficientCreditsDialog. Reached after a reload, when the
+            // refusal is hydrated from the server and its breakdown is gone.
+            balance: walletIsTheWholeBalance ? bannerLeft : null,
+          },
+    );
+  }, [walletIsTheWholeBalance, bannerLeft]);
+
   const handleGenerateVideo = useCallback(
     (board) => {
+      // ── Nothing is being bought here ──────────────────────────────────
+      //
+      // A board that is already rendering, or has already rendered, is paid
+      // for. Pressing its button means "show me", and `startVideo` answers
+      // that by opening the clip screen without starting anything.
+      //
+      // The money gates below have to be skipped for it, and that is the bug
+      // this fixes: they ran first and knew nothing about the board's state,
+      // so a user with an empty wallet who pressed the RENDERING button was
+      // shown "Not enough credits — short by 30" about a render that was
+      // already in flight and already paid for. `splitNeeded` would have put
+      // the split-charge dialog there for the same reason.
+      const inFlight = videosByBoard?.[board?.id]?.status;
+      if (inFlight === 'running' || inFlight === 'ready') return requestVideo(board);
+
       // Caught before the request when the numbers are on this screen: a free
       // plan's balance is the whole story, so there is no reason to ask the
       // server and no reason for the user to wait to be told no.
@@ -2822,7 +2913,15 @@ export default function Workspace({
       });
       return undefined;
     },
-    [splitNeeded, allowanceLeft, requestVideo, walletIsTheWholeBalance, allowanceKnown, bannerLeft]
+    [
+      splitNeeded,
+      allowanceLeft,
+      requestVideo,
+      walletIsTheWholeBalance,
+      allowanceKnown,
+      bannerLeft,
+      videosByBoard,
+    ]
   );
 
   // The brand panel sizes itself to its own content. Re-measured whenever the
@@ -3198,6 +3297,7 @@ export default function Workspace({
                       board={board}
                       index={i + 1}
                       onGenerate={handleGenerateVideo}
+                      onTopUp={showShortfall}
                       // The expand control on the inline player. Same handler:
                       // the board already has a clip, so it opens the screen
                       // rather than starting anything.

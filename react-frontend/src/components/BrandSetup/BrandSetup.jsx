@@ -49,13 +49,55 @@ const BackdropVideo = `${import.meta.env.VITE_S3_BASE_URL}/static/onboarding/onb
  * `onStarted` — the progress screen is the next piece of work.
  */
 
-// A logo, a couple of product shots, a brand deck. Matches the multer limits on
-// the onboarding route so the user is told "no" here rather than after a 32MB
-// upload has already gone out.
-const MAX_FILES = 15;
-const MAX_FILE_BYTES = 32 * 1024 * 1024;
+// ── The upload limits, from INPUT_FILE_LIMITS.md ────────────────────────────
+//
+// Upstream's numbers, so the user is told "no" here rather than after the bytes
+// have crossed the wire and come back as a 413. Node enforces the same three
+// (see `Validations/onboarding/onboardingInit.validation.js`) — this copy is the
+// courtesy, that one is the rule.
+//
+// They used to be 15 files and 32MiB each, against a contract of 3 and 20, so a
+// fourth file or a 25MB one was accepted here and refused two hops later.
+const MAX_FILES = 3;
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
 
-const ACCEPTED = 'image/*,application/pdf';
+const MB = (bytes) => Math.floor(bytes / (1024 * 1024));
+
+// Extensions, because that is what upstream rejects on, and because browsers
+// disagree about the MIME type they attach to `.md` and `.docx`.
+const ACCEPTED_EXTENSIONS = [
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.gif',
+  '.pdf',
+  '.txt',
+  '.md',
+  '.docx',
+  '.pptx',
+];
+
+// The picker's filter. It was `image/*,application/pdf`, which hid the document
+// formats upstream has always accepted — a brand deck (`.pptx`) or guidelines
+// (`.docx`) could not be attached at all, while the comment above this block
+// named a brand deck as the use case.
+const ACCEPTED = ACCEPTED_EXTENSIONS.join(',');
+
+/**
+ * Is this something upstream will read?
+ *
+ * `accept` on the input is a PICKER filter and nothing more: it does not apply
+ * to a file dropped on the card or pasted from the clipboard, and neither did
+ * anything else — so a `.zip` went all the way to upstream to be refused. This
+ * is the check that actually holds.
+ */
+const isAcceptedFile = (file) => {
+  const name = String(file?.name || '').toLowerCase();
+  const dot = name.lastIndexOf('.');
+  return dot !== -1 && ACCEPTED_EXTENSIONS.includes(name.slice(dot));
+};
 const URL_PATTERN = /https?:\/\/[^\s<>"']+/gi;
 
 // The clip opens on a curtain-style reveal. Plain `loop` restarts at 0, so that
@@ -126,25 +168,28 @@ function FilePreview({ file, onRemove }) {
  * only links and files decide it.
  */
 function promptCopy({ hasUrl, fileCount }) {
-  const images = `${fileCount} ${fileCount === 1 ? 'image' : 'images'} added`;
+  // "files", not "images": the picker takes a brand deck, guidelines and notes
+  // as well, and copy that only says images is copy that hides half of what
+  // works.
+  const added = `${fileCount} ${fileCount === 1 ? 'file' : 'files'} added`;
   if (hasUrl && fileCount) {
     return { placeholder: 'Anything else we should know? ', hint: 'All set — hit Analyze' };
   }
   if (hasUrl) {
     return {
       placeholder: 'Add a few words about your brand ',
-      hint: 'Got your site. Images or a short description help sharpen it',
+      hint: 'Got your site. Files or a short description help sharpen it',
     };
   }
   if (fileCount) {
     return {
       placeholder: 'Add your website link or describe your brand',
-      hint: `${images}. A link or description helps us get it right`,
+      hint: `${added}. A link or description helps us get it right`,
     };
   }
   return {
-    placeholder: 'Paste your website, describe your brand, or attach images',
-    hint: 'You can mix all three — a link, a few words, and your images',
+    placeholder: 'Paste your website, describe your brand, or attach files',
+    hint: 'You can mix all three — a link, a few words, and your files',
   };
 }
 
@@ -196,21 +241,42 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset, onSkip }) => {
   const addFiles = (incoming) => {
     const accepted = [];
     let rejected = '';
+    // Running total INCLUDING what is already attached: the 32MB budget is for
+    // the whole request, and two 20MB files are each fine on their own.
+    let total = files.reduce((sum, f) => sum + f.size, 0);
 
     for (const file of incoming) {
-      if (file.size > MAX_FILE_BYTES) {
-        rejected = `${file.name} is larger than 32 MB`;
+      if (!isAcceptedFile(file)) {
+        rejected = `We can't read ${file.name}. Try an image, PDF, DOCX, PPTX, TXT or MD.`;
         continue;
       }
-      // Same name and size twice is a re-drop, not a second file.
-      const duplicate = files.some((f) => f.name === file.name && f.size === file.size);
-      if (!duplicate) accepted.push(file);
+      if (file.size > MAX_FILE_BYTES) {
+        rejected = `${file.name} is larger than ${MB(MAX_FILE_BYTES)} MB`;
+        continue;
+      }
+      // Same name and size twice is a re-drop, not a second file. Checked
+      // against what is being added too — dropping the same file twice in one
+      // gesture used to get through.
+      const seen = (f) => f.name === file.name && f.size === file.size;
+      if (files.some(seen) || accepted.some(seen)) continue;
+
+      // Counted per file rather than sliced off the end afterwards, so the
+      // message names the limit at the moment it is actually reached instead of
+      // silently dropping the overflow.
+      if (files.length + accepted.length >= MAX_FILES) {
+        rejected = `You can attach up to ${MAX_FILES} files`;
+        continue;
+      }
+      if (total + file.size > MAX_TOTAL_BYTES) {
+        rejected = `That comes to more than ${MB(MAX_TOTAL_BYTES)} MB in total`;
+        continue;
+      }
+
+      accepted.push(file);
+      total += file.size;
     }
 
-    const room = MAX_FILES - files.length;
-    if (accepted.length > room) rejected = `You can attach up to ${MAX_FILES} files`;
-
-    setFiles((prev) => [...prev, ...accepted.slice(0, Math.max(room, 0))]);
+    setFiles((prev) => [...prev, ...accepted]);
     setError(rejected);
   };
 
@@ -538,7 +604,7 @@ const BrandSetup = ({ onStarted, resumed = false, onFailedReset, onSkip }) => {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={submitting}
-                    aria-label="Attach logo or product images"
+                    aria-label="Attach a logo, product images, or brand documents"
                     className="ml-1 shrink-0 rounded-xl p-2 text-white/55 transition hover:bg-white/10 hover:text-[#15DCFF] disabled:pointer-events-none disabled:opacity-40"
                   >
                     <Paperclip className="h-[18px] w-[18px]" />

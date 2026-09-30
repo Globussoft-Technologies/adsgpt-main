@@ -557,9 +557,11 @@ const OnBoardHome = () => {
    * loader that fails or takes its time must not hold up the render or the
    * screen change.
    *
-   * The view opens immediately, before either answers. The wait is what the
-   * screen is for, so there is nothing to gain by spending the first second of
-   * it on the workspace.
+   * The view opens as soon as the render is ACCEPTED — not before. The wait is
+   * what the screen is for, so there is nothing to gain by spending the first
+   * minute of it on the workspace; but the 202 is not that wait, and opening
+   * ahead of it meant every refusal (402, 403, 409, 501, 502) showed the clip
+   * screen for an instant and bounced back.
    */
   // `quote` is `{ maxWalletCredits }` when a split confirmation was shown. It
   // is passed straight through to billing, which refuses (409) rather than
@@ -578,17 +580,23 @@ const OnBoardHome = () => {
 
     const existing = run.videos?.byBoard?.[boardId];
 
-    setClipBoardId(boardId);
-    setPhase('clip');
-    // So the Facebook OAuth round-trip comes back to THIS clip rather than to
-    // the board — see `rememberClipBoard`.
-    rememberClipBoard(boardId);
+    /** Take the user to the clip screen for this board. */
+    const openClipView = () => {
+      setClipBoardId(boardId);
+      // So the Facebook OAuth round-trip comes back to THIS clip rather than to
+      // the board — see `rememberClipBoard`.
+      rememberClipBoard(boardId);
+      setPhase('clip');
+    };
 
     // Already rendered, or already rendering. Opening the view is the whole of
     // what a click means here — asking again would be refused server-side
     // anyway, and paying for a second render is the one mistake this flow must
-    // not make by accident.
-    if (existing?.status === 'ready' || existing?.status === 'running') return;
+    // not make by accident. Nothing is being started, so this goes at once.
+    if (existing?.status === 'ready' || existing?.status === 'running') {
+      openClipView();
+      return;
+    }
 
     dispatch(videoStarted(boardId));
 
@@ -602,34 +610,58 @@ const OnBoardHome = () => {
 
     try {
       const res = await generateVideo(run.sessionId, boardId, quote);
-      if (res?.accepted) dispatch(videoAccepted({ boardId, jobId: res.jobId }));
-      else dispatch(videoRejected({ boardId, reason: res?.reason, jobId: res?.jobId }));
+      if (res?.accepted) {
+        dispatch(videoAccepted({ boardId, jobId: res.jobId }));
+        // ── Only now ────────────────────────────────────────────────────
+        //
+        // This used to run before the request, so the clip screen opened for
+        // every press and then bounced back off every refusal — 402, 403, 409,
+        // 501, 502 — as a flash the user read as the app glitching.
+        //
+        // The design note this replaces said the view opens immediately
+        // because "the wait is what the screen is for". That is still true and
+        // still honoured: the wait it means is the RENDER, thirty to sixty
+        // seconds of it, and none of that has happened yet at this line. What
+        // is being waited on here is the 202 — one round trip — and paying it
+        // buys the certainty that this render actually started.
+        openClipView();
+      } else {
+        dispatch(videoRejected({ boardId, reason: res?.reason, jobId: res?.jobId }));
+        // `already_running` is NOT a refusal. It is the server saying this
+        // board is rendering right now — started in another tab, or by a press
+        // this tab lost track of — and it answers 200, not an error status.
+        // The click still meant "show me", and there is something to show, so
+        // it opens the view exactly as an accepted render does. `videoRejected`
+        // above has already adopted the job id it came back with, so the clip
+        // screen finds the render's frames.
+        if (res?.reason === 'already_running') openClipView();
+      }
     } catch (error) {
+      // Nothing below navigates anywhere, and none of it needs to: the clip
+      // screen is only opened once a render has actually been accepted, so
+      // every path through this catch leaves the user exactly where they are —
+      // on the board, beside the concept they pressed, with the dialog the
+      // caller is about to raise.
+
       // 409: the onboarding budget moved between the quote and the charge, so
       // the server took NOTHING. Not a failure of this render — it has not
-      // started yet — so the board is put back the way it was and the caller
-      // re-asks. Treating it as a rejection would leave a dead tile behind a
-      // dialog the user is about to see again.
+      // started yet — and the caller re-asks with the real numbers. Treating it
+      // as a rejection would leave a dead tile behind a dialog the user is
+      // about to see again.
       if (error?.response?.status === 409) {
         dispatch(videoRejected({ boardId, reason: 'price_changed' }));
-        setPhase('workspace');
-        setClipBoardId('');
         return {
           priceChanged: true,
           quote: error?.response?.data?.quote,
         };
       }
-      // 402 / 403: it cannot be paid for, so it never started. Handled exactly
-      // like the quote above — put the board back and let the caller say so
-      // WHERE THE USER IS. Previously this fell through to `videoRejected` on a
-      // clip screen we had already navigated to, so the news arrived one screen
-      // away from the board, from the plan, and from anything that could fix
-      // it.
+      // 402 / 403: it cannot be paid for, so it never started. The caller says
+      // so WHERE THE USER IS. An earlier version fell through to
+      // `videoRejected` on a clip screen it had already navigated to, so the
+      // news arrived one screen away from the board, from the plan, and from
+      // anything that could fix it.
       if (error?.response?.status === 402 || error?.response?.status === 403) {
         dispatch(videoRejected({ boardId, reason: error?.response?.data?.reason || 'insufficient' }));
-        setPhase('workspace');
-        setClipBoardId('');
-        clearClipBoard();
         return {
           insufficient: true,
           needsPlan: error?.response?.status === 403,

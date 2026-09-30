@@ -63,7 +63,10 @@ const {
   rejectForbiddenFields,
   extractUrls,
   totalUploadBytes,
+  unsupportedFile,
+  asMb,
   MAX_TOTAL_UPLOAD_BYTES,
+  ACCEPTED_EXTENSIONS,
 } = require("../../Validations/onboarding/onboardingInit.validation");
 const logger = require("../../utils/logger");
 const { createFlowLog, newReqId } = require("../../utils/flowLog");
@@ -241,9 +244,19 @@ exports.init = async (req, res) => {
     if (uploadBytes > MAX_TOTAL_UPLOAD_BYTES) {
       log.done(400, { reason: "upload_too_large", bytes: uploadBytes });
       return res.status(400).json({
-        error: `Attachments are too large (max ${Math.floor(
-          MAX_TOTAL_UPLOAD_BYTES / (1024 * 1024)
-        )} MB in total)`,
+        error: `Attachments are too large (max ${asMb(MAX_TOTAL_UPLOAD_BYTES)} MB in total)`,
+      });
+    }
+
+    // Type. Upstream answers 415 for anything outside its list, and until now
+    // nothing here checked at all â€” a `.zip` or a `.mp4` was buffered, uploaded
+    // and refused on the far side. The names are listed rather than described,
+    // because that is how the contract states them.
+    const badType = unsupportedFile(files);
+    if (badType) {
+      log.done(400, { reason: "unsupported_type" });
+      return res.status(400).json({
+        error: `We can't read ${badType}. Attach ${ACCEPTED_EXTENSIONS.join(", ")}.`,
       });
     }
 

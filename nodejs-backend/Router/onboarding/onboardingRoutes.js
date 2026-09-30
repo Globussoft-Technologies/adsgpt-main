@@ -2,6 +2,11 @@ const express = require("express");
 const multer = require("multer");
 const router = express.Router();
 const ctrl = require("../../controllers/onboarding/onboardingInitController");
+const {
+  MAX_FILES,
+  MAX_FILE_BYTES,
+  asMb,
+} = require("../../Validations/onboarding/onboardingInit.validation");
 
 // Onboarding module 1 — brand setup.
 //
@@ -16,12 +21,12 @@ const ctrl = require("../../controllers/onboarding/onboardingInitController");
 // writing them to disk first would only add a cleanup problem.
 const upload = multer({
   storage: multer.memoryStorage(),
+  // Upstream's own limits — see INPUT_FILE_LIMITS.md, and the note on the
+  // constants in the validation module. The 32MiB budget is a TOTAL and is
+  // separate from these; the controller checks it once the parts are parsed.
   limits: {
-    // Per-file. The contract's 32MiB budget is a TOTAL, checked in the
-    // controller — this stops one absurd file before it is ever buffered.
-    fileSize: 32 * 1024 * 1024,
-    // A logo, a couple of product shots and a brand deck is the real use case.
-    files: 25,
+    fileSize: MAX_FILE_BYTES,
+    files: MAX_FILES,
   },
 });
 
@@ -32,11 +37,14 @@ function handleUploadErrors(req, res, next) {
   upload.any()(req, res, (error) => {
     if (!error) return next();
     if (error instanceof multer.MulterError) {
+      // Built from the constants rather than written out. The hard-coded
+      // version said "max 32 MB" and "max 10" against limits of 32MiB and 25 —
+      // two numbers, neither of them true.
       const message =
         error.code === "LIMIT_FILE_SIZE"
-          ? "That file is too large (max 32 MB)"
+          ? `That file is too large (max ${asMb(MAX_FILE_BYTES)} MB)`
           : error.code === "LIMIT_FILE_COUNT"
-            ? "Too many files (max 10)"
+            ? `Too many files (max ${MAX_FILES})`
             : "We couldn't read that upload";
       return res.status(400).json({ error: message });
     }

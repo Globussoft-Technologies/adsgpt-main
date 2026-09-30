@@ -59,6 +59,9 @@ const imageSchema = new mongoose.Schema(
                 "product_shot",
                 "apps_saas",
                 "brand_awareness",
+                // `ai_ads` is what AI Creatives → Custom Ads sends (buildImageInputs,
+                // imageValidator, imageController). Dropping it breaks every save.
+                "ai_ads",
                 "ai_creatives",
                 "recreate_ads",
                 "template_recreate",

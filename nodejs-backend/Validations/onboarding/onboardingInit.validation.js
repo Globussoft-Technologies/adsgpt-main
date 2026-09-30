@@ -30,9 +30,56 @@ const Joi = require("joi");
 // it something it rejects, turning our 202 into a delayed failure.
 const MAX_PROMPT_LENGTH = 1_048_576;
 
-// Total attachment size. The contract's default; enforced in Node too so a
-// 200MB upload dies at our edge rather than after crossing the wire twice.
+// ── The upload limits, from INPUT_FILE_LIMITS.md ────────────────────────────
+//
+// Upstream's numbers, matched exactly. Looser and we hand it a payload it
+// answers 413/415 to — after the bytes have crossed the wire twice and the user
+// has watched a progress bar fill for nothing. Stricter and we refuse work it
+// would have done.
+//
+// All three are exported so the ROUTE's multer limits and the CONTROLLER's
+// checks come from one place. They used to be written out separately and had
+// drifted to 25 files and 32 MiB each, against a contract that says 3 and 20 —
+// and multer's own error message said 10, which matched neither.
 const MAX_TOTAL_UPLOAD_BYTES = 32 * 1024 * 1024;
+const MAX_FILES = 3;
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+
+// Extensions, not MIME types, because that is what upstream documents and
+// rejects on. Browsers disagree about the type they attach to `.md` and
+// `.docx`, so the name is the more reliable of the two.
+const ACCEPTED_EXTENSIONS = Object.freeze([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".pdf",
+  ".txt",
+  ".md",
+  ".docx",
+  ".pptx",
+]);
+
+/** Megabytes, for a message a person can read. */
+const asMb = (bytes) => Math.floor(bytes / (1024 * 1024));
+
+/**
+ * The first attachment upstream would refuse for its type, or null.
+ *
+ * Node checks this rather than leaving it to upstream for one reason: a `.zip`
+ * that is going to be refused should be refused before it is uploaded, not
+ * after.
+ */
+function unsupportedFile(files = []) {
+  for (const file of files) {
+    const name = String(file?.originalname || "");
+    const dot = name.lastIndexOf(".");
+    const ext = dot === -1 ? "" : name.slice(dot).toLowerCase();
+    if (!ACCEPTED_EXTENSIONS.includes(ext)) return name || "that file";
+  }
+  return null;
+}
 
 // A generous cap on how many URLs we bother extracting from the prompt. Python
 // only scrapes the first one; the rest are recorded as provenance. Someone
@@ -137,7 +184,12 @@ module.exports = {
   rejectForbiddenFields,
   extractUrls,
   totalUploadBytes,
+  unsupportedFile,
+  asMb,
   MAX_PROMPT_LENGTH,
   MAX_TOTAL_UPLOAD_BYTES,
+  MAX_FILES,
+  MAX_FILE_BYTES,
+  ACCEPTED_EXTENSIONS,
   MAX_EXTRACTED_URLS,
 };
