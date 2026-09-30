@@ -540,7 +540,7 @@ const deleteUserAccount = async (req, res) => {
 
         try {
             await MobileStoreTransaction.updateMany(
-                { platform: "ios", amember_user_id: String(amemberId), lineage_owner: true },
+                { platform: "ios", amember_user_id: String(amemberId) },
                 { $set: { lineage_owner: false, "meta.released_reason": "owner_deleted", "meta.released_at": new Date() } }
             );
         } catch (updateErr) {

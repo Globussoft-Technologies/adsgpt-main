@@ -3382,6 +3382,15 @@ const DeleteAccount = async (req, res) => {
       } catch (amErr) {
         logger.error("[DeleteAccount] aMember user deletion error:", amErr.message);
       }
+
+      try {
+        await MobileStoreTransaction.updateMany(
+          { platform: "ios", amember_user_id: String(targetAmemberUserId) },
+          { $set: { lineage_owner: false, "meta.released_reason": "owner_deleted", "meta.released_at": new Date() } }
+        );
+      } catch (updateErr) {
+        logger.error(`[DeleteAccount] failed to release Apple ownership for ${targetAmemberUserId}:`, updateErr);
+      }
     }
 
     // 4. Soft-delete in MongoDB UserProfile
