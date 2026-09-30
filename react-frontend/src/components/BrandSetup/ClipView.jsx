@@ -800,9 +800,11 @@ function SidePanel({
             </div>
           ) : (
             <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/70">
-              {status === 'failed'
-                ? 'Nothing to send — this concept didn’t render.'
-                : message || (isStill ? 'Ready in about fifteen seconds.' : 'Ready in about a minute.')}
+              {status === 'unknown'
+                ? ' '
+                : status === 'failed'
+                  ? 'Nothing to send — this concept didn’t render.'
+                  : message || (isStill ? 'Ready in about fifteen seconds.' : 'Ready in about a minute.')}
             </p>
           )}
         </div>
@@ -859,7 +861,17 @@ function SidePanel({
                       : 'rgba(255,255,255,0.55)',
                 }}
               >
-                {ready ? 'ready' : status === 'failed' ? 'failed' : 'rendering'}
+                {/* Not "rendering" until we know it is. See `unknown` above:
+                    this row is the other half of the flash — a finished ad
+                    reloaded from a remembered board id reported itself as
+                    still rendering for a frame. */}
+                {ready
+                  ? 'ready'
+                  : status === 'failed'
+                    ? 'failed'
+                    : status === 'unknown'
+                      ? '—'
+                      : 'rendering'}
               </span>
             </Meta>
             {/* A clip is always 9:16; a still is whatever the template was, and
@@ -918,7 +930,21 @@ export default function ClipView({
   // Empty for anything that is not an edit.
   compareSrc = '',
 }) {
-  const status = state.status || 'running';
+  // ── Nothing known yet is not the same as rendering ───────────────────────
+  //
+  // A reload straight onto this screen sets the phase from a remembered board
+  // id and only THEN reads the session, so for the first frames the store holds
+  // no entry for this board at all. `state.status || 'running'` called that a
+  // render in progress, which put the full working sequence — the WORKING chip,
+  // "Reading your brief", "Rendering — about a minute" — over an ad that had
+  // finished twenty minutes ago. It flashed and then corrected itself, which
+  // reads as the app having lost the work and found it again.
+  //
+  // An empty object is only ever "the read has not landed". A render started in
+  // this tab has `videoStarted`'s entry from the instant it begins, so there is
+  // no real in-flight render this can be confused with.
+  const unknown = !state.status && !state.video && !state.startedAt;
+  const status = state.status || (unknown ? 'unknown' : 'running');
   const clip = state.video?.video || null;
 
   // `src` is resolved server-side — durable media store first, this API's own
@@ -1120,7 +1146,9 @@ export default function ClipView({
             />
           ) : (
             <Frame ratio={isStill ? 'aspect-square' : 'aspect-9/16'}>
-              {status === 'failed' ? (
+              {/* Deliberately silent. This state lasts one session read, and
+                  anything that named a stage would be naming the wrong one. */}
+              {status === 'unknown' ? null : status === 'failed' ? (
                 <FailedStage
                   error={state.error}
                   onRetry={onRetry}
@@ -1180,12 +1208,14 @@ export default function ClipView({
             ? isStill
               ? 'Your ad is ready.'
               : 'Your first clip is ready.'
-            : status === 'failed'
-              ? 'Nothing rendered for this concept.'
-              : state.message ||
-                (isStill
-                  ? 'Rendering — this usually takes about fifteen seconds.'
-                  : 'Rendering — this usually takes about a minute.')}
+            : status === 'unknown'
+              ? ''
+              : status === 'failed'
+                ? 'Nothing rendered for this concept.'
+                : state.message ||
+                  (isStill
+                    ? 'Rendering — this usually takes about fifteen seconds.'
+                    : 'Rendering — this usually takes about a minute.')}
         </p>
       </footer>
 

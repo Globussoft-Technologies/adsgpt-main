@@ -30,10 +30,11 @@ import { cn } from '@/lib/utils';
 import { IS_ONBOARDING_TOUR_ENABLED } from '@/utils/featureFlags';
 import useTourSeen from './useTourSeen';
 
-// HIDE-MARK — "Replay tour" button (kept on for testing, 2026-09-17).
-// Set to false to hide it. Independent of VITE_FEATURE_ONBOARDING_TOUR, which
-// only controls auto-start and the backend "seen" flag.
-const SHOW_REPLAY_BUTTON = true;
+// HIDE-MARK — "Replay tour" button. OFF (user decision 2026-09-29); it was on
+// only while the tour was being tested. Set back to true to show it.
+// Independent of VITE_FEATURE_ONBOARDING_TOUR, which only controls auto-start
+// and the backend "seen" flag — the tour itself still runs.
+const SHOW_REPLAY_BUTTON = false;
 
 const PAD = 8; // spotlight breathing room around the target
 const GAP = 14; // spotlight → tooltip

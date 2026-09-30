@@ -67,6 +67,17 @@ router.post("/tours/:tourKey/seen", ctrl.markTourSeen);
 // first-run redirect would bring the user straight back on the next login.
 router.post("/skip", ctrl.skipOnboarding);
 
+// HIDE-MARK — onboarding reset. OFF (user decision 2026-09-29).
+//
+// A QA tool: it puts the caller's onboarding back to a fresh-signup state so
+// the same account can run through it again. It was left UNGATED by decision
+// (ONB-024), which is fine on staging and is not something to ship — any
+// signed-in user could hand themselves a fresh allowance by posting to it.
+//
+// The route is what is switched off; `ctrl.resetOnboarding` is untouched, so
+// restoring this is one line.
+// router.post("/reset", ctrl.resetOnboarding);
+
 // One session, every module section — what the workspace renders from.
 router.get("/sessions/:sessionId", ctrl.getSession);
 
