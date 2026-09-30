@@ -97,7 +97,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import ThemeToggle from './ThemeToggle';
 import AIAssistantHeaderActions from '@/components/AIAssistant/AIAssistantHeaderActions';
 import ModeSwitch from '@/components/AdFactory/ModeSwitch';
-import { IS_AD_FACTORY_V2, IS_ADSTUDIO_UI_V2 } from '@/utils/featureFlags';
+import {
+  IS_AD_FACTORY_V2,
+  IS_ADSTUDIO_UI_V2,
+  IS_ONBOARDING_TOUR_ENABLED,
+} from '@/utils/featureFlags';
 import {
   selectUiMode as selectAdFactoryUiMode,
   setUiMode,
@@ -611,7 +615,10 @@ export default function TopHeader() {
                   <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
                   <span>New Chat</span>
                 </Button>
-                <div className="mx-1.5 h-5 w-[1px] shrink-0 bg-black/15 dark:bg-white/20" />
+                {/* Hidden while VITE_FEATURE_ONBOARDING_TOUR=true — nothing sits to its right there. */}
+                {!IS_ONBOARDING_TOUR_ENABLED && (
+                  <div className="mx-1.5 h-5 w-[1px] shrink-0 bg-black/15 dark:bg-white/20" />
+                )}
               </>
             )}
             {currentRoute === '/adstudio' &&
@@ -627,7 +634,10 @@ export default function TopHeader() {
                     <MessageCirclePlus className="h-4 w-4 2xl:h-5 2xl:w-5" />
                     <span>New Chat</span>
                   </Button>
-                  <div className="mx-1.5 h-5 w-[1px] shrink-0 bg-black/15 dark:bg-white/20" />
+                  {/* Hidden while VITE_FEATURE_ONBOARDING_TOUR=true — nothing sits to its right there. */}
+                  {!IS_ONBOARDING_TOUR_ENABLED && (
+                    <div className="mx-1.5 h-5 w-[1px] shrink-0 bg-black/15 dark:bg-white/20" />
+                  )}
                 </>
               )}
             {currentRoute === '/adstudio' &&
