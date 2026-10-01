@@ -72,10 +72,11 @@ const cloneSchema = Joi.object({
   voiceSampleUrl: Joi.string().allow("", null),
 });
 
-// ai_ads generate-video input schema (type="ai_ads", scenes required)
+// ai_ads generate-video input schema (type="ai_ads")
+// scenes is optional: Seedance 2.5 generates directly without scene preview
 const aiAdsVideoInputSchema = Joi.object({
   type: Joi.string().valid("ai_ads").required(),
-  scenes: Joi.array().min(1).required(),
+  scenes: Joi.array().optional(),
   model: Joi.string().required(),
   numberOfVideos: Joi.number().integer().min(1).required(),
   duration: Joi.string().required(),

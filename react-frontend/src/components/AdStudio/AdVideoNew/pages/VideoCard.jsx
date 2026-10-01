@@ -127,6 +127,27 @@ export default function VideoCard({
   const primaryVideoUrl = item?.results?.[0]?.url ?? '';
   const activeVideoSrc = resolveVideoUrl(activeVideoUrl);
   const [showControls, setShowControls] = useState(false);
+  const [smoothProgress, setSmoothProgress] = useState(() => Math.max(10, item?.promptPercentage || 10));
+
+  useEffect(() => {
+    if (typeof item?.promptPercentage === 'number' && item.promptPercentage > 0) {
+      setSmoothProgress((prev) => Math.max(prev, item.promptPercentage));
+    }
+  }, [item?.promptPercentage]);
+
+  useEffect(() => {
+    if (item?.status !== 'processing') return;
+
+    const interval = setInterval(() => {
+      setSmoothProgress((prev) => {
+        if (prev >= 95) return prev;
+        const increment = prev < 30 ? 2 : prev < 60 ? 1.5 : prev < 85 ? 0.8 : 0.3;
+        return Math.min(95, Math.round((prev + increment) * 10) / 10);
+      });
+    }, 1200);
+
+    return () => clearInterval(interval);
+  }, [item?.status]);
 
   useEffect(() => {
     const url = item?.results?.[0]?.url ?? '';
@@ -736,11 +757,11 @@ export default function VideoCard({
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/15 shadow-xs dark:bg-white/25">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] transition-all duration-300 dark:from-[#15DCFF] dark:to-[#6b72f8]"
-                style={{ width: `${item?.promptPercentage ?? 50}%` }}
+                style={{ width: `${Math.round(smoothProgress)}%` }}
               />
             </div>
             <p className="text-xs font-semibold whitespace-nowrap text-gray-900 dark:text-white">
-              {item?.promptPercentage ?? 50}%
+              {Math.round(smoothProgress)}%
             </p>
           </div>
         </>

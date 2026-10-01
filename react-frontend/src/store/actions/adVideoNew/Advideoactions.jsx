@@ -630,6 +630,10 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
     }
 
     for (const img of details.uploadedImages || []) {
+      if (img.url) {
+        imageUrls.push(img.url);
+        continue;
+      }
       if (!img.file) continue;
       const uploaded = await uploadToS3(img.file, userId, true);
       if (uploaded) imageUrls.push(`${S3_BASE_URL}${uploaded}`);
@@ -765,6 +769,211 @@ export const generateAiAdsSceneAction = (aiAdsType, details) => async (dispatch,
     dispatch(setError(errorMsg));
     globalToast.error(errorMsg);
     dispatch(setAiAdsSceneLoading(false));
+    throw error;
+  }
+};
+
+// Seedance 2.5 — direct video generation (no scene preview step)
+export const generateSeedanceDirectAction = (aiAdsType, details) => async (dispatch, getState) => {
+  try {
+    dispatch(setAiAdsSceneLoading(true));
+    dispatch(setError(null));
+
+    const { socket } = getState();
+    const userId = socket?.userData?.user_id;
+
+    // Track original items alongside their uploaded S3 URLs
+    const itemEntries = [];
+
+    // 1. Process urlImages
+    for (const img of details.urlImages || []) {
+      try {
+        if (img.isS3 && img.url) {
+          itemEntries.push({ type: 'url', item: img, s3Url: img.url });
+          continue;
+        }
+        if (img.url && img.url.startsWith('http')) {
+          const res = await fetch(img.url);
+          const blob = await res.blob();
+          const file = new File([blob], img.name || 'image.jpg', { type: blob.type || 'image/jpeg' });
+          const uploaded = await uploadToS3(file, userId, true);
+          if (uploaded) {
+            itemEntries.push({ type: 'url', item: img, s3Url: `${S3_BASE_URL}${uploaded}` });
+          }
+        }
+      } catch (e) {
+        console.error('Image upload failed:', e);
+      }
+    }
+
+    // 2. Process uploadedImages
+    for (const img of details.uploadedImages || []) {
+      if (img.url && !img.file) {
+        itemEntries.push({ type: 'uploaded', item: img, s3Url: img.url });
+        continue;
+      }
+      if (!img.file) continue;
+      try {
+        const uploaded = await uploadToS3(img.file, userId, true);
+        if (uploaded) {
+          const s3Url = `${S3_BASE_URL}${uploaded}`;
+          itemEntries.push({
+            type: 'uploaded',
+            item: { ...img, url: s3Url },
+            s3Url,
+          });
+        }
+      } catch (e) {
+        console.error('Uploaded image upload failed:', e);
+      }
+    }
+
+    const imageUrls = itemEntries.map((e) => e.s3Url);
+
+    // 3. Upload logo
+    let logoUrl = '';
+    const logoSource = details.uploadedLogo || details.urlLogo;
+    if (logoSource) {
+      try {
+        if (logoSource.file) {
+          const uploaded = await uploadToS3(logoSource.file, userId, true);
+          if (uploaded) logoUrl = `${S3_BASE_URL}${uploaded}`;
+        } else if (logoSource.isS3 && logoSource.url) {
+          logoUrl = logoSource.url;
+        } else if (logoSource.url) {
+          const res = await fetch(logoSource.url);
+          const blob = await res.blob();
+          const file = new File([blob], 'logo.jpg', { type: blob.type || 'image/jpeg' });
+          const uploaded = await uploadToS3(file, userId, true);
+          if (uploaded) logoUrl = `${S3_BASE_URL}${uploaded}`;
+        }
+      } catch (e) { console.error('Logo upload failed:', e); }
+    }
+
+    // 4. Validate images (face detection for Seedance 2.5)
+    const COMMON_FACE_ERROR = 'Oops! A human face is visible in this image. Please upload an image without a face.';
+
+    try {
+      const validateRes = await axios.post(
+        `${BACKEND_HOST}/adsgpt/video/ai-ads/validate-images`,
+        { images: imageUrls },
+        { headers: { Authorization: `Bearer ${getCookies()}` } }
+      );
+      const resData = validateRes.data;
+      if (resData?.valid === false) {
+        dispatch(setAiAdsSceneLoading(false));
+        const results = resData.results || [];
+        const invalidUrls = new Set(
+          results
+            .filter((r) => r.ok === false || r.hasRealisticFace === true)
+            .map((r) => r.url)
+        );
+
+        const validUploadedImages = itemEntries
+          .filter((e) => e.type === 'uploaded' && !invalidUrls.has(e.s3Url))
+          .map((e) => e.item);
+
+        const validUrlImages = itemEntries
+          .filter((e) => e.type === 'url' && !invalidUrls.has(e.s3Url))
+          .map((e) => e.item);
+
+        globalToast.error(COMMON_FACE_ERROR);
+        return {
+          __validationError: true,
+          message: COMMON_FACE_ERROR,
+          results,
+          validUploadedImages,
+          validUrlImages,
+        };
+      }
+    } catch (valErr) {
+      const responseData = valErr.response?.data;
+      if (responseData?.valid === false) {
+        dispatch(setAiAdsSceneLoading(false));
+        const results = responseData.results || [];
+        const invalidUrls = new Set(
+          results
+            .filter((r) => r.ok === false || r.hasRealisticFace === true)
+            .map((r) => r.url)
+        );
+
+        const validUploadedImages = itemEntries
+          .filter((e) => e.type === 'uploaded' && !invalidUrls.has(e.s3Url))
+          .map((e) => e.item);
+
+        const validUrlImages = itemEntries
+          .filter((e) => e.type === 'url' && !invalidUrls.has(e.s3Url))
+          .map((e) => e.item);
+
+        globalToast.error(COMMON_FACE_ERROR);
+        return {
+          __validationError: true,
+          message: COMMON_FACE_ERROR,
+          results,
+          validUploadedImages,
+          validUrlImages,
+        };
+      }
+      // If validation service is unavailable, proceed anyway
+      console.warn('Image validation service unavailable, proceeding:', valErr.message);
+    }
+
+    // 5. Build payload — direct generation (no scenes)
+    const { formData } = details;
+    const isBrand = aiAdsType === 'brand';
+    const duration = toVideoDurationSeconds(formData.duration);
+
+    const inputs = {
+      type: 'ai_ads',
+      aiAdsType: isBrand ? 'brand' : 'product',
+      name: formData.name,
+      ...(isBrand ? { brandName: formData.name } : { productName: formData.name }),
+      description: formData.description,
+      productDescription: formData.description,
+      category: formData.category,
+      images: imageUrls,
+      logoUrl,
+      productType: formData.productType || '',
+      duration,
+      aspectRatio: formData.aspectRatio,
+      model: 'seedance-2.5',
+      ctaType: formData.cta,
+      numberOfVideos: 1,
+      userPrompt: formData.optimizedPrompt || '',
+      captionsEnabled: formData.captionsEnabled ?? false,
+      scenes: [],
+    };
+
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/generate`,
+      { inputs },
+      { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
+    );
+
+    globalToast.success('Video generation started! Check My Space for progress.');
+    dispatch(setAiAdsSceneLoading(false));
+    return { success: true, sessionId: response.data?.data?._id };
+  } catch (error) {
+    const errorMsg = error.response?.data?.error || 'Failed to start video generation';
+    dispatch(setError(errorMsg));
+    globalToast.error(errorMsg);
+    dispatch(setAiAdsSceneLoading(false));
+    throw error;
+  }
+};
+
+export const validateAiAdsImagesAction = (images) => async () => {
+  try {
+    const response = await axios.post(
+      `${BACKEND_HOST}/adsgpt/video/ai-ads/validate-images`,
+      { images },
+      { headers: { Authorization: `Bearer ${getCookies()}`, 'Content-Type': 'application/json' } }
+    );
+    return response.data;
+  } catch (error) {
+    if (error.response?.data) {
+      return error.response.data;
+    }
     throw error;
   }
 };

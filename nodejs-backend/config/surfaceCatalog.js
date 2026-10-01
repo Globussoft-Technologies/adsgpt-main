@@ -53,6 +53,7 @@ const SURFACE_CATALOG = {
   ai_ads: {
     "veo-3.1-fast": { durations: [8, 10, 20, 30, 40], aspectRatios: ["9:16", "16:9"] },
     veo: { durations: [8, 10, 20, 30, 40], aspectRatios: ["9:16", "16:9"] },
+    "seedance-2.5": { durations: [8, 10, 20, 30], aspectRatios: ["16:9", "9:16"] },
   },
   ugc: UGC_BROLL,
   broll: UGC_BROLL,

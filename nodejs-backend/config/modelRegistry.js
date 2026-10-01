@@ -217,6 +217,17 @@ const MODEL_REGISTRY = [
     enabled: true,
   },
   {
+    canonicalKey: "seedance-2.5",
+    type: "video",
+    label: "Seedance 2.5",
+    aliases: ["Seedance 2.5", "seedance-2.5"],
+    creditEnvVar: "ADSGPT_SEEDANCE_2_5_VIDEO_CREDIT_DEDUCTION",
+    creditDefault: 6,
+    aggregationCreditDefault: 6,
+    pricing: { per_second: 0.23 },
+    enabled: true,
+  },
+  {
     canonicalKey: "kling_3.0",
     type: "video",
     label: "Kling 3.0",

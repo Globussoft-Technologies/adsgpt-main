@@ -123,6 +123,13 @@ router.post(
   videoController.getAiAdsProduct
 );
 
+// Seedance 2.5 image face validation (before generation)
+router.post(
+  "/ai-ads/validate-images",
+  authenticateJWT,
+  videoController.validateAiAdsImages
+);
+
 // Step 1 — scene generation (JWT protected)
 router.post(
   "/ai-ads/generate-scene",

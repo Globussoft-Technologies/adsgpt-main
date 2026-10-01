@@ -16,7 +16,7 @@ import { AnimatePresence } from 'framer-motion';
 
 import { useDispatch, useSelector } from 'react-redux';
 import CommonDropdown from '@/components/common/AdPrompt/CommonDropdown';
-import { generateAiAdsSceneAction, copyAiAdsSessionAction } from '@/store/actions/adVideoNew/Advideoactions';
+import { generateAiAdsSceneAction, copyAiAdsSessionAction, generateSeedanceDirectAction } from '@/store/actions/adVideoNew/Advideoactions';
 import { setAiAdsSceneLoading } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { fetchModelCreditsAction } from '@/store/actions/adStudio/promptActions';
 import { useVideoSurfaceModelsState } from '@/utils/hooks/useVideoSurfaceModels';
@@ -28,6 +28,10 @@ import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import { analyzeLogoTransparency, LOGO_BACKGROUND_ERROR } from '@/utils/logoTransparency';
 import UpgradeModal from '@/components/AdStudio/AdVideoNew/UpgradeModal';
 import { getFirstAvailableVideoModel, isVideoModelBlocked } from '@/utils/videoModelAccess';
+import { uploadToS3 } from '@/utils/imageUpload';
+import { globalToast } from '@/utils/globalToast';
+
+const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
@@ -163,7 +167,7 @@ const matchOption = (options, apiValue) => {
   return partial ? partial.value : '';
 };
 
-const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack, onNext, onClose }) => {
+const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack, onNext, onClose, handleGenerate }) => {
   const isBrand = type === 'brand';
   const title = isBrand ? 'Brand Details' : 'Product Details';
   const dispatch = useDispatch();
@@ -189,9 +193,12 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     if (!selectedVideoDuration) e.duration = 'Duration is required';
     // Deliverable differs by provider: Sarvam picks resolve to voiceName
     // (voiceId is always '' for Sarvam), ElevenLabs to voiceId.
-    const vv = formData.voice || {};
-    const hasVoice = vv.provider === 'sarvam' ? !!vv.voiceName : !!vv.voiceId;
-    if (!hasVoice) e.voice = 'Voice is required';
+    // Seedance 2.5 does not use voice — skip validation.
+    if (!isSeedanceModel) {
+      const vv = formData.voice || {};
+      const hasVoice = vv.provider === 'sarvam' ? !!vv.voiceName : !!vv.voiceId;
+      if (!hasVoice) e.voice = 'Voice is required';
+    }
     return e;
   };
 
@@ -239,6 +246,9 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     [surfaceModels, formData.model]
   );
   const selectedVideoDuration = getSelectedModelDuration(configuredDurationOptions, formData.duration);
+
+  // Seedance 2.5 has a simplified flow: no voice, no captions, no scene preview
+  const isSeedanceModel = formData.model === 'seedance-2.5';
 
   // URL-based images from analysis (not File objects)
   // brandImages takes priority — these are already on S3 from BrandIQ, no re-upload needed
@@ -421,12 +431,15 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     }
 
     const filesToUpload = imageFiles.slice(0, remainingSlots);
-    const newPreviews = filesToUpload.map((file) => ({
+    if (!filesToUpload.length) return;
+
+    const newItems = filesToUpload.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
       name: file.name,
     }));
-    setUploadedImages((prev) => [...prev, ...newPreviews]);
+
+    setUploadedImages((prev) => [...prev, ...newItems]);
   };
 
   const handleLogoUpload = async (e) => {
@@ -571,16 +584,33 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       </button>
 
       {submitting && (
-        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-white/70 backdrop-blur-sm dark:bg-black/55">
-          <div className="flex min-w-72 flex-col items-center gap-4 rounded-2xl border border-black/10 bg-white px-8 py-6 text-center shadow-2xl dark:border-white/10 dark:bg-[#202020]">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900 dark:border-white/20 dark:border-t-white" />
-            <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                Preparing script generation
-              </p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-white/60">
-                Uploading assets and starting AI video generation...
-              </p>
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-md transition-all duration-300 dark:bg-black/70">
+          <div className="relative mx-4 flex w-full max-w-sm flex-col items-center overflow-hidden rounded-3xl border border-black/10 bg-white/95 p-8 text-center shadow-[0_25px_60px_-15px_rgba(0,0,0,0.3)] backdrop-blur-xl dark:border-white/10 dark:bg-[#1c1c1f]/95">
+            {/* Ambient Background Glow */}
+            <div className="pointer-events-none absolute -top-12 left-1/2 h-32 w-32 -translate-x-1/2 rounded-full bg-gradient-to-tr from-[#02C8C4]/25 via-[#5867EB]/25 to-purple-500/20 blur-2xl" />
+
+            {/* Glowing Spinner / AI Orb */}
+            <div className="relative mb-5 flex h-16 w-16 items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-[#02C8C4]/20 to-[#5867EB]/20 blur-md animate-pulse" />
+              <div className="h-16 w-16 animate-spin rounded-full border-[3px] border-transparent border-t-[#02C8C4] border-r-[#5867EB] dark:border-t-[#15DCFF] dark:border-r-[#6b72f8]" />
+              <div className="absolute flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 shadow-inner dark:bg-[#252529]">
+                <Sparkles className="h-5 w-5 text-indigo-500 animate-pulse dark:text-cyan-400" />
+              </div>
+            </div>
+
+            {/* Text details */}
+            <h3 className="text-base font-bold tracking-tight text-gray-900 dark:text-white">
+              {isSeedanceModel ? 'Generating Your Video' : 'Creating Implementation Plan'}
+            </h3>
+            <p className="mt-1.5 text-xs text-gray-500 dark:text-white/60">
+              {isSeedanceModel
+                ? 'Uploading assets & launching AI rendering engine...'
+                : 'Analyzing your brand assets & generating scenes...'}
+            </p>
+
+            {/* Shimmering progress line */}
+            <div className="mt-6 h-1 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-white/10">
+              <div className="h-full w-full rounded-full bg-gradient-to-r from-[#02C8C4] via-[#5867EB] to-[#15DCFF] animate-pulse" />
             </div>
           </div>
         </div>
@@ -613,10 +643,17 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       type="b-roll"
                       side="top"
                       showChevron
-                      className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
+                      className="h-8! rounded-full! border border-black/15 dark:border-white/20 bg-white/90 dark:bg-[#252528] px-3! py-1.5! text-[11px]! sm:text-[12px]! font-medium! text-gray-900! dark:text-white! shadow-xs hover:bg-gray-50 dark:hover:bg-[#323236] transition-colors [&>div>span]:text-gray-900! dark:[&>div>span]:text-white! [&>div>span]:font-medium! [&>svg]:text-gray-600! dark:[&>svg]:text-white/80!"
                       options={visibleModelOptions}
                       value={visibleModelOptions.find((opt) => opt.value === formData.model)}
-                      onChange={(val) => { if (isVideoModelBlocked(visibleModelOptions.find((model) => model.value === val), userData)) { setIsUpgradeModalOpen(true); return; } setFormData((prev) => ({ ...prev, model: val, duration: val === prev.model ? prev.duration : '' })); setErrors((prev) => ({ ...prev, model: '' })); }}
+                      onChange={(val) => {
+                        if (isVideoModelBlocked(visibleModelOptions.find((model) => model.value === val), userData)) {
+                          setIsUpgradeModalOpen(true);
+                          return;
+                        }
+                        setFormData((prev) => ({ ...prev, model: val, duration: val === prev.model ? prev.duration : '' }));
+                        setErrors((prev) => ({ ...prev, model: '' }));
+                      }}
                     />
                   </div>
                   {errors.model && <p className="mt-1 text-[10px] text-red-400">{errors.model}</p>}
@@ -628,7 +665,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       type="b-roll"
                       side="top"
                       showChevron
-                      className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
+                      className="h-8! rounded-full! border border-black/15 dark:border-white/20 bg-white/90 dark:bg-[#252528] px-3! py-1.5! text-[11px]! sm:text-[12px]! font-medium! text-gray-900! dark:text-white! shadow-xs hover:bg-gray-50 dark:hover:bg-[#323236] transition-colors [&>div>span]:text-gray-900! dark:[&>div>span]:text-white! [&>div>span]:font-medium! [&>svg]:text-gray-600! dark:[&>svg]:text-white/80!"
                       options={configuredDurationOptions}
                       value={configuredDurationOptions.find((opt) => opt.value === selectedVideoDuration)}
                       onChange={(val) => { updateField('duration', val); setErrors((prev) => ({ ...prev, duration: '' })); }}
@@ -643,7 +680,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       type="b-roll"
                       side="top"
                       showChevron
-                      className="h-auto w-auto bg-gray-100 dark:bg-[#1a1a1a]/60! px-3! py-1.5! text-[11px]! sm:text-[12px]!"
+                      className="h-8! rounded-full! border border-black/15 dark:border-white/20 bg-white/90 dark:bg-[#252528] px-3! py-1.5! text-[11px]! sm:text-[12px]! font-medium! text-gray-900! dark:text-white! shadow-xs hover:bg-gray-50 dark:hover:bg-[#323236] transition-colors [&>div>span]:text-gray-900! dark:[&>div>span]:text-white! [&>div>span]:font-medium! [&>svg]:text-gray-600! dark:[&>svg]:text-white/80!"
                       options={aspectRatioOptions}
                       value={aspectRatioOptions.find((opt) => opt.value === formData.aspectRatio) || (isAspectRatioLoading ? { label: 'Loading ratios...', Icon: <Loader2 className="h-3 w-3 animate-spin" /> } : undefined)}
                       onChange={(val) => { updateField('aspectRatio', val); setErrors((prev) => ({ ...prev, aspectRatio: '' })); }}
@@ -714,7 +751,6 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                   id="images-upload"
                   label="Product Images"
                   required
-                  fileName=""
                   onChange={handleImageUpload}
                   onClear={() => { setUploadedImages([]); setUrlImages([]); }}
                   error={errors.images}
@@ -918,17 +954,31 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
 
           {/* Settings Divider */}
           <div>
-            <div className={`mb-3 rounded-2xl border border-black/10 dark:border-white/5 bg-gray-100 dark:bg-[#909294]/10 p-3 sm:p-4 ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+            <div
+              className={`relative mb-3 rounded-2xl border border-black/10 dark:border-white/5 bg-gray-100 dark:bg-[#909294]/10 p-3 sm:p-4 transition-opacity duration-200 ${
+                isSeedanceModel
+                  ? 'pointer-events-none opacity-30 select-none cursor-not-allowed'
+                  : submitting
+                  ? 'pointer-events-none opacity-50'
+                  : ''
+              }`}
+            >
               <VoiceSelector
                 value={formData.voice}
                 onChange={(next) => { updateField('voice', next); setErrors((prev) => ({ ...prev, voice: '' })); }}
-                error={errors.voice}
+                error={!isSeedanceModel ? errors.voice : ''}
                 compactHeader
               />
             </div>
 
             <div className="mt-3 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className={`flex w-full items-center justify-between gap-2 rounded-xl border border-black/10 bg-gray-100 px-3 py-2 dark:border-white/5 dark:bg-[#909294]/10 sm:w-[245px] sm:flex-none ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
+            <div
+              className={`relative flex w-full items-center justify-between gap-2 rounded-xl border border-black/10 bg-gray-100 px-3 py-2 dark:border-white/5 dark:bg-[#909294]/10 sm:w-[245px] sm:flex-none transition-opacity duration-200 ${
+                submitting
+                  ? 'pointer-events-none opacity-50'
+                  : ''
+              }`}
+            >
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
                   Captions
@@ -940,6 +990,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               <button
                 type="button"
                 role="switch"
+                disabled={submitting}
                 aria-checked={formData.captionsEnabled}
                 aria-label="Enable captions"
                 onClick={() => updateField('captionsEnabled', !formData.captionsEnabled)}
@@ -957,29 +1008,26 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               </button>
             </div>
 
-            <div className="flex min-w-0 flex-col items-end gap-1.5 sm:ml-auto">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3 sm:ml-auto">
               {!hasEnoughCredits && estimatedCredits > 0 && (
-                <div className="flex items-center justify-end">
-                  <span className="shrink-0 whitespace-nowrap rounded-full border border-red-500 bg-red-500 px-3 py-1 text-[11px] font-medium text-white shadow-xs">
-                    Not enough credits — need {estimatedCredits}, you have {availableCredits}
-                  </span>
-                </div>
+                <span className="shrink-0 whitespace-nowrap rounded-full border border-red-500 bg-red-500 px-3 py-1 text-[11px] font-medium text-white shadow-xs">
+                  Not enough credits — need {estimatedCredits}, you have {availableCredits}
+                </span>
               )}
-              <div className="flex items-center gap-2 sm:gap-3">
-                {hasEnoughCredits && estimatedCredits > 0 && (
-                  <ShadcnTooltip label={`Will use : ${estimatedCredits} credits, ${availableCredits - estimatedCredits} left after`}>
-                    <span className="rounded-full bg-black/5 dark:bg-white/20 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-white/90">
-                      ~{estimatedCredits} credits
-                    </span>
-                  </ShadcnTooltip>
-                )}
-                <button
-                  onClick={onBack}
-                  disabled={submitting}
-                  className="rounded-sm border border-black/20 dark:border-[#efefef]/70 px-4 py-1.5 text-13 font-medium text-gray-900 dark:text-white transition hover:bg-black/5 dark:hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
-                >
-                  Back
-                </button>
+              {hasEnoughCredits && estimatedCredits > 0 && (
+                <ShadcnTooltip label={`Will use : ${estimatedCredits} credits, ${availableCredits - estimatedCredits} left after`}>
+                  <span className="rounded-full bg-black/5 dark:bg-white/20 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-white/90">
+                    ~{estimatedCredits} credits
+                  </span>
+                </ShadcnTooltip>
+              )}
+              <button
+                onClick={onBack}
+                disabled={submitting}
+                className="rounded-sm border border-black/20 dark:border-[#efefef]/70 px-4 py-1.5 text-13 font-medium text-gray-900 dark:text-white transition hover:bg-black/5 dark:hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
+              >
+                Back
+              </button>
                 <button
                   disabled={submitting || !formData.model || !selectedVideoDuration || !hasEnoughCredits}
                   onClick={async () => {
@@ -989,6 +1037,42 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                         return;
                       }
 
+                      // ─── Seedance 2.5: skip scenes, generate video directly ───
+                      if (isSeedanceModel) {
+                        setSubmitting(true);
+                        try {
+                          const result = await dispatch(generateSeedanceDirectAction(type, {
+                            formData,
+                            uploadedImages,
+                            uploadedLogo,
+                            urlImages,
+                            urlLogo,
+                          }));
+                          if (result?.__validationError) {
+                            if (Array.isArray(result.validUploadedImages)) {
+                              setUploadedImages(result.validUploadedImages);
+                            }
+                            if (Array.isArray(result.validUrlImages)) {
+                              setUrlImages(result.validUrlImages);
+                            }
+                            setErrors((prev) => ({ ...prev, images: result.message }));
+                            return;
+                          }
+                          // Close form and fly animation to My Space
+                          if (handleGenerate) {
+                            await handleGenerate('video');
+                          } else {
+                            onClose();
+                          }
+                        } catch {
+                          // error already toasted in action
+                        } finally {
+                          setSubmitting(false);
+                        }
+                        return;
+                      }
+
+                      // ─── Normal Veo flow (scene generation → Implementation Plan) ───
                       // Recreate with no edits: clone the original session into a new
                       // doc (status="copy") so generate-video runs on a fresh _id and
                       // doesn't mutate the original. Backend's /ai-ads/copy/:sessionId
@@ -1054,7 +1138,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                     }}
                     className="rounded-sm bg-gray-900 text-white dark:bg-white px-4 py-1.5 text-13 font-medium dark:text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-sm"
                   >
-                    {submitting ? 'Generating...' : 'Next'}
+                    {submitting ? 'Generating...' : isSeedanceModel ? 'Generate' : 'Next'}
                   </button>
                 </div>
               </div>
@@ -1062,7 +1146,6 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
           </div>
         </div>
       </div>
-    </div>
 
       <AnimatePresence>
         {lightbox.open && (

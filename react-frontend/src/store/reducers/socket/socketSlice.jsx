@@ -455,7 +455,7 @@ export const initSocket = (url) => (dispatch, getState) => {
 
     socket.on('videoProgress', (progressData) => {
       console.log('Video progress update:', progressData);
-      if (progressData?._id && progressData?.promptPercentage) {
+      if (progressData?._id && typeof progressData?.promptPercentage === 'number') {
         dispatch(
           updateVideoPromptPercentage({
             id: progressData?._id,

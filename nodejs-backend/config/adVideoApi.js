@@ -25,6 +25,7 @@ const ROUTES = {
 
     // AI ads pipeline
     ai_ads_validate: "/api/v1/ai_ads/validate",
+    ai_ads_validate_images: "/api/v1/ai_ads/validate_images",
     ai_ads_generate_scene: "/api/v1/ai_ads/generate_scenes",
     ai_ads_regenerate_scene: "/api/v1/ai_ads/regenerate_scenes",
     ai_ads_regenerate_voice: "/api/v1/ai_ads/regenerate_voice",

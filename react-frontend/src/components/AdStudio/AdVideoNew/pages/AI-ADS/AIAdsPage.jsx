@@ -149,6 +149,7 @@ const AIAdsPage = ({ handleGenerate }) => {
               handleNext('generation', saved);
             }}
             onClose={handleClose}
+            handleGenerate={handleGenerate}
           />
         );
       case 'generation': {

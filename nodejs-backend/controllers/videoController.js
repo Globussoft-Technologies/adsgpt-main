@@ -223,10 +223,16 @@ exports.generateVideo = async (req, res) => {
     // This is better because it allows us to:
     // 1. Enforce sessionId uniqueness early
     // 2. Track the request even if the Python API call fails
+    // Ensure scenes array exists for ai_ads (Seedance 2.5 uses empty array for direct generation)
+    if (inputs.type === "ai_ads" && !Array.isArray(inputs.scenes)) {
+      inputs.scenes = [];
+    }
+
     const videoData = {
       userId: userId,
       inputs: { ...inputs, watermark: plan == "8" ? true : false },
       status: "pending",
+      promptPercentage: 10,
     };
 
     const video = await VideoGeneration.create(videoData);
@@ -304,13 +310,19 @@ exports.generateVideo = async (req, res) => {
           if (pythonResponse.status === 200) {
             await VideoGeneration.updateOne(
               { _id: videoId },
-              { $set: { status: "processing" } },
+              { $set: { status: "processing", promptPercentage: 10 } },
             );
           }
         } catch (err) {
+          const detail =
+            err.response?.data?.error ||
+            err.response?.data?.message ||
+            (Array.isArray(err.response?.data?.detail)
+              ? err.response.data.detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+              : err.response?.data?.detail) ||
+            err.message;
           logger.error(
-            `Error sending ${inputs.type} request to python:`,
-            err.message,
+            `Error sending ${inputs.type} request to python: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`,
           );
 
           // Python never accepted the job — refund the freeze and clean up.
@@ -319,7 +331,7 @@ exports.generateVideo = async (req, res) => {
 
           return res.status(500).json({
             success: false,
-            error: err.message,
+            error: typeof detail === "string" ? detail : JSON.stringify(detail),
           });
         }
       } else {
@@ -1831,6 +1843,27 @@ exports.downloadMedia = async (req, res) => {
 // -------------------------------------------------------------------------------
 // AI Ads Controllers  (use VideoGeneration model ï¿½ no separate AiAds model)
 // -------------------------------------------------------------------------------
+
+// --- 0. validateAiAdsImages (Seedance 2.5 face detection) ---------------------
+exports.validateAiAdsImages = async (req, res) => {
+  try {
+    const { images } = req.body;
+    if (!Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({ valid: false, message: "images array is required" });
+    }
+    const pythonUrl = adVideoApiUrl("ai_ads_validate_images");
+    if (!pythonUrl) {
+      return res.status(500).json({ valid: false, message: "Image validation service not configured" });
+    }
+    const pythonRes = await axios.post(pythonUrl, { images });
+    return res.status(pythonRes.status).json(pythonRes.data);
+  } catch (err) {
+    if (err.response) {
+      return res.status(err.response.status).json(err.response.data);
+    }
+    return res.status(500).json({ valid: false, message: err.message });
+  }
+};
 
 // --- 1. generateScene ---------------------------------------------------------
 exports.generateScene = async (req, res) => {
