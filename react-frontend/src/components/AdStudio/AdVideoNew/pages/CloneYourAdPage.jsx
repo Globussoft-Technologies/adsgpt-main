@@ -1583,10 +1583,18 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   }, [recreateInputs, dispatch]);
 
   const doStepBack = () => {
+    // If analysis is actively in progress, prevent going back / terminating during analysis
     if (
-      currentStepRef.current === 'workspace' ||
       isAnalyzingRef.current ||
       analysisStateRef.current === 'analyzing' ||
+      isAnalyzing ||
+      analysisState === 'analyzing'
+    ) {
+      return false;
+    }
+
+    if (
+      currentStepRef.current === 'workspace' ||
       analysisStateRef.current === 'success' ||
       analysisStateRef.current === 'failed' ||
       analysisStateRef.current === 'timeout'
@@ -3547,15 +3555,23 @@ const renderLightboxModal = () => {
       ? `Video is too long (${formatDuration(sourceDuration)}). Please select a video that is 60 seconds or less.`
       : '');
 
+  const isAnalyzingActive = isAnalyzing || analysisState === 'analyzing';
+
   return (
     <div className={`flex flex-col w-full ${containerMaxWidthClass} items-start gap-0 my-auto mx-auto transition-all duration-300`}>
       {/* Top Left Back Chevron Button positioned directly above the analyze form / workspace card */}
       <button
-        onClick={doStepBack}
+        onClick={isAnalyzingActive ? undefined : doStepBack}
         type="button"
-        className="-ml-1.5 flex items-center justify-center p-0 leading-none text-zinc-700 dark:text-zinc-200 hover:text-black dark:hover:text-white transition-all cursor-pointer active:scale-95"
-        title="Go back to change input"
-        aria-label="Go back to change input"
+        disabled={isAnalyzingActive}
+        className={`-ml-1.5 flex items-center justify-center p-0 leading-none transition-all ${
+          isAnalyzingActive
+            ? 'opacity-30 cursor-not-allowed text-zinc-400 dark:text-zinc-600'
+            : 'text-zinc-700 dark:text-zinc-200 hover:text-black dark:hover:text-white cursor-pointer active:scale-95'
+        }`}
+        title={isAnalyzingActive ? 'Analysis in progress...' : 'Go back to change input'}
+        aria-label={isAnalyzingActive ? 'Analysis in progress...' : 'Go back to change input'}
+        aria-disabled={isAnalyzingActive}
       >
         <ChevronLeft className="h-6 w-6 2xl:h-7 2xl:w-7" />
       </button>

@@ -229,9 +229,6 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const exitRecreateToMySpace = () => {
     setSearchParams({}, { replace: true });
     dispatch(setRecreateInputs(null));
-    if (activePage === 'clone-ad') {
-      dispatch(clearActiveRecreateSession());
-    }
     dispatch(setImageAndScript(null));
     dispatch(setAvatarStep('options'));
     dispatch(setCloneStep('upload'));
@@ -243,9 +240,6 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const exitToAdVideoHome = () => {
     setSearchParams({}, { replace: true });
     dispatch(setRecreateInputs(null));
-    if (activePage === 'clone-ad') {
-      dispatch(clearActiveRecreateSession());
-    }
     dispatch(setImageAndScript(null));
     dispatch(setAvatarStep('options'));
     dispatch(setCloneStep('upload'));
