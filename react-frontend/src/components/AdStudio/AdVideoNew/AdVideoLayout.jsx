@@ -229,7 +229,9 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const exitRecreateToMySpace = () => {
     setSearchParams({}, { replace: true });
     dispatch(setRecreateInputs(null));
-    dispatch(clearActiveRecreateSession());
+    if (activePage === 'clone-ad') {
+      dispatch(clearActiveRecreateSession());
+    }
     dispatch(setImageAndScript(null));
     dispatch(setAvatarStep('options'));
     dispatch(setCloneStep('upload'));
@@ -241,7 +243,9 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
   const exitToAdVideoHome = () => {
     setSearchParams({}, { replace: true });
     dispatch(setRecreateInputs(null));
-    dispatch(clearActiveRecreateSession());
+    if (activePage === 'clone-ad') {
+      dispatch(clearActiveRecreateSession());
+    }
     dispatch(setImageAndScript(null));
     dispatch(setAvatarStep('options'));
     dispatch(setCloneStep('upload'));
@@ -727,13 +731,15 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
             {activePage === 'clone-ad' ? (
               <h2 className="flex items-center gap-2 text-xl 2xl:text-3xl font-semibold">{page?.title}</h2>
             ) : (
-              <button
-                onClick={handleBackNavigation}
-                className="flex items-center gap-2 text-xl 2xl:text-3xl hover:opacity-80 transition-opacity"
-              >
-                <ChevronLeft className="h-6.5 w-6.5 2xl:h-9 2xl:w-9" />
+              <h2 className="flex items-center gap-2 text-xl 2xl:text-3xl font-semibold">
+                {/* <button
+                  onClick={handleBackNavigation}
+                  className="flex items-center gap-2 text-xl 2xl:text-3xl hover:opacity-80 transition-opacity"
+                >
+                  <ChevronLeft className="h-6.5 w-6.5 2xl:h-9 2xl:w-9" />
+                </button> */}
                 {page?.title}
-              </button>
+              </h2>
             )}
             {/* Hidden genie target — zero-size, positioned top-right to match My Space in sidebar */}
             <span
