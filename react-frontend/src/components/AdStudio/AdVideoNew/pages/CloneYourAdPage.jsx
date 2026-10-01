@@ -1359,7 +1359,9 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
         dispatch(setActiveRecreateSession(sessionPayload));
         try {
           sessionStorage.setItem('activeRecreateSession', JSON.stringify(sessionPayload));
-        } catch {}
+        } catch (err) {
+          void err;
+        }
       }
     } catch (err) {
       console.error('[CloneYourAd] Start Analyze error:', err);
@@ -1623,7 +1625,9 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       try {
         sessionStorage.removeItem('activeRecreateSession');
         localStorage.removeItem('activeRecreateSession');
-      } catch {}
+      } catch (err) {
+        void err;
+      }
 
       const existingVideoSource =
         prefillUrl ||
@@ -2056,7 +2060,9 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
             const raw = sessionStorage.getItem('activeRecreateSession');
             const prev = raw ? JSON.parse(raw) : {};
             sessionStorage.setItem('activeRecreateSession', JSON.stringify({ ...prev, ...updated }));
-          } catch {}
+          } catch (err) {
+            void err;
+          }
         } else if (record.status === 'failed') {
           setAnalysisState('failed');
           setIsAnalyzing(false);
@@ -2962,7 +2968,9 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     try {
       sessionStorage.removeItem('activeRecreateSession');
       localStorage.removeItem('activeRecreateSession');
-    } catch {}
+    } catch (err) {
+      void err;
+    }
 
     if (typeof onClose === 'function') {
       onClose();

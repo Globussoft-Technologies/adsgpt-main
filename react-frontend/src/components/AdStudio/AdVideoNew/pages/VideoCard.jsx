@@ -127,27 +127,76 @@ export default function VideoCard({
   const primaryVideoUrl = item?.results?.[0]?.url ?? '';
   const activeVideoSrc = resolveVideoUrl(activeVideoUrl);
   const [showControls, setShowControls] = useState(false);
-  const [smoothProgress, setSmoothProgress] = useState(() => Math.max(10, item?.promptPercentage || 10));
+  const [smoothProgress, setSmoothProgress] = useState(() => {
+    if (item?.status !== 'processing') return 100;
+    const serverPct = typeof item?.promptPercentage === 'number' && item.promptPercentage > 0 ? item.promptPercentage : 10;
+    let localPct = 0;
+    if (item?._id) {
+      try {
+        const stored = Number(localStorage.getItem(`video_progress_${item._id}`));
+        if (Number.isFinite(stored) && stored > 0) {
+          localPct = stored;
+        }
+      } catch (err) {
+        void err;
+      }
+    }
+    let elapsedPct = 0;
+    if (item?.createdAt) {
+      const elapsedSec = (Date.now() - new Date(item.createdAt).getTime()) / 1000;
+      if (elapsedSec > 0) {
+        elapsedPct = Math.min(92, Math.round(10 + Math.pow(elapsedSec / 60, 0.7) * 70));
+      }
+    }
+    return Math.max(10, serverPct, localPct, elapsedPct);
+  });
 
   useEffect(() => {
     if (typeof item?.promptPercentage === 'number' && item.promptPercentage > 0) {
-      setSmoothProgress((prev) => Math.max(prev, item.promptPercentage));
+      setSmoothProgress((prev) => {
+        const next = Math.max(prev, item.promptPercentage);
+        if (item?._id) {
+          try {
+            localStorage.setItem(`video_progress_${item._id}`, String(next));
+          } catch (err) {
+            void err;
+          }
+        }
+        return next;
+      });
     }
-  }, [item?.promptPercentage]);
+  }, [item?.promptPercentage, item?._id]);
 
   useEffect(() => {
-    if (item?.status !== 'processing') return;
+    if (item?.status !== 'processing') {
+      if (item?._id) {
+        try {
+          localStorage.removeItem(`video_progress_${item._id}`);
+        } catch (err) {
+          void err;
+        }
+      }
+      return;
+    }
 
     const interval = setInterval(() => {
       setSmoothProgress((prev) => {
         if (prev >= 95) return prev;
         const increment = prev < 30 ? 2 : prev < 60 ? 1.5 : prev < 85 ? 0.8 : 0.3;
-        return Math.min(95, Math.round((prev + increment) * 10) / 10);
+        const next = Math.min(95, Math.round((prev + increment) * 10) / 10);
+        if (item?._id) {
+          try {
+            localStorage.setItem(`video_progress_${item._id}`, String(next));
+          } catch (err) {
+            void err;
+          }
+        }
+        return next;
       });
     }, 1200);
 
     return () => clearInterval(interval);
-  }, [item?.status]);
+  }, [item?.status, item?._id]);
 
   useEffect(() => {
     const url = item?.results?.[0]?.url ?? '';
@@ -584,8 +633,8 @@ export default function VideoCard({
         {showInfo && (
           <>
             <div className="absolute top-full right-0 h-2 w-full" />
-            <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 max-h-36 w-64 overflow-y-auto rounded-lg border border-black/10 bg-white p-3 text-xs text-gray-900 shadow-xl dark:border-transparent dark:bg-black/90 dark:text-white">
-              <InfoRow label="Type" value={item?.inputs?.type} />
+            <div className="absolute top-[calc(100%+0.25rem)] right-0 z-50 w-56 rounded-xl border border-black/10 bg-white/95 p-3 text-xs text-gray-900 shadow-xl backdrop-blur-md dark:border-white/10 dark:bg-black/90 dark:text-white">
+              <InfoRow label="Type" value={isAiAds ? 'AI Ads' : item?.inputs?.type} />
               <InfoRow label="Model" value={item?.inputs?.model} />
               <InfoRow
                 label={isAiAds ? 'Name' : 'Product'}
@@ -596,50 +645,26 @@ export default function VideoCard({
 
               {isAiAds && (
                 <>
-                  <InfoRow label="Category" value={item?.inputs?.category} className="mt-1" />
-                  <InfoRow label="Ad Style" value={item?.inputs?.adStyle} />
-                  <InfoRow label="Tone" value={item?.inputs?.tone} />
+                  <InfoRow label="Category" value={item?.inputs?.category} />
                   <InfoRow label="CTA" value={item?.inputs?.ctaType} />
-                  <InfoRow label="Prompt" value={item?.inputs?.userPrompt || item?.inputs?.prompt} />
-                  <InfoRow label="Tagline" value={item?.inputs?.tagline} />
-                  <InfoRow label="Product Type" value={item?.inputs?.productType} />
-                  <InfoRow label="Price" value={item?.inputs?.price} />
-                  <InfoRow label="Voice Model" value={aiAdsInfo.voiceModel} className="mt-1" />
-                  <InfoRow label="Language" value={aiAdsInfo.language} />
-                  <InfoRow label="Gender" value={aiAdsInfo.gender} />
-                  <InfoRow label="Accent" value={aiAdsInfo.accent} />
-                  <InfoRow label="Age" value={aiAdsInfo.age} />
-                  <InfoRow label="Voice" value={aiAdsInfo.voice} />
-                  <InfoRow label="Caption status" value={aiAdsInfo.captionsEnabled} />
                 </>
               )}
 
-              {item?.inputs?.promotion && (
-                <InfoRow label="Promotion" value={item?.inputs?.promotion} />
-              )}
-
-              {item?.inputs?.notes && (
-                <InfoRow label="Notes" value={item?.inputs?.notes} />
-              )}
-
-              {item?.inputs?.productDescription && (
-                <InfoRow label="Description" value={item?.inputs?.productDescription} className="mt-1" />
-              )}
-
-              {item?.updatedAt && (
-                <p className="mt-1">
-                  <span className="text-gray-400">Time:</span>{' '}
-                  {new Date(item.updatedAt).toLocaleString('en-IN', {
-                    timeZone: 'Asia/Kolkata',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: true,
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </p>
+              {(item?.createdAt || item?.updatedAt) && (
+                <div className="mt-2 border-t border-gray-100 pt-1.5 dark:border-white/10">
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    <span className="font-semibold text-gray-400 dark:text-gray-500">Date:</span>{' '}
+                    {new Date(item.createdAt || item.updatedAt).toLocaleString('en-IN', {
+                      timeZone: 'Asia/Kolkata',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </p>
+                </div>
               )}
             </div>
           </>
