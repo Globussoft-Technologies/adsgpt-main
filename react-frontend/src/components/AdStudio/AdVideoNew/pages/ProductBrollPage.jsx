@@ -269,32 +269,70 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
       setIsSubmitting(false);
     }
   };
+  const defaultPreview = pageVideo
+    ? pageVideo.startsWith('http')
+      ? pageVideo
+      : `${import.meta.env.VITE_S3_BASE_URL || ''}${pageVideo}`
+    : '';
+
+  const userImageSrc =
+    uploadedImages[0]?.preview ||
+    (productUrl &&
+    (productUrl.startsWith('http://') ||
+      productUrl.startsWith('https://') ||
+      productUrl.startsWith('data:') ||
+      productUrl.startsWith('blob:'))
+      ? productUrl
+      : null);
+
+  const hasUserImage = Boolean(userImageSrc);
+  const activePreviewImage = userImageSrc || defaultPreview;
+
   return (
     <div className="grid h-full grid-cols-1 sm:grid-cols-2">
       {/* Preview */}
-      <div className="relative flex min-h-[350px] rounded-xl rounded-tr-none rounded-br-none bg-white">
-        <h1 className="z-4 m-4 ml-6 text-lg font-semibold text-white 2xl:m-6 2xl:ml-8 2xl:text-2xl">
-          Create your B-rolls
-        </h1>
+      <div className="relative flex min-h-[350px] flex-col items-center justify-center overflow-hidden rounded-xl rounded-tr-none rounded-br-none bg-zinc-100 dark:bg-zinc-900/60">
+        <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/60 via-black/20 to-transparent p-4 sm:p-6">
+          <h1 className="text-lg font-semibold text-white drop-shadow-md 2xl:text-2xl">
+            Create your B-rolls
+          </h1>
+        </div>
 
-        <img
-          src={import.meta.env.VITE_S3_BASE_URL + pageVideo}
-          alt={`b-roll-preview`}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
+        {hasUserImage ? (
+          <>
+            {/* Ambient Blurred Background */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              <img
+                src={activePreviewImage}
+                alt=""
+                className="h-full w-full scale-125 object-cover opacity-35 blur-2xl dark:opacity-25"
+              />
+            </div>
 
-        {/* <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          className="absolute inset-0 h-full w-full object-cover"
-        >
-          <source src={pageVideo} type="video/mp4" />
-        </video> */}
-
-        <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-black/30" />
+            {/* Main Foreground Image scaled to fill width or height */}
+            <div className="relative z-[2] flex h-full w-full items-center justify-center p-0">
+              <img
+                src={activePreviewImage}
+                alt="b-roll-preview"
+                onError={(e) => {
+                  if (defaultPreview && e.currentTarget.src !== defaultPreview) {
+                    e.currentTarget.src = defaultPreview;
+                  }
+                }}
+                className="h-full w-full object-contain transition-all duration-300"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <img
+              src={defaultPreview}
+              alt="b-roll-preview"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-black/30" />
+          </>
+        )}
       </div>
 
       {/* Form */}
