@@ -49,6 +49,7 @@ const {
 } = require("./renderBilling");
 const UnifiedCreditController = require("../../controllers/UnifiedCreditController");
 const { createFlowLog } = require("../../utils/flowLog");
+const { shouldWatermark } = require("../../utils/watermarkPolicy");
 
 // The POST only queues the render. The 15-60s of actual work happens on the
 // job stream, not on this connection.
@@ -171,6 +172,9 @@ async function startTemplateAdRun({
     template_id: templateId,
     reference_image_urls: productUrls,
     variations: VARIATIONS,
+    // Free plans get the logo, paid plans get a clean render
+    // (utils/watermarkPolicy.js). Both routes take the same flag.
+    watermark: await shouldWatermark(userId),
     // NO `model`. Which model each route renders with is a configuration agreed
     // with DS — Veo 3.1 fast for video, Gemini 3.1 Flash Image for image — and
     // it lives on their deployment, not in our request. See the header note.

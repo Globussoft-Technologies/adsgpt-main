@@ -32,6 +32,7 @@ const { startJobStreamBridge } = require("./jobStreamBridge");
 const { markBoardStarted } = require("./sessionMirror");
 const { securePayment, trueUp, refund } = require("./renderBilling");
 const { createFlowLog } = require("../../utils/flowLog");
+const { shouldWatermark } = require("../../utils/watermarkPolicy");
 
 // The POST only queues the render, so this covers the insert and nothing else.
 // The 40-60s of actual work happens on the stream, not on this connection.
@@ -153,14 +154,21 @@ async function startVideoRun({ userId, sessionId, boardId, maxWalletCredits }) {
     };
   }
 
-  log.ds("out", "videos", { board: boardId, attempt: attempts });
+  // Free plans get the logo, paid plans get a clean clip
+  // (utils/watermarkPolicy.js). This flag covers the clip's every frame AND its
+  // loading previews; the keyframes are a separate flag on the storyboard
+  // request, which we deliberately do not send (product decision 2026-10-01 —
+  // keyframes are workspace previews, not a deliverable).
+  const watermark = await shouldWatermark(userId);
+
+  log.ds("out", "videos", { board: boardId, attempt: attempts, watermark });
 
   try {
     const { data } = await axios.post(
       `${baseUrl}/api/v1/videos/`,
       // Always exactly one. Omitting `board_ids` renders the entire session,
       // which is both expensive and untrackable per tile.
-      { user_id: userId, session_id: sessionId, board_ids: [boardId] },
+      { user_id: userId, session_id: sessionId, board_ids: [boardId], watermark },
       {
         headers: {
           "Content-Type": "application/json",
