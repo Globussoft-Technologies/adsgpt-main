@@ -54,6 +54,11 @@ const when = (value) => {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+const recencyOf = (brief) => {
+  const timestamp = Date.parse(brief?.updatedAt || brief?.createdAt || '');
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
 export default function BriefList({ briefs = [], loading = false, onOpen, onDelete }) {
   const M = useMotionPresets();
 
@@ -69,10 +74,10 @@ export default function BriefList({ briefs = [], loading = false, onOpen, onDele
         <div className="adfactory-brief-grid-scroll min-h-0 flex-1 overflow-hidden">
           <ul
             aria-hidden="true"
-            className="mx-auto grid w-full max-w-[1400px] list-none grid-cols-1 content-start gap-3 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+            className="mx-auto flex w-full max-w-[1400px] list-none flex-wrap justify-center gap-3 px-4 pb-4 sm:flex-wrap-reverse"
           >
             {Array.from({ length: 10 }, (_, index) => (
-              <li key={index}>
+              <li key={index} className="w-full sm:w-[264px]">
                 <div
                   className={`flex min-h-[122px] flex-col gap-2.5 p-4 ${CARD}`}
                 >
@@ -98,6 +103,11 @@ export default function BriefList({ briefs = [], loading = false, onOpen, onDele
   // apologising for — the front door above is already the whole instruction.
   if (briefs.length === 0) return null;
 
+  // Reverse wrapping puts the last partial line above the full rows. Sorting
+  // oldest-to-newest makes that upper line contain the latest briefs, with the
+  // most recently created or edited card at its right edge.
+  const briefsForLayout = [...briefs].sort((a, b) => recencyOf(a) - recencyOf(b));
+
   return (
     <section className="flex min-h-0 w-full flex-1 flex-col">
       <h3 className={`mb-4 shrink-0 text-center ${SECTION}`}>Your briefs</h3>
@@ -109,20 +119,19 @@ export default function BriefList({ briefs = [], loading = false, onOpen, onDele
           bullet and a 34px indent. App.css now declares that rule inside
           `@layer base`; see the note there.
 
-          The tracks are fixed-width and centred rather than stretched across
-          the row. With auto-fit + 1fr, one brief became a single card spanning
-          the full width under a centred hero; now a partial row sits under the
-          hero instead of hugging the left edge. */}
+          Cards use a stable desktop width inside centred wrapping rows. On
+          desktop, reverse wrapping places the newest incomplete row above the
+          full five-card row; mobile keeps the natural full-width stack. */}
       <div className="adfactory-brief-grid-scroll min-h-0 flex-1 overflow-y-auto">
         <motion.ul
           {...M.stagger()}
-          className="mx-auto grid w-full max-w-[1400px] list-none grid-cols-1 content-start gap-3 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+          className="mx-auto flex w-full max-w-[1400px] list-none flex-col-reverse justify-center gap-3 px-4 pb-4 sm:flex-row sm:flex-wrap-reverse"
         >
-          {briefs.map((b) => {
+          {briefsForLayout.map((b) => {
             const status = STATUS[b.status] || STATUS.draft;
             const label = b.brand?.name || hostOf(b.source?.url) || 'Untitled brief';
             return (
-              <motion.li key={b._id} {...M.staggerItem}>
+              <motion.li key={b._id} {...M.staggerItem} className="w-full sm:w-[264px]">
               {/* The card is the button. A row of small targets inside a
                   clickable row makes it ambiguous what opens what. */}
               <div

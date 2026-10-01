@@ -3394,6 +3394,35 @@ html:not(.dark) .inline-url-field:focus-within {
   border-color: var(--lm-field-focus-border) !important;
 }
 
+/* Keep the Recreate Ad URL + Add pill on the modal's white field
+   surface without changing shared inline URL fields elsewhere. */
+html:not(.dark) .inline-url-field.recreate-ad-url-field {
+  background: #fff !important;
+  border-color: #d4d6dc !important;
+}
+
+/* Recreate Ad uses one white Light Mode surface for its Brand IQ,
+   URL/upload, and prompt controls. Dark Mode keeps its existing surfaces. */
+html:not(.dark) .recreate-ad-field-surface {
+  background-color: #fff !important;
+  border: 1px solid #d4d6dc !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) .inline-url-field.recreate-ad-url-field.recreate-ad-field-surface {
+  background: #fff !important;
+  border: 1px solid #d4d6dc !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) .recreate-ad-field-surface:focus-within {
+  border-color: #aeb3bd !important;
+}
+
+html:not(.dark) .recreate-ad-field-surface.recreate-ad-field-interactive:hover {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
 html:not(.dark) .inline-url-input,
 html:not(.dark) .inline-url-input:focus,
 html:not(.dark) .inline-url-input:focus-visible {

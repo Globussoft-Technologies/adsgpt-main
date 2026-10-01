@@ -40,6 +40,7 @@ import { useGenieToMySpace } from '@/utils/ui/useGenieToMySpace';
 import { useAdCreativeConfig } from '@/utils/hooks/useAdCreativeConfig';
 
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
+const SOURCE_ASPECT_RATIO_CACHE = new Map();
 
 // Single-item S3 upload helper. `value` is either a File (push to S3 and
 // return the hosted URL) or a string URL (pass through). Returns '' for
@@ -95,6 +96,83 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
   const imageState = useSelector((s) => s.image.current);
   const recreateInputs = useSelector((s) => s.image.recreateInputs);
   const userData = useSelector((s) => s.socket?.userData);
+  const [sourceAspectRatio, setSourceAspectRatio] = useState(null);
+  const [sourceImageReady, setSourceImageReady] = useState(false);
+  const [formColumnHeight, setFormColumnHeight] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [formColumnElement, setFormColumnElement] = useState(null);
+  const sourceImageRevealFrameRef = useRef(null);
+
+  // Resolve the source ratio before revealing the dialog. This avoids showing
+  // a square fallback and then visibly shifting the whole layout when a
+  // portrait image loads. Cache ratios so repeat opens resolve immediately.
+  useEffect(() => {
+    if (sourceImageRevealFrameRef.current) {
+      cancelAnimationFrame(sourceImageRevealFrameRef.current);
+      sourceImageRevealFrameRef.current = null;
+    }
+
+    const cachedRatio = image ? SOURCE_ASPECT_RATIO_CACHE.get(image) : null;
+    setSourceAspectRatio(cachedRatio || null);
+    setSourceImageReady(Boolean(cachedRatio || !image));
+
+    let active = true;
+    const preloadImage = image ? new window.Image() : null;
+    if (preloadImage && !cachedRatio) {
+      preloadImage.onload = () => {
+        if (!active || !preloadImage.naturalWidth || !preloadImage.naturalHeight) return;
+        const ratio = preloadImage.naturalWidth / preloadImage.naturalHeight;
+        SOURCE_ASPECT_RATIO_CACHE.set(image, ratio);
+        setSourceAspectRatio(ratio);
+        sourceImageRevealFrameRef.current = requestAnimationFrame(() => {
+          sourceImageRevealFrameRef.current = null;
+          if (active) setSourceImageReady(true);
+        });
+      };
+      preloadImage.onerror = () => {
+        if (!active) return;
+        setSourceAspectRatio(1);
+        setSourceImageReady(true);
+      };
+      preloadImage.src = image;
+    }
+
+    return () => {
+      active = false;
+      if (preloadImage) {
+        preloadImage.onload = null;
+        preloadImage.onerror = null;
+      }
+      if (sourceImageRevealFrameRef.current) {
+        cancelAnimationFrame(sourceImageRevealFrameRef.current);
+        sourceImageRevealFrameRef.current = null;
+      }
+    };
+  }, [image]);
+
+  // Portrait previews should not make the desktop modal taller than its form.
+  // Observe the form because chips and inline errors can change its natural
+  // height after the modal opens. The viewport value keeps the same safety cap
+  // when the browser is resized.
+  useEffect(() => {
+    if (!open || !formColumnElement) return undefined;
+
+    const updateMeasurements = () => {
+      setFormColumnHeight(formColumnElement.getBoundingClientRect().height);
+      setViewportHeight(window.innerHeight);
+      setViewportWidth(window.innerWidth);
+    };
+    const observer = new ResizeObserver(updateMeasurements);
+    observer.observe(formColumnElement);
+    window.addEventListener('resize', updateMeasurements);
+    updateMeasurements();
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateMeasurements);
+    };
+  }, [formColumnElement, open]);
 
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState('');
@@ -635,6 +713,31 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
         ? brandSource.data?.brandInfo?.brandName || 'From website'
         : 'Brand IQ';
 
+  const portraitPreviewHeight =
+    viewportWidth >= 768 && sourceAspectRatio && sourceAspectRatio < 1 && formColumnHeight > 0
+      ? Math.min(formColumnHeight, Math.max(1, viewportHeight * 0.94 - 112))
+    : null;
+  const sourcePreviewWidth = portraitPreviewHeight
+    ? Math.min(400, portraitPreviewHeight * sourceAspectRatio)
+    : 400;
+  const sourcePreviewHeight = sourceAspectRatio
+    ? sourcePreviewWidth / sourceAspectRatio
+    : 400;
+  const isPortraitDesktop =
+    viewportWidth >= 768 && sourceAspectRatio && sourceAspectRatio < 1;
+  // Portrait cards are intentionally narrow, so letting the form consume the
+  // full 1080px dialog makes its controls look stretched. Wrap that layout to
+  // the preview + a comfortable 600px form column; other ratios stay unchanged.
+  const portraitModalWidth = isPortraitDesktop
+    ? Math.min(1080, viewportWidth * 0.96, sourcePreviewWidth + 672)
+    : null;
+  const previewLayoutReady =
+    !image ||
+    (sourceImageReady &&
+      Boolean(sourceAspectRatio) &&
+      viewportWidth > 0 &&
+      (!isPortraitDesktop || formColumnHeight > 0));
+
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -647,7 +750,10 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
       />
       <DialogContent
         ref={modalRef}
-        className="max-w-[1080px] w-[96vw] gap-0 rounded-[30px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#303030]/30 p-0 text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-md sm:!max-w-[1080px] sm:scale-100"
+        className={`max-w-[1080px] w-[96vw] gap-0 rounded-[30px] border border-[#D8D5CC] dark:border-white/10 bg-[#FAF9F6] dark:bg-[#202024]/90 p-0 text-gray-900 dark:text-white ring-1 ring-black/15 dark:ring-white/10 shadow-[0_24px_70px_rgba(31,29,41,0.24)] dark:shadow-[0_28px_80px_rgba(0,0,0,0.48)] backdrop-blur-md transition-opacity duration-200 ease-out motion-reduce:transition-none sm:!max-w-[1080px] sm:scale-100 ${
+          previewLayoutReady ? 'visible opacity-100' : 'invisible opacity-0'
+        }`}
+        style={portraitModalWidth ? { width: portraitModalWidth } : undefined}
         showCloseButton
         // The X and Escape both close the modal. Clicking outside (or
         // dragging an upload over the page) does NOT — that protects
@@ -667,28 +773,50 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
           Recreate this Ad with your own configurations
         </DialogTitle>
 
-        {/* Modal container: larger height (740px) gives room for Brand Logo to be fully visible without scrolling */}
-        <div className="flex flex-col gap-6 p-6 pt-2 md:h-[min(94svh,740px)] md:flex-row">
-          <div className="flex shrink-0 justify-center md:w-[400px]">
-            <div className="aspect-square w-full max-w-[400px] overflow-hidden rounded-2xl bg-gray-100 dark:bg-black/40">
+        {/* Size to the current content while keeping the body within the
+            viewport when uploaded image/logo chips expand the form. */}
+        <div className="flex flex-col gap-6 p-6 pt-2 md:max-h-[calc(94svh-64px)] md:flex-row">
+          <div
+            className="flex w-full shrink-0 items-center justify-center md:h-[var(--source-preview-height)] md:w-[var(--source-preview-width)] md:self-center"
+            style={{
+              '--source-preview-width': `${sourcePreviewWidth}px`,
+              '--source-preview-height': `${sourcePreviewHeight}px`,
+            }}
+          >
+            <div
+              className="flex w-full max-w-[400px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 dark:bg-black/40 md:h-full"
+              style={{
+                aspectRatio: sourceAspectRatio || 1,
+                maxHeight: 'calc(94svh - 112px)',
+              }}
+            >
               {image ? (
-                <img src={image} alt="Source ad" className="h-full w-full object-cover" />
+                <img
+                  key={image}
+                  src={image}
+                  alt="Source ad"
+                  className={`h-full w-full object-contain transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none ${
+                    sourceImageReady ? 'scale-100 opacity-100' : 'scale-[0.985] opacity-0'
+                  }`}
+                />
               ) : (
                 <div className="h-full w-full" />
               )}
             </div>
           </div>
 
-          {/* Right column: Brand Voice + Brand logo scroll on top; Prompt
-              AND Generate are pinned together at the bottom. Prompt is the
-              primary input, so growing the upper sections (brand image
-              chips, brand logo chips appearing after a brand is picked)
-              must never push the textarea off-screen. min-h-0 on the
-              scroll area lets it clip cleanly instead of stretching the
-              modal. */}
-          <div className="flex w-full min-w-0 flex-1 flex-col md:h-full">
+          {/* Right column: Brand Voice + Brand logo use a capped scroll area;
+              Prompt and Generate follow directly below it. The cap keeps
+              growing brand-image/logo chip lists from pushing the primary
+              textarea off-screen without forcing empty space above it. */}
+          <div
+            ref={setFormColumnElement}
+            className={`flex w-full min-w-0 flex-1 flex-col md:self-start ${
+              isPortraitDesktop ? 'md:max-w-[600px]' : ''
+            }`}
+          >
             <div
-              className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto pr-1 scrollbar-none [&::-webkit-scrollbar]:hidden"
+              className="flex max-h-[45svh] min-h-0 shrink-0 flex-col gap-3.5 overflow-y-auto pr-1 scrollbar-none md:max-h-[430px] [&::-webkit-scrollbar]:hidden"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
             <Section title="Attach your Brand Voice">
@@ -697,7 +825,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   <button
                     type="button"
                     onClick={openBrandIqPicker}
-                    className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-[12px] font-light ring-1 transition-colors ${
+                    className={`recreate-ad-field-surface recreate-ad-field-interactive flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-[12px] font-light ring-1 transition-colors ${
                       brandSource.kind === 'list'
                         ? 'bg-black/10 dark:bg-white/15 text-gray-900 dark:text-white ring-black/10 dark:ring-white/20'
                         : 'bg-gray-100 dark:bg-[#909294]/10 text-gray-600 dark:text-[#f0f0f0] ring-black/10 dark:ring-white/5 hover:bg-black/5 dark:hover:bg-[#33333a]'
@@ -779,7 +907,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   )}
                 </div>
                 <span className="shrink-0 text-[14px] text-gray-600 dark:text-white/60">or</span>
-                <div className="inline-url-field relative min-w-0 flex-1">
+                <div className="inline-url-field recreate-ad-url-field recreate-ad-field-surface relative min-w-0 flex-1 dark:bg-[#909294]/10 dark:ring-1 dark:ring-white/5">
                   <input
                     type="text"
                     inputMode="url"
@@ -795,7 +923,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                       }
                     }}
                     placeholder="Enter your website URL..."
-                    className="inline-url-input h-[39px] w-full rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4 pr-20 text-[13px] font-light text-gray-900 dark:text-white outline-none ring-1 ring-black/10 dark:ring-white/5 placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20"
+                    className="inline-url-input h-[39px] w-full rounded-full bg-transparent px-4 pr-20 text-[13px] font-light text-gray-900 dark:text-white outline-none placeholder:text-gray-500 dark:placeholder:text-[#afafaf] focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20"
                   />
                   <button
                     type="button"
@@ -1020,7 +1148,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                 scroll container's flex-1. */}
             <div className="mt-3 shrink-0">
             <Section title="Prompt">
-              <div className="rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 p-3 ring-1 ring-black/10 dark:ring-white/10">
+              <div className="recreate-ad-field-surface rounded-[24px] bg-gray-100 dark:bg-[#909294]/10 p-3 ring-1 ring-black/10 dark:ring-white/10">
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
@@ -1252,7 +1380,7 @@ const Section = ({ title, children }) => (
 
 // Picker chips rendered below an upload field.
 // - Click the chip to select / deselect
-// - Click the Eye preview button to view full-size lightbox
+// - Double-click the chip to view the full-size lightbox
 // - If selected, clicking the top-right X button removes/deselects in 1 click
 const OptionChips = ({ label, options, isSelected, onPick, onDoubleClick, rounded }) => {
   return (
@@ -1280,20 +1408,6 @@ const OptionChips = ({ label, options, isSelected, onPick, onDoubleClick, rounde
                   alt=""
                   className={`h-full w-full ${shape} object-cover`}
                 />
-              </button>
-
-              {/* Eye icon preview button on hover */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDoubleClick?.(url);
-                }}
-                aria-label="Preview image"
-                title="Preview image"
-                className="absolute inset-0 m-auto flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow transition-all group-hover:opacity-100 hover:scale-110 hover:bg-black/90"
-              >
-                <Eye className="h-3 w-3" />
               </button>
 
               {/* Selected badge: displays checkmark, turns to red X on hover for 1-click removal/deselection */}
@@ -1405,7 +1519,7 @@ const UploadRow = ({
       }}
       className="flex items-center gap-2"
     >
-      <div className="flex h-[39px] flex-1 items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4 text-[13px] ring-1 ring-black/10 dark:ring-white/5">
+      <div className="recreate-ad-field-surface flex h-[39px] flex-1 items-center gap-2 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4 text-[13px] ring-1 ring-black/10 dark:ring-white/5">
         <input
           type="text"
           value={url}
@@ -1490,7 +1604,7 @@ const UploadRow = ({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className="flex h-[39px] items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4 text-[12px] font-light text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/5 hover:bg-black/5 dark:hover:bg-[#33333a]"
+        className="recreate-ad-field-surface recreate-ad-field-interactive flex h-[39px] items-center gap-1.5 rounded-full bg-gray-100 dark:bg-[#909294]/10 px-4 text-[12px] font-light text-gray-900 dark:text-white ring-1 ring-black/10 dark:ring-white/5 hover:bg-black/5 dark:hover:bg-[#33333a]"
       >
         <Upload className="h-3.5 w-3.5" />
         Upload Image

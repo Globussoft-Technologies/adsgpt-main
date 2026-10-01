@@ -971,11 +971,11 @@ export function AdSetupStep({
                   excluded. Each thumb has an X that removes the matching
                   item from its source list. */}
               {promptThumbs.length > 0 && (
-                <div className="flex flex-nowrap items-end justify-end gap-2 overflow-x-auto px-3 pb-2">
+                <div className="flex flex-wrap items-end justify-end gap-2 px-3 pb-2">
                   {promptThumbs.map((t, i) => (
                     <div
                       key={`prompt-thumb-${t.kind}-${i}-${t.preview}`}
-                      className="relative h-[160px] w-[90px] shrink-0 overflow-hidden rounded-[10px] ring-1 ring-black/10 dark:ring-white/10"
+                      className="relative h-[84px] w-14 shrink-0 overflow-hidden rounded-[10px] ring-1 ring-black/10 sm:h-24 sm:w-16 dark:ring-white/10"
                     >
                       <img
                         src={t.preview}

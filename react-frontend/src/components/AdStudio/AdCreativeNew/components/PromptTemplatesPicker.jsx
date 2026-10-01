@@ -7,6 +7,7 @@ import {
   Search,
   Sparkles,
   AlertCircle,
+  Grid2X2Plus,
   LayoutGrid,
   Megaphone,
   Tag,
@@ -295,21 +296,40 @@ function TokenInput({ name, value, onChange }) {
   );
 }
 
-// Compact sparkle icon button in the Prompt label row that toggles the panel.
+// Compact labelled button in the Prompt row that toggles the templates panel.
 export function TemplatesTrigger({ controller }) {
   const { open, setOpen } = controller;
   return (
     <button
       type="button"
       onClick={() => setOpen((v) => !v)}
-      className={`flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border transition-colors ${
+      aria-expanded={open}
+      className={`flex h-9 items-center justify-center gap-1.5 rounded-[11px] border py-1 pr-2.5 pl-1.5 text-[12px] font-medium shadow-[0_1px_2px_rgba(31,29,41,0.05)] transition-[background-color,border-color,color] ${
         open
-          ? 'bg-[#ECEEFD] border-[#C9CEF8] text-[#5867EB]'
-          : 'bg-white border-[#E2E1E8] text-[#5867EB] hover:bg-[#ECEEFD] hover:border-[#C9CEF8] dark:bg-white/5 dark:border-white/10 dark:text-indigo-300'
+          ? 'border-[#C9C4DF] bg-[#F3F2F8] text-[#675BCC] dark:border-indigo-300/30 dark:bg-indigo-950/40 dark:text-indigo-300'
+          : 'border-[#D9D6E3] bg-white/75 text-[#675BCC] hover:border-[#CBC6DE] hover:bg-[#F7F6FA] dark:border-white/12 dark:bg-white/[0.04] dark:text-indigo-300 dark:hover:border-indigo-300/25 dark:hover:bg-indigo-950/30'
       }`}
       title="Templates"
     >
-      <Sparkles size={16} />
+      <span
+        aria-hidden="true"
+        className={`grid size-7 shrink-0 place-items-center rounded-[9px] transition-[background-color,color,box-shadow] duration-200 ${
+          open
+            ? 'bg-[#E8E5F6] text-[#5B50BE] shadow-[inset_0_1px_1px_rgba(255,255,255,0.8),0_2px_5px_rgba(70,60,130,0.14)] dark:bg-indigo-400/18 dark:text-indigo-200 dark:shadow-none'
+            : 'bg-[#F0EEF8] text-[#6B5ED1] shadow-[inset_0_1px_1px_rgba(255,255,255,0.86),0_2px_4px_rgba(70,60,130,0.1)] dark:bg-indigo-400/10 dark:text-indigo-300 dark:shadow-none'
+        }`}
+      >
+        <Grid2X2Plus size={16} strokeWidth={2.35} />
+      </span>
+      <span>Templates</span>
+      <ChevronDown
+        aria-hidden="true"
+        size={12}
+        strokeWidth={2}
+        className={`shrink-0 text-[#8C85AD] transition-transform duration-200 dark:text-indigo-300/70 ${
+          open ? 'rotate-180' : ''
+        }`}
+      />
     </button>
   );
 }
