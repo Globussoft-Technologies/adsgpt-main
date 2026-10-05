@@ -1510,7 +1510,14 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
     }
 
     if (inputs.model) {
-      setVideoModel(inputs.model);
+      const rawM = String(inputs.model).toLowerCase();
+      const matched = surfaceModels.find(
+        (m) =>
+          m.canonical?.toLowerCase() === rawM ||
+          m.label?.toLowerCase() === rawM ||
+          m.value?.toLowerCase() === rawM
+      );
+      setVideoModel(matched ? matched.canonical : inputs.model);
     }
 
     if (inputs.duration || inputs.targetDurationSeconds) {
@@ -2982,7 +2989,14 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   };
 
   const handleGenerate = async () => {
-    if (!analysisSessionId || isGenerating) return;
+    const effectiveSessionId =
+      analysisSessionId ||
+      currentSessionIdRef.current ||
+      savedSession?.sessionId ||
+      recreateInputs?.sessionId ||
+      recreateInputs?._id;
+
+    if (!effectiveSessionId || isGenerating) return;
 
     try {
       setIsGenerating(true);
@@ -2994,7 +3008,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
       const targetDurationNum = parseInt(selectedVideoDuration || videoDuration, 10) || 8;
       const payload = {
-        sessionId: analysisSessionId,
+        sessionId: effectiveSessionId,
         inputs: {
           productImageUrls: finalProductImageUrls,
           targetDurationSeconds: targetDurationNum,
@@ -4075,18 +4089,27 @@ const renderLightboxModal = () => {
                 {/* Action Buttons */}
                 <div className="mt-0.5 flex items-center justify-end gap-2.5 pt-1 shrink-0">
                   {(() => {
-                    const selectedModel = videoChatModels.find((model) => model.value === videoModel);
-                    const hasEstimateInputs = Boolean(videoModel && selectedVideoDuration && selectedModel);
+                    const selectedModel =
+                      videoChatModels.find((model) => model.value === videoModel) ||
+                      videoChatModels.find(
+                        (model) =>
+                          model.value?.toLowerCase() === (videoModel || '').toLowerCase() ||
+                          model.label?.toLowerCase() === (videoModel || '').toLowerCase() ||
+                          model.canonical?.toLowerCase() === (videoModel || '').toLowerCase()
+                      ) ||
+                      videoChatModels[0];
+                    const effectiveDur = selectedVideoDuration || videoDuration || '8s';
+                    const hasEstimateInputs = Boolean(videoModel && effectiveDur);
                     const est = hasEstimateInputs
                       ? estimateAdVideoCredits({
                         video_model: videoModel,
-                        video_duration: selectedVideoDuration,
+                        video_duration: effectiveDur,
                         no_of_ads: 1,
                         modelCredits,
-                        creditsPerSecond: selectedModel.creditsPerSecond,
+                        creditsPerSecond: selectedModel?.creditsPerSecond || creditsPerSecond,
                       })
                       : 0;
-                    const enough = hasEstimateInputs && availableCredits >= est;
+                    const enough = hasEstimateInputs ? availableCredits >= est : true;
                     const isBtnDisabled = isGenerating || (hasEstimateInputs && !enough);
                     return (
                       <div className="flex items-center gap-2">

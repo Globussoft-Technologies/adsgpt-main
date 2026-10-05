@@ -123,9 +123,9 @@ export default function VideoCard({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [activeNavIndex, setActiveNavIndex] = useState(videoIndex);
-  const [activeVideoUrl, setActiveVideoUrl] = useState(item?.results?.[0]?.url ?? '');
-  const primaryVideoUrl = item?.results?.[0]?.url ?? '';
-  const activeVideoSrc = resolveVideoUrl(activeVideoUrl);
+  const primaryVideoUrl = item?.results?.[0]?.url || item?.cleanVideoUrl || '';
+  const [activeVideoUrl, setActiveVideoUrl] = useState(primaryVideoUrl);
+  const activeVideoSrc = resolveVideoUrl(activeVideoUrl || primaryVideoUrl);
   const [showControls, setShowControls] = useState(false);
   const [smoothProgress, setSmoothProgress] = useState(() => {
     if (item?.status !== 'processing') return 100;
@@ -199,11 +199,11 @@ export default function VideoCard({
   }, [item?.status, item?._id]);
 
   useEffect(() => {
-    const url = item?.results?.[0]?.url ?? '';
+    const url = item?.results?.[0]?.url || item?.cleanVideoUrl || '';
     if (url && !activeVideoUrl) {
       setActiveVideoUrl(url);
     }
-  }, [item?.results?.[0]?.url]);
+  }, [item?.results?.[0]?.url, item?.cleanVideoUrl, activeVideoUrl]);
 
   useEffect(() => {
     setVideoLoaded(false);
@@ -243,9 +243,10 @@ export default function VideoCard({
   const shownVersion = item?.previewVersion ?? committedVersion;
   const shownResult = item?.results?.[shownVersion] || item?.results?.[0];
   const canEditAiAdsVoice = isAiAds && item?.status === 'completed';
+  const isVoiceMissing = isAiAds && (shownResult?.videoStatus === 429 || item?.videoStatus === 429);
   // Idempotent for server results (which keep waterMarkUrl); correct for the
   // socket-appended version (raw url).
-  const pickUrl = (r) => (hasPlan8 ? r?.waterMarkUrl || r?.url : r?.url);
+  const pickUrl = (r) => (hasPlan8 ? r?.waterMarkUrl || r?.url || item?.cleanVideoUrl : r?.url || item?.cleanVideoUrl);
   const [regenOpen, setRegenOpen] = useState(false);
 
   // Point the player at the shown version's URL when it changes.
@@ -676,13 +677,42 @@ export default function VideoCard({
   const handleRecreate = (e) => {
     e.stopPropagation();
 
-    const type = item?.inputs?.type || item?.type || 'broll';
+    const rawType = item?.inputs?.type || item?.type || '';
+    const typeLower = String(rawType).toLowerCase().trim();
+
+    const isRecreateAd =
+      typeLower === 'clone_your_ad' ||
+      typeLower === 'clone-ad' ||
+      typeLower === 'clone_ad' ||
+      typeLower === 'clone_video' ||
+      typeLower === 'clone your ad' ||
+      typeLower === 'recreate_ad' ||
+      typeLower === 'recreate ad' ||
+      typeLower === 'recreate-ad' ||
+      Boolean(item?.inputs?.sourceVideoUrl || item?.inputs?.galleryVideoUrl || item?.identification);
+
     let targetPage = 'b-roll';
-    if (type === 'ugc') targetPage = 'ugc';
-    else if (type === 'avatar') targetPage = 'avatar';
-    else if (type === 'clone') targetPage = 'clone';
-    else if (type === 'clone_your_ad' || type === 'clone-ad' || type === 'clone_ad' || type === 'clone_video') targetPage = 'clone-ad';
-    else if (type === 'ai_ads') targetPage = 'ai-ads';
+    let type = rawType || 'broll';
+
+    if (isRecreateAd) {
+      targetPage = 'clone-ad';
+      type = 'clone_your_ad';
+    } else if (typeLower === 'ugc') {
+      targetPage = 'ugc';
+      type = 'ugc';
+    } else if (typeLower === 'avatar') {
+      targetPage = 'avatar';
+      type = 'avatar';
+    } else if (typeLower === 'clone') {
+      targetPage = 'clone';
+      type = 'clone';
+    } else if (typeLower === 'ai_ads' || typeLower === 'ai-ads') {
+      targetPage = 'ai-ads';
+      type = 'ai_ads';
+    } else if (typeLower === 'broll' || typeLower === 'b-roll') {
+      targetPage = 'b-roll';
+      type = 'broll';
+    }
 
     dispatch(setActiveAdStudioTab('adVideoNew'));
 
@@ -707,13 +737,21 @@ export default function VideoCard({
       return;
     }
 
-    dispatch(setRecreateInputs(item.inputs));
+    const recreatePayload = {
+      ...(item?.inputs || {}),
+      _id: item?._id,
+      sessionId: item?._id,
+      identification: item?.identification,
+      type: type,
+    };
+
+    dispatch(setRecreateInputs(recreatePayload));
     dispatch(setActivePage(targetPage));
     if (type === 'avatar') {
       dispatch(setAvatarStep('config'));
     }
     navigate(`/adstudio?page=${targetPage}`);
-    setTimeout(() => emitter.emit('recreate-video', item.inputs), 100);
+    setTimeout(() => emitter.emit('recreate-video', recreatePayload), 100);
   };
 
   // Hide the card entirely while a clone/avatar job is still generating its
@@ -1156,34 +1194,43 @@ export default function VideoCard({
                     <RefreshCw size={18} />
                   </button>
                 )}
-                <div className="group/volume relative flex items-center">
-                  <button
-                    onClick={toggleMute}
-                    className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+                {isVoiceMissing ? (
+                  <div
+                    title="Voiceover is missing, try to generate it through Customize Script & Voice-over button."
+                    className="rounded-full p-2 text-white/40 cursor-not-allowed backdrop-blur"
                   >
-                    {isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                  </button>
-                  {/* Vertical (up/down) volume slider inside a sleek dark glass pill container */}
-                  <div className="invisible absolute bottom-full left-1/2 z-30 flex -translate-x-1/2 flex-col items-center pb-2 opacity-0 transition-all duration-200 group-hover/volume:visible group-hover/volume:opacity-100">
-                    <div className="flex flex-col items-center rounded-2xl border border-white/20 bg-black/80 px-2 py-3 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-md">
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={isMuted ? 0 : volume}
-                        onChange={handleVolumeChange}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          writingMode: 'vertical-lr',
-                          direction: 'rtl',
-                        }}
-                        className="h-24 w-1.5 cursor-pointer rounded-full accent-white"
-                        aria-label="Volume"
-                      />
+                    <VolumeX size={18} />
+                  </div>
+                ) : (
+                  <div className="group/volume relative flex items-center">
+                    <button
+                      onClick={toggleMute}
+                      className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
+                    >
+                      {isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                    </button>
+                    {/* Vertical (up/down) volume slider inside a sleek dark glass pill container */}
+                    <div className="invisible absolute bottom-full left-1/2 z-30 flex -translate-x-1/2 flex-col items-center pb-2 opacity-0 transition-all duration-200 group-hover/volume:visible group-hover/volume:opacity-100">
+                      <div className="flex flex-col items-center rounded-2xl border border-white/20 bg-black/80 px-2 py-3 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-md">
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={isMuted ? 0 : volume}
+                          onChange={handleVolumeChange}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            writingMode: 'vertical-lr',
+                            direction: 'rtl',
+                          }}
+                          className="h-24 w-1.5 cursor-pointer rounded-full accent-white"
+                          aria-label="Volume"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {!isOnboardingOutput && (
                   <button
@@ -1204,7 +1251,7 @@ export default function VideoCard({
 
                 <button
                   className="rounded-full p-2 text-white/90 backdrop-blur transition-colors hover:bg-white/10"
-                  onClick={() => dispatch(downloadMediaFromUrl(`${shownResult?.url}`))}
+                  onClick={() => dispatch(downloadMediaFromUrl(`${shownResult?.url || item?.cleanVideoUrl || ''}`))}
                 >
                   <Download size={18} />
                 </button>

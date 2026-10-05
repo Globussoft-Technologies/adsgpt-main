@@ -546,22 +546,32 @@ exports.updateVideoResult = async (req, res) => {
       ...resultData
     } = value;
 
+    const isAiAds = preRecord?.inputs?.type === "ai_ads";
+    const isAiAds429 = videoStatus === 429 && isAiAds;
+    const isSuccess = videoStatus === 200 || isAiAds429;
+
     // map python status -> video status
     let finalStatus;
 
-    if (videoStatus === 200) finalStatus = "completed";
+    if (isSuccess) finalStatus = "completed";
     if (
       videoStatus === 400 ||
-      videoStatus === 429 ||
+      (!isAiAds && videoStatus === 429) ||
       videoStatus === 500 ||
       videoStatus === 529
     )
       finalStatus = "failed";
 
+    const effectiveUrl =
+      (watermark ? resultData?.watermarkUrl : resultData?.url) ||
+      (isAiAds429 ? _cleanVideoUrl : "") ||
+      "";
+
     const updateQuery = {
       $push: {
         results: {
           ...resultData,
+          url: resultData?.url || (isAiAds429 ? _cleanVideoUrl : "") || "",
           waterMarkUrl: watermark ? resultData?.watermarkUrl : "",
           videoStatus,
           error: resultData?.error || "",
@@ -569,12 +579,16 @@ exports.updateVideoResult = async (req, res) => {
       },
     };
 
+    if (_cleanVideoUrl) {
+      updateQuery.$set = { cleanVideoUrl: _cleanVideoUrl };
+    }
+
     if (finalStatus) {
-      updateQuery.$set = { status: finalStatus };
+      updateQuery.$set = { ...(updateQuery.$set || {}), status: finalStatus };
     }
 
     logger.info(
-      `[credits] updateVideoResult ENTER session=${sessionId} videoStatus=${videoStatus} model=${resultData?.model} duration=${resultData?.duration}`,
+      `[credits] updateVideoResult ENTER session=${sessionId} videoStatus=${videoStatus} isAiAds429=${isAiAds429} model=${resultData?.model} duration=${resultData?.duration}`,
     );
 
     // Capture PRE-update status so we can detect duplicate callbacks from
@@ -606,10 +620,12 @@ exports.updateVideoResult = async (req, res) => {
     const video = {
       ...priorDoc,
       status: finalStatus || priorDoc.status,
+      cleanVideoUrl: _cleanVideoUrl || priorDoc.cleanVideoUrl,
       results: [
         ...(priorDoc.results || []),
         {
           ...resultData,
+          url: resultData?.url || (isAiAds429 ? _cleanVideoUrl : "") || "",
           waterMarkUrl: watermark ? resultData?.watermarkUrl : "",
           videoStatus,
           error: resultData?.error || "",
@@ -623,7 +639,7 @@ exports.updateVideoResult = async (req, res) => {
           `prior_status=${priorDoc.status} new_videoStatus=${videoStatus} ` +
           `— skipping credit work to avoid double-charge`,
       );
-      if (videoStatus === 200) {
+      if (isSuccess) {
         // Re-emit to the socket only — a prior callback already pushed, so
         // re-pushing would double-buzz the app.
         await notifyUser(video?.userId, {
@@ -632,7 +648,7 @@ exports.updateVideoResult = async (req, res) => {
             _id: video._id,
             video: {
               ...video,
-              url: watermark ? resultData?.watermarkUrl : resultData?.url || "",
+              url: effectiveUrl,
             },
             userId: video?.userId,
           },
@@ -643,7 +659,7 @@ exports.updateVideoResult = async (req, res) => {
 
     // Settle the freeze on success; release it on failure.
     // The reservation_key is the videoId (sessionId), set by generateVideo.
-    if (videoStatus === 200) {
+    if (isSuccess) {
       const rawDuration = resultData?.duration || "0s";
       const durationInSeconds = parseInt(rawDuration.replace("s", ""), 10) || 0;
 
@@ -711,7 +727,7 @@ exports.updateVideoResult = async (req, res) => {
         model: resultData?.model,
         type: "video",
         image: "",
-        video: resultData?.url || "",
+        video: effectiveUrl,
         credit_deduction: totalCreditsToDeduct,
         cost: actualVideoCost,
         duration: durationInSeconds,
@@ -731,9 +747,9 @@ exports.updateVideoResult = async (req, res) => {
       trackBackendGA4Event("ad_studio", {
         user_id: vUserId,
         feature: "ad_video",
-        action_name: videoStatus === 200 ? "ad_video_ai_ads_generated" : "ad_video_ai_ads_failed",
+        action_name: isSuccess ? "ad_video_ai_ads_generated" : "ad_video_ai_ads_failed",
         source: "ai_ads_studio",
-        success: videoStatus === 200,
+        success: isSuccess,
       });
     } else if (vType === "broll") {
       trackBackendGA4Event("ad_studio", {
@@ -773,14 +789,14 @@ exports.updateVideoResult = async (req, res) => {
     // works across all tabs/reconnections) and, on success, FCM push for
     // backgrounded/closed native apps. video is lean (plain JS), so spreading
     // is safe — no Mongoose internals leak.
-    const videoSucceeded = videoStatus === 200;
+    const videoSucceeded = isSuccess;
     await notifyUser(video?.userId, {
       event: "videoCreated",
       socketPayload: {
         _id: video._id,
         video: {
           ...video,
-          url: watermark ? resultData?.watermarkUrl : resultData?.url || "",
+          url: effectiveUrl,
         },
         userId: video?.userId,
       },
@@ -906,7 +922,7 @@ exports.getAllVideos = async (req, res) => {
 
     const filter = {
       userId: req.user.user_id,
-      status: { $ne: "copy" },
+      status: { $nin: ["copy", "analyzing", "analyzed"] },
       $nor: [
         {
           "inputs.type": "ai_ads",
@@ -938,7 +954,36 @@ exports.getAllVideos = async (req, res) => {
       ],
     };
 
-    if (type) filter["inputs.type"] = type;
+    if (type) {
+      const typeLower = String(type).toLowerCase();
+      if (
+        typeLower === "clone_ad" ||
+        typeLower === "clone_your_ad" ||
+        typeLower === "clone-ad" ||
+        typeLower === "clone_video" ||
+        typeLower === "recreate_ad"
+      ) {
+        filter.$or = [
+          {
+            "inputs.type": {
+              $in: ["clone_your_ad", "clone_ad", "clone-ad", "clone_video", "recreate_ad"],
+            },
+          },
+          {
+            "inputs.sourceVideoUrl": { $exists: true, $ne: "" },
+          },
+          {
+            "inputs.galleryVideoUrl": { $exists: true, $ne: "" },
+          },
+        ];
+      } else if (typeLower === "broll" || typeLower === "b-roll") {
+        filter["inputs.type"] = { $in: ["broll", "b-roll"] };
+      } else if (typeLower === "ai_ads" || typeLower === "ai-ads") {
+        filter["inputs.type"] = { $in: ["ai_ads", "ai-ads"] };
+      } else {
+        filter["inputs.type"] = type;
+      }
+    }
     if (model) filter["inputs.model"] = model;
 
     // ✅ Date filter on updatedAt
@@ -4940,25 +4985,74 @@ exports.cloneAdGenerate = async (req, res) => {
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0] || req.user?.subscription_plan_id || "8";
     const watermark = plan == "8";
 
-    // Update DB with latest overrides if provided
-    if (value.inputs || req.body.inputs) {
-      await VideoGeneration.findByIdAndUpdate(sessionId, {
-        $set: {
-          "inputs.brandName": brandNameStr,
-          "inputs.productBrandName": brandNameStr,
-          "inputs.duration": String(targetDurationNum),
-          "inputs.aspectRatio": aspectRatioStr,
-          "inputs.model": modelStr,
-          "inputs.userPrompt": instructionsStr,
-          "inputs.additionalInstructions": instructionsStr,
+    // If recreating from an existing generated video, create a BRAND NEW VideoGeneration record in DB
+    // so the original video remains completely untouched in My Space.
+    let targetSessionId = sessionId;
+    const isRecreateFromExisting =
+      existingRecord.status === "completed" ||
+      Boolean(existingRecord.videoUrl) ||
+      existingRecord.status === "success";
+
+    if (isRecreateFromExisting) {
+      const newVideoData = {
+        userId,
+        status: "processing",
+        jobId: null,
+        watermark,
+        identification: {
+          ...identificationObj,
           ...(hasVisualDescOverride
             ? {
-                "identification.visualDescription": visualDescStr,
-                "identification.analysisSummary": visualDescStr,
+                visualDescription: visualDescStr,
+                analysisSummary: visualDescStr,
               }
             : {}),
         },
-      }).catch(() => {});
+        inputs: {
+          ...(existingRecord.inputs || {}),
+          type: "clone_your_ad",
+          sourceVideoUrl: sourceVidUrl,
+          galleryVideoUrl: galleryVidUrl,
+          productImageUrls: imagesArr,
+          brandName: brandNameStr,
+          productBrandName: brandNameStr,
+          duration: String(targetDurationNum),
+          targetDurationSeconds: targetDurationNum,
+          aspectRatio: aspectRatioStr,
+          model: modelStr,
+          userPrompt: instructionsStr,
+          additionalInstructions: instructionsStr,
+          logoUrl: logoImageUrlStr,
+        },
+        results: [],
+        videoSegments: [],
+        promptPercentage: 0,
+      };
+
+      const newRecord = await VideoGeneration.create(newVideoData);
+      targetSessionId = newRecord._id.toString();
+    } else {
+      // First generation directly after analysis: update the analysis record with overrides
+      if (value.inputs || req.body.inputs) {
+        await VideoGeneration.findByIdAndUpdate(sessionId, {
+          $set: {
+            "inputs.brandName": brandNameStr,
+            "inputs.productBrandName": brandNameStr,
+            "inputs.duration": String(targetDurationNum),
+            "inputs.targetDurationSeconds": targetDurationNum,
+            "inputs.aspectRatio": aspectRatioStr,
+            "inputs.model": modelStr,
+            "inputs.userPrompt": instructionsStr,
+            "inputs.additionalInstructions": instructionsStr,
+            ...(hasVisualDescOverride
+              ? {
+                  "identification.visualDescription": visualDescStr,
+                  "identification.analysisSummary": visualDescStr,
+                }
+              : {}),
+          },
+        }).catch(() => {});
+      }
     }
 
     // Step 5: Determine required credits
@@ -4968,7 +5062,7 @@ exports.cloneAdGenerate = async (req, res) => {
     // Step 6: FREEZE / RESERVE CREDITS (Must happen BEFORE Python payload formation and Python call)
     const freeze = await UnifiedCreditController.freezeCredits({
       userId,
-      reservationKey: sessionId,
+      reservationKey: targetSessionId,
       amount: totalRequiredCredits,
       meta: {
         service_type: "clone_your_ad",
@@ -5002,7 +5096,7 @@ exports.cloneAdGenerate = async (req, res) => {
 
     // Step 7: ONLY AFTER CREDIT FREEZE SUCCEEDS - Form Python Generate payload exactly as required
     const pythonPayload = {
-      sessionId,
+      sessionId: targetSessionId,
       inputs: {
         sourceVideoUrl: sourceVidUrl,
         galleryVideoUrl: galleryVidUrl,
@@ -5035,7 +5129,7 @@ exports.cloneAdGenerate = async (req, res) => {
     } catch (pythonErr) {
       logger.error(`cloneAdGenerate Python API call failed: ${pythonErr.message}`);
       // Release frozen credits if Python call failed
-      await UnifiedCreditController.releaseCredits(sessionId).catch(() => {});
+      await UnifiedCreditController.releaseCredits(targetSessionId).catch(() => {});
 
       if (pythonErr.response) {
         let errorMsg = "Failed to start video generation with Python service";
@@ -5075,7 +5169,7 @@ exports.cloneAdGenerate = async (req, res) => {
 
     if (pythonRes.status !== 202 && pyStatus !== "processing" && pySuccess !== true) {
       logger.error(`cloneAdGenerate: Python service rejected generation job with HTTP status ${pythonRes.status}`);
-      await UnifiedCreditController.releaseCredits(sessionId).catch(() => {});
+      await UnifiedCreditController.releaseCredits(targetSessionId).catch(() => {});
       return res.status(pythonRes.status || 400).json({
         success: false,
         error: pyMessage || "Python service rejected generation job",
@@ -5083,9 +5177,9 @@ exports.cloneAdGenerate = async (req, res) => {
     }
 
     // Step 10: Store Python jobId and update DB status
-    const actualJobId = pyJobId || sessionId;
+    const actualJobId = pyJobId || targetSessionId;
 
-    await VideoGeneration.findByIdAndUpdate(sessionId, {
+    await VideoGeneration.findByIdAndUpdate(targetSessionId, {
       $set: {
         jobId: actualJobId,
         status: "processing",
@@ -5097,7 +5191,7 @@ exports.cloneAdGenerate = async (req, res) => {
     // Step 11: Return 202 acknowledgement to frontend
     return res.status(202).json({
       status: "processing",
-      sessionId: sessionId,
+      sessionId: targetSessionId,
       jobId: actualJobId,
       message: pyMessage || "Generation started",
     });
