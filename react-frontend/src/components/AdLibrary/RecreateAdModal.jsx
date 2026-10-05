@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { useDispatch, useSelector } from 'react-redux';
-import { AlertCircle, Check, ChevronDown, Eye, LayoutGrid, Link2, Loader2, Proportions, Upload, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, LayoutGrid, Link2, Loader2, Proportions, Upload, X } from 'lucide-react';
 import AspectRatioTiles, {
   AnimatedPanel,
   totalImages,
@@ -653,7 +653,9 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
       for (const u of referenceImagesPicked) if (u) refSet.add(u);
       const typedUrl = referenceImageUrl.trim();
       if (typedUrl) refSet.add(typedUrl);
-      const referenceImagesPayload = Array.from(refSet);
+      // Keep the request contract protected even if references are hydrated
+      // from an older record or another state path that predates the UI cap.
+      const referenceImagesPayload = Array.from(refSet).slice(0, MAX_REFS_TOTAL);
 
       const brandInfo = resolveBrandInfo();
       brandInfo.brandLogo = logoHosted || '';
@@ -907,7 +909,7 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   )}
                 </div>
                 <span className="shrink-0 text-[14px] text-gray-600 dark:text-white/60">or</span>
-                <div className="inline-url-field recreate-ad-url-field recreate-ad-field-surface relative min-w-0 flex-1 dark:bg-[#909294]/10 dark:ring-1 dark:ring-white/5">
+                <div className="inline-url-field recreate-ad-url-field recreate-ad-field-surface relative min-w-0 flex-1 overflow-hidden rounded-full dark:bg-[#909294]/10 dark:ring-1 dark:ring-white/5">
                   <input
                     type="text"
                     inputMode="url"
@@ -975,26 +977,33 @@ const RecreateAdModal = ({ open, onOpenChange, image, ad }) => {
                   setReferenceImageUrl('');
                   setImagesError('');
                 }}
-                onFile={(f) => {
-                  if (remainingRefSlots() <= 0) {
+                onFiles={(files) => {
+                  const slots = remainingRefSlots();
+                  if (slots <= 0) {
                     setImagesError(`You can attach up to ${MAX_REFS_TOTAL} images.`);
                     return;
                   }
+                  const incoming = files.slice(0, slots);
                   setReferenceImages((prev) => [
                     ...prev,
-                    { file: f, preview: URL.createObjectURL(f), selected: true },
+                    ...incoming.map((file) => ({
+                      file,
+                      preview: URL.createObjectURL(file),
+                      selected: true,
+                    })),
                   ]);
-                  setImagesError('');
+                  setImagesError(
+                    files.length > slots
+                      ? `You can attach up to ${MAX_REFS_TOTAL} images.`
+                      : '',
+                  );
                 }}
                 onInvalidType={() => setImagesError(IMAGE_TYPE_ERROR)}
                 inputRef={referenceInputRef}
                 multipleFiles
               />
-              {/* Multi-upload chips. Single click toggles whether the
-                  image is included in the generation payload (cyan border
-                  + check when selected). The small red × at the top-right
-                  removes the chip entirely. Double click opens the
-                  lightbox preview. */}
+              {/* Multi-upload chips. The red × removes an image and a
+                  double-click on its thumbnail opens the lightbox preview. */}
               {referenceImages.length > 0 && (
                 <UploadedChipList
                   items={referenceImages}
@@ -1443,6 +1452,8 @@ const OptionChips = ({ label, options, isSelected, onPick, onDoubleClick, rounde
 // Props:
 //   - onFile: called per File (multiple times if multipleFiles enabled
 //     and several were selected/dropped).
+//   - onFiles: called once with all valid files when the caller needs to
+//     enforce a limit across one multi-file selection.
 //   - onUrlCommit: optional — called when the user hits Enter on the URL
 //     input or pastes a URL while onUrlCommit is wired. Caller decides
 //     whether to commit the URL to a chip list or keep it as a single value.
@@ -1453,6 +1464,7 @@ const UploadRow = ({
   onUrlChange,
   onUrlCommit,
   onFile,
+  onFiles,
   onInvalidType,
   inputRef,
   multipleFiles = false,
@@ -1468,9 +1480,14 @@ const UploadRow = ({
   const forwardFiles = (fileList) => {
     const arr = Array.from(fileList || []);
     let rejected = 0;
+    const valid = [];
     for (const f of arr) {
-      if (isAllowedImageFile(f)) onFile?.(f);
+      if (isAllowedImageFile(f)) valid.push(f);
       else rejected += 1;
+    }
+    if (valid.length > 0) {
+      if (onFiles) onFiles(valid);
+      else for (const f of valid) onFile?.(f);
     }
     if (rejected > 0) onInvalidType?.();
   };
@@ -1613,10 +1630,9 @@ const UploadRow = ({
   );
 };
 
-// Row of user-supplied chips (multi-upload). Single click on a chip
 // Row of user-supplied chips (multi-upload).
-// - Click thumbnail or Eye button to open full-size lightbox preview immediately
-// - Click red X button to remove image in 1 click (no deselecting required)
+// - Double-click a thumbnail to open the full-size lightbox preview
+// - The selected check turns into a red X on hover for 1-click removal
 const UploadedChipList = ({ items, onRemove, onPreview }) => {
   return (
     <div className="mt-2 flex flex-wrap gap-2">
@@ -1624,21 +1640,17 @@ const UploadedChipList = ({ items, onRemove, onPreview }) => {
         const key = `${it.preview}-${i}`;
         return (
           <div key={key} className="group relative h-10 w-10 shrink-0">
-            {/* Thumbnail button - single click opens preview */}
+            {/* Thumbnail button - double-click opens preview */}
             <button
               type="button"
-              onClick={() => onPreview?.(it.preview)}
-              title="Click to preview image"
+              onDoubleClick={() => onPreview?.(it.preview)}
+              title="Double-click to preview image"
               className="relative h-full w-full cursor-pointer overflow-hidden rounded-lg border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40 transition"
             >
               <img src={it.preview} alt="" className="h-full w-full rounded-lg object-cover" />
-              {/* Eye preview icon on hover */}
-              <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                <Eye className="h-3.5 w-3.5 text-white" />
-              </span>
             </button>
 
-            {/* Direct 1-click remove button: always red X, immediately removes image */}
+            {/* Selected badge: matches brand-image chips and becomes a red X on hover. */}
             <button
               type="button"
               onClick={(e) => {
@@ -1647,9 +1659,10 @@ const UploadedChipList = ({ items, onRemove, onPreview }) => {
               }}
               aria-label="Remove image"
               title="Remove image"
-              className="absolute -top-1.5 -right-1.5 z-20 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white shadow transition-all hover:scale-110 hover:bg-red-600"
+              className="absolute -top-1.5 -right-1.5 z-20 flex h-4 w-4 items-center justify-center rounded-full bg-[#02C8C4] text-white shadow transition-all group-hover:bg-red-500 hover:scale-110"
             >
-              <X className="h-2.5 w-2.5" strokeWidth={3} />
+              <Check className="h-2.5 w-2.5 group-hover:hidden" strokeWidth={3} />
+              <X className="hidden h-2.5 w-2.5 group-hover:block" strokeWidth={3} />
             </button>
           </div>
         );
@@ -1659,7 +1672,7 @@ const UploadedChipList = ({ items, onRemove, onPreview }) => {
 };
 
 // A single user-supplied chip (uploaded file or pasted URL for Brand Logo).
-// - Click thumbnail or Eye button to open full-size lightbox preview immediately
+// - Double-click the thumbnail to open the full-size lightbox preview
 // - Click red X button to remove logo in 1 click
 const UploadedChip = ({ src, onClear, onPreview, rounded }) => {
   const shape = rounded ? 'rounded-full' : 'rounded-lg';
@@ -1668,14 +1681,11 @@ const UploadedChip = ({ src, onClear, onPreview, rounded }) => {
       <div className="group relative h-10 w-10 shrink-0">
         <button
           type="button"
-          onClick={() => onPreview?.()}
-          title="Click to preview logo"
+          onDoubleClick={() => onPreview?.()}
+          title="Double-click to preview logo"
           className={`relative h-full w-full cursor-pointer overflow-hidden ${shape} border-2 border-[#02C8C4] ring-1 ring-[#02C8C4]/40 transition`}
         >
           <img src={src} alt="" className={`h-full w-full ${shape} object-cover`} />
-          <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-            <Eye className="h-3.5 w-3.5 text-white" />
-          </span>
         </button>
         <button
           type="button"

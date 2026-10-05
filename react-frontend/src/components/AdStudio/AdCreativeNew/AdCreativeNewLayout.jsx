@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import AdCreativeNewHome from './AdCreativeNewHome';
 import AdCreativeHomeV1 from '../v1/AdCreativeHomeV1';
 import { IS_ADSTUDIO_UI_V2 } from '@/utils/featureFlags';
 import { LifestyleAdsFlow } from './lifestyle/LifestyleAdsFlow';
 import { AiCreativesCustom } from './ai-creatives/AiCreativesCustom';
-import {
-  setActiveAdStudioTab,
-  setAdCreativeNewActivePage,
-} from '@/store/reducers/adStudio/adStudioTabsSlice';
-import {
-  setActivePage,
-  setMySpaceTab,
-} from '@/store/reducers/adStudio/adVideoNewSlice';
+import { setAdCreativeNewActivePage } from '@/store/reducers/adStudio/adStudioTabsSlice';
+import { setMySpaceTab } from '@/store/reducers/adStudio/adVideoNewSlice';
 import { useGenieToMySpace } from '@/utils/ui/useGenieToMySpace';
 
 const FLOW_TITLES = {
@@ -33,6 +27,7 @@ const AdCreativeNewLayout = () => {
   // currently holds". Otherwise we want a fresh entry to land on home.
   const hasRecreateInputs = useSelector((s) => Boolean(s.image.recreateInputs));
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setRoute = (next) => dispatch(setAdCreativeNewActivePage(next));
 
@@ -78,10 +73,9 @@ const AdCreativeNewLayout = () => {
   // picker home. Otherwise reset to home like a normal in-tab back.
   const handleFormClose = () => {
     if (fromRecreate) {
-      setRoute('home');
-      dispatch(setActiveAdStudioTab('adVideoNew'));
-      dispatch(setActivePage('myVideos'));
       dispatch(setMySpaceTab('images'));
+      navigate('/my-space', { flushSync: true });
+      setRoute('home');
       return;
     }
     setRoute('home');
