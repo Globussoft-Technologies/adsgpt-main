@@ -279,6 +279,23 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
 
   const prefillInputs = useSelector((state) => state.adVideoNew.aiAdsPrefillInputs);
 
+  // Keep the form aligned with the header brand while it is open. Updating
+  // local state avoids a route transition/remount, so the change is immediate
+  // and visually stable.
+  useEffect(() => {
+    if (!data?.headerBrandId) return;
+    setFormData((prev) => ({
+      ...prev,
+      name: data.name || '',
+      description: data.description || '',
+      category: matchOption(categoryOptions, data.category),
+    }));
+    const images = Array.isArray(data.brandImages) ? data.brandImages.slice(0, 5) : [];
+    setUrlImages(images);
+    const logo = data.brandLogoUrl || '';
+    setUrlLogo(logo ? { url: logo, preview: logo, name: 'brand-logo' } : null);
+  }, [data?.brandLogoUrl, data?.description, data?.headerBrandId, data?.name, data?.category, data?.brandImages]);
+
   useEffect(() => {
     if (!prefillInputs) return;
     const inputs = prefillInputs;

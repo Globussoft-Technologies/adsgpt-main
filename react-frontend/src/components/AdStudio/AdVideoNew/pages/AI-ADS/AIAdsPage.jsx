@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -22,6 +22,19 @@ const AIAdsPage = ({ handleGenerate }) => {
   const step = useSelector((state) => state.adVideoNew.currentAIAdsStep);
   const aiAdsSceneData = useSelector((state) => state.adVideoNew.aiAdsSceneData);
   const prefillInputs = useSelector((state) => state.adVideoNew.aiAdsPrefillInputs);
+  const selectedBrand = useSelector((state) => state.adFactoryNew.selectedBrand);
+  const brandDefaults = useMemo(
+    () => ({
+      name: selectedBrand?.name || '',
+      description: selectedBrand?.description || '',
+      category: selectedBrand?.category || selectedBrand?.industry || '',
+      brandImages: selectedBrand?.brandImages || selectedBrand?.images || [],
+      brandLogoUrl:
+        selectedBrand?.logoUrls?.[0] || selectedBrand?.logoUrl || selectedBrand?.brandLogo || '',
+      headerBrandId: selectedBrand?.id || '',
+    }),
+    [selectedBrand]
+  );
 
   const [formData, setFormData] = useState({
     baseType: '',
@@ -125,7 +138,7 @@ const AIAdsPage = ({ handleGenerate }) => {
         return (
           <DetailsFormStep
             type={formData.baseType}
-            data={{ ...formData.analysisData, ...formData.details }}
+            data={{ ...brandDefaults, ...formData.analysisData, ...formData.details }}
             originalInputs={originalInputs}
             existingSceneData={aiAdsSceneData}
             onBack={() => handleBack('analysis')}

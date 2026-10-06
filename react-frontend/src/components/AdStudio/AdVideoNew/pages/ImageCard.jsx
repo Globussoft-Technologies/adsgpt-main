@@ -56,6 +56,8 @@ const MODEL_LABEL_OVERRIDES = {
 // is left exactly as it was.
 const IMAGE_TYPE_LABELS = {
   template_recreate: 'Template Recreate',
+  // Ad Studio's template renders share the label (and the My Space filter).
+  studio_template: 'Template Recreate',
 };
 
 const IMAGE_TYPE_LABEL = (value) => IMAGE_TYPE_LABELS[value] || value || '-';
@@ -396,8 +398,15 @@ export default function ImageCard({
      editor with an empty form and no way back to the thing being recreated.
      Same reason `template_recreate` was kept distinct from AdLibrary's
      `recreate_ads` in the first place (ONB-011). */
-  const isOnboardingOutput = item?.inputs?.type === 'template_recreate';
+  // Ad Studio template renders (`studio_template`) hide Recreate for the same
+  // reason, for now (product decision 2026-09-30).
+  const isOnboardingOutput =
+    item?.inputs?.type === 'template_recreate' || item?.inputs?.type === 'studio_template';
   const showRecreate = enableRecreate && !isOnboardingOutput;
+  // Ad Studio template renders: the user picks no quality (it's fixed on the
+  // server) and `instructions` holds an internal `template:<id>` tag
+  // (services/adStudio/studioImageRender.js), so neither row means anything to them.
+  const isStudioTemplate = item?.inputs?.type === 'studio_template';
 
   // matched aspect, then either hands off to the AdLibrary RecreateAdModal
   // (for `recreate_ads`) or routes to the appropriate AdCreativeNew editor.
@@ -467,16 +476,18 @@ export default function ImageCard({
                   return MODEL_LABEL_OVERRIDES[raw] || raw;
                 })()}
               </p>
-              <p>
-                <span className="text-gray-500 dark:text-gray-400">Quality:</span>{' '}
-                {(() => {
-                  // Records created before the quality field existed won't
-                  // carry it — fall back to the backend default of "medium".
-                  const q = item?.inputs?.quality || 'medium';
-                  // "ultra_high" → "Ultra High"
-                  return q.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-                })()}
-              </p>
+              {!isStudioTemplate && (
+                <p>
+                  <span className="text-gray-500 dark:text-gray-400">Quality:</span>{' '}
+                  {(() => {
+                    // Records created before the quality field existed won't
+                    // carry it — fall back to the backend default of "medium".
+                    const q = item?.inputs?.quality || 'medium';
+                    // "ultra_high" → "Ultra High"
+                    return q.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                  })()}
+                </p>
+              )}
               {item?.inputs?.brandName && (
                 <p>
                   <span className="text-gray-500 dark:text-gray-400">Brand:</span> {item.inputs.brandName}
@@ -502,7 +513,7 @@ export default function ImageCard({
                   {item.inputs.userPrompt || item.inputs.prompt}
                 </p>
               )}
-              {item?.inputs?.instructions && (
+              {item?.inputs?.instructions && !isStudioTemplate && (
                 <p className="mt-1">
                   <span className="text-gray-500 dark:text-gray-400">Instructions:</span> {item.inputs.instructions}
                 </p>

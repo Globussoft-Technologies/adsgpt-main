@@ -21,6 +21,7 @@ import adFactoryAutomationSlice from '@/store/reducers/adFactoryAutomation/adFac
 import adFactoryBriefSlice from '@/store/reducers/adFactoryBrief/adFactoryBriefSlice';
 import modelCreditsSlice from '@/store/reducers/modelCredits/modelCreditsSlice';
 import adCreativeConfigSlice from '@/store/reducers/adCreativeConfig/adCreativeConfigSlice';
+import studioTemplatesReducer from '@/store/reducers/adStudio/studioTemplatesSlice';
 import usageSlice from '@/store/reducers/profile/usageSlice';
 import competitorSearchReducer from '@/store/reducers/feature/competitorSearchSlice';
 import imageReducer from '@/store/reducers/image/imageSlice';
@@ -79,6 +80,8 @@ const store = configureStore({
     adFactoryBrief: adFactoryBriefSlice,
     modelCredits: modelCreditsSlice,
     adCreativeConfig: adCreativeConfigSlice,
+    // Brand-matched DS templates for the Ad Creative / Ad Video galleries (in memory only).
+    studioTemplates: studioTemplatesReducer,
     usage: usageSlice,
     competitorSearch: competitorSearchReducer,
     image: imageReducer,

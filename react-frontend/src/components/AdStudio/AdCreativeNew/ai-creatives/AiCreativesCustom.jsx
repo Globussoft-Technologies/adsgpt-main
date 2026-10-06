@@ -114,6 +114,11 @@ const NAS_BASE_URL = import.meta.env.VITE_NAS_BASE_URL || '';
 const MAX_REFS_TOTAL = 5;
 
 export function AiCreativesCustom({ onClose, onComplete }) {
+  const headerSelectedBrand = useSelector((state) => state.brandIQTabs.selectedCompetitorBrand);
+  const headerBrands = useSelector((state) => state.brandIQTabs.myBrands);
+  const headerBrand = Array.isArray(headerBrands)
+    ? headerBrands.find((brand) => brand.id === headerSelectedBrand?.id)
+    : null;
   const [prompt, setPrompt] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
   // Each reference is { file: File | null, preview: string }. `file` is set
@@ -194,7 +199,11 @@ export function AiCreativesCustom({ onClose, onComplete }) {
   const [competitorSearch, setCompetitorSearch] = useState('');
   const [competitorTab, setCompetitorTab] = useState('Competitors');
 
-  const [brandSource, setBrandSource] = useState({ kind: 'none' });
+  // The Ad Studio header is the initial brand choice. The picker can still
+  // replace it, and subsequent local edits retain precedence for this session.
+  const [brandSource, setBrandSource] = useState(() =>
+    headerBrand?.id ? { kind: 'list', item: headerBrand } : { kind: 'none' }
+  );
   const [brandList, setBrandList] = useState([]);
   const [brandListState, setBrandListState] = useState('idle');
   const [brandListError, setBrandListError] = useState('');
@@ -717,6 +726,23 @@ export function AiCreativesCustom({ onClose, onComplete }) {
     setShowBrandIqPicker(false);
     setAutofillState('idle');
   };
+
+  // The global Ad Studio selector is authoritative. Apply it in-place so the
+  // active prompt, category match, logo options, and image pool update without
+  // closing or remounting this form.
+  useEffect(() => {
+    if (!headerBrand?.id) return;
+    setBrandSource({ kind: 'list', item: headerBrand });
+    brandSourceLogoRef.current = headerBrand.logoUrls?.[0] || '';
+    setBrandLogoOptions(Array.isArray(headerBrand.logoUrls) ? headerBrand.logoUrls.filter(Boolean) : []);
+    const images = Array.isArray(headerBrand.imageUrl) ? headerBrand.imageUrl.filter(Boolean) : [];
+    setReferenceImages((prev) => prev.filter((item) => !brandSourceImagesRef.current.includes(item.preview)));
+    setBrandImagePool(images.map((url) => ({ file: null, preview: url })));
+    brandSourceImagesRef.current = images;
+    setBrandLogoPicked('');
+    setBrandImagesPicked([]);
+    setAutofillState('idle');
+  }, [headerBrand?.id]);
 
   const handleAutofill = async () => {
     const raw = websiteUrl.trim();

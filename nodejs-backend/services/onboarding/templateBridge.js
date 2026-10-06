@@ -269,5 +269,7 @@ module.exports = {
   startTemplateRun,
   nextPage,
   MAX_LIMIT,
+  // Also used by services/adStudio/studioTemplates.js — same DS stream format.
+  createSseParser,
   _internals: { active, resolveBaseUrl, pageKey, createSseParser },
 };

@@ -9,6 +9,8 @@ import { toast } from 'react-toastify';
 import emitter from '@/utils/eventEmitter';
 
 import AdVideoHomeNew from './AdVideoHomeNew';
+import AdVideoHomeV1 from '../v1/AdVideoHomeV1';
+import { IS_ADSTUDIO_UI_V2 } from '@/utils/featureFlags';
 import UGCAdsPage from './pages/UGCAdsPage';
 import ProductBrollPage from './pages/ProductBrollPage';
 import AvatarAdsPage from './pages/AvatarAdsPage';
@@ -572,7 +574,10 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
       {/* {activePage !== 'myVideos' && <SavedFolderIcon />} */}
 
       {displayedActivePage === 'home' ? (
-        <AdVideoHomeNew />
+        // VITE_FEATURE_ADSTUDIO_UI_V2 off/unset → the pre-redesign home (v1/),
+        // same switch as AdCreativeNewLayout. The new home (tool stage +
+        // template dock) only renders when it is on.
+        IS_ADSTUDIO_UI_V2 ? <AdVideoHomeNew /> : <AdVideoHomeV1 />
       ) : displayedActivePage === 'myVideos' ? (
         <>
           {/* Header */}

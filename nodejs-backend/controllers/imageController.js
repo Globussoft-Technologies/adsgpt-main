@@ -1054,7 +1054,9 @@ exports.getAllImages = async (req, res) => {
             userId: req.user.user_id,
         };
 
-        if (type) filter["inputs.type"] = type;
+        // "Template Recreate" covers onboarding's and Ad Studio's (`studio_template`)
+        // template renders — same rule as services/mySpace/mySpaceImagesService.js.
+        if (type) filter["inputs.type"] = type === "template_recreate" ? { $in: ["template_recreate", "studio_template"] } : type;
         if (model) filter["inputs.model"] = model;
         if (status) filter.status = status;
 

@@ -1,519 +1,63 @@
-import React, { useMemo } from 'react';
-import { ChevronDown, ChevronUp, SlidersHorizontal, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronUp, RefreshCw, Sparkles } from 'lucide-react';
 
-export const CATEGORIES = [
-  { id: 'all', label: 'All Templates' },
-  { id: 'ecommerce', label: 'E-commerce & D2C' },
-  { id: 'saas', label: 'SaaS & App' },
-  { id: 'editorial', label: 'Editorial & Fashion' },
-  { id: 'ugc', label: 'Before / After & UGC' },
-];
+// Template gallery pieces shared by the Ad Creative (image) and Ad Video (video)
+// home screens. Data comes from DS via hooks/useStudioTemplates.js — each item
+// is `{ template_id, kind, url, tags, rank }`, already ranked for the brand
+// selected in the header. The old hardcoded Unsplash list and category pills
+// were removed on 2026-09-29 (docs/ai/modules/adstudio, FEATURE-brand-templates).
 
-export const TEMPLATES = [
-  {
-    id: 't-1',
-    category: 'editorial',
-    categoryLabel: 'FASHION & APPAREL',
-    title: 'Monochrome Fall Collection',
-    aspectRatio: '4:5 Portrait',
-    image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=700&q=80',
-    ctr: '4.8%',
-    moduleKey: 'lifestyle',
-  },
-  {
-    id: 't-2',
-    category: 'saas',
-    categoryLabel: 'FINTECH & SAAS',
-    title: 'Card Payment Floating UI Mockup',
-    aspectRatio: '1:1 Square',
-    image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.2%',
-    moduleKey: 'apps-saas',
-  },
-  {
-    id: 't-3',
-    category: 'ecommerce',
-    categoryLabel: 'BEAUTY & WELLNESS',
-    title: 'Hydrating Essence Botanical',
-    aspectRatio: '4:5 Minimal',
-    image: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.1%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-4',
-    category: 'ugc',
-    categoryLabel: 'UGC TESTIMONIAL',
-    title: 'Morning Routine Honest Reaction',
-    aspectRatio: 'UGC Testimonial',
-    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=700&q=80',
-    ctr: '7.4%',
-    moduleKey: 'lifestyle',
-  },
-  {
-    id: 't-5',
-    category: 'ecommerce',
-    categoryLabel: 'ACCESSORIES',
-    title: 'Heritage Chronometer',
-    aspectRatio: '4:5 Luxury',
-    image: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.0%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-6',
-    category: 'editorial',
-    categoryLabel: 'LUXURY & STYLE',
-    title: 'Evening Silhouette Noir',
-    aspectRatio: '4:5 Portrait',
-    image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.6%',
-    moduleKey: 'lifestyle',
-  },
-  {
-    id: 't-7',
-    category: 'saas',
-    categoryLabel: 'DEV TOOLS',
-    title: 'Cloud Metrics Dark Mode Dashboard',
-    aspectRatio: '16:9 Banner',
-    image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=700&q=80',
-    ctr: '4.4%',
-    moduleKey: 'apps-saas',
-  },
-  {
-    id: 't-8',
-    category: 'ecommerce',
-    categoryLabel: 'FOOTWEAR',
-    title: 'Aerodynamic Knit Runner',
-    aspectRatio: '1:1 Square',
-    image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.8%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-9',
-    category: 'ugc',
-    categoryLabel: 'SKINCARE UGC',
-    title: '7-Day Glow Result Comparison',
-    aspectRatio: '9:16 Story',
-    image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=700&q=80',
-    ctr: '8.1%',
-    moduleKey: 'ai-creatives',
-  },
-  {
-    id: 't-10',
-    category: 'editorial',
-    categoryLabel: 'JEWELRY & GOLD',
-    title: 'Sculptural Minimalist Rings',
-    aspectRatio: '4:5 Luxury',
-    image: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.9%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-11',
-    category: 'ecommerce',
-    categoryLabel: 'ORGANIC BEVERAGE',
-    title: 'Cold Brew Citrus Infusion',
-    aspectRatio: '4:5 Minimal',
-    image: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.3%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-12',
-    category: 'saas',
-    categoryLabel: 'PRODUCTIVITY APP',
-    title: 'Team Workspaces Collaboration UI',
-    aspectRatio: '1:1 Square',
-    image: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.7%',
-    moduleKey: 'apps-saas',
-  },
-  {
-    id: 't-13',
-    category: 'ugc',
-    categoryLabel: 'HOME & DECOR',
-    title: 'Living Room Makeover Unboxing',
-    aspectRatio: 'UGC Testimonial',
-    image: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=700&q=80',
-    ctr: '7.0%',
-    moduleKey: 'brand-awareness',
-  },
-  {
-    id: 't-14',
-    category: 'editorial',
-    categoryLabel: 'STREETWEAR',
-    title: 'Urban Oversized Hoodie Drop',
-    aspectRatio: '4:5 Portrait',
-    image: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.5%',
-    moduleKey: 'lifestyle',
-  },
-  {
-    id: 't-15',
-    category: 'ecommerce',
-    categoryLabel: 'AUDIO & TECH',
-    title: 'Noise Canceling Over-Ear Studio',
-    aspectRatio: '1:1 Square',
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.5%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-16',
-    category: 'editorial',
-    categoryLabel: 'SUMMER RUNWAY',
-    title: 'Pastel Resortwear Lookbook',
-    aspectRatio: '9:16 Story',
-    image: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.7%',
-    moduleKey: 'lifestyle',
-  },
-  {
-    id: 't-17',
-    category: 'saas',
-    categoryLabel: 'AI ANALYTICS',
-    title: 'Real-time Conversions Graph',
-    aspectRatio: '16:9 Banner',
-    image: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.4%',
-    moduleKey: 'apps-saas',
-  },
-  {
-    id: 't-18',
-    category: 'ecommerce',
-    categoryLabel: 'COSMETICS',
-    title: 'Matte Velvet Lip Color Palette',
-    aspectRatio: '1:1 Square',
-    image: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=700&q=80',
-    ctr: '7.2%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-19',
-    category: 'ugc',
-    categoryLabel: 'FITNESS UGC',
-    title: '30-Day Workout Progress Reel',
-    aspectRatio: '9:16 Story',
-    image: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=700&q=80',
-    ctr: '8.4%',
-    moduleKey: 'lifestyle',
-  },
-  {
-    id: 't-20',
-    category: 'ecommerce',
-    categoryLabel: 'FRAGRANCE',
-    title: 'Amber & Cedarwood Eau De Parfum',
-    aspectRatio: '4:5 Luxury',
-    image: 'https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.9%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-21',
-    category: 'editorial',
-    categoryLabel: 'SUNGLASSES & OPTICS',
-    title: 'Retro Aviator Gold Frame',
-    aspectRatio: '1:1 Square',
-    image: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.8%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-22',
-    category: 'saas',
-    categoryLabel: 'MOBILE BANKING',
-    title: 'Instant Global Remittance App',
-    aspectRatio: '9:16 Story',
-    image: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.2%',
-    moduleKey: 'apps-saas',
-  },
-  {
-    id: 't-23',
-    category: 'ugc',
-    categoryLabel: 'COFFEE & FOOD',
-    title: 'Espresso Barista First Sip Review',
-    aspectRatio: 'UGC Testimonial',
-    image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=700&q=80',
-    ctr: '7.9%',
-    moduleKey: 'lifestyle',
-  },
-  {
-    id: 't-24',
-    category: 'ecommerce',
-    categoryLabel: 'CERAMICS & DINING',
-    title: 'Handcrafted Stoneware Set',
-    aspectRatio: '4:5 Minimal',
-    image: 'https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.1%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-25',
-    category: 'editorial',
-    categoryLabel: 'OUTDOOR APPAREL',
-    title: 'Alpine Weatherproof Shell Jacket',
-    aspectRatio: '4:5 Portrait',
-    image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.4%',
-    moduleKey: 'lifestyle',
-  },
-  {
-    id: 't-26',
-    category: 'saas',
-    categoryLabel: 'CRM PLATFORM',
-    title: 'Pipeline Automation Kanban Flow',
-    aspectRatio: '16:9 Banner',
-    image: 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=700&q=80',
-    ctr: '4.9%',
-    moduleKey: 'apps-saas',
-  },
-  {
-    id: 't-27',
-    category: 'ecommerce',
-    categoryLabel: 'SMARTWATCHES',
-    title: 'Titanium Fitness Tracker Pro',
-    aspectRatio: '1:1 Square',
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=700&q=80',
-    ctr: '7.1%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-28',
-    category: 'ugc',
-    categoryLabel: 'HAIRCARE UGC',
-    title: 'Silk Pillowcase Wash & Blowout',
-    aspectRatio: '9:16 Story',
-    image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=700&q=80',
-    ctr: '8.7%',
-    moduleKey: 'ai-creatives',
-  },
-  {
-    id: 't-29',
-    category: 'editorial',
-    categoryLabel: 'FOOTWEAR DROP',
-    title: 'Retro Chunky Leather Sneaker',
-    aspectRatio: '4:5 Luxury',
-    image: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.0%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-30',
-    category: 'ecommerce',
-    categoryLabel: 'ORGANIC MATCHA',
-    title: 'Ceremonial Grade Kyoto Matcha',
-    aspectRatio: '4:5 Minimal',
-    image: 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.9%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-31',
-    category: 'saas',
-    categoryLabel: 'DESIGN SYSTEM',
-    title: 'Vector Component Library Plugin',
-    aspectRatio: '16:9 Banner',
-    image: 'https://images.unsplash.com/photo-1581291518655-9523c932deda?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.3%',
-    moduleKey: 'apps-saas',
-  },
-  {
-    id: 't-32',
-    category: 'ugc',
-    categoryLabel: 'TECH UNBOXING',
-    title: 'Mechanical Keyboard Sound Test',
-    aspectRatio: 'UGC Testimonial',
-    image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=700&q=80',
-    ctr: '7.6%',
-    moduleKey: 'brand-awareness',
-  },
-  {
-    id: 't-33',
-    category: 'editorial',
-    categoryLabel: 'FINE JEWELRY',
-    title: 'Emerald Cut Solitaire Pendant',
-    aspectRatio: '1:1 Square',
-    image: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.3%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-34',
-    category: 'ecommerce',
-    categoryLabel: 'LEATHER GOODS',
-    title: 'Full-Grain Bifold Minimalist Wallet',
-    aspectRatio: '4:5 Luxury',
-    image: 'https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.5%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-35',
-    category: 'saas',
-    categoryLabel: 'CYBERSECURITY',
-    title: 'Zero Trust Authentication Shield',
-    aspectRatio: '9:16 Story',
-    image: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.8%',
-    moduleKey: 'apps-saas',
-  },
-  {
-    id: 't-36',
-    category: 'ugc',
-    categoryLabel: 'PET CARE UGC',
-    title: 'Organic Puppy Food Taste Test',
-    aspectRatio: '9:16 Story',
-    image: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?auto=format&fit=crop&w=700&q=80',
-    ctr: '8.9%',
-    moduleKey: 'ai-creatives',
-  },
-  {
-    id: 't-37',
-    category: 'editorial',
-    categoryLabel: 'AVANT-GARDE',
-    title: 'Architectural Tailored Blazer',
-    aspectRatio: '4:5 Portrait',
-    image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.1%',
-    moduleKey: 'lifestyle',
-  },
-  {
-    id: 't-38',
-    category: 'ecommerce',
-    categoryLabel: 'PLANT-BASED FOOD',
-    title: 'Artisanal Oat Milk Cold Brew',
-    aspectRatio: '1:1 Square',
-    image: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.4%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-39',
-    category: 'saas',
-    categoryLabel: 'VIDEO EDITOR AI',
-    title: 'Timeline Multi-track Subtitle Auto-sync',
-    aspectRatio: '16:9 Banner',
-    image: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.6%',
-    moduleKey: 'apps-saas',
-  },
-  {
-    id: 't-40',
-    category: 'ugc',
-    categoryLabel: 'TRAVEL GEAR',
-    title: 'Carry-On Packing Cube Routine',
-    aspectRatio: 'UGC Testimonial',
-    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=700&q=80',
-    ctr: '7.7%',
-    moduleKey: 'brand-awareness',
-  },
-  {
-    id: 't-41',
-    category: 'ecommerce',
-    categoryLabel: 'AUDIO GEAR',
-    title: 'Hi-Fi Wireless Earbuds ANC',
-    aspectRatio: '4:5 Minimal',
-    image: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=700&q=80',
-    ctr: '7.3%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-42',
-    category: 'editorial',
-    categoryLabel: 'LUXURY TIMEPIECE',
-    title: 'Skeleton Automatic Chronograph',
-    aspectRatio: '4:5 Luxury',
-    image: 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.6%',
-    moduleKey: 'product-shot',
-  },
-  {
-    id: 't-43',
-    category: 'saas',
-    categoryLabel: 'EMAIL MARKETING',
-    title: 'Drip Sequence Conversion Analytics',
-    aspectRatio: '16:9 Banner',
-    image: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=700&q=80',
-    ctr: '5.0%',
-    moduleKey: 'apps-saas',
-  },
-  {
-    id: 't-44',
-    category: 'ugc',
-    categoryLabel: 'CLEAN BEAUTY',
-    title: 'Hydra-Plump Serum Day 14 Results',
-    aspectRatio: '9:16 Story',
-    image: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=700&q=80',
-    ctr: '8.3%',
-    moduleKey: 'ai-creatives',
-  },
-  {
-    id: 't-45',
-    category: 'ecommerce',
-    categoryLabel: 'WELLNESS & CANDLES',
-    title: 'Soy Wax Hand-Poured Candle',
-    aspectRatio: '1:1 Square',
-    image: 'https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&w=700&q=80',
-    ctr: '6.2%',
-    moduleKey: 'product-shot',
-  },
-];
+// Server error codes that retrying cannot fix — the brand itself needs editing.
+const NON_RETRYABLE = new Set(['NO_CONTEXT', 'NO_DESCRIPTION', 'BRAND_NOT_FOUND']);
+
+// Video matching often takes the full 30s upstream; say so after a while.
+const SLOW_VIDEO_NOTICE_MS = 8000;
+
+const SKELETON_HEIGHTS = [260, 200, 320, 240, 180, 300, 220, 280, 190, 250, 310, 210];
 
 export function AdCreativeTemplateHeader({
-  activeCategory = 'all',
-  setActiveCategory,
+  title = 'Trending Image Templates',
+  subtitle = '',
+  brandName = '',
+  onRefresh,
+  isRefreshing = false,
+  refreshDisabled = false,
   isExpanded = false,
   onToggleExpand,
   className = '',
 }) {
   return (
     <div className={`w-full flex flex-col md:flex-row md:items-center justify-between gap-3 ${className}`}>
-      {/* Title + Proven Winners Badge */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 border border-amber-300/80 dark:border-amber-700/50 px-2.5 py-0.5 text-[10px] 2xl:text-[11px] font-bold tracking-wider uppercase shadow-xs select-none">
-          <Sparkles className="h-3 w-3" />
-          PROVEN WINNERS
-        </span>
-        <h2 className="text-base sm:text-lg 2xl:text-xl font-bold text-zinc-900 dark:text-white tracking-tight select-none">
-          Trending Image Templates
-        </h2>
-        <span className="hidden sm:inline text-xs text-zinc-500 dark:text-zinc-400 font-normal select-none">
-          • High-converting ad templates
-        </span>
+      {/* Title (the "PROVEN WINNERS" badge was removed 2026-09-30) */}
+      <div className="flex flex-col gap-0.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <h2 className="text-base sm:text-lg 2xl:text-xl font-bold text-zinc-900 dark:text-white tracking-tight select-none">
+            {title}
+          </h2>
+          {brandName && (
+            <span className="hidden sm:inline text-xs text-zinc-500 dark:text-zinc-400 font-normal select-none">
+              • Matched to {brandName}
+            </span>
+          )}
+        </div>
+        {subtitle && <p className="text-xs text-zinc-500 dark:text-zinc-400 select-none">{subtitle}</p>}
       </div>
 
-      {/* Filter Pills + Settings Button + Expand/Collapse Button */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0 scrollbar-none select-none">
-        {CATEGORIES.map((cat) => {
-          const isActive = activeCategory === cat.id;
-          return (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setActiveCategory?.(cat.id)}
-              className={`shrink-0 rounded-full px-3 py-1 text-xs 2xl:text-[12.5px] font-medium transition-all duration-200 cursor-pointer ${
-                isActive
-                  ? 'bg-zinc-900 text-white shadow-xs dark:bg-white dark:text-zinc-950 font-semibold'
-                  : 'bg-white/80 dark:bg-[#1A1A1E] text-zinc-600 dark:text-zinc-300 border border-black/10 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-[#25252A] hover:text-zinc-900 dark:hover:text-white'
-              }`}
-            >
-              {cat.label}
-            </button>
-          );
-        })}
+      {/* Refresh + Expand/Collapse */}
+      <div className="flex items-center gap-1.5 select-none">
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshDisabled || isRefreshing}
+            aria-label="Refresh templates"
+            title="Refresh templates"
+            className="shrink-0 flex h-7.5 w-7.5 items-center justify-center rounded-full border border-black/10 dark:border-white/10 bg-white/80 dark:bg-[#1A1A1E] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-[#25252A] transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+        )}
 
-        <button
-          type="button"
-          aria-label="Filter settings"
-          className="shrink-0 flex h-7.5 w-7.5 items-center justify-center rounded-full border border-black/10 dark:border-white/10 bg-white/80 dark:bg-[#1A1A1E] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-[#25252A] transition-colors cursor-pointer"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-        </button>
-
-        {/* Expand / Collapse Button */}
         {onToggleExpand && (
           <button
             type="button"
@@ -534,91 +78,337 @@ export function AdCreativeTemplateHeader({
   );
 }
 
-export function AdCreativeTemplateMasonry({
-  activeCategory = 'all',
-  onSelectCategory,
-  className = '',
-}) {
-  const filteredTemplates = useMemo(() => {
-    if (activeCategory === 'all') return TEMPLATES;
-    return TEMPLATES.filter((t) => t.category === activeCategory);
-  }, [activeCategory]);
+function StatusMessage({ children, action }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+      <p className="max-w-md text-sm text-zinc-600 dark:text-zinc-400">{children}</p>
+      {action}
+    </div>
+  );
+}
+
+// Column count per viewport width — the same steps the old CSS `columns-*`
+// classes used (2 / sm 3 / md 4 / lg 5 / xl 5 / 2xl 6 / ≥2000px 7).
+const COLUMN_STEPS = [
+  [2000, 7],
+  [1536, 6],
+  [1024, 5],
+  [768, 4],
+  [640, 3],
+  [0, 2],
+];
+const columnsFor = (width) => COLUMN_STEPS.find(([min]) => width >= min)[1];
+
+function useColumnCount() {
+  const [count, setCount] = useState(() =>
+    typeof window === 'undefined' ? 5 : columnsFor(window.innerWidth)
+  );
+  useEffect(() => {
+    const onResize = () => setCount(columnsFor(window.innerWidth));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return count;
+}
+
+/**
+ * Row-first masonry: item i goes to column i % columns.
+ *
+ * Replaced CSS `columns-*` (2026-09-30). That fills DOWN the first column
+ * before the next, so every image that finished loading and changed height
+ * pushed cards from one column into another — the top row kept reshuffling
+ * while results streamed in. Fixed columns mean rank 1..N is always the first
+ * row, and a late image can only grow its own column.
+ */
+function RowFirstMasonry({ items, renderItem, getKey, ...rest }) {
+  const columns = useColumnCount();
+  const buckets = Array.from({ length: columns }, () => []);
+  items.forEach((item, i) => buckets[i % columns].push(item));
+  return (
+    <div className="flex items-start gap-2.5 2xl:gap-3" {...rest}>
+      {buckets.map((bucket, c) => (
+        <div key={c} className="flex min-w-0 flex-1 flex-col gap-2.5 2xl:gap-3">
+          {bucket.map((item) => (
+            <React.Fragment key={getKey(item)}>{renderItem(item)}</React.Fragment>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SkeletonGrid({ media, brandName }) {
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    if (media !== 'video') return undefined;
+    const timer = setTimeout(() => setSlow(true), SLOW_VIDEO_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [media]);
 
   return (
-    <div className={`w-full ${className}`}>
-      {/* Responsive Masonry Gallery (Adapts columns to screen width/ratio) */}
-      <div className="columns-2 sm:columns-3 md:columns-4 lg:columns-5 xl:columns-5 2xl:columns-6 min-[2000px]:columns-7 gap-2.5 2xl:gap-3 space-y-2.5 2xl:space-y-3">
-        {filteredTemplates.map((template) => (
-          <div
-            key={template.id}
-            onClick={() => onSelectCategory?.(template.moduleKey || 'ai-creatives')}
-            className="group relative break-inside-avoid overflow-hidden rounded-xl border border-black/10 dark:border-white/10 bg-zinc-100 dark:bg-zinc-900/60 shadow-xs transition-all duration-300 hover:shadow-lg hover:border-black/20 dark:hover:border-white/20 cursor-pointer"
+    <div>
+      <p className="mb-3 text-center text-xs text-zinc-500 dark:text-zinc-400" aria-live="polite">
+        {slow
+          ? 'Still matching videos, this can take up to 30 seconds…'
+          : `Finding templates for ${brandName || 'your brand'}…`}
+      </p>
+      <RowFirstMasonry
+        aria-hidden="true"
+        items={SKELETON_HEIGHTS.map((h, i) => ({ h, i }))}
+        getKey={(tile) => tile.i}
+        renderItem={(tile) => (
+          <div style={{ height: tile.h }} className="animate-pulse rounded-xl bg-zinc-200/80 dark:bg-white/5" />
+        )}
+      />
+    </div>
+  );
+}
+
+// Shared frame, hover overlay and Recreate button for both card kinds.
+// No border or tinted frame: a template reads as the ad itself (the tool tiles
+// above are the framed "tools"); hover adds a violet ring.
+//
+// `loaded` = the media has reported its real size. Until then the card holds a
+// 4:5 shimmer box: an <img>/<video> of unknown size is 0px tall, which drew
+// each card as a thin bordered line and made heights jump as media arrived.
+function CardFrame({ template, onSelect, loaded, children }) {
+  const clickable = Boolean(onSelect);
+  const tags = (template.tags || []).slice(0, 2);
+
+  return (
+    <div
+      onClick={clickable ? () => onSelect(template) : undefined}
+      className={`group relative overflow-hidden rounded-xl bg-zinc-200/60 dark:bg-zinc-800/50 transition-all duration-300 hover:shadow-lg hover:ring-2 hover:ring-[#8B5CF6]/60 ${clickable ? 'cursor-pointer' : ''} ${loaded ? '' : 'aspect-4/5 animate-pulse'}`}
+    >
+      {children}
+
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+      <div className="absolute inset-x-0 bottom-0 z-10 p-3 sm:p-3.5 flex items-end justify-between gap-2 text-white opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1.5 group-hover:translate-y-0">
+        <div className="min-w-0 flex-1 pr-1">
+          {tags.map((tag) => (
+            <span key={tag} className="block text-[9px] font-bold tracking-wider text-zinc-300 uppercase truncate">
+              {tag}
+            </span>
+          ))}
+        </div>
+
+        {clickable && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(template);
+            }}
+            className="shrink-0 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10.5px] font-semibold text-zinc-900 shadow-md backdrop-blur-md transition-all duration-150 hover:bg-zinc-100 hover:scale-105 active:scale-95 cursor-pointer"
           >
-            {/* Template Image (Natural Aspect Ratio) */}
-            <img
-              src={template.image}
-              alt={template.title}
-              loading="lazy"
-              className="w-full h-auto object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]"
-            />
-
-            {/* Subtle Gradient Hover Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-
-            {/* Hover Metadata & Recreate Action */}
-            <div className="absolute inset-x-0 bottom-0 z-10 p-3 sm:p-3.5 flex flex-col justify-end text-white opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1.5 group-hover:translate-y-0">
-              <div className="flex items-end justify-between gap-2">
-                <div className="min-w-0 flex-1 pr-1">
-                  {template.categoryLabel && (
-                    <span className="block text-[9px] font-bold tracking-wider text-zinc-300 uppercase mb-0.5 truncate">
-                      {template.categoryLabel}
-                    </span>
-                  )}
-
-                  <h3 className="text-xs sm:text-[12.5px] font-semibold text-white leading-snug line-clamp-2">
-                    {template.title}
-                  </h3>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectCategory?.(template.moduleKey || 'ai-creatives');
-                  }}
-                  className="shrink-0 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10.5px] font-semibold text-zinc-900 shadow-md backdrop-blur-md transition-all duration-150 hover:bg-zinc-100 hover:scale-105 active:scale-95 cursor-pointer"
-                >
-                  <Sparkles className="h-3 w-3 text-amber-500" />
-                  <span>Recreate</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
+            <Sparkles className="h-3 w-3 text-amber-500" />
+            <span>Recreate</span>
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-export default function AdCreativeTemplateGallery({
-  onSelectCategory,
-  className = '',
-}) {
-  const [activeCategory, setActiveCategory] = React.useState('all');
+// While loading, the media sits invisibly on top of the placeholder box (so it
+// has a size and lazy-loading still fires); once loaded it joins the flow.
+const PENDING_MEDIA = 'absolute inset-0 h-full w-full opacity-0';
+
+function ImageTemplateCard({ template, onSelect, onBroken }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <CardFrame template={template} onSelect={onSelect} loaded={loaded}>
+      <img
+        src={template.url}
+        alt={(template.tags || []).join(', ') || 'Ad template'}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        onError={() => onBroken(template.template_id)}
+        className={`${loaded ? 'block w-full h-auto' : PENDING_MEDIA} object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]`}
+      />
+    </CardFrame>
+  );
+}
+
+// Plays muted on hover only, so 30 cards don't all download video at once.
+// `#t=0.1` makes browsers paint the first frame instead of a black box.
+function VideoTemplateCard({ template, onSelect, onBroken }) {
+  const videoRef = useRef(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const play = () => {
+    videoRef.current?.play().catch(() => {
+      /* autoplay can be refused; the first frame stays visible */
+    });
+  };
+  const stop = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.pause();
+    video.currentTime = 0.1;
+  };
 
   return (
-    <div className={`w-full max-w-[1480px] mx-auto px-3 sm:px-6 2xl:px-8 ${className}`}>
-      <AdCreativeTemplateHeader
-        activeCategory={activeCategory}
-        setActiveCategory={setActiveCategory}
-        className="pb-4"
-      />
-      <div className="w-full pt-1 pb-16">
-        <AdCreativeTemplateMasonry
-          activeCategory={activeCategory}
-          onSelectCategory={onSelectCategory}
+    <div onMouseEnter={play} onMouseLeave={stop}>
+      <CardFrame template={template} onSelect={onSelect} loaded={loaded}>
+        <video
+          ref={videoRef}
+          src={`${template.url}#t=0.1`}
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          onLoadedData={() => setLoaded(true)}
+          onError={() => onBroken(template.template_id)}
+          className={`${loaded ? 'block w-full h-auto' : PENDING_MEDIA} object-cover`}
         />
-      </div>
+      </CardFrame>
     </div>
   );
+}
+
+/**
+ * Infinite-scroll trigger under the grid (video). Asks for the next page when
+ * it is within PRELOAD_PX of the bottom of the grid's scroll pane. Re-checked
+ * after every page (`itemCount` in the deps), so a page too short to fill the
+ * screen still pulls the next one in.
+ */
+// Nearest ancestor that scrolls vertically, or null (= the viewport).
+function scrollParentOf(node) {
+  for (let el = node?.parentElement; el; el = el.parentElement) {
+    const { overflowY } = window.getComputedStyle(el);
+    if (overflowY === 'auto' || overflowY === 'scroll') return el;
+  }
+  return null;
+}
+
+const PRELOAD_PX = 600;
+
+function LoadMoreSentinel({ onLoadMore, isLoadingMore, error, itemCount }) {
+  const ref = useRef(null);
+
+  // A plain geometry check on the grid's own scroll container, not an
+  // IntersectionObserver. The grid scrolls inside the drawer pane: with the
+  // viewport as root the preload margin never applied (the pane clips first),
+  // and even with the pane as root, container scrolls produced no callbacks in
+  // headless Chrome — the first page loaded, then nothing. This is
+  // deterministic: check on mount / after every page (fills a short screen),
+  // on every pane scroll and on resize. fetchStudioTemplates' condition drops
+  // repeats, so calling onLoadMore often is harmless.
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || isLoadingMore || error) return undefined;
+    const root = scrollParentOf(node);
+    const check = () => {
+      const bottom = root ? root.getBoundingClientRect().bottom : window.innerHeight;
+      if (node.getBoundingClientRect().top - bottom < PRELOAD_PX) onLoadMore();
+    };
+    check();
+    const target = root || window;
+    target.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => {
+      target.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
+  }, [onLoadMore, isLoadingMore, error, itemCount]);
+
+  return (
+    <div ref={ref} className="flex min-h-14 items-center justify-center py-4" aria-live="polite">
+      {isLoadingMore && (
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-white/15 dark:border-t-white/60" aria-label="Loading more templates" />
+      )}
+      {error && !isLoadingMore && (
+        <button
+          type="button"
+          onClick={onLoadMore}
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-black/10 bg-white/80 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-white/10 dark:bg-[#1A1A1E] dark:text-zinc-200 dark:hover:bg-[#25252A]"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Couldn&apos;t load more — retry
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The template grid and its states. `view` comes from useStudioTemplates:
+ * 'brands-loading' | 'no-brand' | 'loading' | 'ready' | 'error'.
+ * `onSelectTemplate(template)` is optional; without it cards are not clickable.
+ * `hasMore` / `onLoadMore` / `isLoadingMore` / `loadMoreError` turn on infinite
+ * scroll (the Ad Video gallery; images arrive whole).
+ */
+export function AdCreativeTemplateMasonry({
+  media = 'image',
+  view,
+  items = [],
+  error = null,
+  brandName = '',
+  onRetry,
+  onSelectTemplate,
+  hasMore = false,
+  onLoadMore,
+  isLoadingMore = false,
+  loadMoreError = null,
+  className = '',
+}) {
+  // DS links occasionally 404; drop those cards instead of showing a hole.
+  const [broken, setBroken] = useState(() => new Set());
+  const markBroken = (id) => setBroken((prev) => new Set(prev).add(id));
+  const visible = items.filter((t) => !broken.has(t.template_id));
+
+  let content;
+  if (view === 'brands-loading' || view === 'loading') {
+    content = <SkeletonGrid media={media} brandName={brandName} />;
+  } else if (view === 'no-brand') {
+    content = <StatusMessage>Pick a brand (top right) to see templates matched to it.</StatusMessage>;
+  } else if (view === 'error') {
+    const canRetry = !NON_RETRYABLE.has(error?.code);
+    content = (
+      <StatusMessage
+        action={
+          canRetry && onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 dark:border-white/10 bg-white/80 dark:bg-[#1A1A1E] px-3 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-[#25252A] cursor-pointer"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry
+            </button>
+          ) : null
+        }
+      >
+        {error?.message || "Couldn't load templates right now. Please try again in a moment."}
+      </StatusMessage>
+    );
+  } else if (!visible.length) {
+    content = <StatusMessage>No templates matched this brand yet. Try refreshing in a little while.</StatusMessage>;
+  } else {
+    const Card = media === 'video' ? VideoTemplateCard : ImageTemplateCard;
+    content = (
+      <>
+        <RowFirstMasonry
+          items={visible}
+          getKey={(template) => template.template_id}
+          renderItem={(template) => (
+            <Card template={template} onSelect={onSelectTemplate} onBroken={markBroken} />
+          )}
+        />
+        {onLoadMore && (hasMore || isLoadingMore || loadMoreError) && (
+          <LoadMoreSentinel
+            onLoadMore={onLoadMore}
+            isLoadingMore={isLoadingMore}
+            error={loadMoreError}
+            itemCount={items.length}
+          />
+        )}
+      </>
+    );
+  }
+
+  return <div className={`w-full ${className}`}>{content}</div>;
 }

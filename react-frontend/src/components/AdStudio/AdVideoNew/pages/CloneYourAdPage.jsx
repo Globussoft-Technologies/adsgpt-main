@@ -775,6 +775,10 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
   // Step state: 'input' | 'workspace'
   const [currentStep, setCurrentStep] = useState(() => {
+    // A template pre-fill (Ad Video home → DS video template, `prefillOnly`)
+    // always starts on the input form — checked before the saved session,
+    // because the user just picked a new template. See handleRecreate.
+    if (recreateInputs?.prefillOnly) return 'input';
     if (savedSession?.sessionId) return 'workspace';
     if (
       recreateInputs?.sourceVideoUrl ||
@@ -792,8 +796,7 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       initialSessionInputs.prefillUrl ||
       recreateInputs?.sourceVideoUrl ||
       recreateInputs?.galleryVideoUrl ||
-      ''
-  );
+      '');
   const [prefillError, setPrefillError] = useState('');
 
   // Analyze & Socket Async State: 'form' | 'analyzing' | 'success' | 'failed' | 'timeout'
@@ -1433,6 +1436,30 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   // Handle Recreate flow from MySpace video cards
   const handleRecreate = (inputs) => {
     if (!inputs) return;
+
+    // ── Template pre-fill (Ad Video home → DS video template card) ──────────
+    // Only puts the template's video in the reference-video field and stays on
+    // the input form, so the user still adds product images and runs Analyze.
+    // The history-recreate path below jumps to 'workspace' with the analysis
+    // marked done, which is wrong for a fresh template. Dispatched by
+    // AdVideoHomeNew as setRecreateInputs({ prefillOnly: true, sourceVideoUrl }).
+    if (inputs.prefillOnly) {
+      const url = String(inputs.sourceVideoUrl || '').trim();
+      if (url) {
+        uploadedS3UrlRef.current = '';
+        lastUploadedFileRef.current = null;
+        lastPrefilledSourceRef.current = url;
+        setSourceVideoFile(null);
+        setSourceVideoUrl(url);
+        setGalleryVideoUrl('');
+        setPrefillUrl(url);
+        setPrefillError('');
+        setPreviewVideoError(false);
+      }
+      setCurrentStep('input');
+      dispatch(setRecreateInputs(null));
+      return;
+    }
 
     const isCloneAd =
       inputs.type === 'clone_your_ad' ||

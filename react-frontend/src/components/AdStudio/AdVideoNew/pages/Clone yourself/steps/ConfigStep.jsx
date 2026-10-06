@@ -799,7 +799,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
         {/* Brand name */}
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Brand/product Name*</label>
-          <BrandSearch isAvatarAdsSearch={true} />
+          <BrandSearch isAvatarAdsSearch={true} refillFromHeader />
           {errors.brandName && <span className="mt-1 text-[12px] text-red-400">{errors.brandName}</span>}
         </div>
 

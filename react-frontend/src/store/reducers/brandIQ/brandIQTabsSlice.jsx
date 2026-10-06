@@ -93,6 +93,11 @@ const persistAdLibraryFilters = (filters) => {
 const initialState = {
   activeBrandIQTabId: getPersistedTab(),
   myBrands: [],
+  // Lifecycle of fetchBrands ONLY: 'idle' | 'loading' | 'ok' | 'error'. `loading`
+  // below is shared by several thunks and starts false before brands are even
+  // requested, so it can't tell "not fetched yet" from "fetched, none". Read by
+  // hooks/useStudioTemplates.js to avoid a false "Pick a brand" on page load.
+  myBrandsStatus: 'idle',
   myBrandsSearch: '',
   myGallery: [],
   getSession: [],
@@ -186,14 +191,17 @@ const brandIQTabsSlice = createSlice({
       .addCase(fetchBrands.pending, (state) => {
         state.loading = true;
         state.error = null;
+        state.myBrandsStatus = 'loading';
       })
       .addCase(fetchBrands.fulfilled, (state, action) => {
         state.myBrands = action?.payload;
         state.loading = false;
+        state.myBrandsStatus = 'ok';
       })
       .addCase(fetchBrands.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+        state.myBrandsStatus = 'error';
       });
     builder
       .addCase(fetchSavedItems.pending, (state) => {

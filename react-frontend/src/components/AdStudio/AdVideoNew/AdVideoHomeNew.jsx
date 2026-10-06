@@ -1,44 +1,55 @@
-import React, { useEffect } from 'react';
-import { ChevronRight } from 'lucide-react';
-import AdVideoCard from './AdVideoCard';
+import React, { useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import welcomeAdVideoImageURL from '@/assets/layouts/prompt/advideo/welcome-advideo.webp';
-import { fadeUpVariants, containerFadeUpVariants } from '@/utils/ui/framerMotionVariants';
 import { useDispatch, useSelector } from 'react-redux';
+import { fadeUpVariants, containerFadeUpVariants } from '@/utils/ui/framerMotionVariants';
 import { fetchProcessingCount } from '@/store/actions/adVideoNew/Advideoactions';
+import { setActivePage, setRecreateInputs } from '@/store/reducers/adStudio/adVideoNewSlice';
+import useStudioTemplates from '@/hooks/useStudioTemplates';
+import AdVideoModuleCards from './components/AdVideoModuleCards';
+import { StudioToolHeader } from '@/components/AdStudio/StudioToolTile';
+import StudioTemplateDock, {
+  useStudioDock,
+  STUDIO_BLEED,
+  STUDIO_GUTTER,
+} from '@/components/AdStudio/StudioTemplateDock';
 
+// Space above the heading. The tool stage is tall, so it sits close to the tabs.
+const TOOLS_TOP = 'pt-[calc(0.75rem+3vh)] 2xl:pt-[calc(1rem+3vh)]';
+
+// Single source for the module cards: AdVideoCard reads title/desc/img/gif/type
+// and premium (plan-8 lock) / comingSoon from here. Titles now Title Case.
 const cards = [
   {
-    title: 'AI ADS',
-    desc: 'Create full length AI Ad videos',
+    title: 'AI Ads',
+    desc: 'Create full length AI ad videos',
     img: '/static/adVideo/ai_ads_thumb.jpg',
     gif: '/static/adVideo/ai_ads.gif',
     type: 'ai-ads',
     // comingSoon: true,
   },
   {
-    title: 'AI UGC ADS',
-    desc: 'Create AI UGC Ad videos',
+    title: 'AI UGC Ads',
+    desc: 'Create AI UGC ad videos',
     img: '/static/adVideo/ai-ugc-ads-photo.jpg',
     gif: '/static/adVideo/ai-ugc-ads-gif.gif',
     type: 'ugc',
   },
   {
-    title: 'PRODUCT B-ROLLS',
+    title: 'Product B-Rolls',
     desc: 'Create cinematic b-rolls for your products',
     img: '/static/adVideo/product-b-rolls-photo.jpg',
     gif: '/static/adVideo/b-rolls-gif-1.gif',
     type: 'b-roll',
   },
   {
-    title: 'RECREATE AD',
+    title: 'Recreate Ad',
     desc: 'Create a new ad from an existing video',
     img: 'https://dqv0cqkoy5oj7.cloudfront.net/marketing_studio_video_preset/4dcc2a50-47de-46a1-b7e6-d5bd378bb5d1-91841e48382ec5af.mp4',
     gif: 'https://dqv0cqkoy5oj7.cloudfront.net/marketing_studio_video_preset/4dcc2a50-47de-46a1-b7e6-d5bd378bb5d1-91841e48382ec5af.mp4',
     type: 'clone-ad',
   },
   {
-    title: 'AI AVATARS',
+    title: 'AI Avatars',
     desc: 'Create ad videos with custom avatars',
     img: '/static/adVideo/ai-avatars-photo.jpg',
     gif: '/static/adVideo/ai-avatars-gif.gif',
@@ -46,7 +57,7 @@ const cards = [
     // comingSoon: true,
   },
   {
-    title: 'CLONE YOURSELF',
+    title: 'Clone Yourself',
     desc: 'Create AI ad videos with your face and voice',
     img: '/static/adVideo/clone-yourself-photo.jpg',
     gif: '/static/adVideo/clone-yourself-gif.gif',
@@ -55,60 +66,75 @@ const cards = [
   },
 ];
 
+// Same layout as AdCreativeNewHome.jsx: heading + tool tiles, with the
+// template dock (brand-matched DS video templates) over them from the bottom.
 const AdVideoHomeNew = () => {
-  const { userData } = useSelector((state) => state.socket);
-  const userName = userData?.user_name || 'User';
   const dispatch = useDispatch();
   const { savedCount } = useSelector((state) => state.adVideoNew);
+
+  const dock = useStudioDock();
+  const templates = useStudioTemplates('video');
+  const brandName = templates.brand?.name || '';
 
   useEffect(() => {
     dispatch(fetchProcessingCount());
   }, [dispatch, savedCount]);
 
+  // Video template → Re Create Ad, on its first form with the template video
+  // pre-filled; the user adds product images there and runs Analyze.
+  // `prefillOnly` is handled at the top of CloneYourAdPage.handleRecreate.
+  const openRecreateWithTemplate = useCallback(
+    (template) => {
+      dispatch(setRecreateInputs({ prefillOnly: true, sourceVideoUrl: template.url }));
+      dispatch(setActivePage('clone-ad'));
+    },
+    [dispatch]
+  );
+
   return (
-    <div className="layout_for_chat mx-auto h-full min-h-[55vh] w-full sm:p-0 2xl:min-h-[60vh]">
-      <div>
-        <div className="welcome_ad_copy_container flex h-full w-full items-center justify-center">
-          <motion.div
-            variants={containerFadeUpVariants}
-            initial="hidden"
-            animate="visible"
-            className="mt-3 flex w-full flex-col items-center justify-center 2xl:mt-14"
-          >
-            {/* Heading */}
-            <motion.h1
-              variants={fadeUpVariants}
-              custom={0}
-              className="mb-2 bg-gradient-to-t from-[#15DCFF] to-[#6b72f8] bg-clip-text text-2xl font-semibold text-transparent 2xl:mb-4 2xl:text-4xl"
-            >
-              Hello, {userName}
-            </motion.h1>
+    <div
+      ref={dock.rootRef}
+      className={`relative flex h-full flex-col overflow-hidden bg-transparent select-none dark:bg-transparent ${STUDIO_BLEED}`}
+      style={{ maxHeight: 'calc(100svh - 74px)' }}
+    >
+      {/* ── 1. HEADING + TOOLS ── */}
+      <motion.div
+        variants={containerFadeUpVariants}
+        initial="hidden"
+        animate="visible"
+        className={`relative w-full shrink-0 ${TOOLS_TOP} ${STUDIO_GUTTER}`}
+      >
+        <motion.div ref={dock.headRef} variants={fadeUpVariants} custom={0}>
+          <StudioToolHeader kind="video" />
+        </motion.div>
+        {/* flow-root: keeps the row's negative hover margins inside this box, so
+            its measured bottom (dock position) is the tiles' real bottom. */}
+        <motion.div ref={dock.toolsRef} variants={fadeUpVariants} custom={1} className="flow-root">
+          <AdVideoModuleCards cards={cards} />
+        </motion.div>
+      </motion.div>
 
-            <motion.p
-              variants={fadeUpVariants}
-              custom={1}
-              className="mb-6 text-center text-sm text-zinc-600 2xl:mb-8 2xl:text-base dark:text-[#BEBEBE]"
-            >
-              Create scroll-stopping Video ads with AI <br />
-              that understands your business.
-            </motion.p>
-
-            <motion.div
-              variants={fadeUpVariants}
-              custom={2}
-              className="flex w-full items-center justify-center pb-4 lg:h-[48vh] xl:h-[52vh] 2xl:h-[55vh]"
-            >
-              <div className="grid h-full w-full max-w-[650px] gap-2 grid-cols-2 lg:max-w-[1000px] lg:grid-cols-3 2xl:max-w-[1240px]">
-                {cards.map((card) => (
-                  <div key={card.title}>
-                    <AdVideoCard {...card} />
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        </div>
-      </div>
+      {/* ── 2. TEMPLATE DOCK ── */}
+      <StudioTemplateDock
+        {...dock.dockProps}
+        title="Trending Video Templates"
+        subtitle="Pick any video to recreate it with your product."
+        brandName={brandName}
+        media="video"
+        view={templates.view}
+        items={templates.items}
+        error={templates.error}
+        onRetry={templates.retry}
+        onSelectTemplate={openRecreateWithTemplate}
+        onRefresh={templates.refresh}
+        isRefreshing={templates.isRefreshing || templates.view === 'loading'}
+        refreshDisabled={!templates.brand}
+        // Video templates page in as you scroll (10 at a time).
+        hasMore={templates.hasMore}
+        onLoadMore={templates.loadMore}
+        isLoadingMore={templates.isLoadingMore}
+        loadMoreError={templates.loadMoreError}
+      />
     </div>
   );
 };

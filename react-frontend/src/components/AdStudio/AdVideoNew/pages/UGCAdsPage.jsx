@@ -38,19 +38,41 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   const dispatch = useDispatch();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { isLoading, recreateInputs } = useSelector((state) => state.adVideoNew);
+  // Read the header brand straight from brandIQTabs. The adFactoryNew copy is
+  // wiped by other video forms (Avatar/Clone mount resets, B-roll after
+  // generate, AI Ads unmount), which used to drop UGC back onto the URL step.
+  const headerSelectedBrandId = useSelector((state) => state.brandIQTabs.selectedCompetitorBrand?.id);
+  const headerBrands = useSelector((state) => state.brandIQTabs.myBrands);
+  const selectedBrand = useMemo(
+    () =>
+      Array.isArray(headerBrands)
+        ? headerBrands.find((brand) => brand.id === headerSelectedBrandId) || null
+        : null,
+    [headerBrands, headerSelectedBrandId]
+  );
+  const hasSelectedBrand = Boolean(selectedBrand?.id);
+  // Stable key: myBrands refetches create new imageUrl arrays, which must not
+  // re-run the prefill (it would yank the user off step 1 / overwrite edits).
+  const selectedBrandImagesKey = Array.isArray(selectedBrand?.imageUrl)
+    ? selectedBrand.imageUrl.filter(Boolean).join('|')
+    : '';
   const [localRecreateData, setLocalRecreateData] = useState(recreateInputs);
-  const [step, setStep] = useState(recreateInputs?.type === 'ugc' ? 2 : 1);
+  const [step, setStep] = useState(() => (recreateInputs?.type === 'ugc' || hasSelectedBrand ? 2 : 1));
   const { modelCredits } = useSelector((state) => state.prompt);
   const { models: surfaceModels, isLoading: isAspectRatioLoading } = useVideoSurfaceModelsState('ugc');
   const { userData, credits } = useSelector((state) => state.socket);
   const availableCredits = (credits?.totalCredits || 0) - (credits?.creditsUsed || 0);
 
   // Form State
-  const [website, setWebsite] = useState('');
-  const [productName, setProductName] = useState('');
-  const [description, setDescription] = useState('');
+  const [website, setWebsite] = useState(() => selectedBrand?.websiteUrl || '');
+  const [productName, setProductName] = useState(() => selectedBrand?.name || '');
+  const [description, setDescription] = useState(() => selectedBrand?.description || '');
   const [productUrl, setProductUrl] = useState('');
-  const [uploadedImages, setUploadedImages] = useState([]);
+  const [uploadedImages, setUploadedImages] = useState(() =>
+    Array.isArray(selectedBrand?.imageUrl)
+      ? selectedBrand.imageUrl.filter(Boolean).map((preview) => ({ file: null, preview, isApiImage: true }))
+      : []
+  );
   const [videoModel, setVideoModel] = useState('');
   const [videoDuration, setVideoDuration] = useState('');
   const [aspectRatio, setAspectRatio] = useState('');
@@ -64,6 +86,23 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   const [imageOrientation, setImageOrientation] = useState(null); // 'portrait', 'landscape', 'square'
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [urlError, setUrlError] = useState('');
+
+  // A selected header brand bypasses website analysis and fills the complete
+  // UGC form in place. Changing the header brand repeats that update smoothly.
+  useEffect(() => {
+    if (!selectedBrand?.id) return;
+    setStep(2);
+    setWebsite(selectedBrand.websiteUrl || '');
+    setProductName(selectedBrand.name || '');
+    setDescription(selectedBrand.description || '');
+    const images = Array.isArray(selectedBrand.imageUrl)
+      ? selectedBrand.imageUrl.filter(Boolean).map((preview) => ({ file: null, preview, isApiImage: true }))
+      : [];
+    setUploadedImages(images);
+    setSelectedImageIndex(0);
+    setProductUrl('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBrand?.description, selectedBrand?.id, selectedBrandImagesKey, selectedBrand?.name, selectedBrand?.websiteUrl]);
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);

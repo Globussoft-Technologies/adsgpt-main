@@ -21,9 +21,13 @@ export default function BrandSearch({
   isBrandInfoStep = false,
   portal = true,
   surfaceVariant = 'default',
+  // Opt-in (AI Ads): refill from the header brand whenever the field ends up
+  // empty without the user touching it, e.g. a sibling step's unmount reset
+  // landing after this instance's mount-time seed.
+  refillFromHeader = false,
 }) {
 
-  const { myBrands: brands } = useSelector((state) => state.brandIQTabs);
+  const { myBrands: brands, selectedCompetitorBrand } = useSelector((state) => state.brandIQTabs);
   const { selectedBrand, brand_name, brandInfo } = useSelector((state) => state.adFactoryNew);
 
   const [open, setOpen] = useState(false);
@@ -31,6 +35,41 @@ export default function BrandSearch({
   const dispatch = useDispatch();
   const isBroll = surfaceVariant === 'broll' || surfaceVariant === 'form-pill' || isAvatarAdsSearch;
   const usesNeutralFormSurface = surfaceVariant === 'neutral-form';
+  const headerBrand = Array.isArray(brands)
+    ? brands.find((brand) => brand.id === selectedCompetitorBrand?.id)
+    : null;
+
+  // True once the user picks or types in this instance; a refill must never
+  // overwrite their local override. Cleared when the header brand changes.
+  const userTouchedRef = useRef(false);
+
+  const seedFromHeader = () => {
+    const logo = headerBrand.logoUrls?.[0] || headerBrand.logoUrl || headerBrand.brandLogo || '';
+    dispatch(
+      setFields({
+        selectedBrand: headerBrand,
+        brand_name: headerBrand.name || '',
+        brand_description: headerBrand.description || '',
+        brand_logo: logo,
+      })
+    );
+  };
+
+  // Every instance of this control (including AI Ads and Avatar Ads) reflects
+  // the top-right Ad Studio brand immediately, without invoking any analysis.
+  useEffect(() => {
+    if (!headerBrand?.id) return;
+    userTouchedRef.current = false;
+    seedFromHeader();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch, headerBrand?.id]);
+
+  useEffect(() => {
+    if (!refillFromHeader || !headerBrand?.id || userTouchedRef.current) return;
+    if (selectedBrand?.id || brand_name) return;
+    seedFromHeader();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refillFromHeader, headerBrand?.id, selectedBrand?.id, brand_name]);
 
   useEffect(() => {
     if (portal) return;
@@ -51,6 +90,7 @@ export default function BrandSearch({
   );
 
   const handleBrandSelect = (val) => {
+    userTouchedRef.current = true;
     setOpen(false);
     dispatch(
       setFields({
@@ -66,6 +106,7 @@ export default function BrandSearch({
   };
 
   const handleBrandNameChange = (val) => {
+    userTouchedRef.current = true;
     dispatch(
       setFields({
         brand_name: val || '',

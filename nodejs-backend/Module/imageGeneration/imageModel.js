@@ -65,6 +65,11 @@ const imageSchema = new mongoose.Schema(
                 "ai_creatives",
                 "recreate_ads",
                 "template_recreate",
+                // Ad Studio: an ad built from a DS template picked on the Ad
+                // Creative home gallery (services/adStudio/studioImageRender.js).
+                // Kept apart from onboarding's `template_recreate` for the same
+                // reason that one is kept apart from `recreate_ads`.
+                "studio_template",
             ],
                 required: true,
             },

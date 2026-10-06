@@ -225,6 +225,11 @@ export function AdSetupStep({
   // Captured at mount: true when this form was opened via Recreate for this
   // variant — keeps the templates picker collapsed by default in that flow.
   const recreateSessionInputs = useSelector((s) => s.image.recreateInputs);
+  const headerSelectedBrand = useSelector((s) => s.brandIQTabs.selectedCompetitorBrand);
+  const headerBrands = useSelector((s) => s.brandIQTabs.myBrands);
+  const headerBrand = Array.isArray(headerBrands)
+    ? headerBrands.find((brand) => brand.id === headerSelectedBrand?.id)
+    : null;
   const isRecreateSessionRef = useRef(
     Boolean(
       recreateSessionInputs &&
@@ -314,6 +319,21 @@ export function AdSetupStep({
     // from the previous brand in the payload.
     setBrandImagesPicked([]);
   };
+
+  // Header selection drives Brand Voice and every related field in-place.
+  // No route state is changed, so the update is smooth and does not flicker.
+  useEffect(() => {
+    if (!headerBrand?.id) return;
+    setBrandSource({ kind: 'list', item: headerBrand });
+    fillFromBrand({
+      name: headerBrand.name,
+      description: headerBrand.description,
+      logoUrls: headerBrand.logoUrls,
+      imageUrls: headerBrand.imageUrl,
+    });
+    setAutofillState('idle');
+    setAutofillError('');
+  }, [headerBrand?.id]);
 
   const refreshBrandList = useCallback(async () => {
     brandListAbortRef.current?.abort();

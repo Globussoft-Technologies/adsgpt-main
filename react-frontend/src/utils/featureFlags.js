@@ -24,7 +24,11 @@ export const IS_AD_FACTORY_V2 =
 // Ad Studio UI version. OFF (unset) = V1, the UI production shipped before the
 // 2026-09 redesign: category-card homes for Ad Creative and Ad Video, and no
 // brand switcher in the Ad Studio header except on Ad Library. ON = V2, the
-// redesigned homes + the header brand switcher on every Ad Studio tab.
+// redesigned homes — the tool stage (StudioToolStage.jsx) over the brand
+// template dock — + the header brand switcher on every Ad Studio tab.
+// (The tool stage used to sit behind its own VITE_FEATURE_STUDIO_CAROUSEL flag,
+// with a tile row as V2's fallback; that flag was removed 2026-10-06 — V2 now
+// always means the stage.)
 // Only the UI forks here — Redux, APIs and the flows behind the cards are
 // shared, so both versions generate the same way. V1 lives in
 // components/AdStudio/v1/ and can be deleted once V2 ships.

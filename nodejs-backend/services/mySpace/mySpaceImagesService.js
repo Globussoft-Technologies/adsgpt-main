@@ -136,7 +136,10 @@ async function getAdCreativeImages({ userId, startDate, endDate, type, model, st
     ...buildDateFilter({ startDate, endDate }),
   };
 
-  if (type) filter["inputs.type"] = type;
+  // "Template Recreate" lists onboarding's AND Ad Studio's template renders
+  // (`studio_template`, services/adStudio/studioImageRender.js) — one label in
+  // the filter for both, by decision; they stay separate types underneath.
+  if (type) filter["inputs.type"] = type === "template_recreate" ? { $in: ["template_recreate", "studio_template"] } : type;
   if (model) filter["inputs.model"] = model;
   if (status) filter.status = status;
 

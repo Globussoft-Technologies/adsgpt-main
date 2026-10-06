@@ -418,11 +418,18 @@ export default function TopHeader() {
   // Persist only the stable ID; the full, current brand object always comes
   // from myBrands so deleted or updated brands cannot leave stale Redux data.
   useEffect(() => {
-    if (!Array.isArray(myBrands) || myBrands.length === 0) return;
+    // Only brands with an id can be selected. A brand with no id (seen in the
+    // DB: a stray E2E-test fragment) used to match an EMPTY selection here —
+    // `undefined === undefined` — so after a refresh this effect thought a
+    // brand was selected and never restored one. The header still showed its
+    // cached brand, but every module reading the Redux selection got none
+    // (UGC fell back to the website step, AI Creatives had no brand).
+    const selectable = Array.isArray(myBrands) ? myBrands.filter((brand) => brand?.id) : [];
+    if (selectable.length === 0) return;
 
-    const selectedBrandIsAvailable = myBrands.some(
-      (brand) => brand.id === selectedCompetitorBrand?.id
-    );
+    const selectedBrandIsAvailable =
+      Boolean(selectedCompetitorBrand?.id) &&
+      selectable.some((brand) => brand.id === selectedCompetitorBrand.id);
     if (selectedBrandIsAvailable) return;
 
     let storedBrandId = '';
@@ -445,8 +452,10 @@ export default function TopHeader() {
       // Storage may be unavailable in restricted browsing contexts.
     }
 
-    const restoredBrand = myBrands.find((brand) => brand.id === storedBrandId);
-    dispatch(setSelectedCompetitorBrand(restoredBrand || myBrands[0]));
+    const restoredBrand = storedBrandId
+      ? selectable.find((brand) => brand.id === storedBrandId)
+      : null;
+    dispatch(setSelectedCompetitorBrand(restoredBrand || selectable[0]));
   }, [dispatch, myBrands, selectedCompetitorBrand?.id, userData?.user_id]);
 
   // Keep the selection refresh-safe for this user. Brand existence is checked

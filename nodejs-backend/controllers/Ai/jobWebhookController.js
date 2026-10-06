@@ -58,6 +58,7 @@ const { handleStoryboardResult } = require("../../services/onboarding/keyframeRe
 const { fileSessionClips } = require("../../services/onboarding/mySpaceClip");
 const { finishRecreate } = require("../../services/onboarding/jobStreamBridge");
 const { fileBrandToBrandIQ } = require("../../services/onboarding/brandIQEntry");
+const { finishStudioImageRender } = require("../../services/adStudio/studioImageRender");
 
 /**
  * Kinds whose callbacks FOLD into a section instead of replacing it.
@@ -417,6 +418,25 @@ exports.receive = async (req, res) => {
   const { job_id: jobId, seq, status, progress, result, error } = body;
   const log = createFlowLog("jobs.callback", { job: jobId });
 
+  // ── Ad Studio template runs: acknowledge and drop ────────────────────────
+  //
+  // services/adStudio/studioTemplates.js asks DS for templates with
+  // `session_id: "adstudio-<brandId>"` and reads the answer off the stream.
+  // DS still mints a `template.recommend` job and posts it here as a backup,
+  // but there is no OnboardingSession behind that id, so both the job path
+  // (adoptForeignJob) and the sessionless path would 404 it — and DS retries
+  // non-2xx. Nothing here needs it, so answer 200 before any lookup.
+  // Checked first so it covers callbacks with and without a job_id. Limited to
+  // template.recommend so any future Ad Studio job kinds are not swallowed.
+  if (
+    typeof body.session_id === "string" &&
+    body.session_id.startsWith("adstudio-") &&
+    body.kind === "template.recommend"
+  ) {
+    log.done(200, { reason: "adstudio_template_ignored" });
+    return res.status(200).json({ ok: true, ignored: true });
+  }
+
   // ── Sessionless callbacks ────────────────────────────────────────────────
   //
   // Not every piece of upstream work is a job. Template recommendations are a
@@ -646,7 +666,9 @@ exports.receive = async (req, res) => {
       // filed into My Space, and never shown to the user who had just paid for
       // it. Deduped inside `storeTemplateAdResult`, so both paths delivering
       // the same result is a no-op.
-      if (applied.kind === "image.from_template" && status === "succeeded") {
+      // Onboarding's only — Ad Studio renders use the same kind but have no
+      // session; they are finished by the branch below (ADS-R003).
+      if (applied.kind === "image.from_template" && status === "succeeded" && applied.source !== "adstudio") {
         finishRecreate({
           jobId,
           userId: applied.userId,
@@ -654,6 +676,24 @@ exports.receive = async (req, res) => {
           result,
           log,
         }).catch((e) => log.error("recreate.store_failed", { message: e.message }));
+      }
+
+      // An Ad Studio template render (services/adStudio/studioImageRender.js).
+      // No session behind it — `refId` is the ImageGeneration row — so the
+      // result goes through imageController.updateImageResult, which settles or
+      // releases the credit freeze and tells My Space. Fire-and-forget like the
+      // branches above: a failure here must not make DS retry a finished job.
+      // `image.from_template` is the current route; `image.generate` covers
+      // rows started before the 2026-10-05 switch. Node also follows the job's
+      // stream, so this is usually the duplicate — updateImageResult ignores it.
+      if (
+        (applied.kind === "image.from_template" || applied.kind === "image.generate") &&
+        applied.source === "adstudio" &&
+        applied.refId
+      ) {
+        finishStudioImageRender({ job: applied, status, result, error }).catch((e) =>
+          log.error("adstudio.finish_failed", { message: e.message })
+        );
       }
 
       // The brand goes to BrandIQ on the same terms and for the same reason:

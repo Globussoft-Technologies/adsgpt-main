@@ -72,6 +72,14 @@ const aiJobSchema = new mongoose.Schema(
     // refresh without the browser having stored anything.
     parentJobId: { type: String, default: "", index: true },
 
+    // Which feature started a job that has no onboarding session. Empty for
+    // every onboarding job (the default). "adstudio" = an Ad Studio template
+    // render (services/adStudio/studioImageRender.js); `refId` is then the
+    // ImageGeneration id the result must be written to, which the callback
+    // hands to imageController.updateImageResult.
+    source: { type: String, default: "", index: true },
+    refId: { type: String, default: "" },
+
     status: { type: String, enum: JOB_STATUSES, default: "queued", index: true },
 
     // The highest sequence number seen. Every update compares against this, so

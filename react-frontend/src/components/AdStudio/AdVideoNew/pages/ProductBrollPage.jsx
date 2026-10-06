@@ -509,7 +509,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
         {/* Brand Name */}
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Brand/Product Name*</label>
-          <BrandSearch placeholder="Enter your brand/product name" surfaceVariant="broll" />
+          <BrandSearch placeholder="Enter your brand/product name" surfaceVariant="broll" refillFromHeader />
           {errors.productName && (
             <span className="text-[12px] text-red-500">{errors.productName}</span>
           )}

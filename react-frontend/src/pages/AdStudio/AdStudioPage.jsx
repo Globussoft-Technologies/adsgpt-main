@@ -17,6 +17,7 @@ import AdPromptComponent from '@/components/common/AdPrompt/AdPromptComponent';
 import { fetchBrands } from '@/store/actions/brandIQ/myBrandActions';
 import { setActiveAdStudioTab } from '@/store/reducers/adStudio/adStudioTabsSlice';
 import { addImage, setFields } from '@/store/reducers/adStudio/promptSlice';
+import { setFields as setAdFactoryFields } from '@/store/reducers/adFactoryNew/adFactoryNewSlice';
 import { formatUrl } from '@/utils/formatUrl';
 import { canUseWorkspaceFeature } from '@/utils/workspaceSession';
 import { nanoid } from 'nanoid';
@@ -104,6 +105,32 @@ const AdStudioPage = () => {
     promptSelectedBrandId,
     selectedAdStudioBrand?.id,
   ]);
+
+  // Video creation surfaces read their brand picker from adFactoryNew rather
+  // than prompt state. Seed it only when the header brand changes so a local
+  // edit remains intact until the user deliberately changes the header brand.
+  useEffect(() => {
+    const currentBrand = Array.isArray(adStudioBrands)
+      ? adStudioBrands.find((brand) => brand.id === selectedAdStudioBrand?.id)
+      : null;
+    if (!currentBrand) return;
+    const logo = currentBrand.logoUrls?.[0] || currentBrand.logoUrl || currentBrand.brandLogo || '';
+    dispatch(
+      setAdFactoryFields({
+        selectedBrand: currentBrand,
+        brand_name: currentBrand.name || '',
+        brand_description: currentBrand.description || '',
+        brand_logo: logo,
+        brandInfo: {
+          brandName: currentBrand.name || '',
+          description: currentBrand.description || '',
+          category: currentBrand.category || currentBrand.industry || '',
+          logoUrl: logo,
+          brandImages: currentBrand.brandImages || currentBrand.images || [],
+        },
+      })
+    );
+  }, [adStudioBrands, dispatch, selectedAdStudioBrand?.id]);
 
   // network based apis
   const networkBasedApis = useMemo(
