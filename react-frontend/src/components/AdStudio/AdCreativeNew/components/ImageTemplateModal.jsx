@@ -32,10 +32,13 @@ const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const PROMPT_MAX = 2000;
 
 // Onboarding's sheet palette, kept identical so the two modals read as one.
-const LINE = 'rgba(255,255,255,0.09)';
-const LINE_STRONG = 'rgba(255,255,255,0.16)';
-const SURF = '#17171c'; // the sheet
-const SURF2 = '#1f1f26'; // a control sitting on the sheet
+// Theme-aware: each is a CSS variable whose light value is the default and
+// whose dark value (the original look) applies under html.dark — defined in
+// the <style> block at the bottom of RecreateSheet (.recreate-root).
+const LINE = 'var(--rc-line)';
+const LINE_STRONG = 'var(--rc-line-strong)';
+const SURF = 'var(--rc-surf)'; // the sheet
+const SURF2 = 'var(--rc-surf2)'; // a control sitting on the sheet
 const ACCENT = 'rgba(124,92,255,0.55)';
 const EASE = 'cubic-bezier(.4,0,.2,1)';
 
@@ -83,7 +86,7 @@ function TemplatePreview({ template }) {
 
   return (
     <div
-      className="relative mx-auto overflow-hidden rounded-xl bg-[#101014]"
+      className="relative mx-auto overflow-hidden rounded-xl bg-[var(--rc-preview)]"
       style={{
         width,
         maxWidth: '100%',
@@ -301,11 +304,14 @@ function RecreateSheet({ template, brand, onClose }) {
   // height (max-h-full) and scrolls inside, so centring never clips its top.
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden p-4 sm:p-6"
+      className="recreate-root fixed inset-0 z-[60] flex items-center justify-center overflow-hidden p-4 sm:p-6"
       style={{
-        // Onboarding's scrim: no backdrop blur (it re-runs every frame over
-        // playing media); a heavier tint instead.
-        background: 'rgba(6,6,8,0.88)',
+        // Both themes: onboarding's heavy tint plus a LIGHT 4px blur (user,
+        // 2026-10-06). Kept small on purpose: backdrop blur re-runs every frame
+        // over playing media, and its cost grows with the radius.
+        background: 'var(--rc-scrim)',
+        backdropFilter: 'var(--rc-scrim-blur)',
+        WebkitBackdropFilter: 'var(--rc-scrim-blur)',
         opacity: shown ? 1 : 0,
         transition: `opacity 220ms ${EASE}`,
       }}
@@ -322,8 +328,8 @@ function RecreateSheet({ template, brand, onClose }) {
         className="recreate-sheet relative max-h-full w-full max-w-[1120px] overflow-y-auto overscroll-contain rounded-2xl"
         style={{
           background: SURF,
-          border: `1px solid ${LINE_STRONG}`,
-          boxShadow: '0 50px 140px -30px rgba(0,0,0,0.92)',
+          border: '1px solid var(--rc-sheet-border)',
+          boxShadow: 'var(--rc-shadow)',
           opacity: shown ? 1 : 0,
           transform: shown ? 'translateY(0) scale(1)' : 'translateY(14px) scale(0.985)',
           transition: `opacity 260ms ${EASE}, transform 300ms ${EASE}`,
@@ -335,8 +341,8 @@ function RecreateSheet({ template, brand, onClose }) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-white/60 transition duration-200 hover:text-white"
-            style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${LINE_STRONG}` }}
+            className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-full text-zinc-500 dark:text-white/60 transition duration-200 hover:text-zinc-900 dark:hover:text-white"
+            style={{ background: 'var(--rc-chip)', border: `1px solid ${LINE_STRONG}` }}
           >
             <X className="h-4 w-4" />
           </button>
@@ -351,7 +357,7 @@ function RecreateSheet({ template, brand, onClose }) {
                 {template.tags.slice(0, 4).map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-full px-2 py-0.5 text-10 font-semibold tracking-wide text-white/60 uppercase"
+                    className="rounded-full px-2 py-0.5 text-10 font-semibold tracking-wide text-zinc-500 dark:text-white/60 uppercase"
                     style={{ border: `1px solid ${LINE_STRONG}` }}
                   >
                     {tag}
@@ -364,8 +370,8 @@ function RecreateSheet({ template, brand, onClose }) {
           {/* ── Right: the questions ── */}
           <div className="flex min-w-0 flex-col justify-center gap-6">
             <div>
-              <h2 className="text-lg font-bold text-white">Recreate this ad</h2>
-              <p className="mt-1 text-[13px] text-white/60">
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Recreate this ad</h2>
+              <p className="mt-1 text-[13px] text-zinc-500 dark:text-white/60">
                 Add your product and we&apos;ll rebuild this ad for {brand?.name || 'your brand'}.
               </p>
             </div>
@@ -373,10 +379,10 @@ function RecreateSheet({ template, brand, onClose }) {
             {/* Product images */}
             <section className="flex flex-col gap-2.5">
               <div className="flex items-baseline justify-between">
-                <h3 className="text-[13px] font-semibold text-white/85">
+                <h3 className="text-[13px] font-semibold text-zinc-800 dark:text-white/85">
                   Product images <span className="text-red-400">*</span>
                 </h3>
-                <span className="text-xs text-white/50">
+                <span className="text-xs text-zinc-500 dark:text-white/50">
                   {images.length} of {MAX_PRODUCT_IMAGES} added
                 </span>
               </div>
@@ -394,8 +400,8 @@ function RecreateSheet({ template, brand, onClose }) {
                       type="button"
                       onClick={() => remove(img.id)}
                       aria-label="Remove image"
-                      className="absolute -top-2 -right-2 grid h-5 w-5 cursor-pointer place-items-center rounded-full text-white/70 shadow-md transition duration-200 hover:text-white"
-                      style={{ background: '#2a2a32', border: `1px solid ${LINE_STRONG}` }}
+                      className="absolute -top-2 -right-2 grid h-5 w-5 cursor-pointer place-items-center rounded-full text-zinc-600 dark:text-white/70 shadow-md transition duration-200 hover:text-zinc-900 dark:hover:text-white"
+                      style={{ background: 'var(--rc-remove)', border: `1px solid ${LINE_STRONG}` }}
                     >
                       <X className="h-2.5 w-2.5" strokeWidth={3} />
                     </button>
@@ -428,15 +434,15 @@ function RecreateSheet({ template, brand, onClose }) {
                   >
                     <span
                       className="grid h-8 w-8 place-items-center rounded-full"
-                      style={{ background: 'rgba(255,255,255,0.07)', border: `1px solid ${LINE_STRONG}` }}
+                      style={{ background: 'var(--rc-chip)', border: `1px solid ${LINE_STRONG}` }}
                     >
-                      <ImagePlus className="h-4 w-4 text-white/70" />
+                      <ImagePlus className="h-4 w-4 text-zinc-600 dark:text-white/70" />
                     </span>
-                    <span className="text-[13px] font-semibold text-white/80">Upload product</span>
+                    <span className="text-[13px] font-semibold text-zinc-700 dark:text-white/80">Upload product</span>
                     {/* Paste is caught document-wide while the modal is open (no
                         click needed); clicking this box opens the file picker. */}
-                    <span className="text-[12px] text-white/55">Click to browse · or drop, or press Ctrl+V anywhere</span>
-                    <span className="text-[11px] text-white/40">PNG, JPG or WebP</span>
+                    <span className="text-[12px] text-zinc-500 dark:text-white/55">Click to browse · or drop, or press Ctrl+V anywhere</span>
+                    <span className="text-[11px] text-zinc-400 dark:text-white/40">PNG, JPG or WebP</span>
                   </button>
                 )}
                 <input
@@ -455,7 +461,7 @@ function RecreateSheet({ template, brand, onClose }) {
 
               {brandImages.length > 0 && (
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-xs text-white/50">Or pick from {brand?.name || 'your brand'}</span>
+                  <span className="text-xs text-zinc-500 dark:text-white/50">Or pick from {brand?.name || 'your brand'}</span>
                   <div className="flex flex-wrap gap-1.5">
                     {brandImages.map((url) => {
                       const selected = images.some((img) => img.url === url);
@@ -487,7 +493,7 @@ function RecreateSheet({ template, brand, onClose }) {
 
             {/* Prompt (optional — not labelled as such, by decision) */}
             <section className="flex flex-col gap-2.5">
-              <label htmlFor="recreate-prompt" className="text-[13px] font-semibold text-white/85">
+              <label htmlFor="recreate-prompt" className="text-[13px] font-semibold text-zinc-800 dark:text-white/85">
                 Prompt
               </label>
               <textarea
@@ -496,7 +502,7 @@ function RecreateSheet({ template, brand, onClose }) {
                 onChange={(e) => setPrompt(e.target.value.slice(0, PROMPT_MAX))}
                 rows={4}
                 placeholder="e.g. Put my product in this scene, keep the lighting and layout"
-                className="w-full resize-none rounded-xl px-3.5 py-3 text-[13.5px] leading-relaxed text-white/90 outline-none transition-all duration-200 placeholder:text-white/45"
+                className="recreate-prompt w-full resize-none rounded-xl px-3.5 py-3 text-[13.5px] leading-relaxed text-zinc-800 dark:text-white/90 outline-none transition-all duration-200 placeholder:text-zinc-400 dark:placeholder:text-white/45"
                 style={{ background: SURF2, border: `1px solid ${LINE_STRONG}`, transitionTimingFunction: EASE }}
                 onFocus={(e) => {
                   e.target.style.borderColor = ACCENT;
@@ -541,7 +547,7 @@ function RecreateSheet({ template, brand, onClose }) {
                 )}
               </button>
               {images.length === 0 && (
-                <p className="text-[12.5px] text-white/55">Add a product image to continue.</p>
+                <p className="text-[12.5px] text-zinc-500 dark:text-white/55">Add a product image to continue.</p>
               )}
             </div>
 
@@ -549,7 +555,7 @@ function RecreateSheet({ template, brand, onClose }) {
             {errorText && (
               <div
                 role="alert"
-                className="rounded-xl px-4 py-3 text-[12.5px] leading-relaxed text-white/80"
+                className="rounded-xl px-4 py-3 text-[12.5px] leading-relaxed text-zinc-700 dark:text-white/80"
                 style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.32)' }}
               >
                 {errorText}
@@ -563,8 +569,62 @@ function RecreateSheet({ template, brand, onClose }) {
         <style>{`
           .recreate-sheet { scrollbar-width: none; -ms-overflow-style: none; }
           .recreate-sheet::-webkit-scrollbar { width: 0; height: 0; display: none; }
+          /* Light (default) — matched to Ad Library's popup
+             (components/AdLibrary/RecreateAdModal.jsx DialogContent + the
+             ui/dialog.jsx overlay): sheet #FAF9F6, border #D8D5CC, ring
+             black/15 + its shadow, gray-100 fills with black/10 rings inside. */
+          .recreate-root {
+            --rc-surf: #FAF9F6;
+            --rc-sheet-border: #D8D5CC;
+            --rc-surf2: #F3F4F6;
+            --rc-line: rgba(0,0,0,0.10);
+            --rc-line-strong: rgba(0,0,0,0.12);
+            --rc-preview: #F3F4F6;
+            /* Backdrop = dark mode's exactly (user, 2026-10-06: Ad Library's
+               black/30 + blur showed too much of the page behind). */
+            --rc-scrim: rgba(6,6,8,0.88);
+            --rc-scrim-blur: blur(4px);
+            --rc-shadow: 0 0 0 1px rgba(0,0,0,0.15), 0 24px 70px rgba(31,29,41,0.24);
+            --rc-chip: rgba(0,0,0,0.05);
+            --rc-remove: #ffffff;
+            --rc-shimmer-a: rgba(15,15,25,0.04);
+            --rc-shimmer-b: rgba(15,15,25,0.09);
+          }
+          /* Dark — the original values */
+          .dark .recreate-root {
+            --rc-surf: #17171c;
+            --rc-sheet-border: rgba(255,255,255,0.16);
+            --rc-scrim-blur: blur(4px);
+            --rc-surf2: #1f1f26;
+            --rc-line: rgba(255,255,255,0.09);
+            --rc-line-strong: rgba(255,255,255,0.16);
+            --rc-preview: #101014;
+            --rc-scrim: rgba(6,6,8,0.88);
+            --rc-shadow: 0 50px 140px -30px rgba(0,0,0,0.92);
+            --rc-chip: rgba(255,255,255,0.05);
+            --rc-remove: #2a2a32;
+            --rc-shimmer-a: rgba(255,255,255,0.035);
+            --rc-shimmer-b: rgba(255,255,255,0.085);
+          }
+          /* App.css styles every light-mode textarea with !important (cream field,
+             its own border/placeholder) through selectors with up to six :not() parts.
+             The #id here outranks them, keeping the Prompt box on the sheet's own
+             surface. Dark mode is untouched by App.css. */
+          html:not(.dark) .recreate-root textarea#recreate-prompt {
+            background: var(--rc-surf2) !important;
+            border: 1px solid var(--rc-line-strong) !important;
+            box-shadow: none !important;
+            color: #27272a !important;
+          }
+          html:not(.dark) .recreate-root textarea#recreate-prompt:focus {
+            border-color: rgba(124,92,255,0.55) !important;
+            box-shadow: 0 0 0 3px rgba(124,92,255,0.14) !important;
+          }
+          html:not(.dark) .recreate-root textarea#recreate-prompt::placeholder {
+            color: #a1a1aa !important;
+          }
           .recreate-shimmer {
-            background: linear-gradient(100deg, rgba(255,255,255,0.035) 20%, rgba(255,255,255,0.085) 40%, rgba(255,255,255,0.035) 60%);
+            background: linear-gradient(100deg, var(--rc-shimmer-a) 20%, var(--rc-shimmer-b) 40%, var(--rc-shimmer-a) 60%);
             background-size: 260% 100%;
             animation: recreateShimmer 1500ms ease-in-out infinite;
           }
