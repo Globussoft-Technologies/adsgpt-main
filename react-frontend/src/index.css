@@ -345,7 +345,9 @@ html.theme-changing *::after {
      so the navigation reads as part of the workspace instead of a separate app. */
   html:not(.dark) .lm-sidebar-surface {
     position: relative;
-    background: var(--ws-surface) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(88, 103, 235, 0.015)),
+      var(--ws-bg) !important;
     border-right: none !important;
     box-shadow: none !important;
     backdrop-filter: none !important;

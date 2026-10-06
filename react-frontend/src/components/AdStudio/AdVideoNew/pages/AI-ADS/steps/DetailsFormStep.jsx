@@ -64,7 +64,7 @@ const CustomInput = ({ label, value, onChange, placeholder, required = false, er
       onChange={onChange}
       placeholder={placeholder}
       disabled={disabled}
-      className={`w-full min-w-0 rounded-full border bg-gray-100 dark:bg-[#909294]/15 px-3 py-2.5 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] focus:outline-none sm:px-4 sm:py-3 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50 ${error ? 'border-red-500 focus:border-red-500' : 'border-black/10 dark:border-white/5 focus:border-white/20'}`}
+      className={`w-full min-w-0 rounded-full border bg-[var(--advideo-control-surface)] dark:bg-[#909294]/15 px-3 py-2.5 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] focus:outline-none sm:px-4 sm:py-3 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50 ${error ? 'border-red-500 focus:border-red-500' : 'border-[var(--ws-border)] dark:border-white/5 focus:border-[#5867EB]'}`}
     />
     {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
   </div>
@@ -79,7 +79,7 @@ const FileUpload = ({ label, required = false, fileName, onClear, onChange, id, 
         {required && '*'}
       </label>
     )}
-    <div className={`flex w-full min-w-0 items-center gap-1 rounded-full bg-gray-100 dark:bg-[#909294]/15 px-1 py-1 sm:gap-2 sm:py-1.5 ${error ? 'ring-1 ring-red-500' : ''} ${disabled ? 'opacity-50' : ''}`}>
+    <div className={`flex w-full min-w-0 items-center gap-1 rounded-full border border-[var(--ws-border)] bg-[var(--advideo-control-surface)] dark:border-white/5 dark:bg-[#909294]/15 px-1 py-1 sm:gap-2 sm:py-1.5 ${error ? 'ring-1 ring-red-500' : ''} ${disabled ? 'opacity-50' : ''}`}>
       <label
         htmlFor={disabled ? undefined : id}
         className={`flex shrink-0 items-center gap-1 rounded-full bg-zinc-200 px-3 py-1.5 text-[10px] font-normal text-zinc-800 transition sm:px-4 sm:py-2 sm:text-[11px] dark:bg-[#606060] dark:text-white ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-zinc-300 dark:hover:opacity-80'}`}
@@ -573,7 +573,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
 
 
   return (
-    <div data-voice-dropdown-boundary className="scrollbar-hide relative flex h-full max-h-[100vh] w-full min-w-0 flex-col items-center overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-white dark:bg-[#303030]/30 pt-1 pb-6 sm:pt-1 sm:pb-8 2xl:max-h-[90vh]">
+    <div data-voice-dropdown-boundary className="advideo-workflow-card scrollbar-hide relative flex h-full max-h-[100vh] w-full min-w-0 flex-col items-center overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-[var(--ws-surface)] dark:bg-[#303030]/30 pt-1 pb-6 sm:pt-1 sm:pb-8 2xl:max-h-[90vh]">
       {/* Close button */}
       <button
         onClick={onClose}
@@ -625,7 +625,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
           <div className="flex w-full min-w-0 flex-col">
             <label className="mb-1.5 text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:mb-2 sm:text-sm">Prompt*</label>
             <div
-              className={`relative flex h-full flex-1 flex-col rounded-2xl border bg-gray-100 dark:bg-[#909294]/15 focus-within:border-white/20 ${errors.optimizedPrompt ? 'border-red-500' : 'border-black/10 dark:border-white/5'}`}
+              className={`relative flex h-full flex-1 flex-col rounded-2xl border bg-[var(--advideo-control-surface)] dark:bg-[#909294]/15 focus-within:border-[#5867EB] ${errors.optimizedPrompt ? 'border-red-500' : 'border-[var(--ws-border)] dark:border-white/5'}`}
             >
               <textarea
                 value={formData.optimizedPrompt}
@@ -643,7 +643,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       type="b-roll"
                       side="top"
                       showChevron
-                      className="h-8! rounded-full! border border-black/15 dark:border-white/20 bg-white/90 dark:bg-[#252528] px-3! py-1.5! text-[11px]! sm:text-[12px]! font-medium! text-gray-900! dark:text-white! shadow-xs hover:bg-gray-50 dark:hover:bg-[#323236] transition-colors [&>div>span]:text-gray-900! dark:[&>div>span]:text-white! [&>div>span]:font-medium! [&>svg]:text-gray-600! dark:[&>svg]:text-white/80!"
+                      className="h-8! rounded-full! border border-[#D6D8DC] dark:border-white/20 bg-[var(--advideo-dropdown-surface)] dark:bg-[#252528] px-3! py-1.5! text-[11px]! sm:text-[12px]! font-medium! text-gray-900! dark:text-white! shadow-xs hover:bg-[var(--advideo-dropdown-hover)] dark:hover:bg-[#323236] transition-colors [&>div>span]:text-gray-900! dark:[&>div>span]:text-white! [&>div>span]:font-medium! [&>svg]:text-gray-600! dark:[&>svg]:text-white/80!"
                       options={visibleModelOptions}
                       value={visibleModelOptions.find((opt) => opt.value === formData.model)}
                       onChange={(val) => {
@@ -665,7 +665,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       type="b-roll"
                       side="top"
                       showChevron
-                      className="h-8! rounded-full! border border-black/15 dark:border-white/20 bg-white/90 dark:bg-[#252528] px-3! py-1.5! text-[11px]! sm:text-[12px]! font-medium! text-gray-900! dark:text-white! shadow-xs hover:bg-gray-50 dark:hover:bg-[#323236] transition-colors [&>div>span]:text-gray-900! dark:[&>div>span]:text-white! [&>div>span]:font-medium! [&>svg]:text-gray-600! dark:[&>svg]:text-white/80!"
+                      className="h-8! rounded-full! border border-[#D6D8DC] dark:border-white/20 bg-[var(--advideo-dropdown-surface)] dark:bg-[#252528] px-3! py-1.5! text-[11px]! sm:text-[12px]! font-medium! text-gray-900! dark:text-white! shadow-xs hover:bg-[var(--advideo-dropdown-hover)] dark:hover:bg-[#323236] transition-colors [&>div>span]:text-gray-900! dark:[&>div>span]:text-white! [&>div>span]:font-medium! [&>svg]:text-gray-600! dark:[&>svg]:text-white/80!"
                       options={configuredDurationOptions}
                       value={configuredDurationOptions.find((opt) => opt.value === selectedVideoDuration)}
                       onChange={(val) => { updateField('duration', val); setErrors((prev) => ({ ...prev, duration: '' })); }}
@@ -680,7 +680,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                       type="b-roll"
                       side="top"
                       showChevron
-                      className="h-8! rounded-full! border border-black/15 dark:border-white/20 bg-white/90 dark:bg-[#252528] px-3! py-1.5! text-[11px]! sm:text-[12px]! font-medium! text-gray-900! dark:text-white! shadow-xs hover:bg-gray-50 dark:hover:bg-[#323236] transition-colors [&>div>span]:text-gray-900! dark:[&>div>span]:text-white! [&>div>span]:font-medium! [&>svg]:text-gray-600! dark:[&>svg]:text-white/80!"
+                      className="h-8! rounded-full! border border-[#D6D8DC] dark:border-white/20 bg-[var(--advideo-dropdown-surface)] dark:bg-[#252528] px-3! py-1.5! text-[11px]! sm:text-[12px]! font-medium! text-gray-900! dark:text-white! shadow-xs hover:bg-[var(--advideo-dropdown-hover)] dark:hover:bg-[#323236] transition-colors [&>div>span]:text-gray-900! dark:[&>div>span]:text-white! [&>div>span]:font-medium! [&>svg]:text-gray-600! dark:[&>svg]:text-white/80!"
                       options={aspectRatioOptions}
                       value={aspectRatioOptions.find((opt) => opt.value === formData.aspectRatio) || (isAspectRatioLoading ? { label: 'Loading ratios...', Icon: <Loader2 className="h-3 w-3 animate-spin" /> } : undefined)}
                       onChange={(val) => { updateField('aspectRatio', val); setErrors((prev) => ({ ...prev, aspectRatio: '' })); }}
@@ -713,7 +713,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               <div className={`${errors.category ? 'rounded-full ring-1 ring-red-500' : ''} ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
                 <CommonDropdown
                   label="Choose category"
-                  className="h-auto w-full bg-gray-100 dark:bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
+                  className="h-auto w-full bg-[var(--advideo-control-surface)] dark:bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
                   type="b-roll"
                   options={categoryOptions}
                   value={categoryOptions.find((opt) => opt.value === formData.category)}
@@ -734,7 +734,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               placeholder={`Briefly describe your ${type} including key features.`}
               rows={3}
               disabled={submitting}
-              className={`w-full max-h-20 2xl:max-h-[91px] min-w-0 resize-none rounded-[20px] border bg-gray-100 dark:bg-[#909294]/15! px-4 py-3 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 sm:py-3.5 sm:text-sm ${errors.description ? 'border-red-500 focus:border-red-500' : 'border-black/10 dark:border-white/5 focus:border-white/20'}`}
+              className={`w-full max-h-20 2xl:max-h-[91px] min-w-0 resize-none rounded-[20px] border bg-[var(--advideo-control-surface)] dark:bg-[#909294]/15! px-4 py-3 text-[13px] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-[#AFAFAF] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 sm:py-3.5 sm:text-sm ${errors.description ? 'border-red-500 focus:border-red-500' : 'border-[var(--ws-border)] dark:border-white/5 focus:border-[#5867EB]'}`}
             />
             {errors.description && <p className="mt-1 text-xs text-red-400">{errors.description}</p>}
           </div>
@@ -761,7 +761,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                   <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:text-sm">
                     Product Images*
                   </label>
-                  <div className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border bg-gray-100 px-2.5 py-2 dark:bg-[#909294]/15 ${
+                  <div className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border bg-[var(--advideo-control-surface)] px-2.5 py-2 dark:bg-[#909294]/15 ${
                     errors.images
                       ? 'border-red-500'
                       : 'border-black/10 dark:border-white/5'
@@ -863,7 +863,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                   <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-[#afafaf] sm:text-sm">
                     {isBrand ? 'Brand Logo' : 'Product Logo'}
                   </label>
-                  <div className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border bg-gray-100 px-2.5 py-2 dark:bg-[#909294]/15 ${
+                  <div className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border bg-[var(--advideo-control-surface)] px-2.5 py-2 dark:bg-[#909294]/15 ${
                     errors.logo
                       ? 'border-red-500'
                       : 'border-black/10 dark:border-white/5'
@@ -941,7 +941,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
                   <CommonDropdown
                     label="Choose Product Type"
                     type="b-roll"
-                    className="h-auto w-full bg-gray-100 dark:bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
+                    className="h-auto w-full bg-[var(--advideo-control-surface)] dark:bg-[#909294]/15! px-3! py-3 text-[13px]! sm:px-4! sm:py-[23px] sm:text-sm! 2xl:py-6"
                     options={productTypeOptions}
                     value={productTypeOptions.find((opt) => opt.value === formData.productType)}
                     onChange={(val) => { updateField('productType', val); setErrors((prev) => ({ ...prev, productType: '' })); }}
@@ -955,7 +955,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
           {/* Settings Divider */}
           <div>
             <div
-              className={`relative mb-3 rounded-2xl border border-black/10 dark:border-white/5 bg-gray-100 dark:bg-[#909294]/10 p-3 sm:p-4 transition-opacity duration-200 ${
+              className={`relative mb-3 rounded-2xl border border-[var(--ws-border)] dark:border-white/5 bg-[var(--advideo-control-surface)] dark:bg-[#909294]/10 p-3 sm:p-4 transition-opacity duration-200 ${
                 isSeedanceModel
                   ? 'pointer-events-none opacity-30 select-none cursor-not-allowed'
                   : submitting
@@ -973,7 +973,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
 
             <div className="mt-3 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div
-              className={`relative flex w-full items-center justify-between gap-2 rounded-xl border border-black/10 bg-gray-100 px-3 py-2 dark:border-white/5 dark:bg-[#909294]/10 sm:w-[245px] sm:flex-none transition-opacity duration-200 ${
+              className={`relative flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--ws-border)] bg-[var(--advideo-control-surface)] px-3 py-2 dark:border-white/5 dark:bg-[#909294]/10 sm:w-[245px] sm:flex-none transition-opacity duration-200 ${
                 submitting
                   ? 'pointer-events-none opacity-50'
                   : ''

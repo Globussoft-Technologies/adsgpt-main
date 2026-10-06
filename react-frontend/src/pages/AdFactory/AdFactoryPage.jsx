@@ -127,11 +127,11 @@ export default function AdFactoryPage() {
   // slot /adstudio and /brandiq use for their tabs. It was floating at the top
   // of the page body with nothing to align to.
   return (
-    <div className="relative flex h-full w-full flex-col">
+    <div className="relative flex h-full min-h-0 w-full flex-1 flex-col">
       {renderQuickSetup ? (
         <AdFactoryV2Page />
       ) : (
-        <div className="w-full flex-1 overflow-y-auto">
+        <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
           {queryCampaignId ? <AdFactoryWorkflowDarkReal /> : <NoCompaignScreen />}
         </div>
       )}

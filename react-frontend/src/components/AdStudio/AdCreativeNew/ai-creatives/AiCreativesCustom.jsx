@@ -981,7 +981,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
       ) : (
         <>
       <form onSubmit={handleSubmit} className="relative w-full max-w-[1043px]">
-        <div className="adcreative-setup-modal relative w-full max-w-[1043px] max-h-[calc(100svh-40px)] overflow-y-auto rounded-[24px] bg-[#F5F5F8] dark:bg-[#1e1e24] p-[22px_26px] border border-[#E2E1E8] dark:border-white/10 shadow-[0_30px_70px_-30px_rgba(31,29,41,0.35),0_2px_8px_rgba(31,29,41,0.05)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="adcreative-setup-modal relative w-full max-w-[1043px] max-h-[calc(100svh-40px)] overflow-y-auto rounded-[24px] bg-[var(--ws-surface)] dark:bg-[var(--adcreative-dark-surface)] p-[22px_26px] border border-[var(--ws-border)] dark:border-[var(--adcreative-dark-border)] shadow-[var(--ws-shadow-md)] dark:shadow-[0_30px_70px_-30px_rgba(0,0,0,0.55)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="relative flex items-center justify-center min-h-[40px] mb-4">
             <button
               type="button"
@@ -1025,7 +1025,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
               <TemplatesResizer controller={templates} />
 
               <div
-                className="adcreative-prompt-card relative flex flex-1 flex-col rounded-[16px] border bg-white dark:bg-[#1a1a1f] min-h-[140px] transition-colors border-[#CFCDD9] focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:border-white/10"
+                className="adcreative-prompt-card relative flex flex-1 flex-col rounded-[16px] border bg-[var(--ws-surface-control)] dark:bg-[var(--adcreative-dark-control)] min-h-[140px] transition-colors border-[var(--ws-border)] focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:border-[var(--adcreative-dark-border)]"
               >
                 <textarea
                   value={prompt}
@@ -1096,7 +1096,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                   );
                 })()}
 
-                <div className="flex items-center gap-1.5 p-[8px_10px] bg-[#FAFAFC] border-t border-[#E2E1E8] rounded-b-[16px] dark:bg-white/5 dark:border-white/10">
+                <div className="flex items-center gap-1.5 p-[8px_10px] bg-[var(--ws-surface-header)] border-t border-[var(--ws-border)] rounded-b-[16px] dark:bg-transparent dark:border-[var(--adcreative-dark-field-border)]">
                   <button
                     type="button"
                     onClick={handleImprovePrompt}
@@ -1128,12 +1128,17 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                 <span className="text-[13px] font-semibold text-[#1F1D29] dark:text-white block mb-[7px]">
                   Attach your Brand Voice
                 </span>
-                <div className="adcreative-field-white flex items-center gap-1.5 h-[44px] p-1 bg-white border border-[#CFCDD9] rounded-[12px] focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:bg-[#1a1a1f] dark:border-white/10 transition-all">
+                <div className="adcreative-field-white flex items-center gap-1.5 h-[44px] p-1 bg-[var(--ws-surface-control)] border border-[var(--ws-border)] rounded-[12px] focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:bg-[var(--adcreative-dark-control)] dark:border-[var(--adcreative-dark-border)] transition-all">
                   <div ref={brandIqPickerWrapperRef} className="relative shrink-0">
                     <button
                       type="button"
                       onClick={openBrandIqPicker}
-                      className="flex items-center gap-1.5 h-[34px] px-2.5 rounded-[8px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#1F1D29] text-[12px] font-medium max-w-[190px] transition-colors dark:bg-white/10 dark:text-white"
+                      aria-expanded={showBrandIqPicker}
+                      className={`flex h-[34px] max-w-[190px] items-center gap-1.5 rounded-[8px] border px-2.5 text-[12px] font-medium text-[#1F1D29] shadow-[var(--ws-shadow-sm)] transition-[background-color,border-color,box-shadow] outline-none focus-visible:border-[#5867EB] focus-visible:ring-[3px] focus-visible:ring-[#5867EB]/16 dark:text-white dark:shadow-none dark:focus-visible:border-white/30 dark:focus-visible:ring-white/15 ${
+                        showBrandIqPicker
+                          ? 'border-[#5867EB] bg-[#ECEDEF] ring-[3px] ring-[#5867EB]/16 dark:border-white/25 dark:bg-white/15 dark:ring-white/10'
+                          : 'border-[#D6D8DC] bg-[#ECEDEF] hover:border-[var(--ws-border-strong)] hover:bg-[#E3E5E8] dark:border-white/10 dark:bg-white/10 dark:hover:border-white/20 dark:hover:bg-white/15'
+                      }`}
                     >
                       {brandSource.kind === 'list' && (brandSource.item.logoUrls?.[0] || brandSource.item.logoUrl || brandSource.item.logo) ? (
                         <img
@@ -1160,7 +1165,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                       <ChevronDown size={13} className={'transition-transform ' + (showBrandIqPicker ? 'rotate-180' : '')} />
                     </button>
                     {showBrandIqPicker && (
-                      <div className="absolute top-[calc(100%+6px)] left-0 z-40 w-[360px] p-1.5 rounded-[14px] bg-white dark:bg-[#1f1f1f] shadow-[0_25px_50px_-12px_rgba(31,29,41,0.28)] border border-black/[0.08] dark:border-white/10">
+                      <div className="absolute top-[calc(100%+6px)] left-0 z-40 w-[360px] p-1.5 rounded-[14px] bg-[var(--ws-surface)] dark:bg-[var(--adcreative-dark-popup)] shadow-[var(--ws-shadow-md)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.55)] border border-[var(--ws-border)] dark:border-[var(--adcreative-dark-border)]">
                         <div className="grid grid-cols-2 gap-0.5 max-h-[260px] overflow-y-auto">
                           {brandListState === 'loading' && (
                             <div className="col-span-2 flex items-center gap-2 px-3 py-2 text-xs text-gray-500">
@@ -1187,7 +1192,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                                 className={'flex items-center gap-2 p-[6px_8px] rounded-[9px] text-[12.5px] text-left transition-colors min-w-0 ' + (
                                   selected
                                     ? 'bg-[#ECEEFD] text-[#5867EB] font-medium dark:bg-[#5867EB]/20 dark:text-[#8D99FF]'
-                                    : 'text-[#1F1D29] hover:bg-[#EFEEF3] dark:text-white dark:hover:bg-white/10'
+                                    : 'text-[#1F1D29] hover:bg-[var(--ws-surface-hover)] dark:text-white dark:hover:bg-white/10'
                                 )}
                               >
                                 {brandLogoSrc ? (
@@ -1208,7 +1213,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                             );
                           })}
                         </div>
-                        <div className="border-t border-[#E2E1E8] mt-1 pt-1 dark:border-white/10">
+                        <div className="border-t border-[var(--ws-border)] mt-1 pt-1 dark:border-white/10">
                           <button
                             type="button"
                             onClick={() => {
@@ -1224,7 +1229,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                               setBrandImagesPicked([]);
                               setShowBrandIqPicker(false);
                             }}
-                            className="w-full flex items-center gap-2 p-[6px_8px] rounded-[9px] text-[12.5px] text-[#85829A] hover:bg-[#EFEEF3] dark:text-gray-400 dark:hover:bg-white/10"
+                            className="w-full flex items-center gap-2 p-[6px_8px] rounded-[9px] text-[12.5px] text-[#85829A] hover:bg-[var(--ws-surface-hover)] dark:text-gray-400 dark:hover:bg-white/10"
                           >
                             <X size={14} /> No brand voice
                           </button>
@@ -1398,7 +1403,7 @@ export function AiCreativesCustom({ onClose, onComplete }) {
                   <button
                     type="button"
                     onClick={() => setShowCompetitorModal(true)}
-                    className="flex w-full max-w-90 items-center justify-center gap-2 rounded-full bg-white dark:bg-[#1a1a1f] py-2 text-[13px] font-semibold text-[#1F1D29] dark:text-[#ebebeb] transition-colors hover:bg-gray-50 dark:hover:bg-[#25252d]"
+                    className="flex w-full max-w-90 items-center justify-center gap-2 rounded-full bg-[var(--ws-surface-control)] dark:bg-[var(--adcreative-dark-popup)] py-2 text-[13px] font-semibold text-[#1F1D29] dark:text-[#ebebeb] transition-colors hover:bg-[var(--ws-surface-hover)] dark:hover:bg-[var(--adcreative-dark-raised)]"
                   >
                     <Search size={16} strokeWidth={2.2} />
                     Search competitors ads
@@ -1411,9 +1416,9 @@ export function AiCreativesCustom({ onClose, onComplete }) {
             </div>
           </div>
 
-          <div className="flex justify-end items-center gap-[10px] mt-[18px] pt-[14px] border-t border-[#E2E1E8] dark:border-white/10">
+          <div className="flex justify-end items-center gap-[10px] mt-[18px] pt-[14px] border-t border-[var(--ws-border)] dark:border-white/10">
             {total > 0 && (
-              <span className="text-[12px] text-[#85829A] font-medium border border-[#E2E1E8] bg-white rounded-full px-[9px] py-[3px] dark:bg-[#1a1a1f] dark:border-white/10 dark:text-gray-300">
+              <span className="text-[12px] text-[#85829A] font-medium border border-[var(--ws-border)] bg-[var(--ws-surface-control)] rounded-full px-[9px] py-[3px] dark:bg-[var(--adcreative-dark-control)] dark:border-[var(--adcreative-dark-border)] dark:text-gray-300">
                 ~{total * creditsPerImage} credits
               </span>
             )}
@@ -1557,8 +1562,8 @@ function FileUploadField({
         className={'adcreative-field-white flex items-center gap-1.5 h-[42px] pl-3 pr-1 bg-white border rounded-[10px] transition-all ' + (
           isDrag
             ? 'border-solid border-[#5867EB] ring-[3px] ring-[#5867EB]/16'
-            : 'border-dashed border-[#CFCDD9] focus-within:border-solid focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16'
-        ) + ' dark:bg-[#1a1a1f] dark:border-white/10'}
+            : 'border-dashed border-[var(--ws-border)] focus-within:border-solid focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16'
+        ) + ' dark:bg-[var(--adcreative-dark-control)] dark:border-[var(--adcreative-dark-border)]'}
       >
         <input
           type="url"
@@ -1643,7 +1648,7 @@ function BrandImageChipRow({ options, isSelected, onPick, onDoubleClick }) {
               onDoubleClick={handleDouble}
               title={selected ? 'Click to remove · double-click to preview' : 'Click to select · double-click to preview'}
               className={'relative h-[34px] w-[34px] shrink-0 rounded-[8px] border bg-white cursor-pointer transition-transform hover:-translate-y-0.5 ' + (
-                selected ? 'border-[#3AD0C8]' : 'border-[#E2E1E8]'
+                selected ? 'border-[#3AD0C8]' : 'border-[var(--ws-border)]'
               )}
             >
               <img src={url} alt="" className="h-full w-full rounded-[7px] object-cover" />
@@ -1683,13 +1688,13 @@ function QualityPickerPill({ value, onChange, model }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[var(--ws-surface-header)] hover:bg-[var(--ws-surface-hover)] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
       >
         {activeLabel}
         <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[140px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[140px] overflow-hidden rounded-[18px] bg-[var(--ws-surface)] dark:bg-[var(--adcreative-dark-popup)] shadow-2xl ring-1 ring-[var(--ws-border)] dark:ring-[var(--adcreative-dark-border)]">
           {qualities.map((q) => {
             const selected = q === value;
             return (
@@ -1737,7 +1742,7 @@ function ModelPickerPill({ value, onChange }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[var(--ws-surface-header)] hover:bg-[var(--ws-surface-hover)] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
       >
         <span aria-hidden className="flex h-3.5 w-3.5 items-center justify-center">
           <ModelIcon apiId={value} icon={selectedModel?.icon} />
@@ -1746,7 +1751,7 @@ function ModelPickerPill({ value, onChange }) {
         <ChevronDown size={18} strokeWidth={2} className="text-gray-500 dark:text-white/40" />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-white dark:bg-[#1f1f1f] shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+        <div className="absolute bottom-full left-0 z-30 mb-2 min-w-[180px] overflow-hidden rounded-[18px] bg-[var(--ws-surface)] dark:bg-[var(--adcreative-dark-popup)] shadow-2xl ring-1 ring-[var(--ws-border)] dark:ring-[var(--adcreative-dark-border)]">
           {models.map((opt) => {
             const selected = opt.apiId === value;
             return (
@@ -1800,7 +1805,7 @@ function RatioPickerPill({ counts, onChange, model, quality }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[#EFEEF3] hover:bg-[#E4E3EB] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[9px] bg-[var(--ws-surface-header)] hover:bg-[var(--ws-surface-hover)] text-[#4A4758] hover:text-[#1F1D29] text-[12px] font-medium whitespace-nowrap transition-colors dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
       >
         <Proportions size={16} strokeWidth={1.8} className="text-gray-600 dark:text-white/70" />
         <span className="h-3 w-px bg-black/20 dark:bg-white/20" />
@@ -1812,7 +1817,7 @@ function RatioPickerPill({ counts, onChange, model, quality }) {
       </button>
       <AnimatedPanel
         open={open}
-        className="absolute right-0 bottom-full z-30 mb-2 w-[300px] rounded-[20px] bg-white dark:bg-[#1f1f1f] p-4 shadow-2xl ring-1 ring-black/10 dark:ring-white/10"
+        className="absolute right-0 bottom-full z-30 mb-2 w-[300px] rounded-[20px] bg-[var(--ws-surface)] dark:bg-[var(--adcreative-dark-popup)] p-4 shadow-2xl ring-1 ring-[var(--ws-border)] dark:ring-[var(--adcreative-dark-border)]"
       >
         <AspectRatioTiles
           counts={counts}

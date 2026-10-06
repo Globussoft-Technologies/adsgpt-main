@@ -82,6 +82,7 @@ const AIAvatarCommonDropdown = ({
   triggerClassName = '',
   contentClassName = '',
   align,
+  showChevron = false,
 }) => {
   const Icon = value?.Icon;
   const triggerLabel = value?.label?.replace(/\s*\(.*?\)\s*$/, '') || placeholder || label;
@@ -89,7 +90,7 @@ const AIAvatarCommonDropdown = ({
   return (
     <Select value={value?.value ?? ''} onValueChange={onChange}>
       <SelectTrigger
-        hideIcon
+        hideIcon={!showChevron}
         className={`prompt_selection_button_no_gradient group relative flex items-center gap-0 rounded-full py-4 text-xs shadow-none transition-all duration-200 ease-in [&_svg]:text-current! 2xl:py-5 2xl:text-sm dark:border-none dark:bg-[#2B2A2A80] dark:text-[#AFAFAF] [&>svg]:size-5 ${triggerClassName}`}
       >
         <div className="flex items-center gap-1 pr-1 capitalize">
@@ -1139,9 +1140,9 @@ const AvatarConfigForm = ({
     (productUrl || uploadedImages.length > 0) && videoModel && selectedVideoDuration && aspectRatio;
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-3xl border border-black/10 bg-white sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]">
+    <div className="advideo-split-card advideo-avatar-card grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-[24px] border border-[var(--ws-border)] bg-[var(--ws-surface)] sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]">
       {/* Preview */}
-      <div className="relative h-full min-h-[350px] w-full bg-gray-100 dark:bg-[#1c1c1c]">
+      <div className="relative h-full min-h-[350px] w-full overflow-hidden bg-gray-100 dark:bg-[#1c1c1c]">
         {!recreateData && (
           <button
             onClick={onBack}
@@ -1156,7 +1157,7 @@ const AvatarConfigForm = ({
             <img
               src={customAvatarImages[carouselIndex]?.preview}
               alt={`Custom Avatar ${carouselIndex + 1}`}
-              className="h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full object-cover"
             />
             {customAvatarImages.length > 1 && (
               <>
@@ -1193,7 +1194,7 @@ const AvatarConfigForm = ({
             <img
               src={getAvatarUrl(avatar)}
               alt="Selected Avatar"
-              className="h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full object-cover"
             />
             {avatars?.length > 1 && (
               <>
@@ -1218,7 +1219,7 @@ const AvatarConfigForm = ({
       </div>
 
       {/* Form */}
-      <div className="custom-scrollbar flex flex-col gap-6 overflow-y-auto p-6 pb-10 2xl:px-6 2xl:py-8 2xl:pb-15">
+      <div className="advideo-avatar-form custom-scrollbar flex h-full min-h-0 flex-col gap-3 overflow-y-auto bg-[var(--ws-surface)] py-5 pr-3 pl-4 2xl:gap-4 2xl:px-5 2xl:py-6 dark:bg-transparent [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex flex-col gap-2">
           <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-gray-900 px-2.5 py-0.5 text-10 font-medium text-white 2xl:text-xs dark:bg-white dark:text-black">
             🌐 All regional languages supported
@@ -1228,14 +1229,14 @@ const AvatarConfigForm = ({
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">
               Do you have a product image?
             </label>
-            <div className="flex items-center gap-1 rounded-full bg-gray-100 p-1 dark:bg-[#9092941A]">
+            <div className="advideo-avatar-segmented flex h-9 w-[112px] items-center rounded-full border border-[#C8CBD2] bg-[#ECEDEF] p-0.5 dark:border-white/10 dark:bg-[#9092941A]">
               <button
                 type="button"
                 onClick={() => { setHasProductImage(true); setPromptText(''); setErrors((prev) => ({ ...prev, promptText: null, hasProductImage: null })); }}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                className={`flex h-full flex-1 items-center justify-center rounded-full border text-xs font-medium transition-all ${
                   hasProductImage === true
-                    ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'
+                    ? 'border-[#BFC4D8] bg-white text-[#4F5FD5] shadow-sm dark:border-transparent dark:bg-white dark:text-black'
+                    : 'border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white/80'
                 }`}
               >
                 Yes
@@ -1243,10 +1244,10 @@ const AvatarConfigForm = ({
               <button
                 type="button"
                 onClick={() => { setHasProductImage(false); setProductUrl(''); setUploadedImages([]); setErrors((prev) => ({ ...prev, productUrl: null, hasProductImage: null })); }}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                className={`flex h-full flex-1 items-center justify-center rounded-full border text-xs font-medium transition-all ${
                   hasProductImage === false
-                    ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-white/50 dark:hover:text-white/80'
+                    ? 'border-[#BFC4D8] bg-white text-[#4F5FD5] shadow-sm dark:border-transparent dark:bg-white dark:text-black'
+                    : 'border-transparent text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white/80'
                 }`}
               >
                 No
@@ -1260,7 +1261,7 @@ const AvatarConfigForm = ({
 
           {hasProductImage === true && (
             <>
-              <div className={`flex items-center gap-2 rounded-full border border-transparent bg-gray-100 p-1 dark:bg-[#9092941A] ${errors.productUrl ? 'border-red-500/50' : ''}`}>
+              <div className={`advideo-avatar-control flex items-center gap-2 rounded-full border bg-[var(--advideo-dropdown-surface)] p-1 transition dark:bg-[#9092941A] ${errors.productUrl ? 'border-red-500/50' : 'border-[var(--advideo-field-border)] dark:border-transparent'}`}>
                 <input
                   value={productUrl}
                   onChange={(e) => setProductUrl(e.target.value)}
@@ -1326,7 +1327,7 @@ const AvatarConfigForm = ({
               <textarea
                 value={promptText}
                 onChange={(e) => setPromptText(e.target.value)}
-                className={`w-full resize-none rounded-2xl bg-gray-100 p-3 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 focus:outline-none 2xl:text-sm dark:bg-[#9092941A] dark:text-white dark:placeholder:text-[#AFAFAF] ${errors.promptText ? 'border border-red-500/50' : ''}`}
+                className={`w-full resize-none rounded-[12px] border bg-[var(--advideo-control-surface)] p-3 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 focus:border-[#5867EB] focus:outline-none focus:ring-[3px] focus:ring-[#5867EB]/16 2xl:text-sm dark:bg-[#9092941A] dark:text-white dark:placeholder:text-[#AFAFAF] dark:focus:ring-0 ${errors.promptText ? 'border-red-500/50' : 'border-[var(--advideo-field-border)] dark:border-transparent'}`}
                 placeholder="Describe your product or scene (e.g. a sleek black smartwatch on a white surface)"
                 rows={3}
               />
@@ -1348,7 +1349,7 @@ const AvatarConfigForm = ({
         </AnimatePresence>
 
         <div className="flex gap-4">
-          <div className="flex flex-col gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Model*</label>
             <AIAvatarCommonDropdown
               options={videoChatModels}
@@ -1363,13 +1364,14 @@ const AvatarConfigForm = ({
                 setVideoModel(val);
                 if (errors.videoModel) setErrors((prev) => ({ ...prev, videoModel: '' }));
               }}
-              className="!border-[#3a3a3a] !bg-[#2c2c2c]"
+              showChevron
+              triggerClassName="advideo-avatar-control advideo-avatar-dropdown h-11! w-full! justify-between border-[#C8CBD2]! bg-[var(--advideo-dropdown-surface)]! px-4! text-gray-900! dark:border-[#3a3a3a]! dark:bg-[#2c2c2c]! dark:text-[#AFAFAF]! dark:focus-visible:ring-0! [&>svg]:text-gray-500! dark:[&>svg]:text-[#AFAFAF]!"
             />
             {errors.videoModel && (
               <span className="mt-1 text-[12px] text-red-400">{errors.videoModel}</span>
             )}
           </div>
-          <div className="flex flex-1 flex-col gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Duration*</label>
             <AIAvatarCommonDropdown
               options={configuredDurationOptions}
@@ -1379,7 +1381,8 @@ const AvatarConfigForm = ({
                 setVideoDuration(val);
                 setErrors((prev) => ({ ...prev, videoDuration: null }));
               }}
-              className="!border-[#3a3a3a] !bg-[#2c2c2c]"
+              showChevron
+              triggerClassName="advideo-avatar-control advideo-avatar-dropdown h-11! w-full! justify-between border-[#C8CBD2]! bg-[var(--advideo-dropdown-surface)]! px-4! text-gray-900! dark:border-[#3a3a3a]! dark:bg-[#2c2c2c]! dark:text-[#AFAFAF]! dark:focus-visible:ring-0! [&>svg]:text-gray-500! dark:[&>svg]:text-[#AFAFAF]!"
             />
             {errors.videoDuration && (
               <span className="mt-1 text-[12px] text-red-400">{errors.videoDuration}</span>
@@ -1412,14 +1415,14 @@ const AvatarConfigForm = ({
                     }}
                     className={`flex items-center gap-2 rounded-full border px-4 py-2 text-xs transition-all ${
                       isSelected
-                        ? 'border-[#3ad0c8] bg-[#3ad0c8]/15 text-gray-900 shadow-[0_0_12px_rgba(58,208,200,0.15)] dark:bg-[#3ad0c8]/20 dark:text-white'
-                        : 'border-black/10 bg-gray-100 text-gray-600 hover:border-[#3ad0c8]/60 hover:bg-gray-200 hover:text-gray-900 dark:border-white/10 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-[#3ad0c8]/60 dark:hover:bg-[#383838] dark:hover:text-white'
+                        ? 'border-[#5867EB] bg-[#5867EB]/10 text-gray-900 shadow-[0_0_0_3px_rgba(88,103,235,0.12)] dark:border-[#3ad0c8] dark:bg-[#3ad0c8]/20 dark:text-white dark:shadow-[0_0_12px_rgba(58,208,200,0.15)]'
+                        : 'border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] text-gray-600 hover:border-[#5867EB]/60 hover:bg-[var(--advideo-dropdown-hover)] hover:text-gray-900 dark:border-white/10 dark:bg-[#38383880] dark:text-white/40 dark:hover:border-[#3ad0c8]/60 dark:hover:bg-[#383838] dark:hover:text-white'
                     }`}
                   >
                     <AspectRatioPreview
                       ratio={ratio.value}
                       filled={isSelected}
-                      className={`h-4 w-4 ${isSelected ? 'text-[#3ad0c8]' : 'text-gray-500 dark:text-white/40'}`}
+                      className={`h-4 w-4 ${isSelected ? 'text-[#5867EB] dark:text-[#3ad0c8]' : 'text-gray-500 dark:text-white/40'}`}
                     />
                     <span className={isSelected ? 'font-semibold' : 'font-medium'}>{ratio.label}</span>
                   </button>
@@ -1449,26 +1452,30 @@ const AvatarConfigForm = ({
 
         <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Promotional Info</label>
-            <input
-              value={promotion}
-              onChange={(e) => setPromotion(e.target.value)}
-              className="w-full rounded-full bg-gray-100 p-3 px-4 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 focus:outline-none 2xl:text-base dark:bg-[#9092941A] dark:text-white dark:placeholder:text-[#AFAFAF]"
-              placeholder="Enter your Promotional Info"
-            />
+            <div className="advideo-avatar-control flex h-11 w-full items-center rounded-full border border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] dark:border-transparent dark:bg-[#9092941A]">
+              <input
+                value={promotion}
+                onChange={(e) => setPromotion(e.target.value)}
+                className="h-full w-full border-none bg-transparent px-4 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 outline-none shadow-none 2xl:text-base dark:text-white dark:placeholder:text-[#AFAFAF]"
+                placeholder="Enter your Promotional Info"
+              />
+            </div>
         </div>
 
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Prompt</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="w-full resize-none rounded-2xl bg-gray-100 p-3 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 focus:outline-none 2xl:text-sm dark:bg-[#9092941A] dark:text-white dark:placeholder:text-[#AFAFAF]"
-            placeholder="e.g. white background, aerial drone shot, etc"
-            rows={3}
-          />
+          <div className="advideo-avatar-control flex min-h-[78px] w-full rounded-[12px] border border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] dark:border-transparent dark:bg-[#9092941A]">
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="min-h-[78px] w-full resize-none border-none bg-transparent p-3 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 outline-none shadow-none 2xl:text-sm dark:text-white dark:placeholder:text-[#AFAFAF]"
+              placeholder="e.g. white background, aerial drone shot, etc"
+              rows={3}
+            />
+          </div>
         </div>
 
-        <div className="mt-auto mb-3 flex items-center justify-end gap-2">
+        <div className="mt-auto mb-3 flex items-center justify-end gap-2 border-t border-[var(--ws-border)] pt-4 dark:border-white/10">
           {(() => {
             const est = estimateAdVideoCredits({ video_model: videoModel, video_duration: selectedVideoDuration, no_of_ads: 1, modelCredits, creditsPerSecond: videoChatModels.find((model) => model.value === videoModel)?.creditsPerSecond });
             const enough = availableCredits >= est;
@@ -1880,25 +1887,29 @@ const UploadAvatarContent = ({ onBack, onUseCamera, onUploadImages }) => {
           </p>
         </div>
 
-        <div className="grid min-h-0 w-full flex-1 grid-cols-2 gap-2">
+        <div className="grid min-h-0 w-full flex-1 grid-cols-2 gap-4">
           {/* Use Camera Card */}
           <button
             onClick={onUseCamera}
-            className="group relative h-full overflow-hidden rounded-2xl border-2 bg-[#1c1c1c] transition hover:border-blue-500"
+            className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-3xl border border-[var(--ws-border)] bg-gray-100 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl active:scale-[0.99] dark:border-white/10 dark:bg-[#1c1c1c]"
           >
             <img
               src={webcamPlaceholderImg}
               alt="Use Camera"
-              className="h-[120%] w-full object-cover transition-opacity duration-300 group-hover:opacity-0"
+              className="h-full w-full object-cover scale-[1.08] transition-all duration-500 ease-out group-hover:scale-112 group-hover:opacity-0"
             />
             <img
               src={webcamImgGif}
               alt="Use Camera Animation"
-              className="absolute inset-0 h-[120%] w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+              className="absolute inset-0 h-full w-full object-cover scale-[1.08] opacity-0 transition-all duration-500 ease-out group-hover:scale-112 group-hover:opacity-100"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 transform">
-              <span className="rounded-full bg-white px-6 py-2 text-xs font-semibold whitespace-nowrap text-black 2xl:px-8 2xl:py-2.5 2xl:text-base">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent transition-opacity duration-300 group-hover:opacity-95" />
+
+            {/* Dedicated hover border overlay */}
+            <div className="pointer-events-none absolute inset-0 z-30 rounded-3xl border-2 border-transparent transition-all duration-300 group-hover:border-[#5867EB] group-hover:shadow-[0_0_20px_rgba(88,103,235,0.35)] dark:group-hover:border-white dark:group-hover:shadow-[0_0_20px_rgba(255,255,255,0.2)]" />
+
+            <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 transform transition-transform duration-300 group-hover:scale-105">
+              <span className="rounded-full bg-white px-6 py-2 text-xs font-semibold whitespace-nowrap text-black shadow-md 2xl:px-8 2xl:py-2.5 2xl:text-base">
                 Use Camera
               </span>
             </div>
@@ -1907,20 +1918,24 @@ const UploadAvatarContent = ({ onBack, onUseCamera, onUploadImages }) => {
           {/* Upload Your Own Image Card */}
           <button
             onClick={onUploadImages}
-            className="group relative flex h-full flex-col items-center justify-center overflow-hidden rounded-2xl border-2 bg-gray-50 transition hover:border-blue-500 hover:bg-gray-100 dark:bg-[#1c1c1c] dark:hover:bg-[#1c1c1c]/80"
+            className="group relative flex h-full cursor-pointer flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl border border-[var(--ws-border)] bg-gray-50 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl active:scale-[0.99] dark:border-white/10 dark:bg-[#1c1c1c]"
           >
             <img
               src={avatarUploadBgImg}
-              className="absolute right-1/4 z-10 h-auto w-[250px] max-w-[70%] -translate-y-6 transform rounded-2xl object-cover"
+              className="absolute right-1/4 z-10 h-auto w-62.5 max-w-[70%] -translate-y-6 transform rounded-2xl object-cover transition-transform duration-500 ease-out group-hover:scale-105"
               alt=""
             />
             <img
               src={avatarUploadImg}
-              className="absolute left-1/3 z-20 h-auto w-[210px] max-w-[60%] rounded-2xl object-cover"
+              className="absolute left-1/3 z-20 h-auto w-52.5 max-w-[60%] rounded-2xl object-cover transition-transform duration-500 ease-out group-hover:scale-105"
               alt=""
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f0f] via-[#0f0f0f]/10 to-transparent" />
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 transform font-semibold whitespace-nowrap text-white 2xl:text-xl">
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f0f]/70 via-zinc-200/30 to-transparent transition-opacity duration-300 group-hover:opacity-95 dark:from-[#0f0f0f] dark:via-[#0f0f0f]/0" />
+
+            {/* Dedicated hover border overlay */}
+            <div className="pointer-events-none absolute inset-0 z-30 rounded-3xl border-2 border-transparent transition-all duration-300 group-hover:border-[#5867EB] group-hover:shadow-[0_0_20px_rgba(88,103,235,0.35)] dark:group-hover:border-white dark:group-hover:shadow-[0_0_20px_rgba(255,255,255,0.2)]" />
+
+            <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 transform font-semibold whitespace-nowrap text-white transition-transform duration-300 group-hover:scale-105 2xl:text-xl">
               Upload your own images
             </div>
           </button>
@@ -2254,7 +2269,7 @@ const AvatarAdsPage = ({ handleGenerate, onClose }) => {
             </p>
           </div>
 
-          <div className="grid min-h-0 flex-1 grid-cols-2 gap-3">
+          <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
             {/* Avatar Library */}
             <button
               onClick={() => {
@@ -2262,14 +2277,21 @@ const AvatarAdsPage = ({ handleGenerate, onClose }) => {
                 // full pre-fetch is needed here.
                 setAvatarStepLocal('library');
               }}
-              className="group relative h-full overflow-hidden rounded-3xl border-2 border-black/10 bg-white transition hover:border-blue-500 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]"
+              className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-3xl border border-[var(--ws-border)] bg-white transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl active:scale-[0.99] dark:border-white/10 dark:bg-[#1c1c1c]"
             >
-              <img src={avatarLibraryImg} className="h-full w-full object-cover" />
+              <img
+                src={avatarLibraryImg}
+                alt="Avatar Library"
+                className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+              />
 
               {/* overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent transition-opacity duration-300 group-hover:opacity-95" />
 
-              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 transform font-semibold whitespace-nowrap text-white 2xl:bottom-8 2xl:text-xl">
+              {/* Prominent hover border overlay - sits on top of image and gradient */}
+              <div className="pointer-events-none absolute inset-0 z-30 rounded-3xl border-2 border-transparent transition-all duration-300 group-hover:border-[#5867EB] group-hover:shadow-[0_0_20px_rgba(88,103,235,0.35)] dark:group-hover:border-white dark:group-hover:shadow-[0_0_20px_rgba(255,255,255,0.2)]" />
+
+              <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 transform font-semibold whitespace-nowrap text-white transition-transform duration-300 group-hover:scale-105 2xl:bottom-8 2xl:text-xl">
                 Choose from Avatar Library
               </div>
             </button>
@@ -2277,21 +2299,26 @@ const AvatarAdsPage = ({ handleGenerate, onClose }) => {
             {/* Upload */}
             <button
               onClick={() => setAvatarStepLocal('upload')}
-              className="relative flex h-full flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl border-2 border-black/10 bg-gray-50 hover:border-blue-500 dark:border-[#3a3a3a] dark:bg-[#303030]/50"
+              className="group relative flex h-full cursor-pointer flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl border border-[var(--ws-border)] bg-gray-50 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl active:scale-[0.99] dark:border-white/10 dark:bg-[#303030]/50"
             >
               <img
                 src={avatarUploadBgImg}
-                className="absolute right-1/4 z-10 h-auto w-[290px] max-w-[70%] -translate-y-8 transform rounded-2xl object-cover"
+                alt=""
+                className="absolute right-1/4 z-10 h-auto w-[290px] max-w-[70%] -translate-y-8 transform rounded-2xl object-cover transition-transform duration-500 ease-out group-hover:scale-105"
               />
               <img
                 src={avatarUploadImg}
-                className="absolute left-1/3 z-20 h-auto w-[250px] max-w-[60%] rounded-2xl object-cover"
+                alt="Create Avatar"
+                className="absolute left-1/3 z-20 h-auto w-[250px] max-w-[60%] rounded-2xl object-cover transition-transform duration-500 ease-out group-hover:scale-105"
               />
               {/* overlay — light mode uses a soft zinc fade so the photo stays
                   visible, dark mode keeps the near-black fade for contrast. */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f0f]/60 via-zinc-200/30 to-transparent dark:from-[#0f0f0f] dark:via-[#0f0f0f]/0" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f0f]/60 via-zinc-200/30 to-transparent transition-opacity duration-300 group-hover:opacity-95 dark:from-[#0f0f0f] dark:via-[#0f0f0f]/0" />
 
-              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 transform font-semibold whitespace-nowrap text-white 2xl:bottom-8 2xl:text-xl">
+              {/* Prominent hover border overlay - sits on top of images and gradient */}
+              <div className="pointer-events-none absolute inset-0 z-30 rounded-3xl border-2 border-transparent transition-all duration-300 group-hover:border-[#5867EB] group-hover:shadow-[0_0_20px_rgba(88,103,235,0.35)] dark:group-hover:border-white dark:group-hover:shadow-[0_0_20px_rgba(255,255,255,0.2)]" />
+
+              <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 transform font-semibold whitespace-nowrap text-white transition-transform duration-300 group-hover:scale-105 2xl:bottom-8 2xl:text-xl">
                 Create your Own Avatar
               </div>
             </button>

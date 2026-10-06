@@ -3176,7 +3176,7 @@ const renderLightboxModal = () => {
               }
             }
           }}
-          className="relative w-full max-w-[560px] rounded-[28px] border border-black/10 bg-white p-6 sm:p-8 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-[#18181B] dark:shadow-none"
+          className="advideo-recreate-card relative w-full max-w-[560px] rounded-[24px] border border-[var(--ws-border)] bg-[var(--ws-surface)] p-6 shadow-[var(--ws-shadow-md)] sm:p-8 dark:border-white/10 dark:bg-[#18181B] dark:shadow-none"
         >
           {/* Close button */}
           <button
@@ -3209,10 +3209,10 @@ const renderLightboxModal = () => {
               </p>
 
               <div
-                className={`mt-1 flex items-center gap-2 rounded-lg border bg-white dark:bg-zinc-900/80 p-1.5 text-xs text-zinc-600 transition shadow-xs dark:text-[#afafaf] ${
+                className={`advideo-recreate-field mt-1 flex items-center gap-2 rounded-[12px] border bg-[var(--advideo-control-surface)] dark:bg-zinc-900/80 p-1.5 text-xs text-zinc-600 transition dark:text-[#afafaf] ${
                   prefillError
                     ? 'border-red-500 ring-1 ring-red-500/30'
-                    : 'border-zinc-200 dark:border-white/10 focus-within:border-[#5D5FEF] focus-within:ring-1 focus-within:ring-[#5D5FEF] dark:focus-within:border-[#6366F1] dark:focus-within:ring-[#6366F1]'
+                    : 'border-[var(--ws-border)] dark:border-white/10 focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:focus-within:border-[#6366F1] dark:focus-within:ring-1 dark:focus-within:ring-[#6366F1]'
                 }`}
               >
                 {sourceVideoFile ? (
@@ -3384,10 +3384,10 @@ const renderLightboxModal = () => {
 
               <div
                 onPaste={handlePasteProductImage}
-                className={`mt-1 flex items-center gap-2 rounded-lg border bg-white dark:bg-zinc-900/80 p-1.5 text-xs text-zinc-600 transition shadow-xs dark:text-[#afafaf] ${
+                className={`advideo-recreate-field mt-1 flex items-center gap-2 rounded-[12px] border bg-[var(--advideo-control-surface)] dark:bg-zinc-900/80 p-1.5 text-xs text-zinc-600 transition dark:text-[#afafaf] ${
                   errors.productImages
                     ? 'border-red-500 ring-1 ring-red-500/30'
-                    : 'border-zinc-200 dark:border-white/10 focus-within:border-[#5D5FEF] focus-within:ring-1 focus-within:ring-[#5D5FEF] dark:focus-within:border-[#6366F1] dark:focus-within:ring-[#6366F1]'
+                    : 'border-[var(--ws-border)] dark:border-white/10 focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:focus-within:border-[#6366F1] dark:focus-within:ring-1 dark:focus-within:ring-[#6366F1]'
                 }`}
               >
                 <div className="flex flex-1 items-center justify-between min-w-0">
@@ -3515,7 +3515,7 @@ const renderLightboxModal = () => {
           </div>
 
           {/* Footer */}
-          <div className="mt-8 flex items-center justify-between pt-2">
+          <div className="mt-8 flex items-center justify-between border-t border-[var(--ws-border)] pt-4 dark:border-white/10">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">
               Takes about 1–2 minutes
             </span>

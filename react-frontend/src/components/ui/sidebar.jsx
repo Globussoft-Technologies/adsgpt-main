@@ -233,7 +233,7 @@ function Sidebar({
 
   return (
     <div
-      className="group peer text-sidebar-foreground"
+      className="group peer text-sidebar-foreground relative z-[60]"
       data-state={state}
       data-collapsible={state === 'collapsed' ? collapsible : ''}
       data-variant={variant}

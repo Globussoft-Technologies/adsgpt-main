@@ -917,17 +917,25 @@ html:not(.dark) {
 }
 
 html:not(.dark) .lm-sidebar-surface {
-  --sidebar-nav-active-bg: rgba(88, 103, 235, 0.1);
+  --sidebar-nav-active-bg: linear-gradient(
+    100deg,
+    rgba(2, 168, 164, 0.11) 0%,
+    rgba(88, 103, 235, 0.10) 100%
+  );
   --sidebar-nav-hover-bg: color-mix(in srgb, var(--ws-surface-hover) 76%, rgba(88, 103, 235, 0.05));
-  --sidebar-nav-accent: #5867eb;
+  --sidebar-nav-accent: linear-gradient(180deg, #15dcff 0%, #5e66f5 100%);
   color: var(--ws-text-primary);
   font-family: 'Public Sans', sans-serif;
-  /* Flat neutral surface shared with the Light Mode workspace. */
-  background: var(--ws-surface) !important;
+  background: linear-gradient(
+    175deg,
+    #ffffff 0%,
+    #faf9f7 55%,
+    #f5f3f0 100%
+  ) !important;
   /* Right-edge shadow removed so the divider line is crisp without extra thickness or blur */
   box-shadow: none;
-  /* No decorative top accent in the flat Light Mode treatment. */
-  border-top: 0;
+  border-top: 2px solid transparent;
+  background-clip: padding-box;
   position: relative;
 }
 
@@ -1474,14 +1482,10 @@ html:not(.dark) .lm-sidebar-surface .sidebar-expand-handle {
   background: #f5f3ee;
   color: #6b7280;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+  cursor: pointer;
 }
 
-html:not(.dark) .lm-sidebar-surface .sidebar-expand-hitarea,
-html:not(.dark) .lm-sidebar-surface .sidebar-expand-hitarea:hover {
-  background: transparent;
-}
-
-html:not(.dark) .lm-sidebar-surface .sidebar-expand-hitarea:hover .sidebar-expand-handle {
+html:not(.dark) .lm-sidebar-surface .sidebar-expand-handle:hover {
   border-color: rgba(88, 103, 235, 0.28);
   background: #ffffff;
   color: var(--lm-accent-violet);
@@ -1492,14 +1496,10 @@ html:not(.dark) .lm-sidebar-surface .sidebar-expand-hitarea:hover .sidebar-expan
   background: #1e1e1e;
   color: #9ca3af;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.38);
+  cursor: pointer;
 }
 
-.dark .lm-sidebar-surface .sidebar-expand-hitarea,
-.dark .lm-sidebar-surface .sidebar-expand-hitarea:hover {
-  background: transparent;
-}
-
-.dark .lm-sidebar-surface .sidebar-expand-hitarea:hover .sidebar-expand-handle {
+.dark .lm-sidebar-surface .sidebar-expand-handle:hover {
   border-color: rgba(255, 255, 255, 0.22);
   background: #282828;
   color: #ffffff;
@@ -1800,14 +1800,9 @@ html:not(.dark) [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-
     height: 36px;
   }
 
-  [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-expand-hitarea {
-    width: 36px;
-    height: 36px;
-  }
-
   [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-expand-handle {
-    width: 20px;
-    height: 24px;
+    width: 22px;
+    height: 26px;
   }
 
   [data-sidebar-nav-expanded='false'] .lm-sidebar-surface .sidebar-nav-item--compact {
@@ -3988,23 +3983,23 @@ html:not(.dark) body .adfactory-brand-select-popover [data-slot='command-item']:
   background: var(--ws-surface-hover) !important;
 }
 
-/* AI Creatives custom form: keep light-mode fields and panel edges crisp white. */
+/* AI Creatives custom form: use the shared warm Light Mode surface hierarchy. */
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-shell {
-  background: #ffffff !important;
+  background: var(--ws-surface) !important;
   border: 1px solid var(--ws-border) !important;
   box-shadow: var(--ws-shadow-md) !important;
   --tw-ring-shadow: 0 0 #0000 !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-prompt-card {
-  background: #ffffff !important;
-  border: 1px solid #CFCDD9 !important;
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
   box-shadow: none !important;
   --tw-ring-shadow: 0 0 #0000 !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-reference-card {
-  background: #ffffff !important;
+  background: var(--ws-surface) !important;
   border: 1px solid var(--ws-border) !important;
   box-shadow: var(--ws-shadow-sm) !important;
   --tw-ring-shadow: 0 0 #0000 !important;
@@ -4016,8 +4011,8 @@ html:not(.dark) body .adcreative-custom-form .adcreative-custom-prompt-card:focu
 }
 
 html:not(.dark) body .adcreative-custom-form {
-  --adcreative-text-field-bg: #ffffff;
-  --adcreative-text-field-border: #CFCDD9;
+  --adcreative-text-field-bg: var(--ws-surface-control);
+  --adcreative-text-field-border: var(--ws-border);
   --adcreative-text-field-focus-border: #5867EB;
   --adcreative-text-field-shadow: none;
 }
@@ -4025,25 +4020,25 @@ html:not(.dark) body .adcreative-custom-form {
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-text-input {
   color: #1F1D29 !important;
   caret-color: #1F1D29 !important;
-  background: #ffffff !important;
-  border: 1px solid #CFCDD9 !important;
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
   box-shadow: none !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-text-input:focus {
-  background: #ffffff !important;
+  background: var(--ws-surface-control) !important;
   border-color: #5867EB !important;
   box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-upload-field {
-  background: #ffffff !important;
-  border: 1px solid #CFCDD9 !important;
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
   box-shadow: none !important;
 }
 
 html:not(.dark) body .adcreative-custom-form .adcreative-custom-competitor {
-  background: #ffffff !important;
+  background: var(--ws-surface-control) !important;
   box-shadow: none !important;
 }
 
@@ -4051,10 +4046,10 @@ html:not(.dark) body .adcreative-custom-form .adcreative-custom-competitor:hover
   background: var(--ws-surface-hover) !important;
 }
 
-/* Ad Creative field system: clean white fields with no inner tint */
+/* Ad Creative field system: shared warm control surfaces with clear focus. */
 html:not(.dark) body .adcreative-field-system {
-  --adcreative-field-bg: #ffffff;
-  --adcreative-field-border: #CFCDD9;
+  --adcreative-field-bg: var(--ws-surface-control);
+  --adcreative-field-border: var(--ws-border);
   --adcreative-field-focus-border: #5867EB;
   --adcreative-field-shadow: none;
 }
@@ -4064,8 +4059,8 @@ html:not(.dark) body .adcreative-field-system textarea:not(.bg-transparent):not(
 html:not(.dark) body .adcreative-field-system select {
   color: #1F1D29 !important;
   caret-color: #1F1D29 !important;
-  background: #ffffff !important;
-  border: 1px solid #CFCDD9 !important;
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
   box-shadow: none !important;
   --tw-ring-shadow: 0 0 #0000 !important;
 }
@@ -4073,14 +4068,14 @@ html:not(.dark) body .adcreative-field-system select {
 html:not(.dark) body .adcreative-field-system input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([class*='bg-transparent']):focus,
 html:not(.dark) body .adcreative-field-system textarea:not(.bg-transparent):not([class*='bg-transparent']):focus,
 html:not(.dark) body .adcreative-field-system select:focus {
-  background: #ffffff !important;
+  background: var(--ws-surface-control) !important;
   border-color: #5867EB !important;
   box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
 }
 
 html:not(.dark) body .adcreative-field-system .adcreative-composed-field {
-  background: #ffffff !important;
-  border: 1px solid #CFCDD9 !important;
+  background: var(--ws-surface-control) !important;
+  border: 1px solid var(--ws-border) !important;
   box-shadow: none !important;
   --tw-ring-shadow: 0 0 #0000 !important;
 }
@@ -4218,12 +4213,16 @@ html:not(.dark) .light-ambient-ui-layer {
   position: relative;
   z-index: 0;
   isolation: isolate;
-  background: var(--ws-bg) !important;
+  background: transparent !important;
 }
 
 html:not(.dark) .light-ambient-ui-layer::before,
 html:not(.dark) .light-ambient-ui-layer::after {
-  display: none;
+  content: '';
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 9999px;
 }
 
 /* Ads Manager keeps its cyan/indigo upper glow and lavender lower wave. */
@@ -4688,6 +4687,12 @@ html:not(.dark) .light-ambient-ui-layer > * {
   z-index: 1;
 }
 
+[data-slot='sidebar'],
+html:not(.dark) .light-ambient-ui-layer > [data-slot='sidebar'] {
+  position: relative;
+  z-index: 60 !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html:not(.dark) .light-ambient-ui-layer::after {
     animation: none;
@@ -4710,14 +4715,6 @@ html:not(.dark) .describe-brand-popover .describe-brand-cta-input:focus {
   box-shadow: 0 0 0 3px var(--ws-input-focus-ring) !important;
 }
 
-/* Flat Light Mode canvas: decorative page and chrome gradients are disabled.
-   Functional gradients in actions, progress, data, and media remain intact. */
-html:not(.dark) .lm-sidebar-surface::before,
-html:not(.dark) .adfactory-v2-surface::before,
-html:not(.dark) .lm-greeting-ambient::before {
-  display: none;
-}
-
 /* Keep the active Ad Copy CTA popover aligned with the workspace Light Mode controls. */
 html:not(.dark) .adcopy-cta-popover .adcopy-cta-input {
   background: var(--ws-surface-control) !important;
@@ -4730,28 +4727,39 @@ html:not(.dark) .adcopy-cta-popover .adcopy-cta-input:focus {
   box-shadow: 0 0 0 3px var(--ws-input-focus-ring) !important;
 }
 
-/* AdVideo uses several page-specific card primitives. Keep their Light Mode
-   surfaces just warmer than the global card token without touching actions,
-   artwork, or Dark Mode. */
+/* AdVideo workflow cards share the finalized Ad Creative Light Mode hierarchy
+   without touching artwork, media overlays, actions, or Dark Mode. */
+html:not(.dark) .advideo-ui-layer {
+  --advideo-control-surface: #F7F7F8;
+  --advideo-dropdown-surface: #ECEDEF;
+  --advideo-dropdown-hover: #E3E5E8;
+  --advideo-field-border: #D6D8DC;
+}
+
+/* Product B-roll and Avatar Ads share one stable split-card footprint. Content
+   scrolls inside the form column; selected media fills the preview column. */
+.advideo-split-card {
+  height: auto;
+}
+
+@media (min-width: 640px) {
+  .advideo-split-card {
+    height: min(640px, 85vh);
+    max-height: 85vh;
+  }
+}
+
 html:not(.dark) .advideo-ui-layer :is(
   .workspace-card,
+  .advideo-workflow-card,
   .rounded-\[30px\].bg-white\/70,
   [data-slot="card"],
   .rounded-3xl.border.bg-white,
   .rounded-2xl.border.bg-white,
   .rounded-xl.border.bg-white
 ) {
-  background-color: var(--ws-surface-header) !important;
+  background-color: var(--ws-surface) !important;
   border-color: var(--ws-border) !important;
-}
-
-html:not(.dark) .advideo-ugc-setup-card {
-  background-color: #FCFAF7 !important;
-  border-color: #DDD7CD !important;
-  box-shadow:
-    0 20px 40px rgba(80, 70, 58, 0.08),
-    0 8px 16px rgba(80, 70, 58, 0.05),
-    0 2px 6px rgba(80, 70, 58, 0.03) !important;
 }
 
 /* ── Ad Factory V2 Primary Button & Controls ── */
@@ -4988,11 +4996,132 @@ html:not(.dark) .product-broll-form .product-broll-placeholder-dropdown span {
   opacity: 1 !important;
 }
 
+/* Product B-roll has several control primitives (native inputs, Radix selects,
+   and BrandSearch). Force one consistent Light Mode field system locally so
+   global shared-control rules cannot give them different surfaces. */
+html:not(.dark) body .advideo-ui-layer .product-broll-form :is(
+  .product-broll-control,
+  [data-slot='select-trigger'],
+  .brand_select_from_adfactory [data-slot='command']
+) {
+  background-color: #ECEDEF !important;
+  background-image: none !important;
+  background: #ECEDEF !important;
+  border: 1px solid #D6D8DC !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) body .advideo-ui-layer .product-broll-form :is(
+  .product-broll-control,
+  [data-slot='select-trigger'],
+  .brand_select_from_adfactory [data-slot='command']
+):hover {
+  background-color: #E3E5E8 !important;
+  background: #E3E5E8 !important;
+}
+
+html:not(.dark) body .advideo-ui-layer .product-broll-form .product-broll-control:focus-within,
+html:not(.dark) body .advideo-ui-layer .product-broll-form [data-slot='select-trigger']:focus-visible,
+html:not(.dark) body .advideo-ui-layer .product-broll-form .brand_select_from_adfactory [data-slot='command']:focus-within {
+  background-color: #ECEDEF !important;
+  background: #ECEDEF !important;
+  border-color: var(--ws-input-focus-border) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring) !important;
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+html:not(.dark) body .advideo-ui-layer .product-broll-form [data-slot='select-trigger'][data-state='open'] {
+  background-color: #ECEDEF !important;
+  background: #ECEDEF !important;
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 2px rgba(88, 103, 235, 0.14) !important;
+}
+
+/* AI Ads analysis fields use the shared warm-neutral Light Mode focus treatment. */
+html:not(.dark) body .advideo-ui-layer .advideo-ai-analysis-field:not(.border-red-500):focus-within {
+  border-color: var(--ws-input-focus-border) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring) !important;
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+/* Avatar Ads mirrors Product B-roll's control hierarchy while keeping all
+   overrides local to the initial Avatar form. */
+html:not(.dark) body .advideo-ui-layer .advideo-avatar-form :is(
+  .advideo-avatar-control,
+  .brand_select_from_adfactory [data-slot='command']
+) {
+  background-color: #ECEDEF !important;
+  background-image: none !important;
+  background: #ECEDEF !important;
+  border: 1px solid #D6D8DC !important;
+  box-shadow: none !important;
+}
+
+html:not(.dark) body .advideo-ui-layer .advideo-avatar-form :is(
+  .advideo-avatar-control,
+  .brand_select_from_adfactory [data-slot='command']
+):hover {
+  background-color: #E3E5E8 !important;
+  background: #E3E5E8 !important;
+}
+
+html:not(.dark) body .advideo-ui-layer .advideo-avatar-form .advideo-avatar-control:focus-within,
+html:not(.dark) body .advideo-ui-layer .advideo-avatar-form .advideo-avatar-control:focus-visible,
+html:not(.dark) body .advideo-ui-layer .advideo-avatar-form .advideo-avatar-control[data-state='open'],
+html:not(.dark) body .advideo-ui-layer .advideo-avatar-form .brand_select_from_adfactory [data-slot='command']:focus-within {
+  background-color: #ECEDEF !important;
+  background: #ECEDEF !important;
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
+}
+
+html:not(.dark) body .advideo-ui-layer .advideo-avatar-form .advideo-avatar-dropdown {
+  border-color: #C8CBD2 !important;
+  box-shadow: 0 1px 2px rgba(31, 29, 41, 0.04) !important;
+}
+
+html:not(.dark) body .advideo-ui-layer .advideo-avatar-form .advideo-avatar-dropdown:hover {
+  background: #E3E5E8 !important;
+  border-color: #B9BEC7 !important;
+}
+
+html:not(.dark) body .advideo-ui-layer .advideo-avatar-form .advideo-avatar-dropdown:focus-visible,
+html:not(.dark) body .advideo-ui-layer .advideo-avatar-form .advideo-avatar-dropdown[data-state='open'] {
+  background: #ECEDEF !important;
+  border-color: #5867EB !important;
+  box-shadow: 0 0 0 2px rgba(88, 103, 235, 0.14) !important;
+}
+
+html:not(.dark) .advideo-avatar-segmented > button + button {
+  position: relative;
+}
+
+html:not(.dark) .advideo-avatar-segmented > button + button::before {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: -2px;
+  width: 1px;
+  content: '';
+  background: #D0D3D9;
+}
+
 .dark .product-broll-form input::placeholder,
 .dark .product-broll-form .product-broll-placeholder-dropdown span {
   color: rgba(255, 255, 255, 0.72) !important;
   font-weight: 450 !important;
   opacity: 1 !important;
+}
+
+/* Recreate Ad upload fields use the shared warm-neutral Light Mode focus
+   treatment instead of the stronger indigo ring used for selected actions. */
+html:not(.dark) .advideo-recreate-card .advideo-recreate-field:not(.border-red-500):focus-within {
+  border-color: var(--ws-input-focus-border) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring) !important;
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
 }
 
 
@@ -5022,16 +5151,39 @@ html:not(.dark) .product-broll-form .product-broll-placeholder-dropdown span {
 
 
 /* ── AdCreative Setup Modal Fields & Theming ────────────────────────────── */
-/* Light Mode: Crisp White Fields */
+/* Keep every Ad Creative setup card on the exact same Light Mode surface as
+   the application sidebar, regardless of older generic rounded-card rules. */
+html:not(.dark) .lm-sidebar-surface,
+html:not(.dark) .adcreative-setup-modal {
+  background-color: var(--ws-surface) !important;
+  background: var(--ws-surface) !important;
+}
+
+/* Ad Creative preview: reduce the yellow cast without changing the global
+   Light Mode control token. Remove this scoped override to revert the test. */
+html:not(.dark) .adcreative-setup-modal {
+  --ws-surface-control: #F7F6F4;
+}
+
+/* Light Mode: warm fields aligned with the application surface palette. */
 html:not(.dark) .adcreative-setup-modal input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([class*='bg-transparent']),
 html:not(.dark) .adcreative-setup-modal textarea:not(.bg-transparent):not([class*='bg-transparent']),
 html:not(.dark) .adcreative-setup-modal .adcreative-white-input,
 html:not(.dark) .adcreative-setup-modal .adcreative-field-white,
 html:not(.dark) .adcreative-setup-modal .adcreative-prompt-card,
-html:not(.dark) .templates-search-input,
-html:not(.dark) input.templates-search-input,
-html:not(.dark) input[placeholder*="Search all templates"],
-html:not(.dark) input[placeholder*="Search all templates…"],
+html:not(.dark) .adcreative-setup-modal .templates-search-input,
+html:not(.dark) .adcreative-setup-modal input.templates-search-input,
+html:not(.dark) .adcreative-setup-modal input[placeholder*="Search all templates"],
+html:not(.dark) .adcreative-setup-modal input[placeholder*="Search all templates…"] {
+  background-color: var(--ws-surface-control) !important;
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-border) !important;
+  color: #1F1D29 !important;
+  caret-color: #1F1D29 !important;
+  box-shadow: none !important;
+}
+
+/* Keep the existing Lifestyle/product setup treatment outside Custom Ads. */
 html:not(.dark) input[placeholder*="Enter your Product Name"],
 html:not(.dark) input[placeholder*="Enter your Brand Name"],
 html:not(.dark) textarea[placeholder*="Enter your Product Description"],
@@ -5044,30 +5196,38 @@ html:not(.dark) textarea[placeholder*="Enter your Brand Description"] {
   box-shadow: none !important;
 }
 
-html:not(.dark) .templates-search-input,
-html:not(.dark) input.templates-search-input,
-html:not(.dark) input[placeholder*="Search all templates"],
-html:not(.dark) input[placeholder*="Search all templates…"] {
-  border-color: #E2E1E8 !important;
+html:not(.dark) .adcreative-setup-modal .templates-search-input,
+html:not(.dark) .adcreative-setup-modal input.templates-search-input,
+html:not(.dark) .adcreative-setup-modal input[placeholder*="Search all templates"],
+html:not(.dark) .adcreative-setup-modal input[placeholder*="Search all templates…"] {
+  border-color: var(--ws-border) !important;
 }
 
 html:not(.dark) .adcreative-setup-modal input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([class*='bg-transparent']):focus,
 html:not(.dark) .adcreative-setup-modal textarea:not(.bg-transparent):not([class*='bg-transparent']):focus,
 html:not(.dark) .adcreative-setup-modal .adcreative-white-input:focus,
-html:not(.dark) .templates-search-input:focus,
-html:not(.dark) input.templates-search-input:focus,
-html:not(.dark) input[placeholder*="Search all templates"]:focus,
-html:not(.dark) input[placeholder*="Search all templates…"]:focus {
-  background-color: #ffffff !important;
-  background: #ffffff !important;
-  border-color: #5867EB !important;
-  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
+html:not(.dark) .adcreative-setup-modal .templates-search-input:focus,
+html:not(.dark) .adcreative-setup-modal input.templates-search-input:focus,
+html:not(.dark) .adcreative-setup-modal input[placeholder*="Search all templates"]:focus,
+html:not(.dark) .adcreative-setup-modal input[placeholder*="Search all templates…"]:focus {
+  background-color: var(--ws-surface-control) !important;
+  background: var(--ws-surface-control) !important;
+  border-color: var(--ws-input-focus-border) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring) !important;
 }
 
 html:not(.dark) .adcreative-setup-modal .adcreative-field-white:focus-within,
 html:not(.dark) .adcreative-setup-modal .adcreative-prompt-card:focus-within {
-  border-color: #5867EB !important;
-  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.16) !important;
+  border-color: var(--ws-input-focus-border) !important;
+  box-shadow: 0 0 0 2px var(--ws-input-focus-ring) !important;
+}
+
+html:not(.dark) .adcreative-setup-modal :is(input, textarea)[aria-invalid='true']:focus {
+  border-color: #ef4444 !important;
+}
+
+html:not(.dark) .adcreative-setup-modal .adcreative-prompt-card:has(textarea[aria-invalid='true']):focus-within {
+  border-color: #ef4444 !important;
 }
 
 html:not(.dark) .adcreative-setup-modal textarea.bg-transparent,
@@ -5079,6 +5239,19 @@ html:not(.dark) .adcreative-setup-modal textarea[class*="bg-transparent"] {
 }
 
 /* Dark Mode: Sleek Dark Fields */
+html.dark .adcreative-setup-modal {
+  --adcreative-dark-surface: rgba(48, 48, 48, 0.5);
+  --adcreative-dark-control: rgba(144, 146, 148, 0.15);
+  --adcreative-dark-raised: #25252d;
+  --adcreative-dark-popup: #1f1f1f;
+  --adcreative-dark-border: rgba(255, 255, 255, 0.1);
+  --adcreative-dark-field-border: rgba(255, 255, 255, 0.05);
+  --adcreative-dark-border-strong: rgba(255, 255, 255, 0.24);
+
+  background-color: var(--adcreative-dark-surface) !important;
+  border-color: var(--adcreative-dark-border) !important;
+}
+
 html.dark .adcreative-setup-modal input:not([type='file']):not([type='hidden']):not(.bg-transparent):not([type='checkbox']):not([type='radio']):not([class*='bg-transparent']),
 html.dark .adcreative-setup-modal textarea:not(.bg-transparent):not([class*='bg-transparent']),
 html.dark .adcreative-setup-modal .adcreative-white-input,
@@ -5092,9 +5265,9 @@ html.dark input[placeholder*="Enter your Product Name"],
 html.dark input[placeholder*="Enter your Brand Name"],
 html.dark textarea[placeholder*="Enter your Product Description"],
 html.dark textarea[placeholder*="Enter your Brand Description"] {
-  background-color: #1a1a1f !important;
-  background: #1a1a1f !important;
-  border-color: rgba(255, 255, 255, 0.10) !important;
+  background-color: var(--adcreative-dark-control, #18191e) !important;
+  background: var(--adcreative-dark-control, #18191e) !important;
+  border-color: var(--adcreative-dark-field-border, rgba(255, 255, 255, 0.05)) !important;
   color: #ffffff !important;
   caret-color: #ffffff !important;
   box-shadow: none !important;
@@ -5107,16 +5280,34 @@ html.dark .templates-search-input:focus,
 html.dark input.templates-search-input:focus,
 html.dark input[placeholder*="Search all templates"]:focus,
 html.dark input[placeholder*="Search all templates…"]:focus {
-  background-color: #1a1a1f !important;
-  background: #1a1a1f !important;
-  border-color: #5867EB !important;
-  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.25) !important;
+  background-color: var(--adcreative-dark-control, #18191e) !important;
+  background: var(--adcreative-dark-control, #18191e) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: none !important;
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
 }
 
-html.dark .adcreative-setup-modal .adcreative-field-white:focus-within,
+html.dark .adcreative-setup-modal .adcreative-field-white:focus-within {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: none !important;
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
 html.dark .adcreative-setup-modal .adcreative-prompt-card:focus-within {
-  border-color: #5867EB !important;
-  box-shadow: 0 0 0 3px rgba(88, 103, 235, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: none !important;
+  --tw-ring-color: transparent !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+html.dark .adcreative-setup-modal :is(input, textarea)[aria-invalid='true']:focus {
+  border-color: #ef4444 !important;
+}
+
+html.dark .adcreative-setup-modal .adcreative-prompt-card:has(textarea[aria-invalid='true']):focus-within {
+  border-color: #ef4444 !important;
 }
 
 html.dark .adcreative-setup-modal textarea.bg-transparent,

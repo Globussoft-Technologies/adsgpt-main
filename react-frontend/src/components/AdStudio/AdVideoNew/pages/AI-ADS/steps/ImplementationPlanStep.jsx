@@ -273,7 +273,7 @@ const ImplementationPlanStep = ({ canGoBack, onBack, onNext, onClose, onRetryToF
 
 
   return (
-    <div className="relative flex h-full max-h-[100vh] min-h-[500px] rounded-3xl w-screen max-w-[450px] min-w-[450px] flex-col bg-white dark:bg-[#303030]/30 px-1 pt-6 pb-3 md:max-w-[750px] 2xl:max-h-[80vh] 2xl:min-h-[600px] 2xl:max-w-[850px]">
+    <div className="advideo-workflow-card relative flex h-full max-h-[100vh] min-h-[500px] rounded-3xl w-screen max-w-[450px] min-w-[450px] flex-col bg-[var(--ws-surface)] dark:bg-[#303030]/30 px-1 pt-6 pb-3 md:max-w-[750px] 2xl:max-h-[80vh] 2xl:min-h-[600px] 2xl:max-w-[850px]">
       {/* Close Button — disabled until ALL scenes (scripts + images) are
           ready, and during per-scene regen. Only enabled when full session
           is complete, or in error state (so user can dismiss the error). */}

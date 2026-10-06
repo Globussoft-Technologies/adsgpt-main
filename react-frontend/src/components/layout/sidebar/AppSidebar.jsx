@@ -506,19 +506,13 @@ const AppSidebar = () => {
                   type="button"
                   onClick={toggleNavExpanded}
                   aria-label="Expand sidebar"
-                  className={`sidebar-header-control absolute top-1/2 z-20 flex -translate-y-1/2 items-center justify-center transition-colors ${
+                  className={`sidebar-header-control sidebar-expand-handle absolute top-1/2 z-20 flex -translate-y-1/2 items-center justify-center rounded-md cursor-pointer transition-colors ${
                     isMobile
                       ? 'right-0 h-6 w-4 rounded-l-md'
-                      : 'sidebar-expand-hitarea -right-5 h-10 w-10 rounded-md'
+                      : 'right-0 translate-x-1/2 h-[26px] w-[22px]'
                   }`}
                 >
-                  {isMobile ? (
-                    <ChevronsRight className="h-3.5 w-3.5" aria-hidden="true" />
-                  ) : (
-                    <span className="sidebar-expand-handle flex h-[26px] w-[22px] items-center justify-center rounded-md">
-                      <ChevronsRight className="h-3.5 w-3.5" aria-hidden="true" />
-                    </span>
-                  )}
+                  <ChevronsRight className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </ShadcnTooltip>
             </div>

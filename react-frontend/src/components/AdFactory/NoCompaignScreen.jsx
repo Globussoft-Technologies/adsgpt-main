@@ -210,7 +210,7 @@ const NoCompaignScreen = () => {
 
   return (
     <>
-      <div className="brands_new_container relative z-10 flex w-full flex-col sm:pt-[9px] sm:pr-[39px] sm:pb-6 sm:pl-6">
+      <div className="brands_new_container relative z-10 flex h-full min-h-0 w-full flex-1 flex-col sm:pt-[9px] sm:pr-[39px] sm:pl-6">
         {!loading && campaignsList?.length > 0 && (
           <div id="new_campaign_button" className="mb-4 flex shrink-0 justify-end">
             <div className="group w-fit rounded-full bg-gradient-to-b from-black/15 to-black/5 p-[1px] dark:from-white/40 dark:to-white/10">
@@ -255,7 +255,7 @@ const NoCompaignScreen = () => {
             </div>
           </div>
         ) : (
-          <div className="scrollbar-thin h-full max-h-[calc(100svh-152px)] overflow-y-auto pr-3 sm:max-h-[calc(100svh-196px)] sm:pr-4 2xl:max-h-[calc(100svh-216px)]">
+          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pr-3 pb-8 sm:pr-4">
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {campaignsList?.map((campaign) => (
                 <div

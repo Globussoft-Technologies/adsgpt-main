@@ -162,25 +162,29 @@ const CloneYourselfPage = ({ handleGenerate }) => {
               </p>
             </div>
 
-            <div className="grid min-h-0 w-full flex-1 grid-cols-2 gap-2">
+            <div className="grid min-h-0 w-full flex-1 grid-cols-2 gap-4">
               {/* Use Camera */}
               <button
                 onClick={() => setStep('face-capture')}
-                className="group relative h-full overflow-hidden rounded-2xl border-2 bg-[#1c1c1c] transition hover:border-blue-500"
+                className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-3xl border border-[var(--ws-border)] bg-gray-100 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl active:scale-[0.99] dark:border-white/10 dark:bg-[#1c1c1c]"
               >
                 <img
                   src={webcamPlaceholderImg}
                   alt="Use Camera"
-                  className="h-[120%] w-full object-cover transition-opacity duration-300 group-hover:opacity-0"
+                  className="h-full w-full object-cover scale-[1.08] transition-all duration-500 ease-out group-hover:scale-112 group-hover:opacity-0"
                 />
                 <img
                   src={webcamImgGif}
                   alt="Use Camera Animation"
-                  className="absolute inset-0 h-[120%] w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                  className="absolute inset-0 h-full w-full object-cover scale-[1.08] opacity-0 transition-all duration-500 ease-out group-hover:scale-112 group-hover:opacity-100"
                 />
-                <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent" />
-                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 transform">
-                  <span className="rounded-full bg-white px-6 py-2 text-xs font-semibold whitespace-nowrap text-black 2xl:px-8 2xl:py-2.5 2xl:text-base">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent transition-opacity duration-300 group-hover:opacity-95" />
+
+                {/* Dedicated hover border overlay */}
+                <div className="pointer-events-none absolute inset-0 z-30 rounded-3xl border-2 border-transparent transition-all duration-300 group-hover:border-[#5867EB] group-hover:shadow-[0_0_20px_rgba(88,103,235,0.35)] dark:group-hover:border-white dark:group-hover:shadow-[0_0_20px_rgba(255,255,255,0.2)]" />
+
+                <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 transform transition-transform duration-300 group-hover:scale-105">
+                  <span className="rounded-full bg-white px-6 py-2 text-xs font-semibold whitespace-nowrap text-black shadow-md 2xl:px-8 2xl:py-2.5 2xl:text-base">
                     Use Camera
                   </span>
                 </div>
@@ -189,20 +193,24 @@ const CloneYourselfPage = ({ handleGenerate }) => {
               {/* Upload your own images */}
               <button
                 onClick={() => setStep('upload-images')}
-                className="group relative flex h-full flex-col items-center justify-center overflow-hidden rounded-2xl border-2 bg-gray-50 transition hover:border-blue-500 hover:bg-gray-100 dark:bg-[#1c1c1c] dark:hover:bg-[#1c1c1c]/80"
+                className="group relative flex h-full cursor-pointer flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl border border-[var(--ws-border)] bg-gray-50 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl active:scale-[0.99] dark:border-white/10 dark:bg-[#1c1c1c]"
               >
                 <img
                   src={avatarUploadBgImg}
-                  className="absolute right-1/4 z-10 h-auto w-62.5 max-w-[70%] -translate-y-6 transform rounded-2xl object-cover"
+                  className="absolute right-1/4 z-10 h-auto w-62.5 max-w-[70%] -translate-y-6 transform rounded-2xl object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                   alt=""
                 />
                 <img
                   src={avatarUploadImg}
-                  className="absolute left-1/3 z-20 h-auto w-52.5 max-w-[60%] rounded-2xl object-cover"
+                  className="absolute left-1/3 z-20 h-auto w-52.5 max-w-[60%] rounded-2xl object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                   alt=""
                 />
-                <div className="absolute inset-0 bg-linear-to-t from-[#0f0f0f] via-[#0f0f0f]/10 to-transparent" />
-                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 transform font-semibold whitespace-nowrap text-white 2xl:text-xl">
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f0f]/70 via-zinc-200/30 to-transparent transition-opacity duration-300 group-hover:opacity-95 dark:from-[#0f0f0f] dark:via-[#0f0f0f]/0" />
+
+                {/* Dedicated hover border overlay */}
+                <div className="pointer-events-none absolute inset-0 z-30 rounded-3xl border-2 border-transparent transition-all duration-300 group-hover:border-[#5867EB] group-hover:shadow-[0_0_20px_rgba(88,103,235,0.35)] dark:group-hover:border-white dark:group-hover:shadow-[0_0_20px_rgba(255,255,255,0.2)]" />
+
+                <div className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 transform font-semibold whitespace-nowrap text-white transition-transform duration-300 group-hover:scale-105 2xl:text-xl">
                   Upload your own images
                 </div>
               </button>

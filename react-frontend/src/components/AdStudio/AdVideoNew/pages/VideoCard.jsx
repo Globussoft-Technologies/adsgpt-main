@@ -128,44 +128,49 @@ export default function VideoCard({
   const activeVideoSrc = resolveVideoUrl(activeVideoUrl || primaryVideoUrl);
   const [showControls, setShowControls] = useState(false);
   const [smoothProgress, setSmoothProgress] = useState(() => {
-    if (item?.status !== 'processing') return 100;
-    const serverPct = typeof item?.promptPercentage === 'number' && item.promptPercentage > 0 ? item.promptPercentage : 10;
+    if (item?.status === 'completed') return 100;
+    if (typeof item?.promptPercentage === 'number' && item.promptPercentage > 0) {
+      return item.promptPercentage;
+    }
     let localPct = 0;
-    if (item?._id) {
+    if (item?._id && item?.status === 'processing') {
       try {
         const stored = Number(localStorage.getItem(`video_progress_${item._id}`));
-        if (Number.isFinite(stored) && stored > 0) {
+        if (Number.isFinite(stored) && stored > 0 && stored < 95) {
           localPct = stored;
         }
       } catch (err) {
         void err;
       }
     }
-    let elapsedPct = 0;
-    if (item?.createdAt) {
-      const elapsedSec = (Date.now() - new Date(item.createdAt).getTime()) / 1000;
-      if (elapsedSec > 0) {
-        elapsedPct = Math.min(92, Math.round(10 + Math.pow(elapsedSec / 60, 0.7) * 70));
-      }
-    }
-    return Math.max(10, serverPct, localPct, elapsedPct);
+    if (localPct > 0) return localPct;
+    return 10;
   });
 
   useEffect(() => {
-    if (typeof item?.promptPercentage === 'number' && item.promptPercentage > 0) {
-      setSmoothProgress((prev) => {
-        const next = Math.max(prev, item.promptPercentage);
-        if (item?._id) {
-          try {
-            localStorage.setItem(`video_progress_${item._id}`, String(next));
-          } catch (err) {
-            void err;
-          }
+    if (item?.status === 'completed') {
+      setSmoothProgress(100);
+      if (item?._id) {
+        try {
+          localStorage.removeItem(`video_progress_${item._id}`);
+        } catch (err) {
+          void err;
         }
-        return next;
-      });
+      }
+      return;
     }
-  }, [item?.promptPercentage, item?._id]);
+
+    if (typeof item?.promptPercentage === 'number' && item.promptPercentage > 0) {
+      setSmoothProgress(item.promptPercentage);
+      if (item?._id && item?.status === 'processing') {
+        try {
+          localStorage.setItem(`video_progress_${item._id}`, String(item.promptPercentage));
+        } catch (err) {
+          void err;
+        }
+      }
+    }
+  }, [item?.promptPercentage, item?._id, item?.status]);
 
   useEffect(() => {
     if (item?.status !== 'processing') {

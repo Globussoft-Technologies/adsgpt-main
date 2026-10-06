@@ -307,7 +307,7 @@ export function TemplatesTrigger({ controller }) {
       className={`flex h-9 items-center justify-center gap-1.5 rounded-[11px] border py-1 pr-2.5 pl-1.5 text-[12px] font-medium shadow-[0_1px_2px_rgba(31,29,41,0.05)] transition-[background-color,border-color,color] ${
         open
           ? 'border-[#C9C4DF] bg-[#F3F2F8] text-[#675BCC] dark:border-indigo-300/30 dark:bg-indigo-950/40 dark:text-indigo-300'
-          : 'border-[#D9D6E3] bg-white/75 text-[#675BCC] hover:border-[#CBC6DE] hover:bg-[#F7F6FA] dark:border-white/12 dark:bg-white/[0.04] dark:text-indigo-300 dark:hover:border-indigo-300/25 dark:hover:bg-indigo-950/30'
+          : 'border-[var(--ws-border)] bg-[#F5F5F6] text-[#675BCC] hover:border-[var(--ws-border-strong)] hover:bg-[#ECEDEF] dark:border-white/12 dark:bg-white/[0.04] dark:text-indigo-300 dark:hover:border-indigo-300/25 dark:hover:bg-indigo-950/30'
       }`}
       title="Templates"
     >
@@ -465,7 +465,7 @@ export function TemplatesPanel({ controller }) {
               Motion.div, which can finish a frame off from the height
               animation and produce a tiny "settle" at the end. */}
           <div
-            className="mb-3 overflow-hidden rounded-[20px] border border-[#CFCDD9] bg-[#F3F3F6] dark:border-white/10 dark:bg-[#1a1a1f]"
+            className="mb-3 overflow-hidden rounded-[20px] border border-[var(--ws-border)] bg-[#F5F5F6] dark:border-[var(--adcreative-dark-border)] dark:bg-[var(--adcreative-dark-control)]"
             style={{ height: panelHeight }}
           >
             {state !== 'loaded' && (
@@ -509,14 +509,14 @@ export function TemplatesPanel({ controller }) {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search all templates…"
-                    className="templates-search-input adcreative-white-input h-[32px] w-full rounded-full border border-[#E2E1E8] !bg-white pl-8 pr-3 text-[12px] text-[#1F1D29] placeholder:text-[#85829A] outline-none transition-all focus:border-[#5867EB] focus:ring-[3px] focus:ring-[#5867EB]/16 dark:border-white/10 dark:!bg-[#1a1a1f] dark:text-white"
+                    className="templates-search-input adcreative-white-input h-[32px] w-full rounded-full border border-[var(--ws-border)] !bg-[var(--ws-surface-control)] pl-8 pr-3 text-[12px] text-[#1F1D29] placeholder:text-[#85829A] outline-none transition-all focus:border-[#5867EB] focus:ring-[3px] focus:ring-[#5867EB]/16 dark:border-[var(--adcreative-dark-border)] dark:!bg-[var(--adcreative-dark-control)] dark:text-white"
                   />
                 </div>
 
                 {/* Two-column content area — fills remaining height */}
                 <div className="min-h-0 flex flex-1">
                   {/* Left rail — template list (scrollable) */}
-                  <div className="w-[176px] shrink-0 border-r border-[#E2E1E8] p-2 flex flex-col dark:border-white/10">
+                  <div className="w-[176px] shrink-0 border-r border-[var(--ws-border)] p-2 flex flex-col dark:border-white/10">
                     {/* Heading reflects what the list is showing */}
                     {(() => {
                       const searching = Boolean(searchQuery?.trim());

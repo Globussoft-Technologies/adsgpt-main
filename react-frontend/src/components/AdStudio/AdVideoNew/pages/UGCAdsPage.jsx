@@ -327,9 +327,9 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   if (step === 1) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <div className="advideo-ugc-setup-card w-full max-w-[520px] rounded-[32px] border border-[#DDD7CD] bg-[#FCFAF7] p-10 shadow-[0_20px_40px_rgba(80,70,58,0.08),0_8px_16px_rgba(80,70,58,0.05),0_2px_6px_rgba(80,70,58,0.03)] backdrop-blur-xl dark:border-white/5 dark:bg-[#18181B]/60 dark:shadow-2xl">
+        <div className="advideo-workflow-card w-full max-w-[520px] rounded-[30px] border border-[var(--ws-border)] bg-[var(--ws-surface)] p-8 sm:p-10 shadow-[var(--ws-shadow-md)] backdrop-blur-xl dark:border-white/10 dark:bg-[#1C1C1F] dark:shadow-none">
           {/* Header */}
-          <div className="relative mb-10 flex items-center justify-center gap-3 text-gray-900 dark:text-white">
+          <div className="relative mb-8 flex items-center justify-center gap-3 text-gray-900 dark:text-white">
             <Clapperboard className="h-6 w-6 text-gray-900 dark:text-white" />
             <h2 className="text-xl font-semibold tracking-tight">Create your UGC ad</h2>
             <button
@@ -341,8 +341,8 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
           </div>
 
           {/* Input */}
-          <div className="flex flex-col gap-4">
-            <label className="text-sm font-medium text-gray-500 dark:text-white/90">Brand Website</label>
+          <div className="flex flex-col gap-3">
+            <label className="text-sm font-medium text-gray-600 dark:text-white/90">Brand Website</label>
             <div className="relative">
               <input
                 type="text"
@@ -352,23 +352,23 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleNext();
                 }}
-                className={`w-full rounded-full border bg-[#F6F2EC] px-6 py-4 text-sm text-gray-900 shadow-inner transition-all placeholder:text-gray-500 focus:ring-1 focus:ring-[#02C8C4]/30 focus:outline-none dark:bg-white/[0.03] dark:text-white dark:placeholder:text-white/20 dark:focus:ring-white/20 ${
+                className={`w-full rounded-full border bg-[var(--advideo-control-surface)] px-6 py-3.5 text-sm text-gray-900 transition-all placeholder:text-gray-500 focus:border-[#5867EB] focus:ring-[3px] focus:ring-[#5867EB]/16 focus:outline-none dark:bg-white/[0.04] dark:text-white dark:placeholder:text-white/30 ${
                   urlError
                     ? 'border-red-500 focus:ring-red-500/30'
-                    : 'border-[#DDD7CD] dark:border-white/10'
+                    : 'border-[var(--ws-border)] dark:border-white/10'
                 }`}
               />
-              <LinkIcon className="absolute top-1/2 right-6 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-white/20" />
+              <LinkIcon className="absolute top-1/2 right-6 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-white/30" />
             </div>
             {urlError && <p className="mt-1 text-xs text-red-400">{urlError}</p>}
           </div>
 
           {/* Footer Buttons */}
-          <div className="mt-10 flex justify-end gap-3">
+          <div className="mt-8 flex justify-end gap-3">
             <button
               onClick={() => setStep(2)}
               disabled={isAnalyzing}
-              className={`rounded-full bg-[#EAE5DC] px-8 py-2.5 text-sm font-medium text-[#7A7369] transition hover:bg-[#DDD7CD] hover:text-[#24211D] dark:bg-white/[0.08] dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white ${
+              className={`rounded-full bg-[var(--ws-surface-control)] px-7 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-[var(--ws-surface-hover)] hover:text-gray-900 disabled:opacity-50 dark:bg-white/[0.08] dark:text-white/70 dark:hover:bg-white/12 dark:hover:text-white ${
                 isAnalyzing ? 'cursor-not-allowed opacity-50' : ''
               }`}
             >
@@ -377,7 +377,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
             <button
               onClick={handleNext}
               disabled={!website || isAnalyzing}
-              className={`rounded-full bg-gray-900 text-white dark:bg-white px-8 py-2.5 text-sm font-bold dark:text-black shadow-lg transition hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] ${
+              className={`flex items-center gap-2 rounded-full bg-gradient-to-r from-[#02C8C4] to-[#5867EB] px-8 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-90 active:scale-[0.98] disabled:opacity-50 dark:from-[#15DCFF] dark:to-[#6b72f8] ${
                 !website || isAnalyzing ? 'cursor-not-allowed opacity-50' : ''
               }`}
             >
@@ -398,7 +398,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      <div className="advideo-ugc-setup-card relative h-full w-full max-w-[1100px] rounded-[32px] border border-[#DDD7CD] bg-[#FCFAF7] pt-6 backdrop-blur-xl sm:px-6 2xl:px-8 2xl:pt-8 dark:border-white/5 dark:bg-[#18181B]/60">
+      <div className="advideo-workflow-card relative h-full w-full max-w-[1100px] rounded-[30px] border border-[var(--ws-border)] bg-[var(--ws-surface)] pt-6 shadow-[var(--ws-shadow-md)] backdrop-blur-xl sm:px-6 2xl:px-8 2xl:pt-8 dark:border-white/10 dark:bg-[#1C1C1F] dark:shadow-none">
         {/* Back Button */}
         {!localRecreateData && (
           <button

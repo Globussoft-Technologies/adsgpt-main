@@ -753,7 +753,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                     : 'h-fit scale-75 2xl:scale-100'
               } ${
                 activePage !== 'ugc' && activePage !== 'clone-ad'
-                  ? 'rounded-[30px] border border-black/5 bg-white/70 shadow-[0_2px_12px_rgba(0,0,0,0.03)] backdrop-blur-md dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none'
+                  ? `advideo-workflow-card ${activePage === 'b-roll' || activePage === 'avatar' ? 'rounded-[24px]' : 'rounded-[30px]'} border border-[var(--ws-border)] bg-[var(--ws-surface)] shadow-[var(--ws-shadow-md)] dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none`
                   : ''
               } ${
                 activePage === 'ai-ads' && currentAIAdsStep === 'details'

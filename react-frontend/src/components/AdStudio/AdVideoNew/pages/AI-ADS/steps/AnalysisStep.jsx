@@ -150,7 +150,7 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
   };
 
   return (
-    <div className="custom-scrollbar relative flex h-full min-w-[450px] w-screen max-w-md sm:max-w-xl shrink-0 flex-col items-center justify-center overflow-y-auto bg-white dark:bg-[#1C1C1F] p-4 sm:p-8 2xl:max-w-[40rem]">
+    <div className="advideo-workflow-card custom-scrollbar relative flex h-full min-w-[450px] w-screen max-w-md sm:max-w-xl shrink-0 flex-col items-center justify-center overflow-y-auto bg-[var(--ws-surface)] dark:bg-[#1C1C1F] p-4 sm:p-8 2xl:max-w-[40rem]">
       {/* Close button */}
       <button onClick={onClose} className="absolute top-6 right-6 text-gray-500 dark:text-white/50 hover:text-black dark:hover:text-white">
         <X className="h-5 w-5" />
@@ -167,7 +167,7 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
             <div className="mb-6">
               <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-white">Transform your ideas into studio-quality videos</label>
               <div
-                className={`relative w-full rounded-xl border bg-gray-100 dark:bg-[#909294]/15 transition-all ${scriptError || brandiqError ? 'border-red-500' : 'border-transparent focus-within:border-white/20'}`}
+                className={`advideo-ai-analysis-field relative w-full rounded-xl border bg-[var(--advideo-control-surface)] dark:bg-[#909294]/15 transition-all ${scriptError || brandiqError ? 'border-red-500' : 'border-[var(--ws-border)] focus-within:border-[#5867EB]'}`}
               >
                 <button
                     type="button"
@@ -258,7 +258,7 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
             <div className="mb-6">
               <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-white">Transform your ideas into studio-quality videos</label>
               <div
-                className={`relative w-full rounded-xl border bg-gray-100 dark:bg-[#909294]/15 transition-all ${scriptError ? 'border-red-500' : 'border-transparent focus-within:border-white/20'}`}
+                className={`advideo-ai-analysis-field relative w-full rounded-xl border bg-[var(--advideo-control-surface)] dark:bg-[#909294]/15 transition-all ${scriptError ? 'border-red-500' : 'border-[var(--ws-border)] focus-within:border-[#5867EB]'}`}
               >
                 <button
                   type="button"

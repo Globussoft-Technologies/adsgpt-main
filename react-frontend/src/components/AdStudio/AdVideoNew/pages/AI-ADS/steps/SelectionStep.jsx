@@ -12,7 +12,7 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
   };
 
   return (
-    <div className="workspace-card scrollbar-hide relative flex h-full w-screen rounded-3xl max-w-sm min-w-[450px] flex-col overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden p-6 sm:max-w-xl md:max-w-2xl 2xl:max-h-[90vh] 2xl:max-w-4xl 2xl:p-12 dark:bg-[#303030]/40">
+    <div className="scrollbar-hide relative flex h-full w-screen max-w-sm min-w-[450px] flex-col overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden p-6 sm:max-w-xl md:max-w-2xl 2xl:max-h-[90vh] 2xl:max-w-4xl 2xl:p-12">
       {/* Header */}
       <div className="relative mb-10 flex items-center justify-center pt-6 text-gray-900 dark:text-white 2xl:mb-12">
         <h2 className="text-base font-semibold sm:text-lg lg:text-xl 2xl:text-[26px]">
@@ -31,10 +31,10 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
         {/* Brand Card */}
         <div
           onClick={() => handleSelect('brand')}
-          className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[22px] border-2 transition-all duration-300 ease-out hover:-translate-y-1 active:scale-[0.99] ${
+          className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[20px] border transition-all duration-300 ease-out hover:-translate-y-1 active:scale-[0.99] ${
             selected === 'brand'
-              ? 'border-indigo-500 dark:border-white ring-2 ring-indigo-500/30 dark:ring-white/30 shadow-[0_12px_30px_rgba(99,102,241,0.35)] dark:shadow-[0_12px_30px_rgba(255,255,255,0.15)] -translate-y-1'
-              : 'border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/40 hover:shadow-xl'
+              ? 'border-[#5867EB] dark:border-white ring-2 ring-[#5867EB]/30 dark:ring-white/30 shadow-[0_12px_30px_rgba(88,103,235,0.25)] dark:shadow-[0_12px_30px_rgba(255,255,255,0.15)] -translate-y-1'
+              : 'border-[var(--ws-border)] dark:border-white/10 hover:border-[#5867EB]/60 dark:hover:border-white/30 hover:shadow-xl'
           }`}
         >
           <img
@@ -54,10 +54,10 @@ const SelectionStep = ({ onNext, onBack, onClose }) => {
         {/* Product Card */}
         <div
           onClick={() => handleSelect('product')}
-          className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[22px] border-2 transition-all duration-300 ease-out hover:-translate-y-1 active:scale-[0.99] ${
+          className={`group relative aspect-5/6 w-full cursor-pointer overflow-hidden rounded-[20px] border transition-all duration-300 ease-out hover:-translate-y-1 active:scale-[0.99] ${
             selected === 'product'
-              ? 'border-indigo-500 dark:border-white ring-2 ring-indigo-500/30 dark:ring-white/30 shadow-[0_12px_30px_rgba(99,102,241,0.35)] dark:shadow-[0_12px_30px_rgba(255,255,255,0.15)] -translate-y-1'
-              : 'border-black/10 dark:border-white/10 hover:border-black/30 dark:hover:border-white/40 hover:shadow-xl'
+              ? 'border-[#5867EB] dark:border-white ring-2 ring-[#5867EB]/30 dark:ring-white/30 shadow-[0_12px_30px_rgba(88,103,235,0.25)] dark:shadow-[0_12px_30px_rgba(255,255,255,0.15)] -translate-y-1'
+              : 'border-[var(--ws-border)] dark:border-white/10 hover:border-[#5867EB]/60 dark:hover:border-white/30 hover:shadow-xl'
           }`}
         >
           <img

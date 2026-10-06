@@ -289,7 +289,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
   const activePreviewImage = userImageSrc || defaultPreview;
 
   return (
-    <div className="grid h-full grid-cols-1 sm:grid-cols-2">
+    <div className="advideo-split-card advideo-product-broll-card grid grid-cols-1 bg-[var(--ws-surface)] sm:grid-cols-2 dark:bg-transparent">
       {/* Preview */}
       <div className="relative flex min-h-[350px] flex-col items-center justify-center overflow-hidden rounded-xl rounded-tr-none rounded-br-none bg-zinc-100 dark:bg-zinc-900/60">
         <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/60 via-black/20 to-transparent p-4 sm:p-6">
@@ -300,17 +300,8 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
 
         {hasUserImage ? (
           <>
-            {/* Ambient Blurred Background */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              <img
-                src={activePreviewImage}
-                alt=""
-                className="h-full w-full scale-125 object-cover opacity-35 blur-2xl dark:opacity-25"
-              />
-            </div>
-
-            {/* Main Foreground Image scaled to fill width or height */}
-            <div className="relative z-[2] flex h-full w-full items-center justify-center p-0">
+            {/* Selected images fill the fixed preview column without resizing the card. */}
+            <div className="absolute inset-0 z-[2] overflow-hidden">
               <img
                 src={activePreviewImage}
                 alt="b-roll-preview"
@@ -319,7 +310,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
                     e.currentTarget.src = defaultPreview;
                   }
                 }}
-                className="h-full w-full object-contain transition-all duration-300"
+                className="h-full w-full object-cover transition-all duration-300"
               />
             </div>
           </>
@@ -336,7 +327,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
       </div>
 
       {/* Form */}
-      <div className="product-broll-form relative flex max-h-[85vh] flex-col gap-3 overflow-y-auto py-5 pr-3 pl-4 text-zinc-900 2xl:gap-4 2xl:py-6 2xl:px-5 dark:text-white [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="product-broll-form relative flex max-h-[85vh] flex-col gap-3 overflow-y-auto bg-[var(--ws-surface)] py-5 pr-3 pl-4 text-zinc-900 2xl:gap-4 2xl:py-6 2xl:px-5 dark:bg-transparent dark:text-white [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <button
           onClick={onClose}
           className="absolute top-3 right-3 z-[50] rounded-full p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
@@ -351,7 +342,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
           <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Brand/product URL or upload image*</label>
           <div
             onPaste={handlePaste}
-            className="flex h-11 w-full items-center gap-2 rounded-full border border-black/10 bg-zinc-50 px-3 text-sm text-zinc-600 transition dark:border-transparent dark:bg-[#909294]/10 dark:text-[#afafaf]"
+            className="product-broll-control flex h-11 w-full items-center gap-2 rounded-full border border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] px-3 text-sm text-zinc-600 transition focus-within:border-[#5867EB] focus-within:ring-[3px] focus-within:ring-[#5867EB]/16 dark:border-transparent dark:bg-[#909294]/10 dark:text-[#afafaf]"
           >
             <div className="flex flex-1 items-center justify-between">
               <input
@@ -430,7 +421,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
               icon={SparkleDark}
               type="b-roll"
               triggerVariant="form-pill"
-              className={`w-full min-w-0 justify-between opacity-100 [&>div]:min-w-0 [&>div>span]:truncate ${!videoModel ? 'product-broll-placeholder-dropdown' : ''}`}
+              className={`w-full min-w-0 justify-between border-[var(--advideo-field-border)]! bg-[var(--advideo-dropdown-surface)]! opacity-100 hover:bg-[var(--advideo-dropdown-hover)]! focus-visible:border-[#5867EB]! focus-visible:ring-[3px]! focus-visible:ring-[#5867EB]/16! dark:border-transparent! dark:bg-[#909294]/10! dark:hover:bg-[#909294]/20! [&>div]:min-w-0 [&>div>span]:truncate ${!videoModel ? 'product-broll-placeholder-dropdown' : ''}`}
               value={videoChatModels.find((o) => o.value === videoModel)}
               onChange={(val) => {
                 if (isVideoModelBlocked(videoChatModels.find((model) => model.value === val), userData)) {
@@ -455,7 +446,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
               icon={TimerDarkLogo}
               type="b-roll"
               triggerVariant="form-pill"
-              className={`w-full min-w-0 justify-between opacity-100 [&>div]:min-w-0 [&>div>span]:truncate ${!selectedVideoDuration ? 'product-broll-placeholder-dropdown' : ''}`}
+              className={`w-full min-w-0 justify-between border-[var(--advideo-field-border)]! bg-[var(--advideo-dropdown-surface)]! opacity-100 hover:bg-[var(--advideo-dropdown-hover)]! focus-visible:border-[#5867EB]! focus-visible:ring-[3px]! focus-visible:ring-[#5867EB]/16! dark:border-transparent! dark:bg-[#909294]/10! dark:hover:bg-[#909294]/20! [&>div]:min-w-0 [&>div>span]:truncate ${!selectedVideoDuration ? 'product-broll-placeholder-dropdown' : ''}`}
               value={configuredDurationOptions.find((o) => o.value === selectedVideoDuration)}
               onChange={(value) => {
                 setVideoDuration(value);
@@ -496,14 +487,14 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
                     }}
                     className={`flex h-11 items-center gap-2 rounded-full border px-4 text-xs transition 2xl:text-sm ${
                       isSelected
-                        ? 'border-[#3ad0c8] bg-[#3ad0c8]/15 text-gray-900 shadow-[0_0_12px_rgba(58,208,200,0.15)] dark:bg-[#3ad0c8]/20 dark:text-white'
-                        : 'border-black/10 bg-black/5 text-gray-600 hover:border-[#3ad0c8]/60 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white/60 dark:hover:border-[#3ad0c8]/60 dark:hover:text-white'
+                        ? 'border-[#5867EB] bg-[#5867EB]/10 text-gray-900 shadow-[0_0_0_3px_rgba(88,103,235,0.12)] dark:border-[#3ad0c8] dark:bg-[#3ad0c8]/20 dark:text-white dark:shadow-[0_0_12px_rgba(58,208,200,0.15)]'
+                        : 'border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] text-gray-600 hover:border-[#5867EB]/60 hover:bg-[var(--advideo-dropdown-hover)] hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white/60 dark:hover:border-[#3ad0c8]/60 dark:hover:bg-white/5 dark:hover:text-white'
                     }`}
                   >
                     <AspectRatioPreview
                       ratio={value}
                       filled={isSelected}
-                      className={`h-4 w-4 ${isSelected ? 'text-[#3ad0c8]' : 'text-gray-500 dark:text-white/40'}`}
+                      className={`h-4 w-4 ${isSelected ? 'text-[#5867EB] dark:text-[#3ad0c8]' : 'text-gray-500 dark:text-white/40'}`}
                     />
                     <span className={isSelected ? 'font-semibold' : 'font-medium'}>{label}</span>
                   </button>
@@ -527,26 +518,30 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
         {/* Promotional Info */}
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Promotional Info</label>
-          <input
-            className="h-11 w-full rounded-full border border-black/10 bg-zinc-50 px-4 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
-            placeholder="Enter promotional info/offers"
-            value={promotion}
-            onChange={(e) => setPromotion(e.target.value)}
-          />
+          <div className="product-broll-control flex h-11 w-full items-center rounded-full border border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] transition dark:border-transparent dark:bg-[#909294]/10">
+            <input
+              className="h-full w-full border-none bg-transparent px-4 text-sm text-zinc-800 placeholder:text-zinc-500 outline-none shadow-none 2xl:text-base dark:text-white dark:placeholder:text-[#afafaf]"
+              placeholder="Enter promotional info/offers"
+              value={promotion}
+              onChange={(e) => setPromotion(e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Prompt */}
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Prompt</label>
-          <input
-            className="h-11 w-full rounded-full border border-black/10 bg-zinc-50 px-4 text-sm text-zinc-800 placeholder:text-zinc-500 focus:outline-none 2xl:text-base dark:border-transparent dark:bg-[#909294]/10 dark:text-white dark:placeholder:text-[#afafaf]"
-            placeholder="e.g. white background, aerial drone shot"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
+          <div className="product-broll-control flex h-11 w-full items-center rounded-full border border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] transition dark:border-transparent dark:bg-[#909294]/10">
+            <input
+              className="h-full w-full border-none bg-transparent px-4 text-sm text-zinc-800 placeholder:text-zinc-500 outline-none shadow-none 2xl:text-base dark:text-white dark:placeholder:text-[#afafaf]"
+              placeholder="e.g. white background, aerial drone shot"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
         </div>
 
-        <div className="mt-2 flex flex-col items-end gap-2">
+        <div className="mt-2 flex flex-col items-end gap-2 border-t border-[var(--ws-border)] pt-4 dark:border-white/10">
           {(() => {
             const selectedModel = videoChatModels.find((model) => model.value === videoModel);
             const hasEstimateInputs = Boolean(videoModel && selectedVideoDuration && selectedModel);
