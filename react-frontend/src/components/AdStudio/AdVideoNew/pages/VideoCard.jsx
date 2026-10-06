@@ -82,9 +82,14 @@ export default function VideoCard({
   const [showOverlay, setShowOverlay] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const videoStatus = item?.results?.[0]?.videoStatus;
-  const model = item?.inputs?.model || '';
+  const model = item?.inputs?.model || item?.model || '';
   // console.log("model",model)
-  const isSeedanceModel = ['seedance_v1', 'seedance_v2', 'seedance_fast'].includes(model);
+  const isSeedanceModel =
+    typeof model === 'string' &&
+    (model.toLowerCase().includes('seedance') ||
+      ['seedance_v1', 'seedance_v2', 'seedance_fast', 'seedance-2.5', 'seedance_2.5'].includes(
+        model.toLowerCase()
+      ));
 
   /* ── Onboarding output has no Recreate ────────────────────────────────────
      Both kinds of onboarding clip: `storyboard` (rendered from a concept this
@@ -247,8 +252,9 @@ export default function VideoCard({
   const committedVersion = typeof item?.version === 'number' ? item.version : 0;
   const shownVersion = item?.previewVersion ?? committedVersion;
   const shownResult = item?.results?.[shownVersion] || item?.results?.[0];
-  const canEditAiAdsVoice = isAiAds && item?.status === 'completed';
-  const isVoiceMissing = isAiAds && (shownResult?.videoStatus === 429 || item?.videoStatus === 429);
+  const isSeedance25 = model === 'seedance-2.5' || model === 'Seedance 2.5';
+  const canEditAiAdsVoice = isAiAds && item?.status === 'completed' && !isSeedance25;
+  const isVoiceMissing = canEditAiAdsVoice && (shownResult?.videoStatus === 429 || item?.videoStatus === 429);
   // Idempotent for server results (which keep waterMarkUrl); correct for the
   // socket-appended version (raw url).
   const pickUrl = (r) => (hasPlan8 ? r?.waterMarkUrl || r?.url || item?.cleanVideoUrl : r?.url || item?.cleanVideoUrl);
@@ -256,11 +262,11 @@ export default function VideoCard({
 
   // Point the player at the shown version's URL when it changes.
   useEffect(() => {
-    if (!isAiAds) return;
+    if (!canEditAiAdsVoice) return;
     const u = pickUrl(item?.results?.[shownVersion]);
     if (u) setActiveVideoUrl(u);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAiAds, shownVersion, item?.results, hasPlan8]);
+  }, [canEditAiAdsVoice, shownVersion, item?.results, hasPlan8]);
 
   const handlePreviewVersion = (idx) =>
     dispatch(setAiAdsPreviewVersion({ sessionId: item._id, previewVersion: idx }));
@@ -775,7 +781,7 @@ export default function VideoCard({
   return (
     <div
       className={`my-space-media-card group relative min-h-[250px] overflow-hidden rounded-2xl bg-gray-200 dark:bg-[#1f1f1f] ${
-        isAiAds && item?.status === 'completed' ? 'flex flex-col' : ''
+        canEditAiAdsVoice ? 'flex flex-col' : ''
       }`}
     >
       <InfoTooltip />
@@ -1016,7 +1022,7 @@ export default function VideoCard({
         <>
         <div
           ref={containerRef}
-          className={`relative w-full bg-black ${isAiAds ? 'shrink-0' : 'h-full'}`}
+          className={`relative w-full bg-black ${canEditAiAdsVoice ? 'shrink-0' : 'h-full'}`}
         >
           {!videoLoaded && <div className="absolute inset-0 z-10 animate-pulse bg-gray-200 dark:bg-[#1a1a1a]" />}
           <video
@@ -1026,7 +1032,7 @@ export default function VideoCard({
             className={`w-full cursor-pointer transition-opacity duration-300 ${
               isThisFullscreen
                 ? 'h-full object-contain'
-                : isAiAds
+                : canEditAiAdsVoice
                   ? 'h-auto min-h-[250px] max-h-[800px] object-cover'
                   : 'h-full max-h-[800px] object-cover'
             } ${videoLoaded ? 'opacity-100' : 'opacity-0'} ${
@@ -1087,7 +1093,7 @@ export default function VideoCard({
           )}
 
           {/* AI Ads: voice-regen overlay — the video stays visible underneath */}
-          {isAiAds && item?.regenState === 'processing' && (
+          {canEditAiAdsVoice && item?.regenState === 'processing' && (
             <div role="status" aria-live="polite" className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm">
               <RefreshCw aria-hidden="true" className="animate-spin text-emerald-300" size={28} />
               <div className="text-center">
@@ -1100,7 +1106,7 @@ export default function VideoCard({
           )}
 
           {/* AI Ads: version switcher (only when more than one version exists) */}
-          {isAiAds && !isThisFullscreen && (item?.results?.length || 0) > 1 && (
+          {canEditAiAdsVoice && !isThisFullscreen && (item?.results?.length || 0) > 1 && (
             <VideoVersionControls
               results={item.results}
               shownVersion={shownVersion}
