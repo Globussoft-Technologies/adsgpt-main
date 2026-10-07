@@ -306,9 +306,9 @@ function RecreateSheet({ template, brand, onClose }) {
     <div
       className="recreate-root fixed inset-0 z-[60] flex items-center justify-center overflow-hidden p-4 sm:p-6"
       style={{
-        // Both themes: onboarding's heavy tint plus a LIGHT 4px blur (user,
-        // 2026-10-06). Kept small on purpose: backdrop blur re-runs every frame
-        // over playing media, and its cost grows with the radius.
+        // Theme-aware scrim (vars below). Light = Ad Library's black/30 + 24px
+        // blur; dark = heavy tint + a small 4px blur, kept small because
+        // backdrop blur re-runs every frame over playing media.
         background: 'var(--rc-scrim)',
         backdropFilter: 'var(--rc-scrim-blur)',
         WebkitBackdropFilter: 'var(--rc-scrim-blur)',
@@ -580,10 +580,11 @@ function RecreateSheet({ template, brand, onClose }) {
             --rc-line: rgba(0,0,0,0.10);
             --rc-line-strong: rgba(0,0,0,0.12);
             --rc-preview: #F3F4F6;
-            /* Backdrop = dark mode's exactly (user, 2026-10-06: Ad Library's
-               black/30 + blur showed too much of the page behind). */
-            --rc-scrim: rgba(6,6,8,0.88);
-            --rc-scrim-blur: blur(4px);
+            /* Backdrop follows the theme like Ad Library's ui/dialog.jsx overlay
+               (bg-black/30 + backdrop-blur-xl) — user, 2026-10-07: a dark scrim
+               in light mode looked wrong next to Ad Library's light backdrop. */
+            --rc-scrim: rgba(0,0,0,0.30);
+            --rc-scrim-blur: blur(24px);
             --rc-shadow: 0 0 0 1px rgba(0,0,0,0.15), 0 24px 70px rgba(31,29,41,0.24);
             --rc-chip: rgba(0,0,0,0.05);
             --rc-remove: #ffffff;
