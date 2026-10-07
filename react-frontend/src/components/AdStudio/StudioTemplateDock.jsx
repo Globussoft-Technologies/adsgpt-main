@@ -42,8 +42,10 @@ const COLUMN_TARGET_PX = 330; // onboarding: round(width / 330), 2..6 columns
 // bar already separates tools from templates, so it is 4% (28–48px). (The old
 // tile row used 11%, 64–110px.)
 const restGapFor = (rootH) => Math.round(Math.min(48, Math.max(28, rootH * 0.04)));
-// Space left under the heading block when the dock is fully raised.
-const DOCK_PEEK_GAP = 12;
+// Fully raised, the dock reaches the top of the home screen (just under the Ad
+// Studio header) and covers the heading too (user, 2026-10-07: "max expanded
+// height up to here"). It used to stop 12px under the heading block.
+const DOCK_TOP_GAP = 0;
 // Never collapse shorter than this, even on a short window.
 const DOCK_FLOOR_H = 180;
 // onboarding: expanded once the dock is 148px (420 − 272) above its minimum.
@@ -84,7 +86,8 @@ function tagColor(tag) {
 /**
  * Geometry + height state for the dock. Callers put `rootRef` on the home
  * screen's root (the dock is absolutely positioned at its bottom), `headRef` on
- * the heading block and `toolsRef` on the wrapper around the tool row, then
+ * the heading block (kept for callers; no longer sets the ceiling — the dock
+ * rises to the root's top) and `toolsRef` on the wrapper around the tool row, then
  * spread `dockProps` onto <StudioTemplateDock>. `wheelRef` = root, so the
  * wheel works anywhere on the screen.
  */
@@ -112,9 +115,8 @@ export function useStudioDock() {
     const measure = () => {
       const rootH = root.clientHeight;
       const toolsBottom = bottomOf(toolsRef.current);
-      const headBottom = bottomOf(headRef.current);
       const minH = Math.max(DOCK_FLOOR_H, Math.round(rootH - toolsBottom - restGapFor(rootH)));
-      const ceiling = Math.max(minH, Math.round(rootH - headBottom - DOCK_PEEK_GAP));
+      const ceiling = Math.max(minH, Math.round(rootH - DOCK_TOP_GAP));
       setGeo((g) => (g.minH === minH && g.ceiling === ceiling ? g : { minH, ceiling }));
     };
     const observer = new ResizeObserver(measure);

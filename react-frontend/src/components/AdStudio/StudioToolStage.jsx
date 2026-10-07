@@ -292,7 +292,11 @@ export default function StudioToolStage({ tools = [], kindLabel = 'Ad video', la
           <h3 key={`t-${tool.key}`} className="m-0 text-[clamp(24px,2.3vw,32px)] leading-[1.05] font-bold tracking-[-0.03em] text-zinc-900 dark:text-white">
             <BlurWords text={tool.title} delay={0.06} reduce={reduce} />
           </h3>
-          <p key={`d-${tool.key}`} className="m-0 max-w-[34ch] text-sm leading-normal text-zinc-500 dark:text-zinc-400">
+          {/* Always two lines tall (3em at leading-normal) and clamped to two, so
+              the title and Create button sit in the same place for every tool —
+              a one-line description used to move them versus a two-line one
+              (the block is vertically centred). */}
+          <p key={`d-${tool.key}`} className="m-0 line-clamp-2 min-h-[3em] max-w-[34ch] text-sm leading-normal text-zinc-500 dark:text-zinc-400">
             <BlurWords text={tool.desc} delay={0.18} reduce={reduce} />
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2.5">
