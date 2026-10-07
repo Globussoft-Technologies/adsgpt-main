@@ -1206,11 +1206,21 @@ export default function VideoCard({
                   </button>
                 )}
                 {isVoiceMissing ? (
-                  <div
-                    title="Voiceover is missing, try to generate it through Customize Script & Voice-over button."
-                    className="rounded-full p-2 text-white/40 cursor-not-allowed backdrop-blur"
-                  >
-                    <VolumeX size={18} />
+                  <div className="group/voiceMissing relative flex items-center">
+                    <div
+                      className="rounded-full p-2 text-white/40 cursor-not-allowed backdrop-blur"
+                      aria-label="Voiceover missing"
+                    >
+                      <VolumeX size={18} />
+                    </div>
+                    {/* Floating Tooltip styled for Dark and Light mode */}
+                    <div className="pointer-events-none invisible absolute bottom-full left-1/2 z-50 mb-2.5 -translate-x-1/2 -translate-y-1 opacity-0 transition-all duration-200 ease-out group-hover/voiceMissing:visible group-hover/voiceMissing:translate-y-0 group-hover/voiceMissing:opacity-100">
+                      <div className="relative w-max max-w-[260px] rounded-lg border border-[#e5e7eb] bg-white px-3 py-1.5 text-center text-[11px] sm:text-xs font-medium leading-snug text-[#1f2937] shadow-[0_4px_14px_rgba(0,0,0,0.12)] dark:border-[#374151] dark:bg-[#1e2026] dark:text-[#f3f4f6] dark:shadow-[0_4px_16px_rgba(0,0,0,0.5)]">
+                        Voiceover is missing, try to generate it through Customize Script &amp; Voice-over button.
+                        {/* Downward triangle arrow */}
+                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-2 w-2 rotate-45 border-b border-r border-[#e5e7eb] bg-white dark:border-[#374151] dark:bg-[#1e2026]" />
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="group/volume relative flex items-center">
