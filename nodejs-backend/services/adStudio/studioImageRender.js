@@ -20,8 +20,10 @@
 // Delivery, like onboarding: Node follows the job's own event stream
 // (GET /api/v1/jobs/{id}/events) AND accepts DS's callback
 // (controllers/Ai/jobWebhookController.js). Whichever terminal arrives first
-// finishes the render; updateImageResult's duplicate guard makes the second a
-// no-op, so neither can double-charge.
+// finishes the render: it claims AiJob.finishedAt atomically and the second
+// delivery stops there. (updateImageResult's own duplicate guard only covers
+// credits — it pushes `results` first — so relying on it showed every image
+// twice in My Space; fixed 2026-10-06.)
 //
 // ── Why this goes through imageController rather than around it ───────────
 // AdCreative's pipeline already owns everything that has to happen to a
@@ -349,6 +351,26 @@ async function finishStudioImageRender({ job, status, result, error, via = "call
     return;
   }
 
+  // Exactly one delivery finishes a render. The stream and the callback both
+  // land here (often within ms); updateImageResult's own duplicate guard only
+  // covers credits — it has already pushed `results` again by the time it
+  // looks — so a second call duplicated the image in My Space. One atomic
+  // update (finishedAt null → now) decides who goes; the loser returns.
+  const claimed = await AiJob.findOneAndUpdate(
+    { jobId: job.jobId, finishedAt: null },
+    { $set: { finishedAt: new Date() } },
+    { new: false, projection: { _id: 1 } }
+  ).lean();
+  if (!claimed) {
+    log.info("finish.already_done", { image: job.refId, via });
+    return { code: 200, body: { success: true, duplicate: true } };
+  }
+  // A failed finish hands the claim back, so the other delivery can still try.
+  const releaseClaim = () =>
+    AiJob.updateOne({ jobId: job.jobId }, { $set: { finishedAt: null } }).catch((e) =>
+      log.error("finish.release_failed", { message: e.message })
+    );
+
   const files = filesOf(result);
   const succeeded = status === "succeeded" && files.length > 0;
   const takeMs = Array.isArray(result?.images) ? result.images[0]?.time_taken_s : result?.image?.time_taken_s;
@@ -384,9 +406,15 @@ async function finishStudioImageRender({ job, status, result, error, via = "call
       return this;
     },
   };
-  await imageController.updateImageResult({ body: payload, params: {} }, res);
+  try {
+    await imageController.updateImageResult({ body: payload, params: {} }, res);
+  } catch (e) {
+    await releaseClaim();
+    throw e;
+  }
 
   if (outcome.code >= 400) {
+    await releaseClaim();
     log.error("finish.rejected", { code: outcome.code, error: outcome.body?.error, via });
   } else {
     log.info("finished", { image: job.refId, status: payload.status, duplicate: Boolean(outcome.body?.duplicate), via });

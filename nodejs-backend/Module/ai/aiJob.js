@@ -105,6 +105,14 @@ const aiJobSchema = new mongoose.Schema(
     // follow-on work has already been started.
     chainedAt: { type: Date, default: null },
 
+    // Ad Studio finish guard, same idea as chainedAt. An Ad Studio render's
+    // terminal result arrives twice (Node's job stream AND DS's callback), and
+    // imageController.updateImageResult pushes `results` before its own
+    // duplicate check — so two calls left the image in My Space twice. The
+    // first delivery claims this (null → now, atomically); the second sees it
+    // set and stops. See services/adStudio/studioImageRender.js finish.
+    finishedAt: { type: Date, default: null },
+
     idempotencyKey: { type: String, default: "", index: true },
     completedAt: { type: Date, default: null },
   },

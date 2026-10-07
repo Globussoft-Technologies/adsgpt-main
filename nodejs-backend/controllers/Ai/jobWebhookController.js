@@ -685,7 +685,8 @@ exports.receive = async (req, res) => {
       // branches above: a failure here must not make DS retry a finished job.
       // `image.from_template` is the current route; `image.generate` covers
       // rows started before the 2026-10-05 switch. Node also follows the job's
-      // stream, so this is usually the duplicate — updateImageResult ignores it.
+      // stream, so this is usually the duplicate — finishStudioImageRender's
+      // AiJob.finishedAt claim stops it before updateImageResult.
       if (
         (applied.kind === "image.from_template" || applied.kind === "image.generate") &&
         applied.source === "adstudio" &&
