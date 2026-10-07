@@ -534,7 +534,6 @@ export default function TopHeader() {
                 (AdVideoLayout.jsx), so the switcher is placed inline there
                 instead — same reason ThemeToggle is already skipped here. */}
             {!isMySpaceView && <WorkspaceSwitcher />}
-            {SHOW_HIDDEN_HEADER_UI && !isMySpaceView && currentRoute !== '/autopilot/meta' && <ThemeToggle />}
           </div>
         </div>
       </>
@@ -1095,8 +1094,8 @@ export default function TopHeader() {
               </div>
             )}
 
-            {/* Theme toggle — inline header (hidden in Ad Studio to match clean reference header) */}
-            {SHOW_HIDDEN_HEADER_UI && currentRoute !== '/adstudio' && <ThemeToggle />}
+            {/* Theme toggle — only visible on the account page */}
+            {currentRoute === '/profile' && <ThemeToggle forceShow={true} />}
           </div>
         </div>
       )}
@@ -1112,9 +1111,8 @@ export default function TopHeader() {
         <div
           className={`fixed top-4 right-5 z-[60] 2xl:right-6 ${currentRoute === '/meta-ads' ? 'md:top-9 2xl:top-10' : 'md:top-8 2xl:top-8.5'}`}
         >
-          {/* Theme toggle — floating fallback */}
+          {/* Workspace switcher — floating fallback */}
           <WorkspaceSwitcher />
-          {SHOW_HIDDEN_HEADER_UI && !isMySpaceView && <ThemeToggle />}
         </div>
       )}
     </>

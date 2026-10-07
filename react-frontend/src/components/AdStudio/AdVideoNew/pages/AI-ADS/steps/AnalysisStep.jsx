@@ -167,7 +167,7 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
             <div className="mb-6">
               <label className="mb-2 block text-sm font-medium text-gray-900 dark:text-white">Transform your ideas into studio-quality videos</label>
               <div
-                className={`advideo-ai-analysis-field relative w-full rounded-xl border bg-[var(--advideo-control-surface)] dark:bg-[#909294]/15 transition-all ${scriptError || brandiqError ? 'border-red-500' : 'border-[var(--ws-border)] focus-within:border-[#5867EB]'}`}
+                className={`advideo-ai-analysis-field relative w-full rounded-xl border bg-[var(--advideo-control-surface)] dark:bg-[#909294]/15 transition-all ${scriptError || brandiqError ? 'border-red-500' : 'border-[var(--ws-border)] dark:border-white/5'}`}
               >
                 <button
                     type="button"
@@ -218,9 +218,14 @@ const AnalysisStep = ({ type, onBack, onNext, onClose }) => {
                     onChange={handleAddImages}
                   />
                 </div>
-                <div className={`px-3 pb-3 pt-1 ${loading ? 'pointer-events-none opacity-50' : ''}`}>
-                  <div className="w-52 sm:w-56 [&_[data-slot=command]]:!rounded-full [&_[data-slot=command]]:!bg-white dark:[&_[data-slot=command]]:!bg-[#222225] [&_[data-slot=command]]:!border-zinc-300 dark:[&_[data-slot=command]]:!border-white/20 [&_[data-slot=command]]:!shadow-xs [&_.min-h-11]:!min-h-0 [&_.min-h-11]:!h-8.5 [&_input]:!h-8.5 [&_input]:!text-xs [&_input]:!pl-3.5 [&_input]:!pr-8 [&_input]:!text-zinc-900 dark:[&_input]:!text-white [&_input]:!placeholder-zinc-600 dark:[&_input]:!placeholder-zinc-400 [&_input]:!font-medium [&_button]:!h-6 [&_button]:!w-6 [&_button]:!right-1.5 [&_svg]:!size-3.5 [&_svg]:!text-zinc-700 dark:[&_svg]:!text-zinc-300">
-                    <BrandSearch placeholder="Select a brand" portal={true} refillFromHeader />
+                <div className={`px-3 pb-2 ${loading ? 'pointer-events-none opacity-50' : ''}`}>
+                  <div className="w-fit max-w-full">
+                    <BrandSearch
+                      placeholder="Select a brand"
+                      portal={true}
+                      refillFromHeader
+                      surfaceVariant="ai-ads-compact"
+                    />
                   </div>
                 </div>
               </div>
