@@ -646,7 +646,7 @@ const ConfigStep = ({ customAvatarImages = [], onBack, onGenerate, recreateData 
       </div>
 
       {/* Right: form */}
-      <div className="custom-scrollbar flex flex-col gap-6 overflow-y-auto p-6 pb-10 2xl:px-6 2xl:py-8 2xl:pb-15">
+      <div className="custom-scrollbar flex h-full min-h-0 flex-col gap-3 overflow-y-auto py-5 pr-3 pl-4 2xl:gap-4 2xl:px-5 2xl:py-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {/* Product image */}
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">

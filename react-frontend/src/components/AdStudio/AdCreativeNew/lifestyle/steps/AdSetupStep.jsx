@@ -39,6 +39,7 @@ import {
   IMAGE_TYPE_ERROR,
   isAllowedImageFile,
 } from '@/utils/imageValidation';
+import { analyzeLogoTransparency, LOGO_BACKGROUND_ERROR } from '@/utils/logoTransparency';
 import {
   AUTOFILL_FAILURE_MESSAGE,
   fetchAutofill,
@@ -1399,8 +1400,20 @@ export function AdSetupStep({
                       if (v.trim()) clearError('logo');
                     }}
                     files={logoFiles}
-                    onAddFiles={(items) => {
-                      setLogoFiles((p) => [...p, ...items]);
+                    onAddFiles={async (items) => {
+                      const [logo] = items;
+                      if (!logo) return;
+
+                      const check = await analyzeLogoTransparency(logo.file || logo.preview);
+                      if (!check.transparent) {
+                        if (logo.file && logo.preview?.startsWith('blob:')) {
+                          URL.revokeObjectURL(logo.preview);
+                        }
+                        setErrors((p) => ({ ...p, logo: LOGO_BACKGROUND_ERROR }));
+                        return;
+                      }
+
+                      setLogoFiles([logo]);
                       clearError('logo');
                     }}
                     onRemoveFile={(i) => setLogoFiles((p) => p.filter((_, idx) => idx !== i))}
@@ -1703,15 +1716,28 @@ function FileUploadField({
           {files.map((it, i) => (
             <div
               key={`${it.preview}-${i}`}
-              className="relative h-[34px] w-[34px] shrink-0 rounded-[8px] border border-[#3AD0C8] bg-white transition-transform hover:-translate-y-0.5"
+              className="group relative h-[34px] w-[34px] shrink-0 rounded-[8px] border border-[#3AD0C8] bg-white transition-transform hover:-translate-y-0.5"
             >
-              <img
-                src={it.preview}
-                alt=""
-                onClick={() => onPreview?.(i)}
-                className="h-full w-full rounded-[7px] object-cover cursor-pointer"
-              />
-              <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#3AD0C8] text-white border-2 border-white text-[10px]">
+              <button
+                type="button"
+                onDoubleClick={() => onPreview?.(i)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onPreview?.(i);
+                  }
+                }}
+                aria-label={`Preview uploaded image ${i + 1}`}
+                title="Double-click to preview"
+                className="block h-full w-full cursor-pointer rounded-[7px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5867EB] focus-visible:ring-offset-1"
+              >
+                <img
+                  src={it.preview}
+                  alt=""
+                  className="pointer-events-none h-full w-full rounded-[7px] object-cover"
+                />
+              </button>
+              <span className="pointer-events-none absolute -top-1.5 -right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-[#3AD0C8] text-[10px] text-white shadow-sm transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
                 <Check size={10} strokeWidth={3} />
               </span>
               <button
@@ -1720,7 +1746,8 @@ function FileUploadField({
                   e.stopPropagation();
                   onRemoveFile(i);
                 }}
-                className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white shadow"
+                aria-label={`Remove uploaded image ${i + 1}`}
+                className="absolute -top-1.5 -right-1.5 z-20 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow transition-opacity hover:bg-red-600 group-hover:opacity-100 group-focus-within:opacity-100"
               >
                 <X size={10} strokeWidth={2.5} />
               </button>

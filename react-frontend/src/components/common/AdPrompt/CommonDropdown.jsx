@@ -16,6 +16,7 @@ const CommonDropdown = ({
   contentAlign,
   contentClassName = '',
   contentStyle,
+  triggerTooltip = '',
 }) => {
   const Icon = value?.Icon;
   const dropdownLabel = label;
@@ -25,6 +26,15 @@ const CommonDropdown = ({
   const isFormPill = triggerVariant === 'form-pill';
   const isUgcField = triggerVariant === 'ugc-field';
   const isRecreateField = triggerVariant === 'recreate-field';
+  const triggerLabelClassName = isVoiceChip
+    ? 'font-medium text-gray-900 dark:text-white'
+    : isField
+      ? 'font-normal text-gray-700 dark:text-white/75'
+      : isFormPill
+        ? 'truncate text-sm font-normal text-zinc-800 dark:text-white'
+        : isUgcField || isRecreateField
+          ? 'truncate text-xs font-medium text-zinc-800 sm:text-[13px] dark:text-white'
+          : 'font-light text-zinc-800 dark:text-[#afafaf] dark:group-data-[state=open]:text-white';
   // const selectedOption = options?.find((opt) => opt.value === value?.value);
   // const SelectedIcon = selectedOption?.Icon;
   return (
@@ -48,21 +58,13 @@ const CommonDropdown = ({
       >
         <div className="flex items-center gap-2 pr-1 capitalize 2xl:gap-2">
           {Icon ? Icon : (typeof icon === 'string' ? <img src={icon} alt="icon" className={`brightness-0 opacity-60 dark:brightness-100 group-hover:opacity-100 ${isFormPill || isUgcField || isRecreateField ? 'h-4 w-4 shrink-0' : 'h-3 w-3 2xl:h-4 2xl:w-4'}`} /> : icon)}
-          <span
-            className={
-              isVoiceChip
-                ? 'font-medium text-gray-900 dark:text-white'
-                : isField
-                  ? 'font-normal text-gray-700 dark:text-white/75'
-                : isFormPill
-                  ? 'font-normal text-sm text-zinc-800 dark:text-white truncate'
-                : isUgcField || isRecreateField
-                  ? 'font-medium text-xs sm:text-[13px] text-zinc-800 dark:text-white truncate'
-                : 'font-light text-zinc-800 dark:text-[#afafaf] dark:group-data-[state=open]:text-white'
-            }
-          >
-            {triggerLabel}
-          </span>
+          {triggerTooltip ? (
+            <ShadcnTooltip label={triggerTooltip}>
+              <span className={triggerLabelClassName}>{triggerLabel}</span>
+            </ShadcnTooltip>
+          ) : (
+            <span className={triggerLabelClassName}>{triggerLabel}</span>
+          )}
         </div>
       </SelectTrigger>
 

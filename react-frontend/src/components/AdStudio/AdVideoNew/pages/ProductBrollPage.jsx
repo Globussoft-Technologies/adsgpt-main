@@ -327,7 +327,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
       </div>
 
       {/* Form */}
-      <div className="product-broll-form relative flex max-h-[85vh] flex-col gap-3 overflow-y-auto bg-[var(--ws-surface)] py-5 pr-3 pl-4 text-zinc-900 2xl:gap-4 2xl:py-6 2xl:px-5 dark:bg-transparent dark:text-white [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="product-broll-form relative flex max-h-[85vh] flex-col gap-2.5 overflow-y-auto bg-[var(--ws-surface)] py-4 pr-3 pl-4 text-zinc-900 2xl:gap-3 2xl:px-5 2xl:py-5 dark:bg-transparent dark:text-white [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <button
           onClick={onClose}
           className="absolute top-3 right-3 z-[50] rounded-full p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white"
@@ -379,12 +379,12 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
             <span className="text-[12px] text-red-500">{errors.productImage}</span>
           )}
           {uploadedImages.length > 0 && (
-            <div className="mt-1">
+            <div className="mt-0.5">
               <div className="flex flex-wrap gap-2 2xl:gap-3">
                 {uploadedImages.map((img, index) => (
                   <div
                     key={index}
-                    className="group relative h-11 w-11 border border-black/10 2xl:h-14 2xl:w-14 dark:border-white/10"
+                    className="group relative h-10 w-10 border border-black/10 2xl:h-11 2xl:w-11 dark:border-white/10"
                   >
                     <img
                       src={img.preview}
@@ -421,6 +421,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
               icon={SparkleDark}
               type="b-roll"
               triggerVariant="form-pill"
+              triggerTooltip={videoChatModels.find((option) => option.value === videoModel)?.label}
               className={`w-full min-w-0 justify-between border-[var(--advideo-field-border)]! bg-[var(--advideo-dropdown-surface)]! opacity-100 hover:bg-[var(--advideo-dropdown-hover)]! focus-visible:border-[#5867EB]! focus-visible:ring-[3px]! focus-visible:ring-[#5867EB]/16! dark:border-transparent! dark:bg-[#909294]/10! dark:hover:bg-[#909294]/20! [&>div]:min-w-0 [&>div>span]:truncate ${!videoModel ? 'product-broll-placeholder-dropdown' : ''}`}
               value={videoChatModels.find((o) => o.value === videoModel)}
               onChange={(val) => {
@@ -541,7 +542,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
           </div>
         </div>
 
-        <div className="mt-2 flex flex-col items-end gap-2 border-t border-[var(--ws-border)] pt-4 dark:border-white/10">
+        <div className="mt-1 flex flex-col items-end gap-2 border-t border-[var(--ws-border)] pt-3 dark:border-white/10">
           {(() => {
             const selectedModel = videoChatModels.find((model) => model.value === videoModel);
             const hasEstimateInputs = Boolean(videoModel && selectedVideoDuration && selectedModel);

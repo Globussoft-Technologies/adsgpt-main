@@ -1140,18 +1140,28 @@ const AvatarConfigForm = ({
     (productUrl || uploadedImages.length > 0) && videoModel && selectedVideoDuration && aspectRatio;
 
   return (
-    <div className="advideo-split-card advideo-avatar-card grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-[24px] border border-[var(--ws-border)] bg-[var(--ws-surface)] sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]">
-      {/* Preview */}
-      <div className="relative h-full min-h-[350px] w-full overflow-hidden bg-gray-100 dark:bg-[#1c1c1c]">
-        {!recreateData && (
+    <div
+      className={`advideo-split-card advideo-avatar-card grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-[24px] border border-[var(--ws-border)] bg-[var(--ws-surface)] sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c] ${
+        recreateData
+          ? ''
+          : 'grid-rows-[auto_auto_auto] sm:grid-rows-[auto_minmax(0,1fr)]'
+      }`}
+    >
+      {!recreateData && (
+        <div className="col-span-full flex h-12 shrink-0 items-center border-b border-[var(--ws-border)] px-4 dark:border-white/10">
           <button
+            type="button"
             onClick={onBack}
-            className="absolute top-6 left-6 z-10 rounded-full bg-black/40 p-2 text-white hover:bg-black/60"
+            aria-label="Back"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-black/5 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5867EB] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
-        )}
+        </div>
+      )}
 
+      {/* Preview */}
+      <div className="relative h-full min-h-[350px] w-full overflow-hidden bg-gray-100 dark:bg-[#1c1c1c]">
         {isCustomAvatar ? (
           <>
             <img
