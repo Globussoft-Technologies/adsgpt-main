@@ -747,18 +747,18 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
             />
           </div>
 
-          <div className="flex flex-1 h-full w-full items-center justify-center overflow-hidden px-4">
+          <div className="flex flex-1 h-full w-full items-center justify-center overflow-y-auto px-4 pb-4 sm:pb-6 2xl:pb-8">
             <div
               ref={modalRef}
               className={`min-w-112.5 rounded-3xl transition-all duration-300 max-lg:max-h-[88vh] max-lg:overflow-y-auto 2xl:max-h-[85vh] ${
                 activePage === 'ai-ads' && currentAIAdsStep === 'details'
                   ? 'scale-75 2xl:scale-100'
-                  : activePage === 'clone-ad'
-                    ? 'w-full max-w-6xl h-fit max-h-[92vh] scale-100'
+                  : activePage === 'clone-ad' || activePage === 'avatar'
+                    ? 'w-full max-w-4xl 2xl:max-w-5xl h-fit scale-100'
                     : 'h-fit scale-75 2xl:scale-100'
               } ${
-                activePage !== 'ugc' && activePage !== 'clone-ad'
-                  ? `advideo-workflow-card ${activePage === 'b-roll' || activePage === 'avatar' ? 'rounded-[24px]' : 'rounded-[30px]'} border border-[var(--ws-border)] bg-[var(--ws-surface)] shadow-[var(--ws-shadow-md)] dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none`
+                activePage !== 'ugc' && activePage !== 'clone-ad' && activePage !== 'avatar'
+                  ? `advideo-workflow-card ${activePage === 'b-roll' ? 'rounded-[24px]' : 'rounded-[30px]'} border border-[var(--ws-border)] bg-[var(--ws-surface)] shadow-[var(--ws-shadow-md)] dark:border-white/10 dark:bg-[#303030]/50 dark:shadow-none`
                   : ''
               } ${
                 activePage === 'ai-ads' && currentAIAdsStep === 'details'
@@ -769,9 +769,11 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
                       ? 'w-full max-w-6xl h-fit max-h-[92vh]'
                       : activePage === 'avatar' && currentAvatarStep === 'face-capture'
                         ? 'w-full max-w-4xl sm:min-w-[700px] 2xl:max-w-5xl'
-                        : 'w-full max-w-2xl 2xl:max-w-4xl'
+                        : activePage === 'avatar'
+                          ? 'w-full max-w-4xl 2xl:max-w-5xl'
+                          : 'w-full max-w-2xl 2xl:max-w-4xl'
               } ${
-                (activePage === 'ai-ads' && currentAIAdsStep === 'generation') || activePage === 'clone-ad'
+                (activePage === 'ai-ads' && currentAIAdsStep === 'generation') || activePage === 'clone-ad' || activePage === 'avatar'
                   ? ''
                   : 'overflow-hidden max-lg:overflow-y-auto'
               }`}

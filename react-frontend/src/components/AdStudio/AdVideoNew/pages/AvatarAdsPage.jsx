@@ -835,6 +835,30 @@ const AvatarConfigForm = ({
     onAvatarChange?.(avatars[newIndex]);
   };
 
+  // Preload adjacent avatars into browser cache for instant switching
+  useEffect(() => {
+    if (!avatars?.length || currentAvatarIndex === -1) return;
+    const indicesToPreload = [
+      (currentAvatarIndex + 1) % avatars.length,
+      (currentAvatarIndex + 2) % avatars.length,
+      (currentAvatarIndex + 3) % avatars.length,
+      (currentAvatarIndex - 1 + avatars.length) % avatars.length,
+      (currentAvatarIndex - 2 + avatars.length) % avatars.length,
+    ];
+
+    indicesToPreload.forEach((idx) => {
+      const targetAvatar = avatars[idx];
+      if (targetAvatar) {
+        const url = getAvatarUrl(targetAvatar);
+        if (url && !loadedImageCache.has(url)) {
+          const img = new Image();
+          img.src = url;
+          img.onload = () => loadedImageCache.add(url);
+        }
+      }
+    });
+  }, [currentAvatarIndex, avatars]);
+
   useEffect(() => {
     if (videoModel && errors.videoModel) setErrors((prev) => ({ ...prev, videoModel: null }));
     if (aspectRatio && errors.aspectRatio) setErrors((prev) => ({ ...prev, aspectRatio: null }));
@@ -1140,28 +1164,24 @@ const AvatarConfigForm = ({
     (productUrl || uploadedImages.length > 0) && videoModel && selectedVideoDuration && aspectRatio;
 
   return (
-    <div
-      className={`advideo-split-card advideo-avatar-card grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-[24px] border border-[var(--ws-border)] bg-[var(--ws-surface)] sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c] ${
-        recreateData
-          ? ''
-          : 'grid-rows-[auto_auto_auto] sm:grid-rows-[auto_minmax(0,1fr)]'
-      }`}
-    >
+    <div className="relative flex h-fit w-full flex-col">
       {!recreateData && (
-        <div className="col-span-full flex h-12 shrink-0 items-center border-b border-[var(--ws-border)] px-4 dark:border-white/10">
+        <div className="mb-1 flex shrink-0 items-center">
           <button
             type="button"
             onClick={onBack}
-            aria-label="Back"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-black/5 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5867EB] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
+            className="-ml-1 flex items-center justify-center p-0 leading-none transition-all text-zinc-700 dark:text-zinc-200 hover:text-black dark:hover:text-white cursor-pointer active:scale-95"
+            title="Go back"
+            aria-label="Go back"
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ChevronLeft className="h-6 w-6 2xl:h-7 2xl:w-7" />
           </button>
         </div>
       )}
 
-      {/* Preview */}
-      <div className="relative h-full min-h-[350px] w-full overflow-hidden bg-gray-100 dark:bg-[#1c1c1c]">
+      <div className="advideo-split-card advideo-avatar-card grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-[24px] border border-[var(--ws-border)] bg-[var(--ws-surface)] sm:grid-cols-2 dark:border-[#3a3a3a] dark:bg-[#1c1c1c]">
+        {/* Preview */}
+        <div className="relative h-full min-h-[350px] w-full overflow-hidden bg-gray-100 dark:bg-[#1c1c1c]">
         {isCustomAvatar ? (
           <>
             <img
@@ -1205,6 +1225,8 @@ const AvatarConfigForm = ({
               src={getAvatarUrl(avatar)}
               alt="Selected Avatar"
               className="absolute inset-0 h-full w-full object-cover"
+              loading="eager"
+              decoding="async"
             />
             {avatars?.length > 1 && (
               <>
@@ -1229,7 +1251,7 @@ const AvatarConfigForm = ({
       </div>
 
       {/* Form */}
-      <div className="advideo-avatar-form custom-scrollbar flex h-full min-h-0 flex-col gap-3 overflow-y-auto bg-[var(--ws-surface)] py-5 pr-3 pl-4 2xl:gap-4 2xl:px-5 2xl:py-6 dark:bg-transparent [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="advideo-avatar-form flex h-full flex-col gap-2.5 bg-[var(--ws-surface)] py-3.5 pr-4 pl-4 2xl:gap-3.5 2xl:px-5 2xl:py-5 dark:bg-transparent">
         <div className="flex flex-col gap-2">
           <span className="flex w-fit items-center gap-1 rounded-full border border-[#6b72f8]/60 bg-gray-900 px-2.5 py-0.5 text-10 font-medium text-white 2xl:text-xs dark:bg-white dark:text-black">
             🌐 All regional languages supported
@@ -1297,11 +1319,11 @@ const AvatarConfigForm = ({
               </div>
 
               {uploadedImages.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2 2xl:gap-3">
+                <div className="mt-1 flex flex-wrap gap-1.5">
                   {uploadedImages.map((img, index) => (
                     <div
                       key={index}
-                      className="group relative h-12 w-12 border border-black/10 2xl:h-16 2xl:w-16 dark:border-white/10"
+                      className="group relative h-9 w-9 rounded-md border border-black/10 dark:border-white/10"
                     >
                       <img
                         src={img.preview}
@@ -1316,10 +1338,10 @@ const AvatarConfigForm = ({
                       />
                       <button
                         type="button"
-                        className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md duration-300 group-hover:opacity-100"
+                        className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow-md duration-300 group-hover:opacity-100"
                         onClick={() => removeImage(index)}
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-2.5 w-2.5" />
                       </button>
                     </div>
                   ))}
@@ -1450,42 +1472,42 @@ const AvatarConfigForm = ({
           )} */}
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">
             Brand/product Name*
           </label>
           <BrandSearch isAvatarAdsSearch={true} refillFromHeader />
           {errors.brandName && (
-            <span className="mt-1 text-[12px] text-red-400">{errors.brandName}</span>
+            <span className="mt-0.5 text-[12px] text-red-400">{errors.brandName}</span>
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Promotional Info</label>
-            <div className="advideo-avatar-control flex h-11 w-full items-center rounded-full border border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] dark:border-transparent dark:bg-[#9092941A]">
+            <div className="advideo-avatar-control flex h-9 w-full items-center rounded-full border border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] dark:border-transparent dark:bg-[#9092941A]">
               <input
                 value={promotion}
                 onChange={(e) => setPromotion(e.target.value)}
-                className="h-full w-full border-none bg-transparent px-4 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 outline-none shadow-none 2xl:text-base dark:text-white dark:placeholder:text-[#AFAFAF]"
+                className="h-full w-full border-none bg-transparent px-3.5 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 outline-none shadow-none 2xl:text-base dark:text-white dark:placeholder:text-[#AFAFAF]"
                 placeholder="Enter your Promotional Info"
               />
             </div>
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Prompt</label>
-          <div className="advideo-avatar-control flex min-h-[78px] w-full rounded-[12px] border border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] dark:border-transparent dark:bg-[#9092941A]">
+          <div className="advideo-avatar-control flex min-h-[52px] w-full rounded-[12px] border border-[var(--advideo-field-border)] bg-[var(--advideo-dropdown-surface)] dark:border-transparent dark:bg-[#9092941A]">
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="min-h-[78px] w-full resize-none border-none bg-transparent p-3 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 outline-none shadow-none 2xl:text-sm dark:text-white dark:placeholder:text-[#AFAFAF]"
+              className="min-h-[52px] w-full resize-none border-none bg-transparent p-2 text-xs text-gray-900 placeholder:text-sm placeholder:text-gray-500 outline-none shadow-none 2xl:text-sm dark:text-white dark:placeholder:text-[#AFAFAF]"
               placeholder="e.g. white background, aerial drone shot, etc"
-              rows={3}
+              rows={2}
             />
           </div>
         </div>
 
-        <div className="mt-auto mb-3 flex items-center justify-end gap-2 border-t border-[var(--ws-border)] pt-4 dark:border-white/10">
+        <div className="mt-auto mb-1 flex items-center justify-end gap-2 border-t border-[var(--ws-border)] pt-2 pb-1 dark:border-white/10">
           {(() => {
             const est = estimateAdVideoCredits({ video_model: videoModel, video_duration: selectedVideoDuration, no_of_ads: 1, modelCredits, creditsPerSecond: videoChatModels.find((model) => model.value === videoModel)?.creditsPerSecond });
             const enough = availableCredits >= est;
@@ -1520,6 +1542,7 @@ const AvatarConfigForm = ({
             );
           })()}
         </div>
+      </div>
       </div>
       <UpgradeModal
         isOpen={isUpgradeModalOpen}

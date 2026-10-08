@@ -759,14 +759,19 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
 
                 {/* 4. Thumbnails (only when images uploaded) */}
                 {uploadedImages.length > 0 && (
-                  <div className="flex min-h-0 flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">
-                        Product Images *
-                      </label>
-                      <span className="text-[10px] font-medium text-gray-500 dark:text-white/30">
-                        {uploadedImages.length} Images
-                      </span>
+                  <div className="flex min-h-0 flex-col gap-1.5">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium text-gray-700 dark:text-white/90 2xl:text-sm">
+                          Product Images *
+                        </label>
+                        <span className="text-[10px] font-medium text-gray-500 dark:text-white/40">
+                          {uploadedImages.length} Images
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-normal text-gray-600 dark:text-gray-300 2xl:text-xs">
+                        Product images - click to select, double-click to preview
+                      </p>
                     </div>
 
                     <div
@@ -785,6 +790,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
                               setLightboxImage(img.preview);
                               setLightboxOpen(true);
                             }}
+                            title={isSelected ? 'Selected (double-click to preview)' : 'Click to select · double-click to preview'}
                             className={`group relative flex h-[70px] w-full cursor-pointer flex-col items-center justify-center rounded-2xl border shadow-xl transition-all duration-300 ${
                               isSelected
                                 ? 'border-[#4F46E5] bg-[#4F46E5]/10 ring-1 ring-[#4F46E5]'

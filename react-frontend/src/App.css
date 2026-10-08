@@ -4737,8 +4737,7 @@ html:not(.dark) .advideo-ui-layer {
 
 @media (min-width: 640px) {
   .advideo-split-card {
-    height: min(640px, 85vh);
-    max-height: 85vh;
+    height: auto;
   }
 }
 
