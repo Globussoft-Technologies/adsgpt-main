@@ -93,9 +93,9 @@ const AIAvatarCommonDropdown = ({
         hideIcon={!showChevron}
         className={`prompt_selection_button_no_gradient group relative flex items-center gap-0 rounded-full py-4 text-xs shadow-none transition-all duration-200 ease-in [&_svg]:text-current! 2xl:py-5 2xl:text-sm dark:border-none dark:bg-[#2B2A2A80] dark:text-[#AFAFAF] [&>svg]:size-5 ${triggerClassName}`}
       >
-        <div className="flex items-center gap-1 pr-1 capitalize">
-          {Icon ? Icon : <></>}
-          <span className="ml-1 font-light dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
+        <div className="flex min-w-0 flex-1 items-center gap-1 pr-1 capitalize">
+          {Icon ? <span className="flex shrink-0 items-center">{Icon}</span> : <></>}
+          <span className="ml-1 truncate font-light dark:text-[#afafaf] dark:group-data-[state=open]:text-white">
             {triggerLabel}
           </span>
         </div>
@@ -1359,7 +1359,7 @@ const AvatarConfigForm = ({
         </AnimatePresence>
 
         <div className="flex gap-4">
-          <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="flex min-w-0 flex-[1.6] flex-col gap-2">
             <label className="text-sm font-medium text-gray-900 2xl:text-base dark:text-white">Model*</label>
             <AIAvatarCommonDropdown
               options={videoChatModels}

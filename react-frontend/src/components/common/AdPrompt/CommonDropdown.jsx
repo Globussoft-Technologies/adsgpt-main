@@ -56,15 +56,37 @@ const CommonDropdown = ({
             : `prompt_selection_button_no_gradient group 2xl:text-13 relative flex md:text-[11px] 2xl:py-[18px] ${showChevron || label === 'AI Model' || type === 'b-roll' || type === 'ugc' ? '[&>svg]:block' : '[&>svg]:hidden'} items-center gap-0 rounded-[50px] text-[9px] shadow-none transition-all duration-200 ease-in hover:bg-slate-100 dark:border-none [&_img]:opacity-80 [&_img]:brightness-0 dark:[&_img]:opacity-100 dark:[&_img]:brightness-100 [&_svg]:text-current! opacity-80 hover:opacity-100 ${type === 'b-roll' ? 'dark:bg-[#909294]/10 dark:text-[#f0f0f0]' : 'dark:bg-[#202020]/50 dark:text-[#AFAFAF]'} ${className}`
         }
       >
-        <div className="flex items-center gap-2 pr-1 capitalize 2xl:gap-2">
-          {Icon ? Icon : (typeof icon === 'string' ? <img src={icon} alt="icon" className={`brightness-0 opacity-60 dark:brightness-100 group-hover:opacity-100 ${isFormPill || isUgcField || isRecreateField ? 'h-4 w-4 shrink-0' : 'h-3 w-3 2xl:h-4 2xl:w-4'}`} /> : icon)}
-          {triggerTooltip ? (
-            <ShadcnTooltip label={triggerTooltip}>
-              <span className={triggerLabelClassName}>{triggerLabel}</span>
-            </ShadcnTooltip>
-          ) : (
-            <span className={triggerLabelClassName}>{triggerLabel}</span>
-          )}
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 capitalize 2xl:gap-2">
+          {Icon ? (
+            <div className="flex shrink-0 items-center">{Icon}</div>
+          ) : typeof icon === 'string' ? (
+            <img
+              src={icon}
+              alt="icon"
+              className={`shrink-0 brightness-0 opacity-60 transition-opacity dark:brightness-100 group-hover:opacity-100 ${
+                isFormPill || isUgcField || isRecreateField
+                  ? 'h-4 w-4'
+                  : 'h-3 w-3 2xl:h-4 2xl:w-4'
+              }`}
+            />
+          ) : icon ? (
+            <div className="flex shrink-0 items-center">{icon}</div>
+          ) : null}
+          <span
+            className={
+              isVoiceChip
+                ? 'truncate font-medium text-gray-900 dark:text-white'
+                : isField
+                  ? 'truncate font-normal text-gray-700 dark:text-white/75'
+                : isFormPill
+                  ? 'truncate font-normal text-sm text-zinc-800 dark:text-white'
+                : isUgcField || isRecreateField
+                  ? 'truncate font-medium text-xs text-zinc-800 sm:text-[13px] dark:text-white'
+                : 'truncate font-light text-zinc-800 dark:text-[#afafaf] dark:group-data-[state=open]:text-white'
+            }
+          >
+            {triggerLabel}
+          </span>
         </div>
       </SelectTrigger>
 

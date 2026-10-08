@@ -300,8 +300,17 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
 
         {hasUserImage ? (
           <>
-            {/* Selected images fill the fixed preview column without resizing the card. */}
-            <div className="absolute inset-0 z-[2] overflow-hidden">
+            {/* Ambient Blurred Background */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              <img
+                src={activePreviewImage}
+                alt=""
+                className="h-full w-full scale-125 object-cover opacity-35 blur-2xl dark:opacity-25"
+              />
+            </div>
+
+            {/* Main Foreground Image scaled to fill width or height */}
+            <div className="relative z-[2] flex h-full w-full items-center justify-center">
               <img
                 src={activePreviewImage}
                 alt="b-roll-preview"
@@ -310,7 +319,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
                     e.currentTarget.src = defaultPreview;
                   }
                 }}
-                className="h-full w-full object-cover transition-all duration-300"
+                className="h-full w-full object-contain transition-all duration-300"
               />
             </div>
           </>
@@ -413,7 +422,7 @@ const ProductBrollPage = ({ pageVideo, handleGenerate: onGenerate, onClose }) =>
 
         {/* Model + Duration */}
         <div className="flex gap-3 sm:gap-4">
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <div className="flex min-w-0 flex-[1.6] flex-col gap-1.5">
             <label className="text-xs font-medium text-zinc-700 2xl:text-sm dark:text-white/80">Model *</label>
             <CommonDropdown
               options={videoChatModels}

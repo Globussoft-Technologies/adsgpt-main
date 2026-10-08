@@ -2776,6 +2776,26 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
   };
 
   // Product Image handlers (Max 3)
+  const isProductImageDuplicate = (existing, incoming) => {
+    if (!existing || !incoming) return false;
+    if (existing.file && incoming.file) {
+      const eName = existing.file.name;
+      const iName = incoming.file.name;
+      const isClipE = !eName || eName === 'image.png' || eName === 'blob';
+      const isClipI = !iName || iName === 'image.png' || iName === 'blob';
+      if (!isClipE && !isClipI && eName === iName && existing.file.size === incoming.file.size) {
+        return true;
+      }
+      if (existing.file.size === incoming.file.size && existing.file.type === incoming.file.type && incoming.file.size > 0) {
+        return true;
+      }
+    }
+    const prevE = (typeof existing.preview === 'string' ? existing.preview : '').trim();
+    const prevI = (typeof incoming.preview === 'string' ? incoming.preview : '').trim();
+    if (prevE && prevI && prevE === prevI) return true;
+    return false;
+  };
+
   const handleProductImageUpload = (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -2799,9 +2819,30 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
       return;
     }
 
-    const filesToAdd = validImageFiles.slice(0, remainingSlots);
+    let duplicateCount = 0;
+    const nonDuplicates = [];
+    validImageFiles.forEach((file) => {
+      const incoming = { file };
+      const isDup =
+        productImages.some((existing) => isProductImageDuplicate(existing, incoming)) ||
+        nonDuplicates.some((existing) => isProductImageDuplicate(existing, incoming));
+      if (isDup) {
+        duplicateCount++;
+      } else {
+        nonDuplicates.push(incoming);
+      }
+    });
 
-    if (validImageFiles.length > remainingSlots) {
+    if (duplicateCount > 0) {
+      setErrors((prev) => ({
+        ...prev,
+        productImages: duplicateCount === 1 ? 'Duplicate image was skipped.' : `${duplicateCount} duplicate images were skipped.`,
+      }));
+    }
+
+    const filesToAdd = nonDuplicates.slice(0, remainingSlots);
+
+    if (nonDuplicates.length > remainingSlots) {
       setErrors((prev) => ({
         ...prev,
         productImages: `Only ${remainingSlots} image${remainingSlots > 1 ? 's' : ''} added. Maximum 3 images allowed in total.`,
@@ -2811,13 +2852,13 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
         ...prev,
         productImages: 'Some non-image files were skipped.',
       }));
-    } else {
+    } else if (duplicateCount === 0) {
       setErrors((prev) => ({ ...prev, productImages: '' }));
     }
 
-    const newImages = filesToAdd.map((file) => ({
-      file,
-      preview: URL.createObjectURL(file),
+    const newImages = filesToAdd.map((item) => ({
+      file: item.file,
+      preview: URL.createObjectURL(item.file),
     }));
 
     setProductImages((prev) => [...prev, ...newImages]);
@@ -2831,6 +2872,12 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
 
     if (productImages.length >= 3) {
       setErrors((prev) => ({ ...prev, productImages: 'Maximum 3 images allowed.' }));
+      return;
+    }
+
+    const isDuplicate = productImages.some((existing) => isProductImageDuplicate(existing, { preview: cleanUrl }));
+    if (isDuplicate) {
+      setErrors((prev) => ({ ...prev, productImages: 'This image is already added.' }));
       return;
     }
 
@@ -2883,6 +2930,12 @@ const CloneYourAdPage = ({ onClose, handleGenerate: onGenerateSuccess, onGenerat
           const file = items[i].getAsFile();
           if (file) {
             e.preventDefault();
+            const incoming = { file };
+            const isDuplicate = productImages.some((existing) => isProductImageDuplicate(existing, incoming));
+            if (isDuplicate) {
+              setErrors((prev) => ({ ...prev, productImages: 'This image is already added.' }));
+              return;
+            }
             setProductImages((prev) => [...prev, { file, preview: URL.createObjectURL(file) }]);
             setProductUrlInput('');
             setErrors((prev) => ({ ...prev, productImages: '' }));
@@ -4007,7 +4060,7 @@ const renderLightboxModal = () => {
                 {/* Model & Duration (2 Columns) */}
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 items-start">
                   {/* Model */}
-                  <div className="flex min-w-0 flex-1 flex-col gap-1.5 justify-start">
+                  <div className="flex min-w-0 flex-[1.6] flex-col gap-1.5 justify-start">
                     <label className="text-xs sm:text-sm font-semibold text-zinc-800 dark:text-white/90">
                       AI Model
                     </label>

@@ -34,6 +34,42 @@ import { ShadcnTooltip } from '@/components/layout/ShadcnTooltip';
 import { getFirstAvailableVideoModel, isVideoModelBlocked } from '@/utils/videoModelAccess';
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
+
+const isImageDuplicate = (existing, incoming) => {
+  if (!existing || !incoming) return false;
+
+  // Compare file objects if both exist
+  if (existing.file && incoming.file) {
+    const existingName = existing.file.name;
+    const incomingName = incoming.file.name;
+    const isClipboardExisting = !existingName || existingName === 'image.png' || existingName === 'blob';
+    const isClipboardIncoming = !incomingName || incomingName === 'image.png' || incomingName === 'blob';
+
+    if (!isClipboardExisting && !isClipboardIncoming) {
+      if (existingName === incomingName && existing.file.size === incoming.file.size) {
+        return true;
+      }
+    }
+    // For clipboard or generic file names, match by size and MIME type
+    if (
+      existing.file.size === incoming.file.size &&
+      existing.file.type === incoming.file.type &&
+      incoming.file.size > 0
+    ) {
+      return true;
+    }
+  }
+
+  // Compare URLs / preview strings
+  const existingPreview = (typeof existing.preview === 'string' ? existing.preview : '').trim();
+  const incomingPreview = (typeof incoming.preview === 'string' ? incoming.preview : '').trim();
+  if (existingPreview && incomingPreview && existingPreview === incomingPreview) {
+    return true;
+  }
+
+  return false;
+};
+
 const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   const dispatch = useDispatch();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -180,16 +216,51 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   }, [uploadedImages, selectedImageIndex]);
 
   const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
-    const previews = files.map((file) => ({
-      file,
-      preview: URL.createObjectURL(file),
-    }));
-    setUploadedImages((prev) => [...prev, ...previews]);
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+
+    let duplicateCount = 0;
+    const newItems = [];
+
+    files.forEach((file) => {
+      const incoming = { file };
+      const isDuplicate =
+        uploadedImages.some((existing) => isImageDuplicate(existing, incoming)) ||
+        newItems.some((existing) => isImageDuplicate(existing, incoming));
+
+      if (isDuplicate) {
+        duplicateCount++;
+      } else {
+        newItems.push({
+          file,
+          preview: URL.createObjectURL(file),
+        });
+      }
+    });
+
+    if (duplicateCount > 0) {
+      toast.error(
+        duplicateCount === 1
+          ? 'This image is already added'
+          : `${duplicateCount} duplicate images were skipped`
+      );
+    }
+
+    if (newItems.length > 0) {
+      setUploadedImages((prev) => [...prev, ...newItems]);
+      setErrors((prev) => ({ ...prev, productUrl: null }));
+    }
   };
 
   const removeImage = (index) => {
-    setUploadedImages((prev) => prev.filter((_, i) => i !== index));
+    setUploadedImages((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      if (selectedImageIndex >= next.length) {
+        setSelectedImageIndex(Math.max(0, next.length - 1));
+      }
+      return next;
+    });
   };
 
   const handleGenerate = async () => {
@@ -262,7 +333,8 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
         if (response.meta?.title) setProductName(response.meta.title);
         if (response.meta?.description) setDescription(response.meta.description);
         if (response.images && response.images.length > 0) {
-          const apiImages = response.images.map((url) => ({
+          const uniqueUrls = Array.from(new Set(response.images.filter(Boolean)));
+          const apiImages = uniqueUrls.map((url) => ({
             file: null,
             preview: url,
             isApiImage: true,
@@ -286,30 +358,42 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
   };
 
   const handlePaste = (e) => {
-    const items = e.clipboardData.items;
+    const items = e.clipboardData?.items;
+    if (!items) return;
 
     // Case 1: Image pasted directly — store file, upload happens on Generate
     for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
+      if (items[i].type && items[i].type.indexOf('image') !== -1) {
         const file = items[i].getAsFile();
         if (file) {
+          e.preventDefault();
+          const incoming = { file };
+          const isDuplicate = uploadedImages.some((existing) => isImageDuplicate(existing, incoming));
+          if (isDuplicate) {
+            toast.error('This image is already added');
+            return;
+          }
           setUploadedImages((prev) => [...prev, { file, preview: URL.createObjectURL(file) }]);
+          setErrors((prev) => ({ ...prev, productUrl: null }));
           return;
         }
       }
     }
 
     // Case 2: Image URL pasted — store as-is, upload happens on Generate
-    const pastedText = e.clipboardData.getData('text');
+    const pastedText = e.clipboardData.getData('text')?.trim();
 
-    if (pastedText && pastedText.startsWith('http')) {
-      const isDuplicate = uploadedImages.some((img) => img.preview === pastedText);
+    if (pastedText && (pastedText.startsWith('http://') || pastedText.startsWith('https://'))) {
+      e.preventDefault();
+      const incoming = { preview: pastedText };
+      const isDuplicate = uploadedImages.some((existing) => isImageDuplicate(existing, incoming));
       if (isDuplicate) {
         toast.error('This image is already added');
         return;
       }
       setProductUrl(pastedText);
       setUploadedImages((prev) => [...prev, { file: null, preview: pastedText, isUrl: true }]);
+      setErrors((prev) => ({ ...prev, productUrl: null }));
     }
   };
 
@@ -535,7 +619,7 @@ const UGCAdsPage = ({ handleGenerate: onGenerate, onClose }) => {
 
                 {/* 3. Model & Duration */}
                 <div className="flex gap-3 sm:gap-4">
-                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <div className="flex min-w-0 flex-[1.6] flex-col gap-1.5">
                     <label className="text-xs font-medium text-gray-500 dark:text-white/80 2xl:text-sm">Model *</label>
                     <CommonDropdown
                       options={videoChatModels}

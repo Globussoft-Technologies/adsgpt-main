@@ -431,6 +431,34 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       return;
     }
 
+    // Deduplicate against existing uploaded images
+    let duplicateCount = 0;
+    const nonDuplicates = [];
+    imageFiles.forEach((file) => {
+      const isDup =
+        uploadedImages.some(
+          (img) =>
+            img.file &&
+            img.file.size === file.size &&
+            (img.file.name === file.name || (!file.name || file.name === 'image.png'))
+        ) ||
+        nonDuplicates.some(
+          (f) => f.size === file.size && (f.name === file.name || (!file.name || file.name === 'image.png'))
+        );
+
+      if (isDup) {
+        duplicateCount++;
+      } else {
+        nonDuplicates.push(file);
+      }
+    });
+
+    if (duplicateCount > 0) {
+      globalToast.error(
+        duplicateCount === 1 ? 'This image is already added' : `${duplicateCount} duplicate images were skipped`
+      );
+    }
+
     const totalCount = uploadedImages.length + urlImages.length;
     const remainingSlots = 5 - totalCount;
 
@@ -439,7 +467,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       return;
     }
 
-    if (imageFiles.length > remainingSlots) {
+    if (nonDuplicates.length > remainingSlots) {
       setErrors((prev) => ({ ...prev, images: 'Max 5 images allowed' }));
     } else if (hadInvalid) {
       setErrors((prev) => ({ ...prev, images: IMAGE_TYPE_ERROR }));
@@ -447,7 +475,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
       setErrors((prev) => ({ ...prev, images: '' }));
     }
 
-    const filesToUpload = imageFiles.slice(0, remainingSlots);
+    const filesToUpload = nonDuplicates.slice(0, remainingSlots);
     if (!filesToUpload.length) return;
 
     const newItems = filesToUpload.map((file) => ({
