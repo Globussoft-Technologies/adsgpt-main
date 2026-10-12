@@ -80,6 +80,8 @@ const { finishStudioImageRender } = require("../../services/adStudio/studioImage
 const FOLDED_KINDS = new Set(["template.recommend", "video.generate"]);
 const isFoldedKind = (kind) => FOLDED_KINDS.has(String(kind || ""));
 const { resolveResultMedia } = require("../../services/onboarding/mediaUrls");
+const { notifyUser } = require("../../services/push/notifyUser");
+const { pushForJob } = require("../../services/onboarding/onboardingPush");
 
 // The socket event every client already listens on. Emitting here means a job
 // updated by webhook looks identical to one updated by the live SSE bridge —
@@ -95,6 +97,28 @@ function emitToUser(userId, payload) {
     // and we would re-run this handler for an update we had already stored.
     logger.error("[jobWebhook] emit failed", { message: error.message });
   }
+}
+
+/**
+ * Wake a backgrounded app for a finished render.
+ *
+ * Separate from `emitToUser` rather than folded into it, for two reasons. The
+ * socket carries every tick and the push carries almost none — see
+ * `onboardingPush` for which three kinds qualify — so one call that did both
+ * would spend most of its life deciding not to push. And the socket emit is
+ * synchronous while FCM is a network round trip to Google: awaiting it here
+ * would add that to the webhook's response time, and a slow webhook is a
+ * webhook Python retries.
+ *
+ * So this is deliberately NOT awaited. Nothing downstream depends on a push
+ * having been delivered, and `notifyUser` already swallows its own failures.
+ */
+function pushForTerminal(job) {
+  const push = pushForJob(job);
+  if (!push) return;
+  notifyUser(job.userId, { push }).catch((error) =>
+    logger.error("[jobWebhook] push failed", { message: error.message }),
+  );
 }
 
 /**
@@ -568,8 +592,27 @@ exports.receive = async (req, res) => {
     // and that does not exist until the page has been folded in. Everything
     // else emits immediately, as it always has: the sooner the client hears
     // about a storyboard, the sooner it paints.
-    const emitDone = (payloadResult) =>
-      emitToUser(applied.userId, {
+    // Inside `emitDone`, not beside it. The three call sites below are
+    // mutually exclusive — folded kinds wait for the mirror, keyframes wait
+    // for the recovery decision, everything else goes immediately — so this is
+    // the one place a terminal event is announced exactly once, whichever
+    // route it took. `video.generate` is a FOLDED kind, so hanging the push
+    // off the immediate branch would have missed the main case entirely.
+    //
+    // Duplicates cannot reach here: a callback carrying a seq we have already
+    // applied returns above, long before this. That is what stops a retried
+    // webhook buzzing the same phone twice.
+    const emitDone = (payloadResult) => {
+      if (isTerminal) {
+        pushForTerminal({
+          userId: applied.userId,
+          kind: applied.kind,
+          status: applied.status,
+          sessionId: applied.sessionId,
+          jobId: applied.jobId,
+        });
+      }
+      return emitToUser(applied.userId, {
         job_id: applied.jobId,
         session_id: applied.sessionId,
         kind: applied.kind,
@@ -585,6 +628,7 @@ exports.receive = async (req, res) => {
         result: isTerminal ? resolveResultMedia(applied.kind, payloadResult) : undefined,
         error: applied.error || undefined,
       });
+    };
 
     const isPagedKind = isFoldedKind(applied.kind);
     // A keyframe result that is missing frames is HELD — see `keyframeRecovery`.
