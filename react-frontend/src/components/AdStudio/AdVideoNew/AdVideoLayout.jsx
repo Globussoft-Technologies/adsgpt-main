@@ -586,7 +586,7 @@ const AdVideoLayout = ({ libraryOnly = false }) => {
               <SidebarTrigger
                 aria-label="Open navigation"
                 aria-controls="app-sidebar-navigation"
-                className="close_open_ flex h-9 w-9 cursor-pointer items-center justify-center rounded-full p-1 hover:bg-[#EAE5DC] lg:hidden mr-0 sm:mr-1.5"
+                className="close_open_ flex h-9 w-9 cursor-pointer items-center justify-center rounded-full p-1 hover:bg-[#EAE5DC] md:hidden mr-0 sm:mr-1.5"
               >
                 <PanelLeft className="h-5" aria-hidden="true" />
               </SidebarTrigger>

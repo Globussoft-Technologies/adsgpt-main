@@ -278,6 +278,7 @@ export default function TopHeader() {
     (state) => state.adStudioTabs.adCreativeNewActivePage
   );
   const adLibraryFilters = useSelector((state) => state.brandIQTabs.adLibraryFilters);
+  const [modulePopoverOpen, setModulePopoverOpen] = useState(false);
   const [adLibrarySearch, setAdLibrarySearch] = useState(adLibraryFilters?.searchQuery || '');
 
   useEffect(() => {
@@ -287,6 +288,24 @@ export default function TopHeader() {
   const submitAdLibrarySearch = () => {
     dispatch(setAdLibraryFilters({ searchQuery: adLibrarySearch.trim() }));
   };
+
+  const [isShowHeadersTabs, setIsShowHeadersTabs] = useState(true);
+  const mobileTabsOpenRef = useRef(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setIsShowHeadersTabs(true);
+      } else {
+        setIsShowHeadersTabs(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [mobileTabsOpenRef]);
 
   useEffect(() => {
     if (
@@ -326,7 +345,7 @@ export default function TopHeader() {
       aria-label="Open navigation"
       aria-controls="app-sidebar-navigation"
       aria-expanded={openMobile}
-      className={`close_open_ flex h-9 w-9 cursor-pointer items-center justify-center rounded-full p-1 hover:bg-[#EAE5DC] lg:hidden ${className}`}
+      className={`close_open_ flex h-9 w-9 cursor-pointer items-center justify-center rounded-full p-1 hover:bg-[#EAE5DC] md:hidden ${className}`}
     >
       <PanelLeft className="h-5" aria-hidden="true" />
     </SidebarTrigger>
@@ -396,23 +415,7 @@ export default function TopHeader() {
     };
   }, [explorePlatform, exploreCompetitor, dispatch]);
 
-  const [isShowHeadersTabs, setIsShowHeadersTabs] = useState(true);
-  const mobileTabsOpenRef = useRef(null);
 
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 1024) {
-        setIsShowHeadersTabs(true);
-      } else {
-        setIsShowHeadersTabs(false);
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [mobileTabsOpenRef]);
 
   // Restore the user's last selected brand after the current brand list loads.
   // Persist only the stable ID; the full, current brand object always comes
@@ -508,6 +511,8 @@ export default function TopHeader() {
       activePage === 'myVideos');
 
   if (currentRoute !== '/adfactory-demo' && hideHeader) {
+    if (isMySpaceView) return null;
+
     const mobileNavigationControl = (
       <div className="fixed top-3 left-3 z-[60] lg:hidden">
         {renderMobileSidebarTrigger()}
@@ -544,22 +549,22 @@ export default function TopHeader() {
     <>
       {currentRoute !== '/adfactory-demo' && !hideHeader && (
         <div
-          className="app-global-header app-top-header lm-header-surface sticky top-0 z-50 flex w-full items-center justify-between dark:bg-transparent dark:backdrop-blur-none"
+          className="app-global-header app-top-header lm-header-surface sticky top-0 z-50 flex w-full min-w-0 items-center justify-between px-2 sm:px-4 py-2 dark:bg-transparent dark:backdrop-blur-none"
         >
-          <div className="left_header_container flex min-w-0 items-center gap-1 sm:gap-2">
+          <div className="left_header_container flex min-w-0 shrink items-center gap-1 sm:gap-2">
             {renderMobileSidebarTrigger('mr-0 sm:mr-1.5')}
             {/* Left Title */}
             {currentRoute !== '/adfactory-demo' && (
-              <div className="flex shrink-0 items-center">
+              <div className="flex min-w-0 shrink items-center">
                 <h1
-                  className="app-global-header-title"
+                  className="app-global-header-title min-w-0 truncate text-sm sm:text-base md:text-lg font-bold"
                 >
                   {headerName}
                 </h1>
                 {(currentRoute === '/adstudio' ||
                   currentRoute === '/adfactory' ||
                   (currentRoute === '/brandiq' && visibleBrandIqTabs?.length > 0)) && (
-                  <div className="mx-2 sm:mx-2.5 md:mx-3 h-5 sm:h-6 w-[1.5px] shrink-0 bg-zinc-300 dark:bg-zinc-700" />
+                  <div className="hidden md:block mx-2 sm:mx-2.5 md:mx-3 h-5 sm:h-6 w-[1.5px] shrink-0 bg-zinc-300 dark:bg-zinc-700" />
                 )}
               </div>
             )}
@@ -586,8 +591,8 @@ export default function TopHeader() {
               <HeaderTabs
                 isShowHeadersTabs={isShowHeadersTabs}
                 setIsShowHeadersTabs={setIsShowHeadersTabs}
-                tabs={visibleAdStudioTabs}
                 mobileTabsOpenRef={mobileTabsOpenRef}
+                tabs={visibleAdStudioTabs}
                 activeTabId={activeAdStudioTabId}
                 onTabChange={(id) => dispatch(setActiveAdStudioTab(id))}
               />
@@ -596,8 +601,8 @@ export default function TopHeader() {
               <HeaderTabs
                 isShowHeadersTabs={isShowHeadersTabs}
                 setIsShowHeadersTabs={setIsShowHeadersTabs}
-                tabs={visibleBrandIqTabs}
                 mobileTabsOpenRef={mobileTabsOpenRef}
+                tabs={visibleBrandIqTabs}
                 activeTabId={activeBrandIQTabId}
                 onTabChange={(id) => dispatch(setActiveBrandIQTab(id))}
               />
@@ -606,7 +611,7 @@ export default function TopHeader() {
 
           <div
             id="tour_filter_adcreatives_prompt"
-            className="right_header_mybrands relative flex shrink-0 items-center gap-1.5 sm:gap-2"
+            className="right_header_mybrands relative flex shrink-0 items-center gap-1 sm:gap-1.5 md:gap-2 ml-auto"
           >
             <WorkspaceSwitcher />
             {/* AI Assistant — History + New Chat */}
@@ -679,8 +684,72 @@ export default function TopHeader() {
               />
             </div> */}
 
-                  {/* ! search field */}
-                  <div className="ad-library-search relative flex min-w-[150px] items-center gap-2 rounded-full px-3 py-1.5 text-zinc-600 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:text-[#AFAFAF]">
+                  {/* Mobile Search Popover (< sm) */}
+                  <div className="flex sm:hidden">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Search competitors"
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white/70 text-zinc-600 dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]"
+                        >
+                          <Search className="h-4 w-4" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="end"
+                        sideOffset={8}
+                        className="z-50 w-[270px] max-w-[calc(100vw-24px)] p-2 rounded-2xl border border-black/10 bg-white/95 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#141414]/95"
+                      >
+                        <div className="flex flex-col gap-2">
+                          <div className="relative flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 bg-zinc-50 dark:bg-white/5">
+                            <Search className="h-4 w-4 text-zinc-400 shrink-0" />
+                            <input
+                              type="text"
+                              placeholder="Search competitors..."
+                              className="w-full bg-transparent text-xs text-zinc-800 focus:outline-none dark:text-zinc-100 placeholder:text-zinc-400"
+                              value={exploreCompetitor}
+                              onChange={(e) => dispatch(setExploreCompetitor(e.target.value))}
+                            />
+                            {exploreCompetitor && (
+                              <button
+                                type="button"
+                                onClick={() => dispatch(setExploreCompetitor(''))}
+                              >
+                                <X className="h-3.5 w-3.5 text-zinc-400" />
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 justify-end">
+                            {['competitor', 'keyword'].map((type) => {
+                              const isActive = (exploreSearchTerm || 'competitor') === type;
+                              return (
+                                <button
+                                  key={type}
+                                  type="button"
+                                  className={`rounded-full px-3 py-1 text-xs capitalize transition-colors duration-150 cursor-pointer ${
+                                    isActive
+                                      ? 'bg-zinc-900 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900'
+                                      : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white'
+                                  }`}
+                                  onClick={() => {
+                                    dispatch(setExploreSearchTerm(type));
+                                    dispatch(setSkip(0));
+                                    dispatch(fetchExploreAds());
+                                  }}
+                                >
+                                  {type === 'competitor' ? 'Competitor' : 'Keyword'}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Desktop Search field (>= sm) */}
+                  <div className="ad-library-search relative hidden sm:flex min-w-[150px] items-center gap-2 rounded-full px-3 py-1.5 text-zinc-600 transition-colors sm:py-2 md:left-8 md:scale-[0.8] 2xl:inset-0 2xl:scale-100 2xl:px-5 2xl:pr-3 2xl:text-sm dark:text-[#AFAFAF]">
                     <div className="flex flex-shrink-0 items-center">
                       <Search
                         className="h-4 w-4 cursor-pointer hover:text-white 2xl:h-4 2xl:w-4"
@@ -766,8 +835,81 @@ export default function TopHeader() {
             {/* for AdStudio Ad Library */}
             {currentRoute === '/adstudio' && activeAdStudioTabId === 'adLibrary' && (
               <>
-                {/* Search field with Competitor and Keyword selector */}
-                <div className="ad-library-search relative flex h-9 min-w-0 flex-1 sm:flex-initial sm:min-w-[190px] md:min-w-[240px] lg:min-w-[300px] 2xl:min-w-[380px] max-w-[420px] items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3 py-1 text-zinc-700 backdrop-blur-md transition-all duration-200 dark:text-zinc-200">
+                {/* Mobile Search Popover (< sm) */}
+                <div className="flex sm:hidden">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Search Ad Library"
+                        className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white/70 text-zinc-600 dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]"
+                      >
+                        <Search className="h-4 w-4" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="end"
+                      sideOffset={8}
+                      className="z-50 w-[270px] max-w-[calc(100vw-24px)] p-2 rounded-2xl border border-black/10 bg-white/95 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#141414]/95"
+                    >
+                      <div className="flex flex-col gap-2">
+                        <div className="relative flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 bg-zinc-50 dark:bg-white/5">
+                          <Search className="h-4 w-4 text-zinc-400 shrink-0" />
+                          <input
+                            type="text"
+                            placeholder="Search ads..."
+                            className="w-full bg-transparent text-xs text-zinc-800 focus:outline-none dark:text-zinc-100 placeholder:text-zinc-400"
+                            value={adLibrarySearch}
+                            onChange={(e) => setAdLibrarySearch(e.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') submitAdLibrarySearch();
+                            }}
+                          />
+                          {adLibrarySearch && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdLibrarySearch('');
+                                dispatch(setAdLibraryFilters({ searchQuery: '' }));
+                              }}
+                            >
+                              <X className="h-3.5 w-3.5 text-zinc-400" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 justify-end">
+                          {['competitor', 'keyword'].map((type) => {
+                            const isActive = (adLibraryFilters?.searchType || 'competitor') === type;
+                            return (
+                              <button
+                                key={type}
+                                type="button"
+                                className={`rounded-full px-3 py-1 text-xs capitalize transition-colors duration-150 cursor-pointer ${
+                                  isActive
+                                    ? 'bg-zinc-900 font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900'
+                                    : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white'
+                                }`}
+                                onClick={() => {
+                                  dispatch(
+                                    setAdLibraryFilters({
+                                      searchType: type,
+                                      searchQuery: adLibrarySearch.trim(),
+                                    })
+                                  );
+                                }}
+                              >
+                                {type === 'competitor' ? 'Competitor' : 'Keyword'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Desktop Search field (>= sm) */}
+                <div className="ad-library-search relative hidden sm:flex h-9 min-w-0 sm:min-w-[190px] md:min-w-[240px] lg:min-w-[300px] 2xl:min-w-[380px] max-w-[420px] items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3 py-1 text-zinc-700 backdrop-blur-md transition-all duration-200 dark:text-zinc-200">
                   <button
                     type="button"
                     aria-label="Search Ad Library"
@@ -959,7 +1101,48 @@ export default function TopHeader() {
               <>
                 {Array.isArray(myBrands) && myBrands?.length > 0 && (
                   <>
-                    <div className="ad-library-search relative flex h-9 w-[150px] items-center gap-2 rounded-full px-3 text-zinc-700 backdrop-blur-md transition-all duration-200 sm:w-[190px] md:w-[240px] lg:w-[300px] 2xl:w-[340px] dark:text-zinc-200">
+                    {/* Mobile Brand Search (< sm) */}
+                    <div className="flex sm:hidden">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Search your brands"
+                            className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white/70 text-zinc-600 dark:border-white/20 dark:bg-[#0D0D0D]/50 dark:text-[#AFAFAF]"
+                          >
+                            <Search className="h-4 w-4" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="end"
+                          sideOffset={8}
+                          className="z-50 w-[270px] max-w-[calc(100vw-24px)] p-2 rounded-2xl border border-black/10 bg-white/95 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#141414]/95"
+                        >
+                          <div className="relative flex items-center gap-2 rounded-full border border-black/10 dark:border-white/15 px-3 py-1.5 bg-zinc-50 dark:bg-white/5">
+                            <Search className="h-4 w-4 text-zinc-400 shrink-0" />
+                            <input
+                              type="text"
+                              inputMode="search"
+                              placeholder="Search your brands..."
+                              className="w-full bg-transparent text-xs text-zinc-800 focus:outline-none dark:text-zinc-100 placeholder:text-zinc-400"
+                              value={myBrandsSearch}
+                              onChange={(event) => dispatch(setMyBrandsSearch(event.target.value))}
+                            />
+                            {myBrandsSearch && (
+                              <button
+                                type="button"
+                                onClick={() => dispatch(setMyBrandsSearch(''))}
+                              >
+                                <X className="h-3.5 w-3.5 text-zinc-400" />
+                              </button>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    {/* Desktop Brand Search (>= sm) */}
+                    <div className="ad-library-search relative hidden sm:flex h-9 w-[150px] items-center gap-2 rounded-full px-3 text-zinc-700 backdrop-blur-md transition-all duration-200 sm:w-[190px] md:w-[240px] lg:w-[300px] 2xl:w-[340px] dark:text-zinc-200">
                       <Search className="h-4 w-4 shrink-0 text-zinc-400" aria-hidden="true" />
                       <input
                         type="text"
@@ -1077,20 +1260,84 @@ export default function TopHeader() {
               </div>
             )}
 
+
+
             {(currentRoute === '/brandiq' || currentRoute === '/adstudio') && (
               <div className="responsive_options flex lg:hidden">
-                <button
-                  id="tour_mobile_tabs_open"
-                  ref={mobileTabsOpenRef}
-                  onClick={() => setIsShowHeadersTabs(!isShowHeadersTabs)}
-                  className={`show_top_header cursor-pointer rounded-full border p-2 text-xs transition-all duration-200 ease-out hover:scale-105 ${
-                    isShowHeadersTabs
-                      ? 'border-black/30 text-black dark:border-white/60 dark:text-white'
-                      : 'border-black/10 text-zinc-600 dark:border-white/20 dark:text-[#AFAFAF]'
-                  } bg-white/70 hover:border-black/20 hover:text-black dark:bg-[#0D0D0D]/50 dark:hover:border-white/40 dark:hover:text-white`}
-                >
-                  <List className="h-4 w-4" />
-                </button>
+                <Popover open={modulePopoverOpen} onOpenChange={setModulePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      ref={mobileTabsOpenRef}
+                      id="tour_mobile_tabs_open"
+                      aria-label="Switch module"
+                      className="show_top_header cursor-pointer rounded-full border p-2 text-xs transition-all duration-200 ease-out hover:scale-105 border-black/10 text-zinc-600 dark:border-white/20 dark:text-[#AFAFAF] bg-white/70 hover:border-black/20 hover:text-black dark:bg-[#0D0D0D]/50 dark:hover:border-white/40 dark:hover:text-white"
+                    >
+                      <List className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    sideOffset={8}
+                    className="z-50 min-w-[190px] p-1.5 rounded-2xl border border-black/10 bg-white/95 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-[#141414]/95"
+                  >
+                    <div className="px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                      {currentRoute === '/adstudio' ? 'Ad Studio Modules' : 'BrandIQ Modules'}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {(currentRoute === '/adstudio' ? visibleAdStudioTabs : visibleBrandIqTabs).map(
+                        (tab) => {
+                          const Icon = tab.icon;
+                          const isActive =
+                            currentRoute === '/adstudio'
+                              ? activeAdStudioTabId === tab.id
+                              : activeBrandIQTabId === tab.id;
+                          return (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => {
+                                setModulePopoverOpen(false);
+                                const planType = Object.keys(
+                                  userData?.userSubscriptionType || {}
+                                )[0];
+                                const isPlan = planType == AUTO_GENERATED_PLAN_ID;
+                                if (tab.id === 'adVideo' && isPlan) {
+                                  window.location.href =
+                                    import.meta.env.VITE_GUEST_USER_SIGNUP_URL;
+                                } else {
+                                  if (currentRoute === '/adstudio') {
+                                    dispatch(setActiveAdStudioTab(tab.id));
+                                  } else {
+                                    dispatch(setActiveBrandIQTab(tab.id));
+                                  }
+                                }
+                              }}
+                              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium cursor-pointer transition-colors ${
+                                isActive
+                                  ? 'bg-zinc-100 font-semibold text-zinc-950 dark:bg-white/10 dark:text-white'
+                                  : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white'
+                              }`}
+                            >
+                              {Icon && (
+                                <Icon
+                                  className={`h-4 w-4 shrink-0 ${
+                                    isActive
+                                      ? 'text-zinc-950 dark:text-white stroke-[2.2]'
+                                      : 'text-zinc-400 dark:text-zinc-400 stroke-[1.8]'
+                                  }`}
+                                />
+                              )}
+                              <span className="flex-1 text-left">{tab.label}</span>
+                              {isActive && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-zinc-950 dark:bg-white" />
+                              )}
+                            </button>
+                          );
+                        }
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             )}
 

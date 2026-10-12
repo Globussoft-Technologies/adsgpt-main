@@ -347,10 +347,18 @@ html.theme-changing *::after {
     position: relative;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(88, 103, 235, 0.015)),
-      var(--ws-bg) !important;
+      var(--ws-bg, #FCFAF7) !important;
     border-right: none !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
+  }
+
+  /* Ensure mobile drawer sheet has full solid background */
+  [data-mobile="true"] .lm-sidebar-surface {
+    background: #FCFAF7 !important;
+  }
+  .dark [data-mobile="true"] .lm-sidebar-surface {
+    background: #0F0F0F !important;
   }
 
   html:not(.dark) .lm-sidebar-surface::before {
@@ -554,3 +562,57 @@ input[type='range']::-webkit-slider-thumb {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MOBILE SIDEBAR DRAWER (UN-LAYERED GLOBAL OVERRIDES)
+   Ensures the mobile sidebar drawer opens with full visibility, correct
+   transforms, and full-bleed backdrop across all mobile/tablet viewports (< 1024px).
+───────────────────────────────────────────────────────────────────────────── */
+[data-mobile="true"],
+[data-sidebar="sidebar"][data-mobile="true"],
+[data-slot="sheet-content"] {
+  background-color: #FCFAF7 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45) !important;
+}
+
+html.dark [data-mobile="true"],
+html.dark [data-sidebar="sidebar"][data-mobile="true"],
+html.dark [data-slot="sheet-content"],
+.dark [data-mobile="true"],
+.dark [data-sidebar="sidebar"][data-mobile="true"],
+.dark [data-slot="sheet-content"] {
+  background-color: #0F0F0F !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85) !important;
+}
+
+[data-slot="sheet-content"][data-state="open"],
+[data-sidebar="sidebar"][data-mobile="true"][data-state="open"],
+[data-mobile="true"][data-state="open"] {
+  transform: translate3d(0, 0, 0) !important;
+  translate: 0 0 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+[data-slot="sheet-content"][data-state="closed"],
+[data-sidebar="sidebar"][data-mobile="true"][data-state="closed"],
+[data-mobile="true"][data-state="closed"] {
+  transform: translate3d(-100%, 0, 0) !important;
+  translate: -100% 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+[data-slot="sheet-overlay"][data-state="open"] {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+[data-slot="sheet-overlay"][data-state="closed"] {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+

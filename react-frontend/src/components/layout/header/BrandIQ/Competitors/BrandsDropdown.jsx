@@ -509,7 +509,7 @@ const BrandsDropdown = ({
                   ? `0 0 14px ${hexToRgba(activeColor, 0.32)}, 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.22)`
                   : `0 2px 10px ${hexToRgba(activeColor, 0.14)}, inset 0 1px 0 rgba(255, 255, 255, 0.7)`,
               }}
-          className={`group inline-flex h-9 items-center gap-2 rounded-full border py-1 pl-1.5 pr-3 transition-colors duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 ${
+          className={`group inline-flex h-9 items-center gap-1.5 sm:gap-2 rounded-full border py-1 pl-1.5 pr-2 sm:pr-3 transition-colors duration-200 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 ${
             subtle
               ? 'brand-switcher-subtle'
               : 'transition-all hover:scale-[1.015] hover:shadow-sm'
@@ -560,7 +560,7 @@ const BrandsDropdown = ({
           </div>
 
           {/* Selected brand label */}
-          <span className="min-w-0 max-w-[80px] xs:max-w-[110px] sm:max-w-[150px] 2xl:max-w-[200px] truncate text-left text-[12px] sm:text-[13px] font-semibold text-zinc-800 capitalize tracking-tight dark:text-white">
+          <span className="hidden sm:inline-block min-w-0 max-w-[80px] xs:max-w-[110px] sm:max-w-[150px] 2xl:max-w-[200px] truncate text-left text-[12px] sm:text-[13px] font-semibold text-zinc-800 capitalize tracking-tight dark:text-white">
             {selectedLabel}
           </span>
 

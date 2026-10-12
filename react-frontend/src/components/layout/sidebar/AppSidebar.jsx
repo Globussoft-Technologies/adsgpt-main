@@ -12,6 +12,7 @@ import {
   Sparkles,
   Users,
   Zap,
+  X,
 } from 'lucide-react';
 import AdsGPTLogoDarkLogo from '@/assets/layouts/adsgpt-dark-mode-logo.svg';
 import AdsGPTLogo from '@/assets/layouts/adsgpt-logo.webp';
@@ -233,7 +234,7 @@ const AppSidebar = () => {
   const showLibraryGroup = showWorkspace || showMySpace;
 
   // ── Layout mode: showExpanded = wide nav with labels ───────────────────
-  const showExpanded = isNavExpanded;
+  const showExpanded = isMobile || isNavExpanded;
 
   // ── Badge renderer ─────────────────────────────────────────────────────
   const renderBadge = (badge) => {
@@ -462,28 +463,39 @@ const AppSidebar = () => {
               </ShadcnTooltip>
             </div>
           ) : showExpanded ? (
-            <div className="sidebar-header-expanded flex h-[56px] items-center justify-between pl-2 pr-[17px]">
+            <div className={`sidebar-header-expanded flex ${isMobile ? 'h-[48px] pl-2.5 pr-2.5' : 'h-[56px] pl-2 pr-[17px]'} items-center justify-between`}>
               <Link
                 to="/adstudio"
                 onClick={handleLogoClick}
                 aria-label="Home - Ad Studio Ad Creative"
                 className="flex min-w-0 flex-1 items-center justify-start gap-[9px] rounded-md focus:outline-none"
               >
-                <SidebarLogoMark className="sidebar-expanded-logo-mark h-9 w-9 flex-shrink-0" />
-                <span className="sidebar-expanded-brand-name truncate text-[20px] font-bold leading-none text-[#1F1D29] dark:text-white">
+                <SidebarLogoMark className={`sidebar-expanded-logo-mark ${isMobile ? 'h-7 w-7' : 'h-9 w-9'} flex-shrink-0`} />
+                <span className={`sidebar-expanded-brand-name truncate ${isMobile ? 'text-[17px]' : 'text-[20px]'} font-bold leading-none text-[#1F1D29] dark:text-white`}>
                   AdsGPT
                 </span>
               </Link>
-              <ShadcnTooltip label="Collapse sidebar" side="right">
+              {isMobile ? (
                 <button
                   type="button"
-                  onClick={toggleNavExpanded}
-                  aria-label="Collapse sidebar"
-                  className="sidebar-header-control sidebar-collapse-handle flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md transition-colors"
+                  onClick={() => setOpenMobile(false)}
+                  aria-label="Close sidebar"
+                  className="sidebar-header-control flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md cursor-pointer transition-colors"
                 >
-                  <ChevronsLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                  <X className="h-4 w-4" aria-hidden="true" />
                 </button>
-              </ShadcnTooltip>
+              ) : (
+                <ShadcnTooltip label="Collapse sidebar" side="right">
+                  <button
+                    type="button"
+                    onClick={toggleNavExpanded}
+                    aria-label="Collapse sidebar"
+                    className="sidebar-header-control sidebar-collapse-handle flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md transition-colors"
+                  >
+                    <ChevronsLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </ShadcnTooltip>
+              )}
             </div>
           ) : (
             <div
@@ -802,7 +814,9 @@ const AppSidebar = () => {
           <div
             className={`sidebar-profile-footer relative flex flex-shrink-0 items-center justify-center ${
               showExpanded
-                ? 'h-[88px] px-2.5 pb-2.5 pt-1'
+                ? isMobile
+                  ? 'h-[74px] px-2 pb-2 pt-1'
+                  : 'h-[88px] px-2.5 pb-2.5 pt-1'
                 : openHistory
                   ? 'h-[58px] px-2 pb-2 pt-1'
                   : isMobile

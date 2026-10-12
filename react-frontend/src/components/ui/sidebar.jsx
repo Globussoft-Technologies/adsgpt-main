@@ -35,6 +35,46 @@ function useSidebar() {
   return context;
 }
 
+const PHONE_BREAKPOINT = 768;
+
+function useIsPhone() {
+  const [isPhone, setIsPhone] = React.useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < PHONE_BREAKPOINT;
+  });
+
+  React.useEffect(() => {
+    const checkPhone = () => {
+      const isUnder = window.innerWidth < PHONE_BREAKPOINT;
+      setIsPhone(isUnder);
+    };
+
+    checkPhone();
+
+    window.addEventListener('resize', checkPhone, { passive: true });
+    window.addEventListener('orientationchange', checkPhone, { passive: true });
+
+    const mql = window.matchMedia(`(max-width: ${PHONE_BREAKPOINT - 1}px)`);
+    if (mql?.addEventListener) {
+      mql.addEventListener('change', checkPhone);
+    } else if (mql?.addListener) {
+      mql.addListener(checkPhone);
+    }
+
+    return () => {
+      window.removeEventListener('resize', checkPhone);
+      window.removeEventListener('orientationchange', checkPhone);
+      if (mql?.removeEventListener) {
+        mql.removeEventListener('change', checkPhone);
+      } else if (mql?.removeListener) {
+        mql.removeListener(checkPhone);
+      }
+    };
+  }, []);
+
+  return isPhone;
+}
+
 function SidebarProvider({
   defaultOpen = false,
   open: openProp,
@@ -44,7 +84,7 @@ function SidebarProvider({
   children,
   ...props
 }) {
-  const isMobile = useIsMobile();
+  const isMobile = useIsPhone();
   const [openMobile, setOpenMobile] = React.useState(false);
   const [openHistory, setOpenHistory] = React.useState(false);
 
@@ -87,35 +127,58 @@ function SidebarProvider({
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : toggleNavExpanded();
+    const isUnderPhone = typeof window !== 'undefined' ? window.innerWidth < PHONE_BREAKPOINT : isMobile;
+    return isUnderPhone ? setOpenMobile((open) => !open) : toggleNavExpanded();
   }, [isMobile, toggleNavExpanded]);
 
   const toggleHistorySection = React.useCallback(() => {
     setOpenHistory((open) => !open);
   }, [setOpenHistory]);
 
-  // Adds a keyboard shortcut to toggle the sidebar.
+  // Adds a keyboard shortcut (Ctrl+B / Cmd+B) to toggle the sidebar, and Escape to close mobile sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
+      const isUnderPhone = typeof window !== 'undefined' ? window.innerWidth < PHONE_BREAKPOINT : isMobile;
+
+      if (event.key === 'Escape' && isUnderPhone && openMobile) {
+        setOpenMobile(false);
+        return;
+      }
+
+      const isBKey =
+        event.key === 'b' ||
+        event.key === 'B' ||
+        event.code === 'KeyB' ||
+        event.keyCode === 66;
+
+      if (isBKey && (event.metaKey || event.ctrlKey)) {
         const target = event.target;
         const isEditableTarget =
           target instanceof HTMLElement &&
-          (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+          (target.isContentEditable ||
+            ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) ||
+            Boolean(target.closest('input, textarea, select, [contenteditable="true"]')));
         if (isEditableTarget) return;
 
         event.preventDefault();
-        if (!isMobile && openHistory) {
+        event.stopPropagation();
+
+        if (!isUnderPhone && openHistory) {
           setOpenHistory(false);
           return;
         }
-        toggleSidebar();
+
+        if (isUnderPhone) {
+          setOpenMobile((prev) => !prev);
+        } else {
+          toggleNavExpanded();
+        }
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isMobile, openHistory, toggleSidebar]);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isMobile, openHistory, openMobile, toggleNavExpanded]);
 
   // A sheet closed on desktop must not reopen when the viewport returns to mobile.
   React.useEffect(() => {
@@ -190,7 +253,7 @@ function Sidebar({
   children,
   ...props
 }) {
-  const { isMobile, state, openMobile, setOpenMobile, openHistory, isNavExpanded } = useSidebar();
+  const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
 
   if (collapsible === 'none') {
     return (
@@ -209,25 +272,44 @@ function Sidebar({
 
   if (isMobile) {
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
-        <SheetContent
+      <div
+        data-slot="sidebar"
+        data-mobile="true"
+        data-state={openMobile ? 'open' : 'closed'}
+        className="relative"
+      >
+        {/* Backdrop Overlay */}
+        <div
+          role="presentation"
+          aria-hidden={!openMobile}
+          onClick={() => setOpenMobile(false)}
+          className={cn(
+            'fixed inset-0 z-[65] bg-black/50 transition-opacity duration-300 ease-in-out',
+            openMobile ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          )}
+        />
+        {/* Mobile Drawer */}
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation sidebar"
           data-sidebar="sidebar"
-          data-slot="sidebar"
           data-mobile="true"
-          className={`bg-sidebar sidebar_adjust_container text-sidebar-foreground w-full ${
-            openHistory || isNavExpanded
-              ? 'max-w-[260px]! dark:max-w-[230px]! dark:lg:max-w-[300px]!'
-              : 'max-w-[90px]! dark:max-w-[84px]! dark:sm:max-w-[94px]!'
-          } p-0 motion-reduce:duration-0 [&>button]:hidden`}
-          side={side}
+          data-state={openMobile ? 'open' : 'closed'}
+          className={cn(
+            'fixed inset-y-0 left-0 z-[70] flex h-full w-[200px] max-w-[70vw] flex-col bg-[#FCFAF7] dark:bg-[#0F0F0F] text-sidebar-foreground border-r border-sidebar-border shadow-2xl transition-transform duration-300 ease-in-out',
+            openMobile ? 'translate-x-0 pointer-events-auto' : '-translate-x-full pointer-events-none',
+            className
+          )}
+          style={{
+            transform: openMobile ? 'translateX(0)' : 'translateX(-100%)',
+            pointerEvents: openMobile ? 'auto' : 'none',
+          }}
+          {...props}
         >
-          <SheetHeader className="sr-only">
-            <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
-          </SheetHeader>
-          <div className="flex h-full w-full flex-col">{children}</div>
-        </SheetContent>
-      </Sheet>
+          <div className="flex h-full w-full flex-col overflow-hidden">{children}</div>
+        </div>
+      </div>
     );
   }
 
@@ -255,8 +337,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          'fixed inset-y-0 flex h-svh w-(--sidebar-width) border-none transition-[left,right,width] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none',
-          !isNavExpanded && !openHistory ? 'z-[60]' : 'z-10',
+          'fixed inset-y-0 flex h-svh w-(--sidebar-width) border-none transition-[left,right,width] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none z-[60]',
           side === 'left'
             ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
             : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',

@@ -24,7 +24,7 @@ const HeaderTabs = ({
           !tabsRef.current.contains(event.target) &&
           (!mobileTabsOpenRef || !mobileTabsOpenRef.current.contains(event.target))
         ) {
-          setIsShowHeadersTabs(false);
+          setIsShowHeadersTabs?.(false);
         }
       }
     };
@@ -38,7 +38,7 @@ const HeaderTabs = ({
   return (
     <div
       ref={tabsRef}
-      className="brand-iq-tabs flex items-center gap-2 overflow-x-auto scroll-smooth pt-1 pb-1.5 select-none no-scrollbar sm:gap-2.5 md:gap-3 2xl:gap-3.5"
+      className="brand-iq-tabs hidden md:flex items-center gap-2 overflow-x-auto scroll-smooth pt-1 pb-1.5 select-none no-scrollbar sm:gap-2.5 md:gap-3 2xl:gap-3.5"
     >
       {tabs.map((tab) => {
         const Icon = tab.icon;
