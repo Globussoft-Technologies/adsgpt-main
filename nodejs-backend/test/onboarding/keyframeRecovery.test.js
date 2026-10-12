@@ -75,6 +75,73 @@ test("either link alone is enough", () => {
   assert.deepEqual(missingKinds(board("a", [frame("first"), onlyLocal])), []);
 });
 
+// ── Boards with more than two frames ──────────────────────────────────────
+// Upstream used to send exactly a `first` and a `last`. It now sends 1–8, and
+// the check used to look up those two kinds by name and ignore the rest — so a
+// board whose middle frame failed read as COMPLETE and never got the retry
+// that would have fixed it.
+
+test("a middle frame that failed is missing, not ignored", () => {
+  const b = board("a", [
+    frame("first"),
+    frame("mid_1"),
+    frame("mid_2", { status: "failed" }),
+    frame("last"),
+  ]);
+  assert.deepEqual(missingKinds(b), ["mid_2"]);
+});
+
+test("four good frames is nothing missing", () => {
+  const b = board("a", [frame("first"), frame("mid_1"), frame("mid_2"), frame("last")]);
+  assert.deepEqual(missingKinds(b), []);
+});
+
+test("a middle frame ready with no link is missing too", () => {
+  const b = board("a", [
+    frame("first"),
+    frame("mid_1", { url: "", local_url: "" }),
+    frame("last"),
+  ]);
+  assert.deepEqual(missingKinds(b), ["mid_1"]);
+});
+
+test("several bad frames are all reported", () => {
+  const b = board("a", [
+    frame("first", { status: "failed" }),
+    frame("mid_1", { status: "queued" }),
+    frame("last"),
+  ]);
+  assert.deepEqual(missingKinds(b), ["first", "mid_1"]);
+});
+
+test("a frame with no kind is named by its position", () => {
+  const b = board("a", [frame("first"), { status: "failed" }, frame("last")]);
+  assert.deepEqual(missingKinds(b), ["frame_2"]);
+});
+
+test("a board that never uses first/last is judged only on what it sent", () => {
+  // The guard that matters: demanding `first` and `last` from a board that
+  // names its frames some other way would gap every board, retry three times
+  // and then mark the whole session permanently exhausted.
+  const b = board("a", [frame("scene_1"), frame("scene_2"), frame("scene_3")]);
+  assert.deepEqual(missingKinds(b), []);
+});
+
+test("the named pair is still required when the board uses those names", () => {
+  const b = board("a", [frame("first"), frame("mid_1")]);
+  assert.deepEqual(missingKinds(b), ["last"]);
+});
+
+test("one duplicated kind is still one gap", () => {
+  const b = board("a", [
+    frame("first"),
+    frame("mid_1", { status: "failed" }),
+    frame("mid_1", { status: "failed" }),
+    frame("last"),
+  ]);
+  assert.deepEqual(missingKinds(b), ["mid_1"]);
+});
+
 console.log("\ninspectFrames\n");
 
 test("every concept complete", () => {
@@ -119,6 +186,21 @@ test("concepts with empty images read as entirely missing", () => {
   assert.equal(census.complete, false);
   assert.equal(census.gaps.length, 2);
   assert.deepEqual(census.gaps[0].kinds, ["first", "last"]);
+});
+
+// A four-frame board with one hole must reach the retry — the whole point of
+// the change above.
+test("a four-frame board with one bad middle is gapped", () => {
+  const good = board("a", [frame("first"), frame("mid_1"), frame("last")]);
+  const holed = board("b", [
+    frame("first"),
+    frame("mid_1", { status: "failed" }),
+    frame("mid_2"),
+    frame("last"),
+  ]);
+  const census = inspectFrames({ storyboards: [good, holed] });
+  assert.equal(census.complete, false);
+  assert.deepEqual(census.gaps, [{ boardId: "b", kinds: ["mid_1"] }]);
 });
 
 console.log(`\n${passed} passed\n`);

@@ -1,4 +1,4 @@
-// keyframeRecovery — a storyboard is not finished until both its frames exist.
+// keyframeRecovery — a storyboard is not finished until ALL its frames exist.
 //
 // ── The problem ─────────────────────────────────────────────────────────────
 // Keyframe rendering upstream is best-effort. A generation run reports
@@ -53,24 +53,74 @@ function resolveBaseUrl() {
 }
 
 /**
+ * The two frames the contract has always promised by name.
+ *
+ * They are no longer the whole story — see `missingKinds` — but they are still
+ * the only two that can be missing WITHOUT leaving an entry in `images` to
+ * notice, so they keep a check of their own.
+ */
+const NAMED_KINDS = ["first", "last"];
+
+/** A frame that can actually be put on screen. */
+function usable(frame) {
+  if (!frame) return false;
+  if (frame.status !== "ready") return false;
+  // `ready` with no link is a real state: the durable upload runs after the
+  // render and does not always land.
+  return Boolean(frame.url || frame.local_url);
+}
+
+/**
  * Which frames a concept is still missing.
  *
- * A concept needs a `first` and a `last`, both `ready`. Anything else counts as
- * missing — a frame that failed, a frame that was never produced at all, and a
- * frame that came back `ready` with no usable link (a durable upload that did
- * not land leaves exactly that).
+ * ── Why this no longer asks for `first` and `last` and stops ──────────────
+ * A storyboard used to BE two frames. Upstream now returns 1–8 (observed: a
+ * board carrying four), and the old check looked up exactly two kinds by name
+ * and ignored every other entry in `images`. A board whose third frame failed
+ * therefore read as COMPLETE: no gap, no retry, and the terminal event
+ * forwarded a hole that nothing was ever going to fill. The frame was
+ * recoverable the whole time — `retry-images` re-renders whatever is not
+ * ready — we simply never asked.
+ *
+ * So every entry in `images` is now judged on its own: a frame that failed, a
+ * frame still queued, and a frame that came back `ready` with no usable link
+ * all count as missing.
+ *
+ * The named check survives on top of that, because an absent frame leaves no
+ * entry to fail on. It is conditional: a board that names its frames `first`
+ * and `last` must have both, while a board that names them some other way must
+ * not be held hostage to two kinds it was never going to send. Getting that
+ * wrong would retry every board three times and then mark the session
+ * permanently exhausted.
  *
  * Kept as a list rather than a boolean so the log can say WHAT was missing,
  * which is the first question when a retry does not help.
  */
 function missingKinds(board) {
   const images = Array.isArray(board?.images) ? board.images : [];
-  return ["first", "last"].filter((kind) => {
-    const frame = images.find((img) => img?.kind === kind);
-    if (!frame) return true;
-    if (frame.status !== "ready") return true;
-    return !frame.url && !frame.local_url;
+
+  // Nothing was produced at all. Reported under the named kinds because that
+  // is what a board with no frames is still short of.
+  if (!images.length) return [...NAMED_KINDS];
+
+  const missing = [];
+
+  // Every frame upstream actually sent, under its own name. The positional
+  // fallback is for a frame that arrives with no `kind` — rare, but a gap we
+  // cannot name is still a gap, and `frame_3` at least says which one.
+  images.forEach((frame, i) => {
+    if (!usable(frame)) missing.push(String(frame?.kind || `frame_${i + 1}`));
   });
+
+  // ...plus either named frame that is not in the array at all.
+  if (images.some((frame) => NAMED_KINDS.includes(frame?.kind))) {
+    NAMED_KINDS.forEach((kind) => {
+      if (!images.some((frame) => frame?.kind === kind)) missing.push(kind);
+    });
+  }
+
+  // Two frames can share a kind upstream; the gap is still one gap.
+  return [...new Set(missing)];
 }
 
 /**

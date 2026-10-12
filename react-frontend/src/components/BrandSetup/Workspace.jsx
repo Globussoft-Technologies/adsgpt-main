@@ -44,6 +44,7 @@ import useOnboardingEligibility from '@/hooks/useOnboardingEligibility';
 import SplitChargeDialog from './SplitChargeDialog';
 import FreeAdBanner from './FreeAdBanner';
 import { FrameSettleLoader, FrameStatusLine, FRAME_LINES, useRotatingCopy } from './FrameLoader';
+import StoryboardStoryPlayer, { MAX_FRAMES } from './StoryboardStoryPlayer';
 import RetryCountdownButton from './RetryCountdownButton';
 import OnboardingTour from './OnboardingTour';
 import RecreateModal from './RecreateModal';
@@ -515,9 +516,13 @@ function useFitScale(deps) {
  * to exactly the strip available, so the card's padding survives on both edges.
  */
 function ConceptCard({ board, index, onGenerate, onOpen, onTopUp, videoState, anchorId, tourAnchor = false, framesExhausted, showPrice }) {
+  // Every ready frame, not the first two. Upstream used to send exactly a
+  // `first` and a `last`; it now sends 1–8, and the old `.slice(0, 2)` was
+  // quietly dropping the middle of every concept (observed: 4 frames stored,
+  // 2 shown). The cap is the contract's ceiling, not a layout limit.
   const frames = (board.images || [])
     .filter((img) => img.status === 'ready' && img.src)
-    .slice(0, 2);
+    .slice(0, MAX_FRAMES);
 
   // Watch plays the clip HERE, in the strip the two keyframes were in. The
   // storyboard is a promise of a video and the clip is that video; sending the
@@ -576,35 +581,10 @@ function ConceptCard({ board, index, onGenerate, onOpen, onTopUp, videoState, an
             onOpen={onOpen}
           />
         ) : frames.length ? (
-          <>
-            <Frame frames={frames} index={0} />
-            {/* An 8px channel between the frames with the badge centred over it.
-                The badge is absolute, so the channel is what actually reserves
-                the space it sits in. */}
-            <div className="z-[3] w-2 shrink-0">
-              {frames[1] && (
-                <span
-                  aria-hidden
-                  className="absolute top-1/2 left-1/2 grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border text-white shadow-[0_4px_14px_rgba(0,0,0,0.7)]"
-                  style={{ background: 'rgba(14,14,17,0.9)', borderColor: LINE_STRONG }}
-                >
-                  <svg
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M5 12h13M13 6l6 6-6 6" />
-                  </svg>
-                </span>
-              )}
-            </div>
-            {frames[1] && <Frame frames={frames} index={1} />}
-          </>
+          // ONE box, centred, 9:16 — the shape a frame comes back in. The pair
+          // that used to live here could only ever show two of the board's
+          // frames; the player steps through all of them in the same room.
+          <StoryboardStoryPlayer frames={frames} />
         ) : (
           // No picture YET is the normal case, not a failure: the script arrives
           // from one job and the frames from a second one that runs after it.
@@ -613,11 +593,12 @@ function ConceptCard({ board, index, onGenerate, onOpen, onTopUp, videoState, an
                 retries. A keyframe that failed upstream is usually recovered by
                 the retry it triggers, so showing "failed" the moment the first
                 attempt reports one would be wrong more often than not. */}
-            <FramePlaceholder badge="First" seed={index * 2} failed={framesExhausted} />
-            <div className="w-2 shrink-0" />
-            <FramePlaceholder badge="Last" seed={index * 2 + 1} failed={framesExhausted} />
-            {/* One status for the pair: the UI cannot tell which frame is in
-                flight, so the copy never names First or Last. */}
+            {/* One box, the shape the player will be, so the card does not
+                change size the moment the frames land. No badge: with 1–8
+                frames coming there is no way to say which one this is. */}
+            <FramePlaceholder seed={index * 2} failed={framesExhausted} className="w-full" />
+            {/* The UI cannot tell which frame is in flight, so the copy never
+                names one. */}
             {framesPending && <FrameStatusLine line={frameLine} />}
           </>
         )}
@@ -642,19 +623,33 @@ function ConceptCard({ board, index, onGenerate, onOpen, onTopUp, videoState, an
         onToggle={() => setVoiceExpanded((v) => !v)}
       />
 
-      <ConceptAction
-        board={board}
-        state={videoState}
-        onGenerate={onGenerate}
-        onWatch={() => setWatching(true)}
-        showPrice={showPrice}
-        onTopUp={onTopUp}
-        // Nothing to render until the keyframes exist.
-        disabled={framesPending}
-        // Only used by the exhausted-retry state, to send the user somewhere
-        // that is not this concept.
-        onOpen={onOpen}
-      />
+      {/* The count, beside the action rather than inside it: ConceptAction has
+          six branches and each returns its own row, so putting the badge in
+          there would mean adding it six times and forgetting it on the
+          seventh. `justify-between` keeps the button exactly where it was. */}
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        {frames.length > 1 ? (
+          <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold text-white/55 tabular-nums" style={{ borderColor: LINE }}>
+            {frames.length} frames
+          </span>
+        ) : (
+          <span />
+        )}
+
+        <ConceptAction
+          board={board}
+          state={videoState}
+          onGenerate={onGenerate}
+          onWatch={() => setWatching(true)}
+          showPrice={showPrice}
+          onTopUp={onTopUp}
+          // Nothing to render until the keyframes exist.
+          disabled={framesPending}
+          // Only used by the exhausted-retry state, to send the user somewhere
+          // that is not this concept.
+          onOpen={onOpen}
+        />
+      </div>
     </article>
   );
 }
@@ -945,13 +940,18 @@ function ConceptAction({
  * @param seed  shifts the loader's pattern so the First and Last slots on a
  *   card never look identical.
  */
-function FramePlaceholder({ badge, seed = 0, failed = false }) {
+function FramePlaceholder({ badge, seed = 0, failed = false, className }) {
   return (
     <div
       // No `animate-pulse`. A box fading in and out as one says "placeholder",
       // and the box is not a placeholder — a picture is being composed for it.
       // The mosaic says that instead: pieces settling at different rates.
-      className="relative h-full min-w-0 flex-1 overflow-hidden rounded-lg border bg-white/[0.03]"
+      className={cn(
+        'relative h-full min-w-0 overflow-hidden rounded-lg border bg-white/[0.03]',
+        // `flex-1` by default (the old side-by-side pair), overridable now that
+        // the card holds ONE box and the placeholder has to be its shape.
+        className || 'flex-1'
+      )}
       style={{ borderColor: LINE }}
     >
       {failed ? (
@@ -969,7 +969,9 @@ function FramePlaceholder({ badge, seed = 0, failed = false }) {
            first and last slots on a card never show the same pattern. */
         <FrameSettleLoader seed={seed} />
       )}
-      <FrameBadge>{badge}</FrameBadge>
+      {/* Guarded: the concept card no longer names its slots, and an empty
+          badge is a grey smudge in the corner. */}
+      {badge && <FrameBadge>{badge}</FrameBadge>}
     </div>
   );
 }
@@ -1145,193 +1147,6 @@ function VoiceoverLine({ text, expanded = false, onToggle }) {
   );
 }
 
-/**
- * One keyframe, clickable to full size.
- *
- * `object-cover`, not `contain`. The frames come back at 293x512 — 9:15.7, a
- * hair off the 9:16 the box is — and `contain` turned that rounding error into
- * visible letterbox bars, so every scene sat in an obvious black box instead of
- * filling its frame. Cover crops about a pixel and the box disappears.
- */
-const FRAME_LABELS = ['First frame', 'Last frame'];
-const FRAME_BADGES = ['First', 'Last'];
-
-/**
- * @param frames  BOTH keyframes of this concept. The tile renders its own
- *   (`frames[index]`), but the full-size view steps between them: from First a
- *   right-hand arrow goes to Last, and from Last a left-hand one comes back —
- *   user request 2026-09-16. Arrow keys do the same.
- */
-function Frame({ frames, index }) {
-  const img = frames[index];
-  const [open, setOpen] = useState(false);
-  // Which frame the lightbox is showing; always re-seeded from the tile that
-  // was clicked, so opening Last never starts on First.
-  const [viewIndex, setViewIndex] = useState(index);
-  const viewed = frames[viewIndex] || img;
-  const canStep = frames.length > 1;
-
-  /* Has the FULL-SIZE picture actually arrived?
-     The `<figure>` has no size of its own — all of it comes from the `<img>`
-     inside. So until that image paints, the figure is ~0 tall and the caption,
-     the close button and the step arrow are all that render: a dimmed screen
-     with three controls floating on it and no picture, which reads as a broken
-     app. It happens two ways — a moment's decode while stepping between the
-     frames (the `key` below remounts the image every time), and permanently
-     when a frame URL 404s or its signed link has expired.
-     Tracked against the src rather than as a bare flag, so stepping to the
-     other frame is "loading" again from the first render — a plain `useState`
-     reset in an effect would show the previous frame's "ready" for one paint. */
-  const [load, setLoad] = useState({ src: '', status: 'loading' });
-  const status = load.src === viewed.src ? load.status : 'loading';
-
-  const openAt = () => {
-    setViewIndex(index);
-    setOpen(true);
-  };
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') setOpen(false);
-      if (!canStep) return;
-      if (e.key === 'ArrowRight') setViewIndex(1);
-      if (e.key === 'ArrowLeft') setViewIndex(0);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, canStep]);
-
-  return (
-    <div
-      // `flex-1` rather than an aspect lock. The pair used to be sized from
-      // HEIGHT at 9:16, so on any card wider than two portraits the leftover
-      // width showed as a gap down both edges and between them. Filling the row
-      // and letting `object-cover` crop the odd pixel removes the gap without
-      // making anything smaller.
-      className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border bg-black/35 transition-colors duration-300 hover:border-[#15DCFF]/50"
-      style={{ borderColor: LINE }}
-    >
-      <button
-        type="button"
-        onClick={openAt}
-        className="block h-full w-full cursor-zoom-in"
-        aria-label={`Open ${FRAME_LABELS[index]} full size`}
-      >
-        <img
-          src={img.src}
-          alt={FRAME_LABELS[index]}
-          loading="lazy"
-          className="h-full w-full object-cover"
-        />
-      </button>
-
-      <FrameBadge>{FRAME_BADGES[index]}</FrameBadge>
-
-      {/* Portalled to `document.body` — every panel on this screen clips its own
-          overflow, so a modal rendered in place would be cut by the very card it
-          is meant to escape. */}
-      {open &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm"
-            onClick={() => setOpen(false)}
-          >
-            <figure
-              className={cn(
-                'relative flex items-center justify-center',
-                // A STANDING BOX, but only while there is no picture to hug.
-                // Once the image is up the figure goes back to being sized by
-                // it exactly as before, so the happy path is unchanged: the
-                // border still hugs the frame rather than a fixed rectangle.
-                // 9:16 of 70vh is the shape every keyframe comes back in
-                // (293x512), so the placeholder is the size of the thing it is
-                // standing in for.
-                status !== 'ready' &&
-                  'h-[70vh] w-[39vh] max-w-[88vw] rounded-xl border border-white/15 bg-[#0e0e11] shadow-[0_40px_120px_-20px_rgba(0,0,0,0.95)]'
-              )}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* The same settling-tiles loader the keyframes use while they are
-                  being generated, so waiting for a frame to DOWNLOAD looks like
-                  waiting for one to arrive rather than like a different bug. */}
-              {status === 'loading' && (
-                // Its own clipping layer rather than `overflow-hidden` on the
-                // figure: the close button hangs OUTSIDE the box by design
-                // (`-top-3 -right-3`), and clipping the figure would cut off
-                // the one control that gets you out of here.
-                <div className="absolute inset-0 overflow-hidden rounded-xl">
-                  <FrameSettleLoader seed={viewIndex * 2} />
-                </div>
-              )}
-              {status === 'error' && (
-                // Said plainly: there is nothing the user can do about it from
-                // in here, and pretending to load for ever is worse than
-                // admitting it.
-                <div className="absolute inset-0 grid place-items-center px-6 text-center">
-                  <div className="space-y-1">
-                    <p className="text-[13px] font-medium text-white/75">
-                      This frame couldn&apos;t be loaded
-                    </p>
-                    <p className="text-[12px] text-white/45">
-                      {canStep
-                        ? 'Try the other frame, or close and open it again.'
-                        : 'Close and open it again.'}
-                    </p>
-                  </div>
-                </div>
-              )}
-              <img
-                // Keyed so stepping between the two actually swaps the picture
-                // rather than leaving the old one until the new file decodes.
-                key={viewed.src}
-                src={viewed.src}
-                alt={FRAME_LABELS[viewIndex]}
-                onLoad={() => setLoad({ src: viewed.src, status: 'ready' })}
-                onError={() => setLoad({ src: viewed.src, status: 'error' })}
-                className={cn(
-                  'max-h-[88vh] max-w-[88vw] rounded-xl border border-white/15 object-contain shadow-[0_40px_120px_-20px_rgba(0,0,0,0.95)]',
-                  // `hidden` rather than unmounted: a display:none image still
-                  // downloads, so this is what is waiting to load. Unmounting
-                  // it would mean nothing ever fetched and `onLoad` never fired.
-                  status !== 'ready' && 'hidden'
-                )}
-              />
-              <figcaption className="absolute right-3 bottom-3 rounded bg-black/65 px-2 py-1 text-[10px] tracking-[0.08em] text-white/70 uppercase backdrop-blur-sm">
-                {FRAME_LABELS[viewIndex]}
-              </figcaption>
-              <CloseButton onClick={() => setOpen(false)} />
-            </figure>
-
-            {/* One arrow at a time, on the side you are travelling towards:
-                right while the First frame is up, left while the Last is. At
-                the screen's edge rather than on the picture, so it never covers
-                the frame you came to look at. */}
-            {canStep && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setViewIndex(viewIndex === 0 ? 1 : 0);
-                }}
-                aria-label={viewIndex === 0 ? 'Show the last frame' : 'Show the first frame'}
-                className={cn(
-                  'absolute top-1/2 z-[2] grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border text-white/80 backdrop-blur-md transition hover:border-[#15DCFF]/50 hover:text-white',
-                  viewIndex === 0 ? 'right-6' : 'left-6'
-                )}
-                style={{ background: 'rgba(14,14,17,0.9)', borderColor: LINE_STRONG }}
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  {viewIndex === 0 ? <path d="M5 12h13M13 6l6 6-6 6" /> : <path d="M19 12H6M11 18l-6-6 6-6" />}
-                </svg>
-              </button>
-            )}
-          </div>,
-          document.body
-        )}
-    </div>
-  );
-}
 
 /**
  * What a concept looks like before it exists.
@@ -1399,36 +1214,17 @@ function ConceptSkeleton({ delay = 0, index = 1 }) {
       className="flex h-full min-h-0 w-full min-w-0 flex-col gap-2.5 rounded-2xl border p-3"
       style={{ background: SURF, borderColor: LINE }}
     >
-      {/* Same strip as the real card: two slots, an 8px channel, the node over
-          it. `flex-1`, not an aspect lock, so the layout does not jump when the
-          real frames arrive. */}
+      {/* Same strip as the real card: ONE box, filling the row. It used to be
+          two slots with an arrow between them, which promised a first and a
+          last — a promise the card can no longer keep now that a board arrives
+          with anything from one frame to eight. `flex-1`, not an aspect lock,
+          so the layout does not jump when the real frames arrive. */}
       <div className="relative flex min-h-20 flex-1 basis-0 items-center justify-center overflow-visible">
         <div
-          className="relative h-full min-w-0 flex-1 overflow-hidden rounded-lg border bg-white/[0.03]"
+          className="relative h-full w-full min-w-0 overflow-hidden rounded-lg border bg-white/[0.03]"
           style={{ borderColor: LINE }}
         >
           <FrameSettleLoader seed={Math.round(delay / 140) * 2} />
-          <FrameBadge>First</FrameBadge>
-        </div>
-
-        <div className="z-[3] w-2 shrink-0">
-          <span
-            aria-hidden
-            className="absolute top-1/2 left-1/2 grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border text-white shadow-[0_4px_14px_rgba(0,0,0,0.7)]"
-            style={{ background: 'rgba(14,14,17,0.9)', borderColor: LINE_STRONG }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h13M13 6l6 6-6 6" />
-            </svg>
-          </span>
-        </div>
-
-        <div
-          className="relative h-full min-w-0 flex-1 overflow-hidden rounded-lg border bg-white/[0.03]"
-          style={{ borderColor: LINE }}
-        >
-          <FrameSettleLoader seed={Math.round(delay / 140) * 2 + 1} />
-          <FrameBadge>Last</FrameBadge>
         </div>
 
         <FrameStatusLine line={line} />
@@ -3011,7 +2807,7 @@ export default function Workspace({
   // In on-screen order, prefer a card with both frames and an unstarted render,
   // then one frame and unstarted. Frame counting mirrors ConceptCard.
   const readyFrames = (b) =>
-    Math.min((b.images || []).filter((img) => img?.status === 'ready' && img?.src).length, 2);
+    Math.min((b.images || []).filter((img) => img?.status === 'ready' && img?.src).length, MAX_FRAMES);
   const unstarted = (b) => !videosByBoard[b.id]?.status;
   // Guarded: with no boards yet, orderWithLeadInMiddle returns `[undefined]`
   // (it splices in a missing lead), which crashed the `.find`s below.
