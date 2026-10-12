@@ -278,6 +278,10 @@ function surfaceRowFor(entry, caps, media) {
   if (entry.icon) row.icon = entry.icon;
 
   if (media === "ai_ads" && isVideo) {
+    row.supported_voice = caps.supported_voice !== false;
+  }
+
+  if (media === "ai_ads" && isVideo) {
     const regenCharge = (entry.extraCharges || []).find(
       (charge) => charge.type === "ai_ads_scene_regen_image",
     );

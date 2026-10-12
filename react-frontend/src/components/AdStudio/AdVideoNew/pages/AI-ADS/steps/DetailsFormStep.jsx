@@ -193,8 +193,8 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
     if (!selectedVideoDuration) e.duration = 'Duration is required';
     // Deliverable differs by provider: Sarvam picks resolve to voiceName
     // (voiceId is always '' for Sarvam), ElevenLabs to voiceId.
-    // Seedance 2.5 does not use voice — skip validation.
-    if (!isSeedanceModel) {
+    // Models without voice support do not require a voice selection.
+    if (isVoiceSupported) {
       const vv = formData.voice || {};
       const hasVoice = vv.provider === 'sarvam' ? !!vv.voiceName : !!vv.voiceId;
       if (!hasVoice) e.voice = 'Voice is required';
@@ -247,8 +247,12 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
   );
   const selectedVideoDuration = getSelectedModelDuration(configuredDurationOptions, formData.duration);
 
-  // Seedance 2.5 has a simplified flow: no voice, no captions, no scene preview
+  // Voice availability is independent of the Seedance-specific direct generation flow.
+  const selectedModelConfig = surfaceModels.find(
+    (m) => m.canonical === formData.model || m.label === formData.model
+  );
   const isSeedanceModel = formData.model === 'seedance-2.5';
+  const isVoiceSupported = selectedModelConfig?.supported_voice !== false;
 
   // URL-based images from analysis (not File objects)
   // brandImages takes priority — these are already on S3 from BrandIQ, no re-upload needed
@@ -1001,7 +1005,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
           <div>
             <div
               className={`relative mb-3 rounded-2xl border border-[var(--ws-border)] dark:border-white/5 bg-[var(--advideo-control-surface)] dark:bg-[#909294]/10 p-3 sm:p-4 transition-opacity duration-200 ${
-                isSeedanceModel
+                !isVoiceSupported
                   ? 'pointer-events-none opacity-30 select-none cursor-not-allowed'
                   : submitting
                   ? 'pointer-events-none opacity-50'
@@ -1011,7 +1015,7 @@ const DetailsFormStep = ({ type, data, originalInputs, existingSceneData, onBack
               <VoiceSelector
                 value={formData.voice}
                 onChange={(next) => { updateField('voice', next); setErrors((prev) => ({ ...prev, voice: '' })); }}
-                error={!isSeedanceModel ? errors.voice : ''}
+                error={isVoiceSupported ? errors.voice : ''}
                 compactHeader
               />
             </div>

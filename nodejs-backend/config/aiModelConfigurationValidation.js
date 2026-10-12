@@ -22,6 +22,9 @@ function validateSurfaceMap(surfaces) {
     if (!SURFACE_SLUGS.includes(surface)) return `Unknown surface "${surface}"`;
     if (!config || typeof config !== "object" || Array.isArray(config)) return `Surface "${surface}" must be an object`;
     if (config.enabled !== undefined && typeof config.enabled !== "boolean") return `Surface "${surface}" enabled must be boolean`;
+    if (config.supported_voice !== undefined && (surface !== "ai_ads" || typeof config.supported_voice !== "boolean")) {
+      return `surfaces.${surface}.supported_voice must be a boolean on ai_ads`;
+    }
     for (const field of ["aspectRatios", "qualities"]) {
       const error = stringArray(config[field], `surfaces.${surface}.${field}`);
       if (error) return error;

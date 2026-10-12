@@ -394,7 +394,7 @@ exports.generateImage = async (req, res) => {
             if (freeze.reason === "INSUFFICIENT") {
                 return res.status(402).json({
                     success: false,
-                    error: `Insufficient credits. You need ${totalRequiredCredits} credits for ${totalImages} image(s) but only have ${freeze.remaining}.`,
+                    error: `You need ${totalRequiredCredits} ${totalRequiredCredits === 1 ? "credit" : "credits"} to generate ${totalImages === 1 ? "an image" : `${totalImages} images`}, but your current balance is ${freeze.remaining} credits. Please add more credits to continue`,
                 });
             }
             return res.status(503).json({

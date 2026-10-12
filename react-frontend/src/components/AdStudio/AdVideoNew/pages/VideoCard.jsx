@@ -252,8 +252,8 @@ export default function VideoCard({
   const committedVersion = typeof item?.version === 'number' ? item.version : 0;
   const shownVersion = item?.previewVersion ?? committedVersion;
   const shownResult = item?.results?.[shownVersion] || item?.results?.[0];
-  const isSeedance25 = model === 'seedance-2.5' || model === 'Seedance 2.5';
-  const canEditAiAdsVoice = isAiAds && item?.status === 'completed' && !isSeedance25;
+  const isVoiceSupported = item?.supported_voice !== false;
+  const canEditAiAdsVoice = isAiAds && item?.status === 'completed' && isVoiceSupported;
   const isVoiceMissing = canEditAiAdsVoice && (shownResult?.videoStatus === 429 || item?.videoStatus === 429);
   // Idempotent for server results (which keep waterMarkUrl); correct for the
   // socket-appended version (raw url).

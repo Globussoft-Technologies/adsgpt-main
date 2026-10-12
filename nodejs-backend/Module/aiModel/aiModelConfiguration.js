@@ -18,6 +18,7 @@ const surfaceConfigurationSchema = new mongoose.Schema(
       default: undefined,
     },
     qualities: { type: [String], default: undefined },
+    supported_voice: { type: Boolean, default: undefined },
     capabilities: { type: mongoose.Schema.Types.Mixed, default: undefined },
   },
   { _id: false, minimize: false },

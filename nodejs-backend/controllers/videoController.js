@@ -16,6 +16,7 @@ const {
 } = require("../Validations/videoValidator");
 const mediaResolverService = require("../services/mediaResolverService");
 const VideoGeneration = require("../Module/videoGeneration/videoModel");
+const AIModelConfiguration = require("../Module/aiModel/aiModelConfiguration");
 const UnifiedCreditController = require("./UnifiedCreditController");
 const modelConfigurationService = require("../services/modelConfigurationService");
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
@@ -34,6 +35,32 @@ const { apiUrl: adVideoApiUrl } = require("../config/adVideoApi");
 const getFileName = (extension) => `${Date.now()}${extension}`;
 
 const AI_ADS_REGEN_IMAGE_CHARGE_TYPE = "ai_ads_scene_regen_image";
+
+async function getAiAdsVoiceSupportByModel(videos) {
+  const keys = [...new Set(videos
+    .filter((video) => video?.inputs?.type === "ai_ads")
+    .map((video) => video.inputs.model || video.model)
+    .filter(Boolean))];
+  if (!keys.length) return new Map();
+
+  const models = await AIModelConfiguration.find({
+    $or: [{ canonicalKey: { $in: keys } }, { aliases: { $in: keys } }],
+  }).select("canonicalKey aliases surfaces").lean();
+  const supportByModel = new Map();
+  for (const model of models) {
+    const caps = modelConfigurationService._surfacesObject(model).ai_ads;
+    const supported = caps?.supported_voice !== false;
+    for (const key of [model.canonicalKey, ...(model.aliases || [])]) {
+      supportByModel.set(key, supported);
+    }
+  }
+  return supportByModel;
+}
+
+function videoSupportsAiAdsVoice(video, supportByModel) {
+  const modelKey = video?.inputs?.model || video?.model || "";
+  return supportByModel.get(modelKey) ?? true;
+}
 
 async function getAiAdsRegenImageCredits(modelValue) {
   const model = await modelConfigurationService.resolveModelByAlias(modelValue);
@@ -1010,6 +1037,7 @@ exports.getAllVideos = async (req, res) => {
 
     const totalCount = await VideoGeneration.countDocuments(filter);
     const videos = await query.exec();
+    const voiceSupportByModel = await getAiAdsVoiceSupportByModel(videos);
     const plan = Object.keys(req.user?.userSubscriptionType || {})[0];
 
     // Watermark helper: plan "8" (free) sees the watermarked URL when present.
@@ -1017,6 +1045,11 @@ exports.getAllVideos = async (req, res) => {
     const pickUrl = (r) => (applyWm ? r?.waterMarkUrl || r?.url : r?.url);
 
     const formattedVideos = videos.map((v) => {
+      const supported_voice =
+        v?.inputs?.type === "ai_ads"
+          ? videoSupportsAiAdsVoice(v, voiceSupportByModel)
+          : true;
+
       // AI Ads supports multiple switchable "versions" (voice regenerate).
       // Return the FULL results[] array + the version pointer so the frontend
       // can render results[version] as active and offer the rest in the
@@ -1024,6 +1057,7 @@ exports.getAllVideos = async (req, res) => {
       if (v?.inputs?.type === "ai_ads") {
         return {
           ...v,
+          supported_voice,
           version: typeof v.version === "number" ? v.version : 0,
           results: (v.results || []).map((r) => ({ ...r, url: pickUrl(r) })),
         };
@@ -1031,6 +1065,7 @@ exports.getAllVideos = async (req, res) => {
 
       return {
         ...v,
+        supported_voice,
         results: [
           {
             ...v.results[0],
@@ -1069,9 +1104,16 @@ exports.getVideoById = async (req, res) => {
         .json({ success: false, error: "Video record not found" });
     }
 
+    const voiceSupportByModel = await getAiAdsVoiceSupportByModel([video]);
+
     res.json({
       success: true,
-      data: video,
+      data: {
+        ...video,
+        supported_voice: video.inputs?.type === "ai_ads"
+          ? videoSupportsAiAdsVoice(video, voiceSupportByModel)
+          : true,
+      },
     });
   } catch (err) {
     console.error("Error in getVideoById:", err);
