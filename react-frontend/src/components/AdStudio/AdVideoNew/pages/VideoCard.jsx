@@ -105,20 +105,27 @@ export default function VideoCard({
 
   const isCloneModel = item?.inputs?.type === 'clone';
   const isAiAds = item?.inputs?.type === 'ai_ads';
-  const rawError = item?.results?.[0]?.error;
+  const rawError = item?.sceneError || item?.results?.[0]?.error || item?.error || '';
 
-  const errorMessage =
-    isAiAds && item?.sceneError
+  const isFaceOrPersonError =
+    typeof rawError === 'string' &&
+    /(?:human face was detected|InputImageSensitiveContentDetected|contain real person|no people, hands, or faces)/i.test(
+      rawError
+    );
+
+  const errorMessage = isFaceOrPersonError
+    ? 'Your product image may contain a person or face. Please upload a product-only image and try again.'
+    : isAiAds && item?.sceneError
       ? item.sceneError
-      : (isAiAds || isCloneModel || isSeedanceModel) && rawError
-      ? rawError
-      : videoStatus === 529
-        ? 'This model is currently experiencing high demand ⏳. These spikes are usually temporary. Please try again in a little while. Note: Your credits were not deducted.'
-        : videoStatus === 500
-          ? 'The model was unable to generate the video. Please try again. Note: Your credits were not deducted.'
-          : videoStatus === 400
-            ? 'This video request was restricted for safety compliance. Please revise your input and try again. Note: Your credits were not deducted.'
-            : 'An error occurred during video generation.';
+      : (isAiAds || isCloneModel || isSeedanceModel) && item?.results?.[0]?.error
+        ? item.results[0].error
+        : videoStatus === 529
+          ? 'This model is currently experiencing high demand ⏳. These spikes are usually temporary. Please try again in a little while. Note: Your credits were not deducted.'
+          : videoStatus === 500
+            ? 'The model was unable to generate the video. Please try again. Note: Your credits were not deducted.'
+            : videoStatus === 400
+              ? 'This video request was restricted for safety compliance. Please revise your input and try again. Note: Your credits were not deducted.'
+              : 'An error occurred during video generation.';
   // const errorMessage = 'Model was unable to generate video.';
   const overlayTimeout = useRef(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -1300,11 +1307,11 @@ export default function VideoCard({
         </>
       ) : (
         <div className="relative flex h-full min-h-[250px] flex-col items-center justify-center p-4 text-center">
-          {videoStatus ? (
-            <p className="mt-2 text-xs text-gray-400">{errorMessage}</p>
-          ) : (
-            <p className="mt-2 text-xs text-gray-400">An error occurred during video generation.</p>
-          )}
+          <p className="mt-2 text-xs text-gray-400">
+            {isFaceOrPersonError || videoStatus
+              ? errorMessage
+              : 'An error occurred during video generation.'}
+          </p>
           {!isOnboardingOutput && (
             <button
               className="absolute right-3 bottom-3 rounded-full p-2 text-gray-500 backdrop-blur transition-colors hover:bg-black/5 hover:text-black dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
