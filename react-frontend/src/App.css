@@ -626,12 +626,6 @@ html:not(.dark) .rdrDayToday .rdrDayNumber span:after {
   background: #18181b;
 }
 
-html:not(.dark) .rdrMonthPicker::after,
-html:not(.dark) .rdrYearPicker::after {
-  border-right-color: #71717a;
-  border-bottom-color: #71717a;
-}
-
 /* React-date-range calendar — these are the DARK-mode overrides. In light
    mode they're skipped so the library's imported default (light) theme
    applies. Gated under `.dark` so dark mode renders exactly as before. */
@@ -768,24 +762,12 @@ html:not(.dark) .rdrYearPicker::after {
   background: transparent !important;
 }
 
-.dark .rdrMonthPicker,
-.dark .rdrYearPicker {
-  position: relative;
-}
-
+.rdrMonthPicker::after,
+.rdrYearPicker::after,
 .dark .rdrMonthPicker::after,
 .dark .rdrYearPicker::after {
-  content: '';
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid #ffffffa1;
-  border-bottom: 2px solid #ffffffa1;
-  transform: rotate(45deg);
-  right: 9px;
-  top: 50%;
-  margin-top: -6px;
-  pointer-events: none;
+  display: none !important;
+  content: none !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1346,15 +1328,18 @@ html:not(.dark) .sidebar-profile-button.sidebar-profile-button-active .sidebar-p
   border-radius: 9999px !important;
 }
 
-html:not(.dark) .sidebar-profile-button,
+html:not(.dark) .sidebar-profile-button {
+  border: 1.5px solid rgba(14, 165, 233, 0.35) !important;
+}
+
 .dark .sidebar-profile-button {
-  border: 2px solid #6f73f2 !important;
+  border: 1.5px solid rgba(56, 189, 248, 0.3) !important;
 }
 
 html:not(.dark) .sidebar-profile-button span.sidebar-profile-avatar,
 .dark .sidebar-profile-button span.sidebar-profile-avatar,
 .dark .sidebar-profile-button.sidebar-profile-button-active span.sidebar-profile-avatar {
-  background: linear-gradient(145deg, #6366f1 0%, #7657e8 52%, #9333ea 100%) !important;
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
   color: #ffffff !important;
 }
 
@@ -1728,12 +1713,14 @@ html:not(.dark) [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-
 }
 
 [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-progress {
-  height: 5px;
-  background: rgba(15, 23, 42, 0.14);
+  height: 4px;
+  background: rgba(15, 23, 42, 0.1);
+  border-radius: 9999px;
 }
 
 [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-progress > span {
-  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+  background: linear-gradient(90deg, #0284c7 0%, #2563eb 100%);
+  border-radius: 9999px;
 }
 
 [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-credits {
@@ -1759,7 +1746,11 @@ html:not(.dark) [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-
 }
 
 .dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-progress {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-progress > span {
+  background: linear-gradient(90deg, #15dcff 0%, #38bdf8 100%);
 }
 
 .dark [data-sidebar-nav-expanded='true'] .lm-sidebar-surface .sidebar-account-credits {
@@ -4794,6 +4785,10 @@ html:not(.dark) .adsgpt-cal-pop .rdrMonthAndYearPickers select {
   border-radius: 6px !important;
   padding: 2px 6px !important;
   font-weight: 600 !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-image: none !important;
 }
 
 html:not(.dark) .adsgpt-cal-pop .rdrNextPrevButton {
@@ -4855,6 +4850,14 @@ html:not(.dark) .adsgpt-cal-pop .rdrDayEndPreview {
   border-radius: 6px !important;
   padding: 2px 6px !important;
   font-weight: 600 !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-image: none !important;
+}
+
+.adsgpt-cal-pop .rdrMonthAndYearPickers select::-ms-expand {
+  display: none !important;
 }
 
 .dark .adsgpt-cal-pop .rdrNextPrevButton {

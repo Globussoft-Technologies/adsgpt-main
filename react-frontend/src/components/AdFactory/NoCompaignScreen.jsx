@@ -210,13 +210,17 @@ const NoCompaignScreen = () => {
 
   return (
     <>
-      <div className="brands_new_container relative z-10 flex h-full min-h-0 w-full flex-1 flex-col sm:pt-[9px] sm:pr-[39px] sm:pl-6">
+      <div className="brands_new_container relative z-[55] flex h-full min-h-0 w-full flex-1 flex-col pt-6 2xl:pt-10 sm:pr-[39px] sm:pl-6">
         {!loading && campaignsList?.length > 0 && (
-          <div id="new_campaign_button" className="mb-4 flex shrink-0 justify-end">
+          <div
+            id="new_campaign_button"
+            className="fixed top-3.5 right-4 sm:right-[39px] z-[55] flex shrink-0 justify-end"
+          >
             <div className="group w-fit rounded-full bg-gradient-to-b from-black/15 to-black/5 p-[1px] dark:from-white/40 dark:to-white/10">
               <button
+                type="button"
                 onClick={() => setOpenStartForm(true)}
-                className="backdrop-blur-100 relative flex h-10 items-center justify-center gap-1.5 rounded-full bg-white px-5 py-1.5 text-base text-gray-600 transition-all duration-300 hover:text-black dark:bg-[#0D0D0D]/60 dark:text-[#AFAFAF] dark:hover:text-white"
+                className="backdrop-blur-100 relative flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-white px-5 py-1.5 text-base text-gray-600 transition-all duration-300 hover:text-black dark:bg-[#0D0D0D]/60 dark:text-[#AFAFAF] dark:hover:text-white"
               >
                 <Plus className="h-4 w-4 text-[#6b72f8] transition-all group-hover:text-black/70 2xl:h-5 2xl:w-5 dark:group-hover:text-white/70" />
                 <span className="bg-gradient-to-t from-[#0c9fbd] to-[#5057d6] bg-clip-text font-medium text-transparent group-hover:text-black/70 dark:from-[#15DCFF] dark:to-[#6b72f8] dark:group-hover:text-white/70">
