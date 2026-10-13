@@ -190,7 +190,7 @@ const videoSchema = new mongoose.Schema(
       duration: { type: String },
       aspectRatio: {
         type: String,
-        enum: ["9:16", "1:1", "16:9"],
+        enum: ["9:16", "1:1", "16:9", "21:9", "4:3", "3:4"],
       },
       productUrl: String,
       productName: String,
