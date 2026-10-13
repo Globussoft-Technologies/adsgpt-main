@@ -8,8 +8,8 @@ const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const AdVideoCard = ({ title, desc, img, gif, type, comingSoon, premium }) => {
   const dispatch = useDispatch();
   const { userData } = useSelector((state) => state.socket);
-  const imgUrl = img?.startsWith('http') ? img : import.meta.env.VITE_S3_BASE_URL + img;
-  const gifUrl = gif?.startsWith('http') ? gif : import.meta.env.VITE_S3_BASE_URL + gif;
+  const imgUrl = img?.startsWith('http') || img?.startsWith('/adcreative') ? img : import.meta.env.VITE_S3_BASE_URL + img;
+  const gifUrl = gif?.startsWith('http') || gif?.startsWith('/adcreative') ? gif : import.meta.env.VITE_S3_BASE_URL + gif;
 
   // Plan "8" is the free plan; premium-only features are locked for these users.
   const hasPlan8 = Object.keys(userData?.userSubscriptionType || {}).includes('8');

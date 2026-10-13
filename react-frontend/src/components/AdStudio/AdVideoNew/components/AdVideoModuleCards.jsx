@@ -5,7 +5,7 @@ import { setActivePage } from '@/store/reducers/adStudio/adVideoNewSlice';
 import StudioToolStage from '@/components/AdStudio/StudioToolStage';
 
 const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
-const s3 = (u) => (u?.startsWith('http') ? u : import.meta.env.VITE_S3_BASE_URL + u);
+const s3 = (u) => (u?.startsWith('http') || u?.startsWith('/adcreative') ? u : import.meta.env.VITE_S3_BASE_URL + u);
 
 // Same chip as AdVideoCard. `bg-linear-to-r` keeps the gradient in light mode
 // (App.css blanks `rounded-full bg-gradient-to-*`).
@@ -35,6 +35,7 @@ export default function AdVideoModuleCards({ cards = [] }) {
       desc: card.desc,
       img: s3(card.img),
       gif: s3(card.gif),
+      mediaClassName: card.mediaClassName || (card.img?.includes('recreateAd') ? 'object-top' : ''),
       disabled: !!card.comingSoon,
       badge: card.comingSoon ? (
         <Chip>Coming Soon</Chip>

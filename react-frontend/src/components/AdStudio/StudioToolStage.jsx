@@ -36,7 +36,7 @@ import { ArrowRight } from 'lucide-react';
 
 const AUTO_MS = 5000;
 const EASE = [0.22, 0.8, 0.2, 1];
-const isVideo = (url) => typeof url === 'string' && /\.(mp4|webm|mov)(\?.*)?$/i.test(url);
+const isVideo = (url) => typeof url === 'string' && /\.(mp4|webm|mov)(\?.*|#.*)?$/i.test(url);
 
 // Deck slots by distance from the active card (0 = front). The deck fans out
 // to BOTH sides (next tools on the right, previous ones on the left), so it
@@ -93,26 +93,56 @@ function fanLayout(w, h, textSpare = 0) {
 
 function Media({ url, playing = false, className = '' }) {
   const ref = useRef(null);
+
+  // Extract custom timestamp if specified (e.g. /video.mp4#t=0.1), default 0.1 for recreateAd or 2
+  const targetTime = React.useMemo(() => {
+    if (!url || typeof url !== 'string') return 2;
+    const match = url.match(/#t=([\d.]+)/);
+    if (match) return parseFloat(match[1]);
+    return url.includes('recreateAd') ? 0.1 : 2;
+  }, [url]);
+
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
-    if (playing) v.play().catch(() => {});
-    else v.pause();
-  }, [playing]);
+    if (playing) {
+      v.play().catch(() => {});
+    } else {
+      v.pause();
+      if (!isNaN(targetTime)) {
+        try {
+          v.currentTime = targetTime;
+        } catch {}
+      }
+    }
+  }, [playing, targetTime]);
+
+  const isRecreate = typeof url === 'string' && url.includes('recreateAd');
+  const posClass = isRecreate ? 'object-top' : '';
+
   if (isVideo(url)) {
+    const cleanBase = typeof url === 'string' ? url.split('#')[0] : '';
+    const videoSrc = `${cleanBase}#t=${targetTime}`;
     return (
       <video
         ref={ref}
-        src={`${url}#t=2`}
+        src={videoSrc}
         muted
         loop
         playsInline
-        preload="metadata"
-        className={`absolute inset-0 h-full w-full object-cover ${className}`}
+        preload="auto"
+        onLoadedMetadata={(e) => {
+          if (!playing && !isNaN(targetTime)) {
+            try {
+              e.currentTarget.currentTime = targetTime;
+            } catch {}
+          }
+        }}
+        className={`absolute inset-0 h-full w-full object-cover ${posClass} ${className}`}
       />
     );
   }
-  return <img src={url} alt="" draggable={false} className={`absolute inset-0 h-full w-full object-cover ${className}`} />;
+  return <img src={url} alt="" draggable={false} className={`absolute inset-0 h-full w-full object-cover ${posClass} ${className}`} />;
 }
 
 // `onPick`: click on this card — the stage decides (front opens, others come
@@ -138,11 +168,11 @@ function DeckCard({ tool, rel, count, fan, onPick }) {
       animate={{ x: slot.x, y: slot.y, rotate: slot.rotate, scale: slot.scale, opacity: slot.opacity }}
       transition={{ duration: 0.8, ease: EASE }}
     >
-      <Media url={tool.img} />
+      <Media url={tool.img} className={tool.mediaClassName || ''} />
       {/* The moving preview mounts on the front card only: one animating asset at a time. */}
       {front && tool.gif && (
         <motion.div className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
-          <Media url={tool.gif} playing />
+          <Media url={tool.gif} playing className={tool.mediaClassName || ''} />
         </motion.div>
       )}
       <motion.div

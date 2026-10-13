@@ -45,8 +45,7 @@ const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
 // Default demo visual asset for Clone Your Ad (isolated for easy S3/CDN replacement)
-const CLONE_YOUR_AD_DEMO_URL =
-  'https://dqv0cqkoy5oj7.cloudfront.net/marketing_studio_video_preset/4dcc2a50-47de-46a1-b7e6-d5bd378bb5d1-91841e48382ec5af.mp4';
+const CLONE_YOUR_AD_DEMO_URL = '/adcreative/recreateAd.mp4';
 
 // 5 Sequential Checklist Steps for Analysis Progress (Matching Reference)
 const ANALYSIS_CHECKLIST_STEPS = [
@@ -3875,7 +3874,7 @@ const renderLightboxModal = () => {
                   loop
                   playsInline
                   preload="auto"
-                  className="absolute inset-0 z-0 h-full w-full object-cover bg-black"
+                  className="absolute inset-0 z-0 h-full w-full object-cover object-top bg-black"
                 />
               ) : (
                 <img
