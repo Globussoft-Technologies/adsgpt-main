@@ -41,8 +41,8 @@ const cards = [
   {
     title: 'RECREATE AD',
     desc: 'Create a new ad from an existing video',
-    img: '/adcreative/recreateAd.mp4#t=0.1',
-    gif: '/adcreative/recreateAd.mp4',
+    img: '/static/adVideo/recreateAd.mp4#t=0.1',
+    gif: '/static/adVideo/recreateAd.mp4',
     type: 'clone-ad',
   },
   {

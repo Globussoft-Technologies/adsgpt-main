@@ -45,7 +45,7 @@ const SIGNUP_URL = import.meta.env.VITE_SIGNUP_URL;
 const S3_BASE_URL = import.meta.env.VITE_S3_BASE_URL;
 
 // Default demo visual asset for Clone Your Ad (isolated for easy S3/CDN replacement)
-const CLONE_YOUR_AD_DEMO_URL = '/adcreative/recreateAd.mp4';
+const CLONE_YOUR_AD_DEMO_URL = `${S3_BASE_URL || 'https://contents.adsgpt.io'}/static/adVideo/recreateAd.mp4`;
 
 // 5 Sequential Checklist Steps for Analysis Progress (Matching Reference)
 const ANALYSIS_CHECKLIST_STEPS = [
