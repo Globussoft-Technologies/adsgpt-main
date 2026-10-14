@@ -1,5 +1,6 @@
 const { verifyTokenSocket } = require('../services/authService');
 const { parseCookies } = require('../services/oauth/sessionCheck');
+const { isUserIdPendingDeletion } = require('../services/account/accountDeletion');
 
 const verifyTokenSocketMain = (socket, next) => {
   const supplied = socket.handshake.auth.token;
@@ -11,8 +12,17 @@ const verifyTokenSocketMain = (socket, next) => {
     cookies["adsgpt-session"] ||
     cookies["access-token"];
   const sessionId = socket.handshake?.auth?.sessionId ?? ""
-  verifyTokenSocket(token, (err, decoded) => {
+  verifyTokenSocket(token, async (err, decoded) => {
     if (err) {
+      return next(new Error('Authentication error'));
+    }
+    try {
+      const rawId = decoded?.user_id;
+      const prefixed = decoded?.created_from == "PAS" ? `PAS-${rawId}` : `GPT-${rawId}`;
+      if (rawId && await isUserIdPendingDeletion(prefixed)) {
+        return next(new Error('ACCOUNT_PENDING_DELETION'));
+      }
+    } catch (checkErr) {
       return next(new Error('Authentication error'));
     }
     

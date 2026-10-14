@@ -13,6 +13,7 @@ const UnifiedCreditController = require('../controllers/UnifiedCreditController'
 const { sweepStaleRenders } = require('../services/onboarding/staleRenders');
 const oauthSigningKeyService = require('../services/oauth/signingKeyService');
 const { reconcileBillingCycles } = require('../services/billingReconciliation');
+const { purgeExpiredAccounts } = require('../services/account/accountDeletion');
 require('dotenv').config();
 
 // -----------------------------------------------------------------------------
@@ -287,6 +288,17 @@ const runCronJobs = () => {
 
     // OAuth signing key rotation (daily at 03:00 by default)
     registerOAuthSigningKeyRotationCron();
+
+    // Account deletion cooling period: 3-day reminder emails + permanent purge
+    // of accounts past ACCOUNT_DELETION_COOLING_DAYS. Hourly, so a deletion is
+    // finished within the hour it falls due rather than at the next midnight.
+    cron.schedule('0 * * * *', exclusive('account-purge', 55 * 60, async () => {
+        try {
+            await purgeExpiredAccounts();
+        } catch (error) {
+            console.error('[account-purge] cron error:', error);
+        }
+    }));
 
     // Daily newsletter drip — runs at 09:00 UTC every day
     cron.schedule('0 9 * * *', exclusive('newsletter-drip', 30 * 60, async () => {

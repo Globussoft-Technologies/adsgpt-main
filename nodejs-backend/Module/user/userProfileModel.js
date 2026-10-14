@@ -136,12 +136,17 @@ const userProfileSchema = new mongoose.Schema(
     plan_metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
 
     // === Soft delete ===
-    // Set when a user self-deletes. The aMember account is hard-deleted, but we
-    // keep this document (and all related data) for audit/history. Because the
-    // aMember delete revokes access, login is blocked without needing a guard.
+    // Set when a user self-deletes. With deletion_scheduled_at set the account
+    // is in its cooling period (services/account/accountDeletion.js): logins are
+    // refused with ACCOUNT_PENDING_DELETION, the user can restore it, and the
+    // hourly purge cron wipes it afterwards. Older profiles have is_deleted
+    // without deletion_scheduled_at: their aMember account was hard-deleted at
+    // once and the signup flows reuse the document.
     is_deleted: { type: Boolean, default: false },
     deleted_at: { type: Date, default: null },
     delete_reason: { type: String, default: "" },
+    deletion_scheduled_at: { type: Date, default: null, index: true },
+    deletion_reminder_sent: { type: Boolean, default: false },
 
     // === Mobile & Social Auth Fields ===
     firebase_uid: { type: String, default: "" },

@@ -25,7 +25,10 @@ const {
   v2EmailAuth,
   v2GoogleAuth,
   v2AppleAuth,
+  v2RestoreAccount,
+  v2DeleteAccount,
   v2UpdateOnboardingProfile,
+  v2GetProfilePayload,
 } = require("../../controllers/auth/mobileController");
 
 // Auth Endpoints (Mounted at /adsgpt/mobile/*)
@@ -63,8 +66,11 @@ router.post("/webhooks/google/notifications", handleGoogleWebhook);
 router.post("/v2/auth/email",  v2EmailAuth);                           // API 1A
 router.post("/v2/auth/google", v2GoogleAuth);                          // API 1B
 router.post("/v2/auth/apple",  v2AppleAuth);                           // API 1C
+router.post("/v2/auth/restore-account", v2RestoreAccount);              // Cancel a pending deletion
+router.post("/v2/auth/delete-account", authenticateJWT, v2DeleteAccount); // Delete with cooling period
 
 // Onboarding profile (JWT required)
 router.post("/v2/user/profile", authenticateJWT, v2UpdateOnboardingProfile); // API 2.1
+router.get("/v2/user/profile-payload", authenticateJWT, v2GetProfilePayload); // socket session + credits over REST
 
 module.exports = router;

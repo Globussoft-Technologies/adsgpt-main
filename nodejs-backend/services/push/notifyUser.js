@@ -146,6 +146,25 @@ async function notifyUserSessionUpdate(userId) {
     const roomIds = new Set([gptId, numericId]);
 
     if (global.io) {
+      const isPlanActive = (u) => {
+        const sub = u?.userSubscriptionType || u?.subscriptions;
+        if (!sub || Object.keys(sub).length === 0) return false;
+        const subDate = new Date(Object.values(sub)[0]);
+        const expiryUTC = Date.UTC(
+          subDate.getUTCFullYear(),
+          subDate.getUTCMonth(),
+          subDate.getUTCDate(),
+          23,
+          59,
+          59,
+          999
+        );
+        return Date.now() <= expiryUTC;
+      };
+
+      const hasActivePlan = isPlanActive(user);
+      const subscription_expiry = user?.subscriptions ? Object.values(user.subscriptions)[0] : null;
+
       const sessionUser = {
         status: true,
         user_id: numericId,
@@ -157,6 +176,9 @@ async function notifyUserSessionUpdate(userId) {
         userSubscriptionType: user?.subscriptions || {},
         created_from: user?.created_from || "GPT",
         featureObject,
+        hasActivePlan,
+        subscription_plan_name: user?.subscription_plan_name || "",
+        subscription_expiry,
       };
 
       for (const room of roomIds) {

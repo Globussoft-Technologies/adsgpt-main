@@ -87,6 +87,16 @@ const authenticateJWT = (req, res, next) => {
       try {
         if(user?.created_from=="PAS") user.user_id = `PAS-${user.user_id}`
         if(user?.created_from=="GPT") user.user_id = `GPT-${user.user_id}`
+        // A JWT issued before a v2 deletion request stays valid on its own,
+        // so refuse it while the account is in its deletion cooling period.
+        const { isUserIdPendingDeletion } = require('./account/accountDeletion');
+        if (await isUserIdPendingDeletion(user.user_id)) {
+          return res.status(401).json({
+            success: false,
+            code: "ACCOUNT_PENDING_DELETION",
+            message: "Account is pending deletion.",
+          });
+        }
         await validateWorkspaceMemberSession(user);
         req.user = user;
         next();

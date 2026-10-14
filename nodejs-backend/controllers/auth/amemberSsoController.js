@@ -192,6 +192,11 @@ async function callback(req, res) {
       const renewUrl = memberAreaUrl();
       if (renewUrl) return res.redirect(303, renewUrl);
     }
+    if (error.code === "ACCOUNT_PENDING_DELETION") {
+      return res
+        .status(403)
+        .send(`${error.body?.message || "Your account is scheduled for deletion."} Sign in on the AdsGPT login page to restore it.`);
+    }
     return res
       .status(status >= 400 && status < 600 ? status : 401)
       .send(

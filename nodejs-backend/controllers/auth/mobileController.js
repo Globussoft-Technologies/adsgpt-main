@@ -12,6 +12,14 @@ const MobileStoreWebhookEvent = require("../../Module/mobilePayments/mobileStore
 const mobileStorePlans = require("../../config/mobileStorePlans");
 const { fetchUserDataByName, syncUserProfile } = require("./authController");
 const BrandsList = require("../../Module/brandNames/brandNamesSchema");
+const {
+  scheduleAccountDeletion,
+  findPendingDeletionProfile,
+  pendingDeletionBody,
+  AccountPendingDeletionError,
+  restorePendingAccount,
+  checkPendingAccountPassword,
+} = require("../../services/account/accountDeletion");
 
 const apiKey = process.env.AMEMBER_API_KEY;
 const baseUrl = process.env.AMEMBER_BASE_API_URL;
@@ -342,6 +350,9 @@ async function findUserByEmailOrFirebaseUid({ email, firebaseUid }) {
   if (email) conditions.push({ email: email.toLowerCase() });
 
   const mongoProfile = conditions.length > 0 ? await UserProfile.findOne({ $or: conditions, is_deleted: { $ne: true } }) : null;
+  // An account in its deletion cooling period: login/signup callers must refuse
+  // with ACCOUNT_PENDING_DELETION instead of treating it as a returning user.
+  const pendingDeletion = mongoProfile ? null : await findPendingDeletionProfile({ email, firebaseUid });
 
   let amemberUser = null;
   if (email) {
@@ -359,7 +370,7 @@ async function findUserByEmailOrFirebaseUid({ email, firebaseUid }) {
     }
   }
 
-  return { mongoProfile, amemberUser };
+  return { mongoProfile, amemberUser, pendingDeletion };
 }
 
 // ── aMember Direct Product Resolution ───────────────────────────────────────
@@ -609,46 +620,6 @@ async function postAmemberInvoice({
   purchasedAt,
   expiresAt,
 }) {
-  // Expire any existing active access records in aMember for this user before granting new access
-  try {
-    const todayStr = formatDateForAmember(new Date());
-    const userAccessResp = await axios.get(`${baseUrl}/access`, {
-      params: { _key: apiKey, "_filter[user_id]": String(amemberUserId) },
-    });
-    const accessRecords = Array.isArray(userAccessResp.data)
-      ? userAccessResp.data
-      : Object.values(userAccessResp.data || {});
-    for (const acc of accessRecords) {
-      if (acc && acc.access_id && acc.expire_date && acc.expire_date > todayStr) {
-        const expireParams = new URLSearchParams({
-          _key: apiKey,
-          expire_date: todayStr,
-        });
-        await axios.put(`${baseUrl}/access/${acc.access_id}`, expireParams.toString(), {
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        }).catch((e) => logger.warn("[postAmemberInvoice] Could not expire previous access:", e.message));
-      }
-    }
-  } catch (prevErr) {
-    logger.warn("[postAmemberInvoice] Warning checking previous active access:", prevErr.message);
-  }
-
-  // Expire previous active transactions in MongoDB MobileStoreTransaction
-  await MobileStoreTransaction.updateMany(
-    {
-      amember_user_id: String(amemberUserId),
-      canonical_transaction_id: { $ne: canonicalTransactionId },
-      expires_at: { $gt: new Date() },
-    },
-    {
-      $set: {
-        expires_at: new Date(),
-        "meta.replaced_by": canonicalTransactionId,
-        "meta.replaced_at": new Date(),
-      },
-    }
-  ).catch((err) => logger.warn("[postAmemberInvoice] Expire previous active transactions warning:", err.message));
-
   const publicId = `${platform}_${canonicalTransactionId}`;
   const paysysId = platform === "ios" ? "app-store" : "google-play";
   const beginDateStr = formatDateForAmember(purchasedAt);
@@ -708,6 +679,50 @@ async function postAmemberInvoice({
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
   logger.info(`[postAmemberInvoice] aMember API Response: ${JSON.stringify(resReq.data, null, 2)}`);
+
+  // Expire any existing active access records in aMember for this user before granting new access
+  try {
+    const todayStr = formatDateForAmember(new Date());
+    const userAccessResp = await axios.get(`${baseUrl}/access`, {
+      params: { _key: apiKey, "_filter[user_id]": String(amemberUserId) },
+    });
+    const accessRecords = Array.isArray(userAccessResp.data)
+      ? userAccessResp.data
+      : Object.values(userAccessResp.data || {});
+    for (const acc of accessRecords) {
+      if (acc && acc.access_id && acc.expire_date && acc.expire_date > todayStr) {
+        // Idempotent: only expire access that is NOT the new transaction
+        if (acc.transaction_id && acc.transaction_id === canonicalTransactionId) {
+          continue;
+        }
+        const expireParams = new URLSearchParams({
+          _key: apiKey,
+          expire_date: todayStr,
+        });
+        await axios.put(`${baseUrl}/access/${acc.access_id}`, expireParams.toString(), {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        }).catch((e) => logger.warn("[postAmemberInvoice] Could not expire previous access:", e.message));
+      }
+    }
+  } catch (prevErr) {
+    logger.warn("[postAmemberInvoice] Warning checking previous active access:", prevErr.message);
+  }
+
+  // Expire previous active transactions in MongoDB MobileStoreTransaction
+  await MobileStoreTransaction.updateMany(
+    {
+      amember_user_id: String(amemberUserId),
+      canonical_transaction_id: { $ne: canonicalTransactionId },
+      expires_at: { $gt: new Date() },
+    },
+    {
+      $set: {
+        expires_at: new Date(),
+        "meta.replaced_by": canonicalTransactionId,
+        "meta.replaced_at": new Date(),
+      },
+    }
+  ).catch((err) => logger.warn("[postAmemberInvoice] Expire previous active transactions warning:", err.message));
 
   // Access is granted by the `nested[access][0]` block on the invoice POST
   // above, which links the row to the invoice so aMember can expire and
@@ -839,7 +854,8 @@ const MobileSignup = async (req, res) => {
     
     const cleanLogin = cleanEmail;
 
-    const { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email: cleanEmail });
+    const { mongoProfile, amemberUser, pendingDeletion } = await findUserByEmailOrFirebaseUid({ email: cleanEmail });
+    if (pendingDeletion) return res.status(403).json(pendingDeletionBody(pendingDeletion));
     if (mongoProfile || amemberUser) {
       const amemberUserId = amemberUser?.user_id || mongoProfile?.amember_user_id;
       const userData = await fetchUserDataByName(amemberUser?.login || mongoProfile?.login || cleanLogin);
@@ -1021,7 +1037,8 @@ const GoogleSignup = async (req, res) => {
     const derivedFirstName = firstName || "";
     const derivedLastName = lastName || "";
 
-    const { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+    const { mongoProfile, amemberUser, pendingDeletion } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+    if (pendingDeletion) return res.status(403).json(pendingDeletionBody(pendingDeletion));
     if (mongoProfile || amemberUser) {
       const amemberUserId = amemberUser?.user_id || mongoProfile?.amember_user_id;
       const userData = await fetchUserDataByName(amemberUser?.login || mongoProfile?.login || email);
@@ -1210,7 +1227,8 @@ const GoogleLogin = async (req, res) => {
       return res.status(400).json({ ok: false, code: "INVALID_EMAIL", error: "Please provide a valid email address." });
     }
 
-    let { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+    let { mongoProfile, amemberUser, pendingDeletion } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+    if (pendingDeletion) return res.status(403).json(pendingDeletionBody(pendingDeletion));
     if (!mongoProfile && !amemberUser) {
       return res.status(404).json({
         ok: false,
@@ -1349,7 +1367,8 @@ const AppleSignup = async (req, res) => {
       derivedLastName = "User";
     }
 
-    const { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+    const { mongoProfile, amemberUser, pendingDeletion } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+    if (pendingDeletion) return res.status(403).json(pendingDeletionBody(pendingDeletion));
     if (mongoProfile || amemberUser) {
       const amemberUserId = amemberUser?.user_id || mongoProfile?.amember_user_id;
       const userData = await fetchUserDataByName(amemberUser?.login || mongoProfile?.login || email);
@@ -1543,7 +1562,8 @@ const AppleLogin = async (req, res) => {
     const email = (decoded.email || bodyEmail) ? (decoded.email || bodyEmail).toLowerCase() : null;
     const firebaseUid = decoded.uid;
 
-    let { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+    let { mongoProfile, amemberUser, pendingDeletion } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+    if (pendingDeletion) return res.status(403).json(pendingDeletionBody(pendingDeletion));
     if (!mongoProfile && !amemberUser) {
       return res.status(404).json({
         ok: false,
@@ -2648,8 +2668,26 @@ async function getUserSubscriptionDetails(amemberUserId, userData, active) {
       amember_user_id: String(amemberUserId),
     }).sort({ createdAt: -1 });
 
+    const isTxActive = latestTx ? (active && new Date(latestTx.expires_at) > new Date()) : false;
+
+    // Prioritize active web subscriptions over expired/missing mobile transactions
+    if (active && !isTxActive) {
+      return {
+        hasActivePlan: true,
+        platform: "web",
+        source: "web",
+        store_product_id: "",
+        status: "active",
+        latest_transaction_id: "",
+        original_transaction_id: "",
+        purchased_at: null,
+        expires_at: null,
+        can_manage_in_app: false,
+        manage_url: "https://adsgpt.app/account",
+      };
+    }
+
     if (latestTx) {
-      const isTxActive = active && new Date(latestTx.expires_at) > new Date();
       const platform = latestTx.platform || "ios";
       const expectedGooglePackage = process.env.GOOGLE_PLAY_PACKAGE_NAME || "io.adsgpt.app";
       const manageUrl = platform === "ios"
@@ -2671,21 +2709,8 @@ async function getUserSubscriptionDetails(amemberUserId, userData, active) {
       };
     }
 
-    if (active) {
-      return {
-        hasActivePlan: true,
-        platform: "web",
-        source: "web",
-        store_product_id: "",
-        status: "active",
-        latest_transaction_id: "",
-        original_transaction_id: "",
-        purchased_at: null,
-        expires_at: null,
-        can_manage_in_app: false,
-        manage_url: "https://adsgpt.app/account",
-      };
-    }
+    // Fallback if no active web or mobile plan
+
 
     return {
       hasActivePlan: false,
@@ -2731,9 +2756,18 @@ const getSubscriptionStatus = async (req, res) => {
 
     const userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
     const userData = await fetchUserDataByName(userProfile?.login || req.user?.login);
-    const active = userData?.ok ? isPlanActive(userData) : false;
+    
+    if (userData && !userData.ok && userData.error) {
+       return res.status(503).json({
+         ok: false,
+         code: "BILLING_SERVICE_UNAVAILABLE",
+         error: "Billing service is temporarily unavailable. Please try again later.",
+       });
+    }
 
+    const active = userData?.ok ? isPlanActive(userData) : false;
     const subscription = await getUserSubscriptionDetails(amemberUserId, userData, active);
+    const subscription_expiry = userData?.subscriptions ? Object.values(userData.subscriptions)[0] : null;
 
     return res.status(200).json({
       ok: true,
@@ -2743,6 +2777,8 @@ const getSubscriptionStatus = async (req, res) => {
         user_id: amemberUserId,
         hasActivePlan: active,
         userSubscriptionType: userData?.subscriptions || {},
+        subscription_plan_name: userData?.subscription_plan_name || "",
+        subscription_expiry,
       },
       userSubscriptionType: userData?.subscriptions || {},
       credits: {
@@ -3930,7 +3966,7 @@ const v2EmailAuth = async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
 
     // 1. Check if user exists in aMember (using findUserByEmailOrFirebaseUid helper)
-    const { mongoProfile: existingProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email: cleanEmail });
+    const { mongoProfile: existingProfile, amemberUser, pendingDeletion } = await findUserByEmailOrFirebaseUid({ email: cleanEmail });
 
     let userData;
     let isNewUser = false;
@@ -3951,12 +3987,20 @@ const v2EmailAuth = async (req, res) => {
         });
       }
 
+      // A pending account is locked in aMember, so check-access fails even
+      // with the right password; check it the pending-account way instead.
+      if (!userData?.ok && pendingDeletion && await checkPendingAccountPassword(pendingDeletion, password)) {
+        return res.status(403).json(pendingDeletionBody(pendingDeletion));
+      }
       if (!userData?.ok) {
         return res.status(401).json({
           success: false, statusCode: 401,
           error: "Invalid email or password.", code: "INVALID_CREDENTIALS",
         });
       }
+      // Checked only after the password is verified, so the pending state is
+      // never revealed to someone who doesn't own the account.
+      if (pendingDeletion) return res.status(403).json(pendingDeletionBody(pendingDeletion));
     } else {
       // 3. User does NOT exist -> SIGNUP Flow
       isNewUser = true;
@@ -4064,7 +4108,8 @@ async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, provide
     throw err;
   }
 
-  let { mongoProfile, amemberUser } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+  let { mongoProfile, amemberUser, pendingDeletion } = await findUserByEmailOrFirebaseUid({ email, firebaseUid });
+  if (pendingDeletion) throw new AccountPendingDeletionError(pendingDeletion);
   let isNewUser   = false;
   let amemberUserId;
   let hasActivePlan = false;
@@ -4216,6 +4261,7 @@ const v2GoogleAuth = async (req, res) => {
       _v2BuildSuccessResponse(jwtToken, mongoProfile, amemberUserId, email, fullName, isNewUser, isOnboarded, hasActivePlan),
     );
   } catch (error) {
+    if (error instanceof AccountPendingDeletionError) return res.status(403).json(error.body);
     logger.error("[v2Auth/googleAuth] error:", error.response?.data || error.message || error);
     const isAxios = error.isAxiosError || (error.message && error.message.includes("status code"));
     const status = isAxios ? 500 : (error.status || 500);
@@ -4292,6 +4338,7 @@ const v2AppleAuth = async (req, res) => {
       _v2BuildSuccessResponse(jwtToken, mongoProfile, amemberUserId, email, fullName, isNewUser, isOnboarded, hasActivePlan),
     );
   } catch (error) {
+    if (error instanceof AccountPendingDeletionError) return res.status(403).json(error.body);
     logger.error("[v2Auth/appleAuth] error:", error.response?.data || error.message || error);
     const isAxios = error.isAxiosError || (error.message && error.message.includes("status code"));
     const status = isAxios ? 500 : (error.status || 500);
@@ -4302,6 +4349,257 @@ const v2AppleAuth = async (req, res) => {
       error: errMsg,
       code: isAxios ? "AUTH_SERVICE_ERROR" : (error.code || "APPLE_AUTH_ERROR"),
     });
+  }
+};
+
+// ── API 1F : POST /api/v2/auth/delete-account ───────────────────────────────
+
+/**
+ * V2 account deletion with a cooling period (v1 /delete-account still deletes
+ * immediately). The profile is soft-deleted and scheduled; logins are refused
+ * with ACCOUNT_PENDING_DELETION until the user restores the account or the
+ * hourly purge cron wipes it from aMember, Firebase, S3 and MongoDB.
+ * Input: { reason?, authorizationCode? }
+ */
+const v2DeleteAccount = async (req, res) => {
+  /*
+    #swagger.tags = ['V2 Auth & Onboarding']
+    #swagger.summary = 'V2 Delete account (cooling period)'
+    #swagger.description = 'Schedules the authenticated account for deletion after ACCOUNT_DELETION_COOLING_DAYS (default 15). Apple Sign-In is revoked and Apple subscription ownership released immediately; everything else is purged when the period ends. The account can be restored via /v2/auth/restore-account.'
+    #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.responses[200] = { description: 'Account scheduled for deletion' }
+    #swagger.responses[404] = { description: 'Account not found or already scheduled for deletion' }
+  */
+  try {
+    const rawUserId = req.user?.user_id || req.user?.amember_user_id;
+    if (!rawUserId) {
+      return res.status(401).json({
+        success: false, statusCode: 401,
+        error: "An authenticated user is required.", code: "AUTH_USER_REQUIRED",
+      });
+    }
+    const cleanUserId = String(rawUserId).replace(/^GPT-/, "");
+
+    const userProfile = await UserProfile.findOne({
+      $or: [{ amember_user_id: cleanUserId }, { user_id: `GPT-${cleanUserId}` }],
+    }).select("+apple_refresh_token");
+
+    if (!userProfile || userProfile.is_deleted === true) {
+      return res.status(404).json({
+        success: false, statusCode: 404,
+        error: "Account not found or already scheduled for deletion.", code: "USER_NOT_FOUND",
+      });
+    }
+
+    const reason = (req.body?.reason || "User requested deletion").toString().trim();
+    const authorizationCode = req.body?.authorizationCode;
+
+    // 1. Revoke Apple Sign-In now (Apple requires it on a deletion request).
+    //    Firebase and aMember users stay alive so the account can be restored.
+    if (userProfile.loginProviders?.includes("apple") || userProfile.apple_refresh_token) {
+      let refreshTokenToRevoke = userProfile.apple_refresh_token;
+      if (authorizationCode) {
+        try {
+          const tokenRes = await exchangeAppleAuthCode(authorizationCode);
+          refreshTokenToRevoke = tokenRes.refresh_token;
+        } catch (codeErr) {
+          logger.error("[v2DeleteAccount] Apple authorization code exchange failed:", codeErr.response?.data || codeErr.message);
+        }
+      }
+      if (refreshTokenToRevoke) {
+        await revokeAppleToken(refreshTokenToRevoke).catch((err) => {
+          logger.error("[v2DeleteAccount] Apple token revocation failed:", err.response?.data || err.message);
+        });
+      }
+      userProfile.apple_refresh_token = "";
+    }
+
+    // 2. Release Apple subscription ownership immediately, so the store account
+    //    can subscribe on another AdsGPT account during the cooling period.
+    const targetAmemberUserId = userProfile.amember_user_id || cleanUserId;
+    try {
+      await MobileStoreTransaction.updateMany(
+        { platform: "ios", amember_user_id: String(targetAmemberUserId) },
+        { $set: { lineage_owner: false, "meta.released_reason": "owner_deleted", "meta.released_at": new Date() } }
+      );
+    } catch (updateErr) {
+      logger.error(`[v2DeleteAccount] failed to release Apple ownership for ${targetAmemberUserId}:`, updateErr);
+    }
+
+    // 3. Soft-delete and start the cooling period
+    const { deletion_scheduled_at, purge_at } = await scheduleAccountDeletion(userProfile, reason);
+
+    return res.status(200).json({
+      success: true, statusCode: 200,
+      message: `Your account is scheduled for deletion on ${purge_at.toDateString()}. Log in before then to restore it.`,
+      deletion_scheduled_at,
+      purge_at,
+    });
+  } catch (error) {
+    logger.error("[v2DeleteAccount] error:", error);
+    return res.status(500).json({
+      success: false, statusCode: 500,
+      error: "Failed to delete account. Please try again.", code: "INTERNAL_ERROR",
+    });
+  }
+};
+
+// ── API 1E : POST /api/v2/auth/restore-account ──────────────────────────────
+
+/**
+ * Cancel a pending account deletion and log the user straight in.
+ * Input: { email, password } or { firebaseIdToken, platform?, authorizationCode? }
+ * The same credentials as login are required, so nobody can restore an account
+ * they don't own. On success the response is the normal V2 login response.
+ */
+const v2RestoreAccount = async (req, res) => {
+  /*
+    #swagger.tags = ['V2 Auth & Onboarding']
+    #swagger.summary = 'V2 Restore account pending deletion'
+    #swagger.description = 'Cancels a scheduled account deletion during the cooling period. Requires the same credentials as login (email + password, or a Firebase ID token) and returns the normal V2 login response.'
+    #swagger.responses[200] = { description: 'Account restored and user logged in', schema: { $ref: '#/components/schemas/v2AuthSuccessResponse' } }
+    #swagger.responses[401] = { description: 'Invalid credentials' }
+    #swagger.responses[404] = { description: 'No account pending deletion for these credentials' }
+  */
+  try {
+    const { email, password, firebaseIdToken } = req.body || {};
+    let pending = null;
+    let loginHandler = null;
+
+    if (firebaseIdToken) {
+      const decoded = await verifyFirebaseToken(firebaseIdToken);
+      const provider = decoded.firebase?.sign_in_provider;
+      if (provider !== "google.com" && provider !== "apple.com") {
+        return res.status(400).json({
+          success: false, statusCode: 400,
+          error: "Please use Google or Apple to restore with a Firebase token.", code: "INVALID_PROVIDER",
+        });
+      }
+      pending = await findPendingDeletionProfile({ email: decoded.email, firebaseUid: decoded.uid });
+      loginHandler = provider === "apple.com" ? v2AppleAuth : v2GoogleAuth;
+    } else if (typeof email === "string" && email.trim() && typeof password === "string" && password) {
+      const cleanEmail = email.trim().toLowerCase();
+      pending = await findPendingDeletionProfile({ email: cleanEmail });
+      if (pending) {
+        if (!(await checkPendingAccountPassword(pending, password))) {
+          return res.status(401).json({
+            success: false, statusCode: 401,
+            error: "Invalid email or password.", code: "INVALID_CREDENTIALS",
+          });
+        }
+      }
+      loginHandler = v2EmailAuth;
+    } else {
+      return res.status(400).json({
+        success: false, statusCode: 400,
+        error: "Provide email and password, or firebaseIdToken.", code: "INVALID_INPUT",
+      });
+    }
+
+    if (!pending) {
+      return res.status(404).json({
+        success: false, statusCode: 404,
+        error: "No account pending deletion was found for these credentials.", code: "NOT_PENDING_DELETION",
+      });
+    }
+
+    await restorePendingAccount(pending);
+    logger.info(`[v2Auth/restoreAccount] restored ${pending.user_id}`);
+
+    // Reuse the normal login so the response (token, profile, onboarding state)
+    // is exactly what the app already handles.
+    return loginHandler(req, res);
+  } catch (error) {
+    logger.error("[v2Auth/restoreAccount] error:", error.response?.data || error.message || error);
+    const status = error.status && error.status < 500 ? error.status : 500;
+    return res.status(status).json({
+      success: false, statusCode: status,
+      error: status === 500 ? "Failed to restore account. Please try again." : error.message,
+      code: status === 500 ? "INTERNAL_ERROR" : (error.code || "RESTORE_ERROR"),
+    });
+  }
+};
+
+// ── API 2.2 : GET /api/v2/user/profile-payload ──────────────────────────────
+
+const _splitEnvList = (value) =>
+  (value || "").split(",").map((p) => p.trim()).filter(Boolean);
+
+/**
+ * REST replacement for the socket "session" + "credits" events, so clients can
+ * stop depending on the socket. Unlike the socket's connect event it reads the
+ * profile fresh from MongoDB, so the plan is right straight after an upgrade.
+ */
+const v2GetProfilePayload = async (req, res) => {
+  /*
+    #swagger.tags = ['V2 Auth & Onboarding']
+    #swagger.summary = 'V2 Session + credits payload'
+    #swagger.description = 'Returns the same data as the socket "session" and "credits" events: { ok, session, credits }. Pass the socket session id in the x-session-id header or ?sessionId= if the client uses it.'
+    #swagger.security = [{ "BearerAuth": [] }]
+    #swagger.responses[200] = { description: '{ ok, session, credits }' }
+  */
+  try {
+    const buildFeatureObject = require("../../utils/featureObjectBuilder");
+    const UnifiedCreditController = require("../UnifiedCreditController");
+
+    // req.user = decoded JWT; authenticateJWT already prefixed user_id (GPT-/PAS-)
+    const claims = { ...req.user };
+    delete claims.token;
+    const userId = claims.user_id;
+    const numericId = String(userId).replace(/^(GPT|PAS)-/, "");
+
+    const profile = await UserProfile.findOne({
+      $or: [{ user_id: userId }, { amember_user_id: numericId }],
+    }).lean();
+
+    // Subscription: DB first, then JWT. Same PAS rewrite as middlewares/authMiddleware.js
+    let userSubscriptionType =
+      (profile?.subscriptions && Object.keys(profile.subscriptions).length
+        ? profile.subscriptions
+        : claims.userSubscriptionType) || {};
+    if (claims.created_from === "PAS") {
+      userSubscriptionType = { PAS: Object.values(userSubscriptionType)[0] };
+    }
+    const plan = Object.keys(userSubscriptionType)[0] || null;
+
+    const featureObject = await buildFeatureObject(userId, profile || claims);
+    const allowedPlans = _splitEnvList(process.env.ENABLE_CREATIVE);
+    const allowedVideoPlans = _splitEnvList(process.env.ENABLE_VIDEO);
+
+    const session = {
+      ...claims,
+      sessionId: req.get("x-session-id") || req.query?.sessionId || "",
+      user_name:
+        profile?.name ||
+        `${profile?.name_f || ""} ${profile?.name_l || ""}`.trim() ||
+        profile?.login ||
+        claims.user_name || "",
+      user_email: profile?.email || claims.user_email || "",
+      name_f: profile?.name_f || claims.name_f || "",
+      name_l: profile?.name_l || claims.name_l || "",
+      userSubscriptionType,
+      featureObject,
+      isAdCreativeActive:
+        allowedPlans.includes(plan) || process.env.ACCESS_ADCREATIVE_ALL === "true",
+      isAdVideo: allowedVideoPlans.includes(plan),
+    };
+
+    const creditStatus = await UnifiedCreditController.getCreditStatus(userId);
+    const credits = {
+      creditsUsed: creditStatus.used_credits,
+      totalCredits: creditStatus.total_credits,
+      remainingCredits: creditStatus.remaining_credits,
+      frozenCredits: creditStatus.frozen_credits,
+      settledCredits: creditStatus.settled_credits,
+      subscription: creditStatus.subscription,
+      rollover: creditStatus.rollover,
+      topup: creditStatus.topup,
+    };
+
+    return res.status(200).json({ ok: true, session, credits });
+  } catch (error) {
+    logger.error("[v2User/profilePayload] error:", error);
+    return res.status(500).json({ ok: false, code: "INTERNAL_ERROR", message: "Internal server error" });
   }
 };
 
@@ -4449,6 +4747,41 @@ const v2UpdateOnboardingProfile = async (req, res) => {
   }
 };
 
+const checkPurchaseEligibility = async (req, res) => {
+  /*
+    #swagger.tags = ['Mobile Native Auth & Payments']
+    #swagger.summary = 'Check Purchase Eligibility'
+    #swagger.description = 'Evaluates if a user is already on a recurring web plan to prevent duplicate StoreKit/Google Play billing.'
+    #swagger.security = [{ "BearerAuth": [] }]
+  */
+  try {
+    const rawUserId = req.user?.user_id || req.user?.amember_user_id;
+    if (!rawUserId) {
+      return res.status(401).json({ ok: false, code: "UNAUTHORIZED", error: "Authentication required." });
+    }
+    const amemberUserId = String(rawUserId).replace(/^GPT-/, "");
+    
+    const userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
+    const userData = await fetchUserDataByName(userProfile?.login || req.user?.login);
+    const active = userData?.ok ? isPlanActive(userData) : false;
+    
+    const subscription = await getUserSubscriptionDetails(amemberUserId, userData, active);
+
+    if (active && subscription.platform === "web") {
+      return res.status(409).json({
+        ok: false,
+        code: "ACTIVE_WEB_SUBSCRIPTION",
+        error: "You already have an active subscription managed via the Web. Please cancel it there before purchasing on this device to avoid duplicate charges.",
+      });
+    }
+
+    return res.status(200).json({ ok: true, eligible: true });
+  } catch (error) {
+    logger.error("[checkPurchaseEligibility] error:", error);
+    return res.status(500).json({ ok: false, error: "Failed to evaluate purchase eligibility." });
+  }
+};
+
 module.exports = {
   MobileSignup,
   GoogleSignup,
@@ -4471,12 +4804,16 @@ module.exports = {
   getMobileSubscriptionDetails,
   handleAppleWebhook,
   handleGoogleWebhook,
+  checkPurchaseEligibility,
   // ── V2 Auth (Step 1) ────────────────────────────────────────────────────────
   v2EmailAuth,
   v2GoogleAuth,
   v2AppleAuth,
+  v2RestoreAccount,
+  v2DeleteAccount,
   // ── V2 User (Step 2.1) ──────────────────────────────────────────────────────
   v2UpdateOnboardingProfile,
+  v2GetProfilePayload,
   // Exposed for unit testing only
   _v2BuildSuccessResponse,
   _v2ResolveFirebaseUser,

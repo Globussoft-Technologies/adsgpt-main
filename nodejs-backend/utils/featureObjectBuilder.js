@@ -36,8 +36,11 @@ async function buildFeatureObject(userId, userObj = null) {
         if (productMeta) {
           planName = productMeta.title || planName;
 
-          // A plan is PAID if firstPrice > 0.
-          if (typeof productMeta.firstPrice === "number" && productMeta.firstPrice > 0) {
+          const isPaid = typeof productMeta.firstPrice === "number" && productMeta.firstPrice > 0;
+          const currentTitle = String(productMeta.title || "").toLowerCase();
+          
+          // Only true top-tier plans flag topPlan = true, keeping intermediate plans upgradeable
+          if (isPaid && (currentTitle.includes("scale") || currentTitle.includes("growth") || currentTitle.includes("agency"))) {
             topPlan = true;
           } else if (productMeta.firstPrice === 0) {
             isFreePlan = true;
