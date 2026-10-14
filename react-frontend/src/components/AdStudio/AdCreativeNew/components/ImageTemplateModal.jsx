@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSelector } from 'react-redux';
-import { Check, ImagePlus, Sparkles, X } from 'lucide-react';
+import { Check, Loader2, Plus, Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import creditIcon from '@/assets/layouts/profile/adcreative.svg';
 import { uploadToS3 } from '@/utils/imageUpload';
 import { useGenieToMySpace } from '@/utils/ui/useGenieToMySpace';
 import toMediaUrl from '@/utils/mediaUrl';
+import ShowLightBox from '@/components/AdFactory/Cards/Lightbox';
 import { generateStudioTemplateImage, getStudioRenderPrice } from '@/apis/adStudio/studioTemplatesApi';
 const GENIE_TIMEOUT_MS = 4000;
 
@@ -28,6 +29,13 @@ const GENIE_TIMEOUT_MS = 4000;
 // The form is keyed by template and unmounted on close, so every open starts empty.
 
 const MAX_PRODUCT_IMAGES = 3;
+// The three product slots are rendered from this, empty or not, so the section
+// keeps one fixed height and the sheet never jumps as images come and go.
+const SLOT_INDEXES = [0, 1, 2];
+const SLOT_PURPLE = '#8b5cf6';
+const SLOT_LINE = '#2f2f37';
+const SLOT_LINE_HOVER = '#45454f';
+const SLOT_DASH = '#3c3c46';
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const PROMPT_MAX = 2000;
 
@@ -124,7 +132,7 @@ function RecreateSheet({ template, brand, onClose }) {
   useEffect(() => {
     const frame = requestAnimationFrame(() => setShown(true));
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape' && !previewOpenRef.current) onClose?.();
     };
     window.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
@@ -152,7 +160,7 @@ function RecreateSheet({ template, brand, onClose }) {
     const valid = list.filter((f) => ACCEPTED_TYPES.includes(f.type));
     const room = MAX_PRODUCT_IMAGES - imagesRef.current.length;
     if (valid.length < list.length) setNotice('Only PNG, JPG or WebP images can be added.');
-    else if (valid.length > room) setNotice(`You can add up to ${MAX_PRODUCT_IMAGES} product images.`);
+    else if (valid.length > room) setNotice(`Maximum ${MAX_PRODUCT_IMAGES} images`);
     const added = valid.slice(0, Math.max(room, 0)).map((file) => ({
       id: newId(),
       file,
@@ -168,7 +176,7 @@ function RecreateSheet({ template, brand, onClose }) {
     const current = imagesRef.current;
     if (current.some((img) => img.url === url)) return;
     if (current.length >= MAX_PRODUCT_IMAGES) {
-      setNotice(`You can add up to ${MAX_PRODUCT_IMAGES} product images.`);
+      setNotice(`Maximum ${MAX_PRODUCT_IMAGES} images`);
       return;
     }
     imagesRef.current = [...current, { id: newId(), url, preview: url, source }];
@@ -187,6 +195,72 @@ function RecreateSheet({ template, brand, onClose }) {
     const existing = images.find((img) => img.url === url);
     if (existing) remove(existing.id);
     else addUrl(url, 'brand');
+  };
+
+  // Double-click a brand pick to preview it in Ad Studio's shared lightbox
+  // (components/AdFactory/Cards/Lightbox.jsx — the one AI Creatives' chips use).
+  // Single click still picks, but waits 220ms (AI Creatives' value) so the first
+  // half of a double-click doesn't toggle the pick on and back off.
+  const [preview, setPreview] = useState(null); // { images: [url], current: url } | null
+  const previewOpenRef = useRef(false);
+  previewOpenRef.current = Boolean(preview);
+  const clickTimer = useRef(null);
+  useEffect(() => () => clearTimeout(clickTimer.current), []);
+  const onBrandPickClick = (url, blocked) => {
+    clearTimeout(clickTimer.current);
+    if (blocked) return; // full: nothing to add (preview still works)
+    clickTimer.current = setTimeout(() => toggleBrandImage(url), 220);
+  };
+  const onBrandPickDoubleClick = (url) => {
+    clearTimeout(clickTimer.current);
+    setPreview({ images: brandImages, current: url });
+  };
+
+  // The notice doubles as the "Maximum 3 images" toast, so it clears itself
+  // rather than sitting over the grid until the next action.
+  useEffect(() => {
+    if (!notice) return undefined;
+    const t = setTimeout(() => setNotice(''), 2600);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  // Order is meaning here: index 0 is the MAIN product image and is sent first
+  // at generate time, so "set as main" and slot-to-slot dragging are just moves
+  // within the array.
+  const moveImage = (from, to) => {
+    const next = [...imagesRef.current];
+    if (from === to || !next[from]) return;
+    const [moved] = next.splice(from, 1);
+    next.splice(Math.min(to, next.length), 0, moved);
+    imagesRef.current = next;
+    setImages(next);
+  };
+  const makeMain = (index) => moveImage(index, 0);
+
+  // Slot-to-slot reorder (native HTML5 drag, no library). Held in a ref as well
+  // as state: the grid's own dragover/drop must tell a reorder from a file drag
+  // coming in from the desktop, and refs read true inside those handlers.
+  const [reorderFrom, setReorderFrom] = useState(null);
+  const reorderFromRef = useRef(null);
+  const setReorder = (index) => {
+    reorderFromRef.current = index;
+    setReorderFrom(index);
+  };
+
+  // Both drop targets (the empty-state box and the compact add tile) take the
+  // same drag behaviour, so a file dropped on either lands the same way.
+  const dropHandlers = {
+    onDragOver: (e) => {
+      e.preventDefault();
+      setDragging(true);
+    },
+    onDragLeave: () => setDragging(false),
+    onDrop: (e) => {
+      e.preventDefault();
+      setDragging(false);
+      setNotice('');
+      addFiles(e.dataTransfer?.files, 'upload');
+    },
   };
 
   // Paste anywhere while the sheet is open: image files from the clipboard, or
@@ -302,7 +376,9 @@ function RecreateSheet({ template, brand, onClose }) {
 
   // Centred both ways. Safe for a tall sheet: it is capped at the overlay's
   // height (max-h-full) and scrolls inside, so centring never clips its top.
-  return createPortal(
+  return (
+    <>
+      {createPortal(
     <div
       className="recreate-root fixed inset-0 z-[60] flex items-center justify-center overflow-hidden p-4 sm:p-6"
       style={{
@@ -387,93 +463,210 @@ function RecreateSheet({ template, brand, onClose }) {
                 </span>
               </div>
 
-              <div className="flex flex-wrap gap-2.5">
-                {images.map((img) => (
-                  <div key={img.id} className="relative">
-                    <img
-                      src={img.preview}
-                      alt="Product"
-                      className="h-[86px] w-[86px] rounded-lg object-cover"
-                      style={{ border: `1px solid ${LINE_STRONG}` }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => remove(img.id)}
-                      aria-label="Remove image"
-                      className="absolute -top-2 -right-2 grid h-5 w-5 cursor-pointer place-items-center rounded-full text-zinc-600 dark:text-white/70 shadow-md transition duration-200 hover:text-zinc-900 dark:hover:text-white"
-                      style={{ background: 'var(--rc-remove)', border: `1px solid ${LINE_STRONG}` }}
-                    >
-                      <X className="h-2.5 w-2.5" strokeWidth={3} />
-                    </button>
-                  </div>
-                ))}
+              {/* Three fixed square slots, always rendered. Files dropped
+                  anywhere on the grid land the same way, so the dimmer empty
+                  slots are drop targets too even though only the first one
+                  opens the picker. */}
+              <div
+                className="relative grid grid-cols-3 gap-2 min-[480px]:gap-3"
+                onDragOver={(e) => {
+                  if (reorderFromRef.current !== null) return; // a tile being reordered, not a file
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={(e) => {
+                  if (e.currentTarget.contains(e.relatedTarget)) return; // moving between slots
+                  setDragging(false);
+                }}
+                onDrop={(e) => {
+                  if (reorderFromRef.current !== null) return;
+                  e.preventDefault();
+                  setDragging(false);
+                  setNotice('');
+                  addFiles(e.dataTransfer?.files, 'upload');
+                }}
+              >
+                {SLOT_INDEXES.map((slot) => {
+                  const img = images[slot];
 
-                {!isFull && (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setDragging(true);
-                    }}
-                    onDragLeave={() => setDragging(false)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setDragging(false);
-                      setNotice('');
-                      addFiles(e.dataTransfer?.files, 'upload');
-                    }}
-                    className={cn(
-                      'flex min-h-[86px] min-w-[86px] flex-1 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl px-3 py-4 text-center transition-all duration-200'
-                    )}
-                    style={{
-                      background: dragging ? 'rgba(124,92,255,0.10)' : SURF2,
-                      border: `1px dashed ${dragging ? ACCENT : LINE_STRONG}`,
-                      transitionTimingFunction: EASE,
-                    }}
-                  >
-                    <span
-                      className="grid h-8 w-8 place-items-center rounded-full"
-                      style={{ background: 'var(--rc-chip)', border: `1px solid ${LINE_STRONG}` }}
+                  if (img) {
+                    return (
+                      <div
+                        key={img.id}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.effectAllowed = 'move';
+                          // Firefox refuses to start a drag with no payload set.
+                          e.dataTransfer.setData('text/plain', String(slot));
+                          setReorder(slot);
+                        }}
+                        onDragEnd={() => setReorder(null)}
+                        onDragOver={(e) => reorderFromRef.current !== null && e.preventDefault()}
+                        onDrop={(e) => {
+                          if (reorderFromRef.current === null) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          moveImage(reorderFromRef.current, slot);
+                          setReorder(null);
+                        }}
+                        className={cn(
+                          'group relative aspect-square overflow-hidden rounded-xl transition-all duration-200',
+                          reorderFrom === slot && 'opacity-60'
+                        )}
+                        style={{
+                          background: '#111',
+                          border: `1px solid ${SLOT_LINE}`,
+                          transitionTimingFunction: EASE,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = SLOT_LINE_HOVER;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = SLOT_LINE;
+                        }}
+                      >
+                        <img
+                          src={img.preview}
+                          alt={`Product ${slot + 1}`}
+                          draggable={false}
+                          className="h-full w-full object-contain"
+                        />
+
+                        {slot === 0 ? (
+                          <span
+                            className="pointer-events-none absolute top-2 left-2 rounded-md px-[7px] py-[3px] text-[10px] font-bold tracking-wide text-white"
+                            style={{ background: SLOT_PURPLE }}
+                          >
+                            MAIN
+                          </span>
+                        ) : (
+                          /* Covers the tile: clicking the image promotes it, and
+                             the label only shows on hover or keyboard focus. */
+                          <button
+                            type="button"
+                            onClick={() => makeMain(slot)}
+                            aria-label={`Set image ${slot + 1} as main`}
+                            className="absolute inset-0 flex cursor-pointer items-end justify-center pb-2 opacity-0 transition-opacity duration-200 hover:bg-black/35 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#8b5cf6]"
+                          >
+                            <span className="rounded-md bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
+                              Set as main
+                            </span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => remove(img.id)}
+                          aria-label={`Remove image ${slot + 1}`}
+                          className="absolute top-2 right-2 z-10 grid h-[22px] w-[22px] cursor-pointer place-items-center rounded-full bg-black/70 text-white transition duration-200 hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5cf6]"
+                        >
+                          <X className="h-3 w-3" strokeWidth={3} />
+                        </button>
+
+                        {/* Files only leave for S3 when Generate is pressed, so
+                            that is the one moment a slot is really uploading. */}
+                        {phase === 'working' && img.file && (
+                          <span className="absolute inset-0 z-20 grid place-items-center bg-black/55">
+                            <Loader2 className="h-5 w-5 animate-spin text-white" />
+                          </span>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  const isFirstEmpty = slot === images.length;
+                  const slotStyle = {
+                    border: `1.5px dashed ${dragging ? SLOT_PURPLE : SLOT_DASH}`,
+                    transitionTimingFunction: EASE,
+                  };
+
+                  if (!isFirstEmpty) {
+                    return (
+                      <div
+                        key={`empty-${slot}`}
+                        aria-hidden="true"
+                        className="aspect-square rounded-xl opacity-50 transition-all duration-200"
+                        style={slotStyle}
+                      />
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={`empty-${slot}`}
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      aria-label="Add image"
+                      className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5cf6]"
+                      style={slotStyle}
                     >
-                      <ImagePlus className="h-4 w-4 text-zinc-600 dark:text-white/70" />
-                    </span>
-                    <span className="text-[13px] font-semibold text-zinc-700 dark:text-white/80">Upload product</span>
-                    {/* Paste is caught document-wide while the modal is open (no
-                        click needed); clicking this box opens the file picker. */}
-                    <span className="text-[12px] text-zinc-500 dark:text-white/55">Click to browse · or drop, or press Ctrl+V anywhere</span>
-                    <span className="text-[11px] text-zinc-400 dark:text-white/40">PNG, JPG or WebP</span>
-                  </button>
+                      <span
+                        className="grid h-[30px] w-[30px] place-items-center rounded-full"
+                        style={{ background: 'var(--rc-chip)', border: `1px solid ${LINE_STRONG}` }}
+                      >
+                        <Plus className="h-4 w-4 text-zinc-600 dark:text-white/70" />
+                      </span>
+                      <span className="text-[12px]" style={{ color: '#8a8a95' }}>
+                        Add image
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {/* Floated over the slots, never in flow: the section keeps one
+                    height whatever the user does. */}
+                {notice && (
+                  <p
+                    role="status"
+                    className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-lg bg-black/85 px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap text-amber-300 shadow-lg"
+                  >
+                    {notice}
+                  </p>
                 )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept={ACCEPTED_TYPES.join(',')}
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    setNotice('');
-                    addFiles(e.target.files, 'upload');
-                    e.target.value = '';
-                  }}
-                />
               </div>
+
+              {/* Paste is caught document-wide while the sheet is open. */}
+              <p className="text-[11px]" style={{ color: '#8a8a95' }}>
+                Drop, browse or Ctrl+V · PNG, JPG or WebP
+              </p>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPTED_TYPES.join(',')}
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  setNotice('');
+                  addFiles(e.target.files, 'upload');
+                  e.target.value = '';
+                }}
+              />
 
               {brandImages.length > 0 && (
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-xs text-zinc-500 dark:text-white/50">Or pick from {brand?.name || 'your brand'}</span>
+                  <span className="text-xs text-zinc-500 dark:text-white/50">
+                    Or pick from {brand?.name || 'your brand'}
+                    <span className="text-zinc-400 dark:text-white/35"> · double-click to preview</span>
+                  </span>
                   <div className="flex flex-wrap gap-1.5">
                     {brandImages.map((url) => {
                       const selected = images.some((img) => img.url === url);
+                      const blocked = !selected && isFull;
                       return (
                         <button
                           key={url}
                           type="button"
-                          onClick={() => toggleBrandImage(url)}
-                          disabled={!selected && isFull}
+                          onClick={() => onBrandPickClick(url, blocked)}
+                          onDoubleClick={() => onBrandPickDoubleClick(url)}
                           aria-pressed={selected}
-                          className="relative h-12 w-12 cursor-pointer overflow-hidden rounded-md disabled:cursor-not-allowed disabled:opacity-40"
-                          style={{ border: `2px solid ${selected ? '#7c5cff' : 'transparent'}` }}
+                          aria-disabled={blocked}
+                          title="Click to pick · double-click to preview"
+                          className={cn(
+                            'relative h-12 w-12 cursor-pointer overflow-hidden rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5cf6]',
+                            blocked && 'opacity-40'
+                          )}
+                          style={{ border: `2px solid ${selected ? SLOT_PURPLE : 'transparent'}` }}
                         >
                           <img src={url} alt="Brand product" className="h-full w-full object-cover" />
                           {selected && (
@@ -488,7 +681,6 @@ function RecreateSheet({ template, brand, onClose }) {
                 </div>
               )}
 
-              {notice && <p className="text-xs text-amber-400">{notice}</p>}
             </section>
 
             {/* Prompt (optional — not labelled as such, by decision) */}
@@ -500,7 +692,7 @@ function RecreateSheet({ template, brand, onClose }) {
                 id="recreate-prompt"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value.slice(0, PROMPT_MAX))}
-                rows={4}
+                rows={3}
                 placeholder="e.g. Put my product in this scene, keep the lighting and layout"
                 className="recreate-prompt w-full resize-none rounded-xl px-3.5 py-3 text-[13.5px] leading-relaxed text-zinc-800 dark:text-white/90 outline-none transition-all duration-200 placeholder:text-zinc-400 dark:placeholder:text-white/45"
                 style={{ background: SURF2, border: `1px solid ${LINE_STRONG}`, transitionTimingFunction: EASE }}
@@ -633,7 +825,16 @@ function RecreateSheet({ template, brand, onClose }) {
         `}</style>
       </div>
     </div>,
-    document.body
+        document.body
+      )}
+      {preview && (
+        <ShowLightBox
+          images={preview.images}
+          lightboxImage={preview.current}
+          closeLightbox={() => setPreview(null)}
+        />
+      )}
+    </>
   );
 }
 

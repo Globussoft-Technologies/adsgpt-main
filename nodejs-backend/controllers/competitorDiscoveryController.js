@@ -15,6 +15,20 @@ function isStalePending(job) {
   return Date.now() - started > STALE_PENDING_MS;
 }
 
+// Persist only the selected brand. Saving the whole BrandsList validates every
+// sibling brand, so an unrelated legacy row can block discovery.
+async function updateBrandDiscovery(userId, brandId, fields) {
+  const updates = Object.fromEntries(
+    Object.entries(fields).map(([field, value]) => [`brands.$.${field}`, value])
+  );
+  const result = await brandNameLists.updateOne(
+    { user_id: userId, 'brands.id': brandId },
+    { $set: updates },
+    { runValidators: true }
+  );
+  if (!result.matchedCount) throw new Error('Brand not found');
+}
+
 // ── Structured output schema for Gemini ─────────────────────────────────
 
 const responseSchema = {
@@ -79,8 +93,7 @@ async function runDiscoveryJob(userId, brandId) {
       errorMessage: null,
       keywordVersion: KEYWORD_VERSION,
     };
-    user.markModified('brands');
-    await user.save();
+    await updateBrandDiscovery(userId, brandId, { discoveryJob: brand.discoveryJob });
 
     // console.log(`[runDiscoveryJob] Started for brand ${brandId}`);
 
@@ -152,8 +165,12 @@ async function runDiscoveryJob(userId, brandId) {
       errorMessage: null,
       keywordVersion: KEYWORD_VERSION,
     };
-    user.markModified('brands');
-    await user.save();
+    await updateBrandDiscovery(userId, brandId, {
+      competitors: brand.competitors,
+      keywords: brand.keywords,
+      lastFetchedAt: brand.lastFetchedAt,
+      discoveryJob: brand.discoveryJob,
+    });
 
     // console.log(`[runDiscoveryJob] SUCCESS for brand ${brandId}: discovery data ready`);
   } catch (err) {
@@ -170,8 +187,7 @@ async function runDiscoveryJob(userId, brandId) {
             errorMessage: err.message,
             keywordVersion: KEYWORD_VERSION,
           };
-          user.markModified('brands');
-          await user.save();
+          await updateBrandDiscovery(userId, brandId, { discoveryJob: b.discoveryJob });
         }
       }
     } catch (e) {
@@ -365,8 +381,7 @@ async function getCompetitorAds(req, res) {
           errorMessage: null,
           keywordVersion: KEYWORD_VERSION,
         };
-        user.markModified('brands');
-        await user.save();
+        await updateBrandDiscovery(userId, brandId, { discoveryJob: brand.discoveryJob });
         // Fire-and-forget discovery job
         runDiscoveryJob(userId, brandId);
       }
@@ -571,8 +586,7 @@ async function refreshCompetitorAds(req, res) {
       errorMessage: null,
       keywordVersion: KEYWORD_VERSION,
     };
-    user.markModified('brands');
-    await user.save();
+    await updateBrandDiscovery(userId, brandId, { discoveryJob: brand.discoveryJob });
 
     // Fire-and-forget
     runDiscoveryJob(userId, brandId);
