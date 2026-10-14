@@ -10,6 +10,7 @@ const autopilotRunDashboard = require("../controllers/admin/autopilotRunDashboar
 const planLimits = require("../controllers/admin/planLimits.controller");
 const modelConfiguration = require("../controllers/admin/modelConfiguration.controller");
 const dbMonitor = require("../controllers/admin/dbMonitor.controller");
+const aiConsentDisclosure = require("../controllers/admin/aiConsentDisclosure.controller");
 const ipAccessRules = require("../controllers/admin/ipAccessRule.controller");
 const multer = require("multer");
 
@@ -315,6 +316,22 @@ router.get("/db/slow-queries", requireAdmin, (req, res, next) => {
     #swagger.summary = 'MongoDB profiler status and recorded slow operations'
   */
   dbMonitor.slowQueries(req, res, next);
+});
+
+router.get("/ai-consent/disclosures", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'List published AI data-sharing disclosure versions'
+  */
+  aiConsentDisclosure.listDisclosures(req, res, next);
+});
+
+router.post("/ai-consent/disclosures", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Publish a new AI data-sharing disclosure version (all users are asked again)'
+  */
+  aiConsentDisclosure.publishDisclosure(req, res, next);
 });
 
 module.exports = router;

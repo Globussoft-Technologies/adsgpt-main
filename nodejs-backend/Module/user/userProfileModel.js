@@ -148,6 +148,14 @@ const userProfileSchema = new mongoose.Schema(
     deletion_scheduled_at: { type: Date, default: null, index: true },
     deletion_reminder_sent: { type: Boolean, default: false },
 
+    // AI data-sharing consent, current state (/adsgpt/privacy/ai-consent).
+    // Full decision history is in the ai_consent_history collection.
+    // null = never asked, true = granted, false = withdrawn.
+    ai_consent: { type: Boolean, default: null },
+    ai_consent_version: { type: String, default: null }, // e.g. "1.1.1"
+    ai_consent_decided_at: { type: Date, default: null },
+    ai_consent_platform: { type: String, default: null },
+
     // === Mobile & Social Auth Fields ===
     firebase_uid: { type: String, default: "" },
     loginProviders: [{ type: String }], // e.g. ["general", "google", "apple"]

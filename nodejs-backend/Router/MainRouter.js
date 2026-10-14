@@ -62,6 +62,7 @@ const amemberSsoRoute = require("./auth/amemberSsoRoute");
 const mobileRoutes = require("./auth/mobileRoutes");
 const adsSearchRoutes = require("./adsSearchRoutes");
 const mySpaceRoutes = require("./mySpaceRoutes");
+const privacyRoutes = require("./privacyRoutes");
 const bizSdk = require("facebook-nodejs-business-sdk");
 const {
   installGlobalUsageTracking,
@@ -87,6 +88,7 @@ const app = express();
 // when a request makes no Meta calls.
 app.use(metaUsageContextMiddleware);
 app.use("/mobile", mobileRoutes);
+app.use("/privacy", authenticateJWT, privacyRoutes);
 app.use("/adcopy", authenticateJWT, adCopyRouter);
 app.use("/adCreative", authenticateJWT, adCretiveRouter);
 app.use("/adVideo", authenticateJWT, adVideoRouter);
