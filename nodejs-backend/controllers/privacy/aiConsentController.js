@@ -23,17 +23,22 @@ const findProfile = async (req) => {
   return profile && !profile.is_deleted ? profile : null;
 };
 
-const toPayload = (p, currentVersion) => ({
-  ok: true,
-  currentVersion,
-  consent: {
-    status:
-      p.ai_consent === true ? "granted" : p.ai_consent === false ? "withdrawn" : "none",
-    version: p.ai_consent_version ?? null,
-    decidedAt: p.ai_consent_decided_at ?? null,
-    platform: p.ai_consent_platform ?? null,
-  },
-});
+// consent.* describes the decision for the requested platform only, so the
+// app always compares that platform's agreed version with its currentVersion.
+const toPayload = (p, platform, currentVersion) => {
+  const version = p.ai_consent_versions?.[platform] ?? null;
+  const decidedAt = p.ai_consent_decided_at?.[platform] ?? null;
+  return {
+    ok: true,
+    currentVersion,
+    consent: {
+      status: p.ai_consent_withdrawn ? "withdrawn" : version ? "granted" : "none",
+      version,
+      decidedAt,
+      platform: decidedAt ? platform : null,
+    },
+  };
+};
 
 // GET /adsgpt/privacy/ai-consent?platform=ios
 const getAiConsent = async (req, res) => {
@@ -43,7 +48,7 @@ const getAiConsent = async (req, res) => {
 
     const profile = await findProfile(req);
     if (!profile) return fail(res, 404, "USER_NOT_FOUND", "User not found.");
-    return res.json(toPayload(profile, await getCurrentVersion(platform)));
+    return res.json(toPayload(profile, platform, await getCurrentVersion(platform)));
   } catch (error) {
     logger.error("[getAiConsent] error:", error);
     return fail(res, 500, "INTERNAL_ERROR", "Failed to read AI consent.");
@@ -70,23 +75,32 @@ const recordAiConsent = async (req, res) => {
     const grant = action === "grant";
     const decidedAt = new Date();
 
-    profile.ai_consent = grant;
-    if (grant) profile.ai_consent_version = currentVersion;
-    profile.ai_consent_decided_at = decidedAt;
-    profile.ai_consent_platform = platform;
+    // Grant: set only this platform's version. Withdraw: account-wide, clear
+    // every platform so each asks again with its own form.
+    const previousVersion = profile.ai_consent_versions?.[platform] ?? null;
+    profile.ai_consent_withdrawn = !grant;
+    if (grant) {
+      profile.set(`ai_consent_versions.${platform}`, currentVersion);
+      profile.set(`ai_consent_decided_at.${platform}`, decidedAt);
+    } else {
+      for (const p of PLATFORMS) {
+        profile.set(`ai_consent_versions.${p}`, null);
+        profile.set(`ai_consent_decided_at.${p}`, decidedAt);
+      }
+    }
     await profile.save();
 
     await AiConsentHistory.create({
       user_id: profile.amember_user_id,
       action,
-      version: profile.ai_consent_version,
+      version: grant ? currentVersion : previousVersion,
       platform,
       app_version: appVersion || "",
       decided_at: decidedAt,
       user_agent: req.get("user-agent") || "",
     });
 
-    return res.json(toPayload(profile, currentVersion));
+    return res.json(toPayload(profile, platform, currentVersion));
   } catch (error) {
     logger.error("[recordAiConsent] error:", error);
     return fail(res, 500, "INTERNAL_ERROR", "Failed to record AI consent.");

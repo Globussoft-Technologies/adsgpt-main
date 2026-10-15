@@ -150,11 +150,19 @@ const userProfileSchema = new mongoose.Schema(
 
     // AI data-sharing consent, current state (/adsgpt/privacy/ai-consent).
     // Full decision history is in the ai_consent_history collection.
-    // null = never asked, true = granted, false = withdrawn.
-    ai_consent: { type: Boolean, default: null },
-    ai_consent_version: { type: String, default: null }, // e.g. "1.1.1"
-    ai_consent_decided_at: { type: Date, default: null },
-    ai_consent_platform: { type: String, default: null },
+    // Versions are per platform (each has its own disclosure form); withdrawal
+    // is account-wide and clears every platform's version.
+    ai_consent_withdrawn: { type: Boolean, default: false },
+    ai_consent_versions: {
+      ios: { type: String, default: null }, // e.g. "1.1"
+      android: { type: String, default: null },
+      web: { type: String, default: null },
+    },
+    ai_consent_decided_at: {
+      ios: { type: Date, default: null },
+      android: { type: Date, default: null },
+      web: { type: Date, default: null },
+    },
 
     // === Mobile & Social Auth Fields ===
     firebase_uid: { type: String, default: "" },
