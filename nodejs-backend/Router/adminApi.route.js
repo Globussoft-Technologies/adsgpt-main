@@ -11,6 +11,7 @@ const planLimits = require("../controllers/admin/planLimits.controller");
 const modelConfiguration = require("../controllers/admin/modelConfiguration.controller");
 const dbMonitor = require("../controllers/admin/dbMonitor.controller");
 const aiConsentDisclosure = require("../controllers/admin/aiConsentDisclosure.controller");
+const contentReports = require("../controllers/admin/contentReport.controller");
 const ipAccessRules = require("../controllers/admin/ipAccessRule.controller");
 const multer = require("multer");
 
@@ -332,6 +333,38 @@ router.post("/ai-consent/disclosures", requireAdmin, (req, res, next) => {
     #swagger.summary = 'Publish a new AI data-sharing disclosure version (all users are asked again)'
   */
   aiConsentDisclosure.publishDisclosure(req, res, next);
+});
+
+router.delete("/ai-consent/disclosures/:id", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Delete a published AI data-sharing disclosure version'
+  */
+  aiConsentDisclosure.deleteDisclosure(req, res, next);
+});
+
+router.patch("/ai-consent/disclosures/:id/current", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'Make a disclosure version current for its platform'
+  */
+  aiConsentDisclosure.makeCurrent(req, res, next);
+});
+
+router.get("/ai-consent/history", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'List AI data-sharing consent decisions'
+  */
+  aiConsentDisclosure.listConsentHistory(req, res, next);
+});
+
+router.get("/content-reports", requireAdmin, (req, res, next) => {
+  /*
+    #swagger.tags = ['Admin']
+    #swagger.summary = 'List reported generated media'
+  */
+  contentReports.listContentReports(req, res, next);
 });
 
 module.exports = router;

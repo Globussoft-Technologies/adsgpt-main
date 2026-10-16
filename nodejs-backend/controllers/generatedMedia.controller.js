@@ -100,7 +100,7 @@ class GeneratedMediaController {
     const limitNumber = parseInt(limit);
     const skip = (pageNumber - 1) * limitNumber;
 
-    let filter = { userId };
+    let filter = { userId, is_reported: { $ne: true } };
 
     if (type) filter.type = type;
     if (model) filter.model = model;
@@ -286,7 +286,7 @@ class GeneratedMediaController {
       const sourceMatch = source ? { source } : {};
 
       const pipeline = [
-        { $match: { userId, ...typeMatch, ...sourceMatch, ...urlMatch } },
+        { $match: { userId, is_reported: { $ne: true }, ...typeMatch, ...sourceMatch, ...urlMatch } },
         { $sort: { createdAt: -1 } },
         {
           $facet: {

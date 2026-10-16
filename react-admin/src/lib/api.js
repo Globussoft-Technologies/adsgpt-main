@@ -32,6 +32,13 @@ api.interceptors.response.use(
 export const adminApi = {
   login: (username, password) => api.post("/login", { username, password }),
   me: () => api.get("/me"),
+  aiConsentDisclosures: (params) => api.get("/ai-consent/disclosures", { params }),
+  publishAiConsentDisclosure: (payload) => api.post("/ai-consent/disclosures", payload),
+  deleteAiConsentDisclosure: (id, { force } = {}) =>
+    api.delete(`/ai-consent/disclosures/${encodeURIComponent(id)}`, { params: force ? { force: true } : undefined }),
+  makeAiConsentDisclosureCurrent: (id) => api.patch(`/ai-consent/disclosures/${encodeURIComponent(id)}/current`),
+  aiConsentHistory: (params) => api.get("/ai-consent/history", { params }),
+  contentReports: (params) => api.get("/content-reports", { params }),
   ipRules: (params) => api.get("/ip-rules", { params }),
   createIpRule: (payload) => api.post("/ip-rules", payload),
   updateIpRule: (id, payload) => api.patch(`/ip-rules/${encodeURIComponent(id)}`, payload),

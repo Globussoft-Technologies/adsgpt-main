@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Activity, Calculator, Cpu, Database, KeyRound, LayoutDashboard, Layers, LogOut, Network, Radar, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { Activity, Calculator, Cpu, Database, Flag, KeyRound, LayoutDashboard, Layers, LogOut, Network, Radar, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { clearAdminToken } from "@/lib/auth";
 import { resetStoredDateRange } from "@/lib/dateRangeStore";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,8 @@ const NAV = [
   { to: "/partner-api-keys", label: "Partner API Keys", icon: KeyRound },
   { to: "/plans", label: "Plans & Limits", icon: Layers },
   { to: "/models", label: "AI Models", icon: Cpu },
+  { to: "/ai-consent", label: "AI Data Sharing", icon: ShieldCheck },
+  { to: "/content-reports", label: "Content Reports", icon: Flag },
   // One sidebar entry, two tabs (see components/MetaOpsTabs.jsx). They answer
   // adjacent halves of one question — what the cycle did, and what it cost
   // against Meta's quota — and were previously unrelated-looking siblings.
@@ -108,7 +110,9 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-x-hidden">
+      {/* clip, not hidden: overflow-x-hidden makes <main> a scroll container,
+          which stops position:sticky children from sticking to the window. */}
+      <main className="min-w-0 flex-1 overflow-x-clip">
         <div className="mx-auto max-w-7xl p-6 lg:p-8">
           <Outlet />
         </div>

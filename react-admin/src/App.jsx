@@ -14,6 +14,8 @@ import MetaUsageUserPage from "./pages/MetaUsageUserPage.jsx";
 import AutopilotRunsPage from "./pages/AutopilotRunsPage.jsx";
 import IpManagerPage from "./pages/IpManagerPage.jsx";
 import DatabaseMonitorPage from "./pages/DatabaseMonitorPage.jsx";
+import AiConsentPage from "./pages/AiConsentPage.jsx";
+import ContentReportsPage from "./pages/ContentReportsPage.jsx";
 
 export default function App() {
   return (
@@ -37,6 +39,8 @@ export default function App() {
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/meta-usage" element={<MetaUsagePage />} />
         <Route path="/meta-usage/users/:userId" element={<MetaUsageUserPage />} />
+        <Route path="/ai-consent" element={<AiConsentPage />} />
+        <Route path="/content-reports" element={<ContentReportsPage />} />
         <Route path="/autopilot-runs" element={<AutopilotRunsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

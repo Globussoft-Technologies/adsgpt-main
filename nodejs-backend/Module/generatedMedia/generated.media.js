@@ -47,7 +47,14 @@ const GeneratedMediaSchema = new Schema({
     image: { type: mongoose.Schema.Types.Mixed, default: "" },
     video: { type: mongoose.Schema.Types.Mixed, default: "" },
     // Track if Admin saved/selected this media item as a template
-    isSavedAsTemplate: { type: Boolean, default: false, index: true }
+    isSavedAsTemplate: { type: Boolean, default: false, index: true },
+    // Report (POST /adsgpt/privacy/content-reports). Only the owner can report
+    // an item, once; that hides it from their media lists (it still counts
+    // toward spending). Admins see reports read-only at
+    // /adsgpt/admin/content-reports.
+    is_reported: { type: Boolean, default: false, index: true },
+    report_reason: { type: String, default: "" }, // the user's own words
+    reported_at: { type: Date, default: null },
 }, { timestamps: true });
 
 GeneratedMediaSchema.index({ userId: 1 });

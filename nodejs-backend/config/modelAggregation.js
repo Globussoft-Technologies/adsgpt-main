@@ -81,6 +81,12 @@ function videoCanonicalKeys() {
   return runtimeModels("video").map((entry) => entry.canonicalKey);
 }
 
+// $switch rejects an empty branches list, which is what we get when no models
+// are configured; fall back to the default value directly.
+function switchOrDefault(branches, fallback) {
+  return branches.length ? { $switch: { branches, default: fallback } } : fallback;
+}
+
 function buildEffectiveCostStages() {
   return [
     { $addFields: { cleanModel: { $trim: { input: "$model" } } } },
@@ -90,7 +96,7 @@ function buildEffectiveCostStages() {
           $cond: [
             { $gt: [{ $ifNull: ["$credit_deduction", 0] }, 0] },
             "$credit_deduction",
-            { $switch: { branches: buildCreditLookupBranches(), default: 0 } },
+            switchOrDefault(buildCreditLookupBranches(), 0),
           ],
         },
       },
@@ -118,7 +124,7 @@ function buildEffectiveCostStages() {
           $cond: [
             { $gt: [{ $ifNull: ["$cost", 0] }, 0] },
             "$cost",
-            { $switch: { branches: buildCostFallbackBranches(), default: 0 } },
+            switchOrDefault(buildCostFallbackBranches(), 0),
           ],
         },
       },
