@@ -1,4 +1,3 @@
-const mongoose = require("mongoose");
 const GeneratedMedia = require("../../Module/generatedMedia/generated.media");
 const logger = require("../../utils/logger");
 
@@ -18,23 +17,44 @@ const parseReason = (body = {}) => {
   return { reason };
 };
 
+const parseLink = (body = {}) => {
+  const link = typeof body.link === "string" ? body.link.trim() : "";
+  if (!/^(https?:\/\/\S+|\/[^/\s][^\s]*)$/i.test(link)) {
+    return { error: "link must be an image or video URL or root-relative path." };
+  }
+  return { link };
+};
+
+const mediaLinkFilter = (link) => ({
+  $or: [
+    { image: link }, { video: link },
+    { "image.url": link }, { "image.base_image": link },
+    { "image.base_image_with_logo": link }, { "video.url": link },
+    { "video.videoUrl": link }, { "video.cleanVideoUrl": link },
+  ],
+});
+
 const fail = (res, status, code, error) =>
   res.status(status).json({ ok: false, code, error });
 
-// POST /adsgpt/privacy/content-reports  { generatedMediaId, reason }
+// POST /adsgpt/privacy/content-reports  { link, reason }
 // Reports one of the user's generated images/videos and hides it straight
 // away, so it disappears from their lists. `reason` is the user's own words.
 // Admins see reports read-only.
 const reportContent = async (req, res) => {
   try {
-    const { generatedMediaId } = req.body || {};
-    if (!mongoose.isValidObjectId(generatedMediaId)) {
-      return fail(res, 400, "INVALID_ID", "generatedMediaId is required.");
-    }
+    const parsedLink = parseLink(req.body);
+    if (parsedLink.error) return fail(res, 400, "INVALID_LINK", parsedLink.error);
+    const { link } = parsedLink;
     const parsed = parseReason(req.body);
     if (parsed.error) return fail(res, 400, "INVALID_REASON", parsed.error);
 
-    const media = await GeneratedMedia.findById(generatedMediaId).select("userId is_reported").lean();
+    const userId = String(req.user?.user_id || "").replace(/^GPT-/, "");
+    const ownerIds = [userId, `GPT-${userId}`];
+    const media = await GeneratedMedia.findOne({
+      userId: { $in: ownerIds },
+      ...mediaLinkFilter(link),
+    }).select("userId is_reported").lean();
     if (!media || !ownsMedia(media, req.user?.user_id)) {
       return fail(res, 404, "MEDIA_NOT_FOUND", "Generated media not found.");
     }
@@ -48,11 +68,11 @@ const reportContent = async (req, res) => {
       { $set: { is_reported: true, report_reason: parsed.reason, reported_at: new Date() } },
     );
 
-    return res.json({ ok: true, generatedMediaId: String(media._id), reported: true });
+    return res.json({ ok: true, link, reported: true });
   } catch (error) {
     logger.error("[reportContent] error:", error);
     return fail(res, 500, "INTERNAL_ERROR", "Failed to report content.");
   }
 };
 
-module.exports = { reportContent, MAX_REASON, ownsMedia, parseReason };
+module.exports = { reportContent, MAX_REASON, ownsMedia, parseReason, parseLink, mediaLinkFilter };
