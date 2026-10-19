@@ -95,6 +95,12 @@ const resultSchema = new mongoose.Schema(
 
     // ── AI Ads per-version state (voice regenerate; null for other types) ──────
     aiAds: { type: aiAdsResultSchema, default: null },
+
+    // Set by POST /adsgpt/privacy/content-reports when this video has no
+    // generatedmedias row. Reported results are hidden from the owner.
+    is_reported: { type: Boolean, default: false },
+    report_reason: { type: String, default: "" },
+    reported_at: { type: Date, default: null },
   },
   { _id: false }
 );

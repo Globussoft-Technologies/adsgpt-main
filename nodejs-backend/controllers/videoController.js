@@ -24,6 +24,7 @@ const { s3Client } = require("../storage/s3");
 const axios = require("axios");
 const archiver = require("archiver");
 const logger = require("../utils/logger");
+const { getReportedMediaLinks, reportedLinkMatchers } = require("./privacy/contentReportController");
 
 const Avatar = require("../Module/videoGeneration/avatarModel");
 const modelPricingConfig = require("../config/modelPricingConfig");
@@ -980,6 +981,15 @@ exports.getAllVideos = async (req, res) => {
         },
       ],
     };
+
+    // Hide videos the user reported. Matchers accept the link as a path or
+    // a full URL, however it was stored.
+    const reportedLinks = await getReportedMediaLinks(req.user.user_id);
+    if (reportedLinks.size) {
+      const links = reportedLinkMatchers(reportedLinks);
+      filter.$nor.push({ "results.url": { $in: links } });
+      filter.$nor.push({ "results.waterMarkUrl": { $in: links } });
+    }
 
     if (type) {
       const typeLower = String(type).toLowerCase();

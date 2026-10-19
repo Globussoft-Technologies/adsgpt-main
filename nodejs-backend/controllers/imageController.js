@@ -8,6 +8,7 @@ const UnifiedCreditController = require("./UnifiedCreditController");
 const mongoose = require("mongoose");
 const axios = require("axios");
 const logger = require("../utils/logger");
+const { getReportedMediaLinks, isReportedLink } = require("./privacy/contentReportController");
 const modelPricingConfig = require("../config/modelPricingConfig");
 const modelConfigurationService = require("../services/modelConfigurationService");
 const GeneratedMediaController = require("./generatedMedia.controller");
@@ -1074,18 +1075,31 @@ exports.getAllImages = async (req, res) => {
             }
         }
 
-        const query = ImageGeneration.find(filter).sort({ updatedAt: -1 }).lean();
+        const start = Math.max(0, parseInt(skip, 10) || 0);
+        const pageSize = Math.max(1, parseInt(limit, 10) || 10);
+        const reportedLinks = await getReportedMediaLinks(req.user.user_id);
 
-        if (skip) query.skip(parseInt(skip));
-        if (limit) query.limit(parseInt(limit));
+        // Nothing reported (almost every user): page in the database.
+        if (!reportedLinks.size) {
+            const [totalCount, images] = await Promise.all([
+                ImageGeneration.countDocuments(filter),
+                ImageGeneration.find(filter).sort({ updatedAt: -1 }).skip(start).limit(pageSize).lean(),
+            ]);
+            return res.json({ success: true, totalCount, data: images });
+        }
 
-        const totalCount = await ImageGeneration.countDocuments(filter);
-        const images = await query.exec();
+        // Some reported: drop those images, and records left with no image.
+        const records = await ImageGeneration.find(filter).sort({ updatedAt: -1 }).lean();
+        const visible = records.flatMap((record) => {
+            if (!Array.isArray(record.results) || !record.results.length) return [record];
+            const results = record.results.filter((result) => !isReportedLink(reportedLinks, result.generatedImageUrl));
+            return results.length ? [{ ...record, results }] : [];
+        });
 
         res.json({
             success: true,
-            totalCount,
-            data: images,
+            totalCount: visible.length,
+            data: visible.slice(start, start + pageSize),
         });
     } catch (err) {
         logger.error("Error in getAllImages:", err);

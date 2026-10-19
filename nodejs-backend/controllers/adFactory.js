@@ -21,6 +21,7 @@ const modelPricingConfig = require("../config/modelPricingConfig");
 const GeneratedCount = require("../Module/generatedCount/generatedCountSchema");
  const AdCreativeImages = require("../Module/adCreative/adCreativeImages");
 const { assembleAdFactoryImages } = require("../services/adFactory/adFactoryImagesService");
+const { getReportedMediaLinks } = require("./privacy/contentReportController");
 const modelConfigurationService = require("../services/modelConfigurationService");
 
 // The DB/React flow uses canonical model keys. The existing Python Ad Factory
@@ -697,6 +698,7 @@ exports.getAdFactoryImagesByUserId = async (req, res) => {
     const result = assembleAdFactoryImages({
       campaigns,
       histories,
+      hiddenUrls: await getReportedMediaLinks(userId),
       startDate,
       endDate,
       skip,

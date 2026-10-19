@@ -13,6 +13,11 @@ const resultSchema = new mongoose.Schema(
         imageBytes: { type: Number, default: 0 },
         error: { type: String, default: null },
         status: { type: String, enum: ["pending", "processing", "completed", "failed"], default: "pending" },
+        // Set by POST /adsgpt/privacy/content-reports when this image has no
+        // generatedmedias row. Reported results are hidden from the owner.
+        is_reported: { type: Boolean, default: false },
+        report_reason: { type: String, default: "" },
+        reported_at: { type: Date, default: null },
     },
     { _id: false }
 );

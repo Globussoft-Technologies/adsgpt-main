@@ -2,6 +2,7 @@ const ImageGeneration = require("../../Module/imageGeneration/imageModel");
 const Campaign = require("../../Module/adFactory/adFactory");
 const CampaignHistory = require("../../Module/adFactory/adFactoryHistory");
 const { assembleAdFactoryImages } = require("../adFactory/adFactoryImagesService");
+const { getReportedMediaLinks, isReportedLink } = require("../../controllers/privacy/contentReportController");
 
 const ACTIVE_IMAGE_SOURCES = ["adCreative", "adFactory"];
 
@@ -246,23 +247,20 @@ async function getMySpaceImages({
   const safeSkip = parseNonNegativeInt(skip, 0);
   const safeLimit = parsePositiveInt(limit, 20);
 
-  const sourceResults = await Promise.all(
-    requestedSources.map(async (sourceName) => {
-      const adapter = sourceAdapters[sourceName];
-      const data = await adapter({
-        userId,
-        startDate,
-        endDate,
-        type,
-        model,
-        status,
-      });
-      return { source: sourceName, data };
-    }),
-  );
+  const [sourceResults, reportedLinks] = await Promise.all([
+    Promise.all(
+      requestedSources.map(async (sourceName) => {
+        const adapter = sourceAdapters[sourceName];
+        const data = await adapter({ userId, startDate, endDate, type, model, status });
+        return { source: sourceName, data };
+      }),
+    ),
+    getReportedMediaLinks(userId),
+  ]);
 
   const allImages = sourceResults
     .flatMap((result) => result.data)
+    .filter((image) => !isReportedLink(reportedLinks, image.url))
     .filter((image) => matchesOptionalFilters(image, { type, model, status }));
   allImages.sort((a, b) => dateToMs(b.timestamp || b.updatedAt) - dateToMs(a.timestamp || a.updatedAt));
 

@@ -1277,17 +1277,7 @@ const getUserDetails = async (req, res) => {
     const pendingDeletion = await findPendingDeletionProfile({ amemberUserId: userData.user_id });
     if (pendingDeletion) {
       return res.status(403).json(pendingDeletionBody(pendingDeletion));
-    } else if (!isPlanActive(userData)) {
-      return res.status(403).json({
-        ok: true,
-        code: -6,
-        expired: true,
-        msg: "Your Plan expired",
-      });
     }
-
-    // Sync user profile and credits in MongoDB
-    await syncUserProfile(userData);
 
     const tokenPayload = {
       status: userData?.ok,
@@ -1304,6 +1294,28 @@ const getUserDetails = async (req, res) => {
       ),
       created_from: "GPT",
     };
+
+    if (!isPlanActive(userData)) {
+      // Same shape as the mobile Google/Apple logins: a token with
+      // hasActivePlan: false and nextAction SELECT_PLAN, so the apps can sign
+      // the user in to their plan screen to buy, restore, sign out, or delete
+      // the account. expired: true stays, because the web clients check it
+      // before the token and send these users to the renew page. Paid
+      // features are still blocked by credits and requireBasePlan.
+      tokenPayload.hasActivePlan = false;
+      return res.status(200).json({
+        ok: true,
+        code: -6,
+        expired: true,
+        msg: "Your Plan expired",
+        token: generateToken(tokenPayload, secretKey, tokenExpiryTime),
+        user: tokenPayload,
+        nextAction: "SELECT_PLAN",
+      });
+    }
+
+    // Sync user profile and credits in MongoDB
+    await syncUserProfile(userData);
 
     let jwtToken = "";
     if (Object.keys(userData.subscriptions)[0] == customPlanID) {

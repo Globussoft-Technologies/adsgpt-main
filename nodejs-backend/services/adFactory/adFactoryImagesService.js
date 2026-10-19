@@ -111,6 +111,16 @@ function buildInRange({ startDate, endDate } = {}) {
   };
 }
 
+// "https://cdn/creatives/a.webp" -> "/creatives/a.webp"; paths are kept as is.
+function mediaPath(url) {
+  if (!/^https?:\/\//i.test(url)) return url.split(/[?#]/)[0];
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
 // Dedupe key. Successful/errored images dedupe so the same image (which is
 // copied across every history snapshot + the live doc) appears once.
 //   - has URL              → dedupe on URL
@@ -140,6 +150,7 @@ function dedupeKey(img) {
 function assembleAdFactoryImages({
   campaigns = [],
   histories = [],
+  hiddenUrls = new Set(),
   startDate,
   endDate,
   skip = 0,
@@ -192,7 +203,10 @@ function assembleAdFactoryImages({
   }
 
   // 3. Date-range filter on the (effective) timestamp.
-  const filtered = all.filter((m) => inRange(m.timestamp));
+  // hiddenUrls holds each reported link as stored and as a path, so a full
+  // URL here still matches a link that was stored as a path, and vice versa.
+  const isHidden = (url) => !!url && (hiddenUrls.has(url) || hiddenUrls.has(mediaPath(url)));
+  const filtered = all.filter((m) => inRange(m.timestamp) && !isHidden(m.url));
 
   // 4. Dedupe.
   const seen = new Set();
