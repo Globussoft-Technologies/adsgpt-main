@@ -11,6 +11,8 @@ const MobileStoreTransaction = require("../../Module/mobilePayments/mobileStoreT
 const MobileStoreWebhookEvent = require("../../Module/mobilePayments/mobileStoreWebhookEventModel");
 const mobileStorePlans = require("../../config/mobileStorePlans");
 const { fetchUserDataByName, syncUserProfile } = require("./authController");
+const UnifiedCreditController = require("../UnifiedCreditController");
+const { notifyUserSessionUpdate } = require("../../services/push/notifyUser");
 const BrandsList = require("../../Module/brandNames/brandNamesSchema");
 const {
   scheduleAccountDeletion,
@@ -1852,6 +1854,7 @@ async function sendApplePaymentSuccess({
     await syncUserProfile(userData);
     userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
   }
+  UnifiedCreditController._broadcastCredits(`GPT-${amemberUserId}`);
 
   const amemberProdId = matchedProduct?.amember_product_id || 8;
   const subscriptionType = {
@@ -2447,6 +2450,7 @@ const verifyGooglePayment = async (req, res) => {
       await syncUserProfile(userData);
       userProfile = await UserProfile.findOne({ amember_user_id: amemberUserId });
     }
+    UnifiedCreditController._broadcastCredits(`GPT-${amemberUserId}`);
 
     const googleAmemberProdId = matchedProduct?.amember_product_id || 8;
     const tokenPayload = {
@@ -2833,6 +2837,27 @@ const getMobileSubscriptionDetails = async (req, res) => {
 
 // ── Webhooks Handlers ────────────────────────────────────────────────────────
 
+/**
+ * Store webhooks change the plan in aMember (renewal invoice, upgrade,
+ * expiry, refund) but nothing pulls that back into the UserProfile until the
+ * user's next login, so notifyUserSessionUpdate alone would re-emit the stale
+ * balance. Re-sync from aMember first; syncUserProfile/refreshBillingCycle
+ * apply the credit change, then the session + credits are pushed to sockets.
+ * Fire-and-forget: callers must not await this on the webhook's response path.
+ */
+async function resyncAndNotifySession(amemberUserId) {
+  try {
+    const profile = await UserProfile.findOne({ amember_user_id: String(amemberUserId) });
+    if (profile?.login) {
+      const userData = await fetchUserDataByName(profile.login);
+      if (userData?.ok) await syncUserProfile(userData);
+    }
+  } catch (err) {
+    logger.warn(`[mobile.webhook] profile resync failed for user=${amemberUserId}: ${err.message}`);
+  }
+  await notifyUserSessionUpdate(amemberUserId);
+}
+
 const handleAppleWebhook = async (req, res) => {
   try {
     const { signedPayload } = req.body;
@@ -3063,11 +3088,10 @@ const handleAppleWebhook = async (req, res) => {
     });
 
     try {
-      const { notifyUserSessionUpdate } = require("../../services/push/notifyUser");
       if (txInfo?.originalTransactionId) {
         const tx = await MobileStoreTransaction.findOne({ original_transaction_id: String(txInfo.originalTransactionId) });
         if (tx && tx.amember_user_id) {
-          notifyUserSessionUpdate(tx.amember_user_id).catch(() => {});
+          resyncAndNotifySession(tx.amember_user_id).catch(() => {});
         }
       }
     } catch (_) {}
@@ -3296,11 +3320,10 @@ const handleGoogleWebhook = async (req, res) => {
     }
 
     try {
-      const { notifyUserSessionUpdate } = require("../../services/push/notifyUser");
       if (subNotification?.purchaseToken) {
         const tx = await MobileStoreTransaction.findOne({ original_transaction_id: String(subNotification.purchaseToken) });
         if (tx && tx.amember_user_id) {
-          notifyUserSessionUpdate(tx.amember_user_id).catch(() => {});
+          resyncAndNotifySession(tx.amember_user_id).catch(() => {});
         }
       }
     } catch (_) {}

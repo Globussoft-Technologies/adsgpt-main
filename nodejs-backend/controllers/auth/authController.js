@@ -1175,6 +1175,17 @@ async function syncUserProfile(userData) {
         derivedCycleStart,
       );
     }
+
+    // Plan purchases, upgrades, downgrades and top-ups all land here. The
+    // wallet methods broadcast their own writes (refreshBillingCycle included),
+    // but the plan-change branches above write credits directly, so push the
+    // new balance to open sockets ourselves — otherwise the apps keep showing
+    // the old balance until the next login.
+    const topupChanged =
+      topupPurchasedTotal !== (existingUser.topup_credits_purchased || 0);
+    if (oldPlanId !== newPlanId || topupChanged) {
+      UnifiedCreditController._broadcastCredits(userId);
+    }
   }
 }
 

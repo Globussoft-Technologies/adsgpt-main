@@ -838,8 +838,20 @@ class UnifiedCreditController {
       const elapsedMs = now.getTime() - cycleStart.getTime();
       const elapsedDays = elapsedMs / (1000 * 60 * 60 * 24);
 
-      // Cycle still active and aMember hasn't renewed — nothing to do.
-      if (!anchorAdvanced && elapsedDays < durationDays) return user;
+      // With an anchor, aMember alone decides whether a new cycle has begun —
+      // the same rule billingReconciliation applies. Our elapsed-time clock is
+      // only a fallback for when no anchor can be derived. Letting it fire
+      // alongside an unmoved anchor double-granted on the first login after a
+      // purchase: aMember's expire_date is date-only, so a plan expiring today
+      // derives a cycle start of exactly `durationDays` ago (00:00 UTC), which
+      // the purchase stamps, and the next login then reads as a full elapsed
+      // cycle — moving the unused allocation to rollover and granting it again.
+      // It also handed a cancelled user an unpaid month by signing in on
+      // their last day.
+      if (anchor !== null && !anchorAdvanced) return user;
+
+      // No anchor: fall back to our own clock.
+      if (anchor === null && elapsedDays < durationDays) return user;
 
       // A short trial is a ONE-TIME grant, not a 7-day recurring plan.
       //
@@ -930,6 +942,7 @@ class UnifiedCreditController {
             : `carried forward ${totalCarryForward} credits, new allocation: ${newBaseCredits}`),
       );
 
+      this._broadcastCredits(userId);
       return updatedUser;
     } catch (error) {
       logger.error("Error refreshing billing cycle:", error);
