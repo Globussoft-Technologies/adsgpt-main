@@ -22,6 +22,10 @@
  * 'OR' / nested groups are deferred to v2.
  */
 
+const {
+  findUnguardedConditions,
+} = require("../../config/zeroFilledMetrics");
+
 const NUMERIC_OPS = new Set([">", "<", ">=", "<=", "==", "!="]);
 const STRING_OPS = new Set(["==", "!="]);
 
@@ -96,6 +100,29 @@ function evaluateRule(rule, entity) {
   const operator = rule.conditions?.operator || "AND";
   if (operator !== "AND") return false;
 
+  // A `<` / `<=` on a metric that is 0 when its denominator is 0 also
+  // matches every entity that HAS no denominator — `cpi <= 50` is satisfied
+  // by an ad with no installs at all. The validator refuses to save such a
+  // condition unguarded, but rules stored before that existed keep running,
+  // and one of them resumed 153 ads of which 103 had zero installs.
+  //
+  // So the same judgement is applied here, and narrowly:
+  //   - only to conditions the validator would reject, i.e. ones with NO
+  //     condition on the matching denominator. An author who wrote
+  //     `installs > 0` or `installs == 0` has said what they meant and is
+  //     left completely alone.
+  //   - it fails CLOSED. An entity with no installs is one we have no
+  //     evidence about, so a "cheap installs" test should not pass on it.
+  //
+  // Keeping this in step with the validator is the point: a rule must not
+  // mean one thing in the form and another in the cron.
+  const unguarded = findUnguardedConditions(conds);
+  for (const u of unguarded) {
+    const denom = Number(entity[u.denominator]);
+    // Absent is as unproven as zero — fail closed either way.
+    if (!Number.isFinite(denom) || denom <= 0) return false;
+  }
+
   for (const c of conds) {
     if (!evaluateCondition(c, entity)) return false;
   }
@@ -116,5 +143,5 @@ module.exports = {
   evaluateRule,
   evaluateRuleAgainstMany,
   // Exported for unit tests; not part of the public API.
-  _internals: { evaluateCondition, NUMERIC_OPS, STRING_OPS },
+  _internals: { evaluateCondition, NUMERIC_OPS, STRING_OPS, findUnguardedConditions },
 };

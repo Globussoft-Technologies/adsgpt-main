@@ -248,3 +248,45 @@ export function fieldMeta(fieldValue) {
     null
   );
 }
+
+// ─── zero-filled metrics ────────────────────────────────────────────────────
+//
+// MUST MATCH nodejs-backend/config/zeroFilledMetrics.js. The backend rejects
+// the save; this exists so the author sees it while typing instead of after
+// pressing Save.
+//
+// These metrics are 0 when their denominator is 0, so a `<` or `<=` on one
+// also matches every entity that has no denominator at all. A production
+// rule reading `cpi <= 50` resumed 153 ads, 103 of which had zero installs.
+export const DENOMINATOR_BY_METRIC = {
+  cpi: "installs",
+  cpa: "purchases",
+  roas: "purchases",
+  cpc: "clicks",
+  cpm: "impressions",
+  conversion_rate: "clicks",
+  prev_cpi: "prev_installs",
+  prev_cpa: "purchases",
+  prev_roas: "purchases",
+  prev_cpc: "clicks",
+  prev_cpm: "impressions",
+  prev_conversion_rate: "clicks",
+};
+
+const INVERTING_OPS = ["<", "<="];
+
+/** Conditions comparing a zero-filled metric with `<`/`<=` and unguarded. */
+export function findUnguardedConditions(conditions) {
+  const list = Array.isArray(conditions) ? conditions : [];
+  const present = new Set(list.map((c) => c && c.field).filter(Boolean));
+  const out = [];
+  list.forEach((cond, index) => {
+    if (!cond || !DENOMINATOR_BY_METRIC[cond.field]) return;
+    if (!INVERTING_OPS.includes(cond.op)) return;
+    const denom = DENOMINATOR_BY_METRIC[cond.field];
+    const bare = denom.replace(/^prev_/, "");
+    if (present.has(denom) || present.has(bare)) return;
+    out.push({ index, field: cond.field, op: cond.op, value: cond.value, denominator: denom });
+  });
+  return out;
+}

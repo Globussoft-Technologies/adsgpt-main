@@ -258,7 +258,30 @@ const rejectFieldsMissingAtLevel = (value, helpers) => {
   return value;
 };
 
+// A `<` / `<=` on a metric that is 0 when its denominator is 0 silently
+// matches every entity that has no denominator at all. In production a
+// `cpi <= 50` resume rule turned on 153 ads, 103 of which had zero installs
+// — it read as "cheap installs OR no installs", and the second half is much
+// the larger. See config/zeroFilledMetrics.js for why this is caught here
+// rather than repaired in the normaliser.
+const rejectUnguardedZeroFilledMetric = (value, helpers) => {
+  if (!value || !value.conditions) return value;
+  const unguarded = findUnguardedConditions(value.conditions.rules);
+  if (unguarded.length > 0) {
+    return helpers.error("rule.unguardedZeroFilledMetric", {
+      detail: unguarded.map(explainZeroFill).join(" "),
+    });
+  }
+  return value;
+};
+
+const {
+  findUnguardedConditions,
+  explain: explainZeroFill,
+} = require("../config/zeroFilledMetrics");
+
 const CROSS_FIELD_MESSAGES = {
+  "rule.unguardedZeroFilledMetric": "{{#detail}}",
   "rule.adsetWithCampaignLevel":
     "This rule is attached to a specific ad set, so it can't evaluate at campaign level. Pick Ad set or Ad, or attach the whole campaign instead.",
   "rule.fieldsMissingAtLevel":
@@ -305,6 +328,7 @@ const createRuleSchema = Joi.object({
 })
   .custom(rejectAdsetWithCampaignLevel)
   .custom(rejectFieldsMissingAtLevel)
+  .custom(rejectUnguardedZeroFilledMetric)
   .messages(CROSS_FIELD_MESSAGES);
 
 // PATCH semantics: every field optional, but body must contain at least
@@ -337,6 +361,10 @@ const updateRuleSchema = Joi.object({
   // one of them alone is validated against the stored rule in the controller.
   .custom(rejectAdsetWithCampaignLevel)
   .custom(rejectFieldsMissingAtLevel)
+  // Unlike the two above, this one needs no companion field: `conditions`
+  // carries everything the check reads, so a patch that touches only the
+  // conditions is fully checkable on its own.
+  .custom(rejectUnguardedZeroFilledMetric)
   .messages({
     "object.min":
       "PATCH body must contain at least one field to update.",

@@ -64,6 +64,13 @@ const TEMPLATES = [
           { field: "status", op: "==", value: "ACTIVE" },
           { field: "spend", op: ">", value: 200000 },
           { field: "roas", op: "<", value: 1 },
+          // Without this the rule also matches campaigns with NO purchases
+          // at all, because `roas` is 0 when Meta reports no revenue — and
+          // those are far more numerous than the ones this template is
+          // about. The description says "losing money on every conversion",
+          // which presupposes there were conversions. See
+          // config/zeroFilledMetrics.js.
+          { field: "purchases", op: ">", value: 0 },
         ],
       },
       action: { type: "alert" },

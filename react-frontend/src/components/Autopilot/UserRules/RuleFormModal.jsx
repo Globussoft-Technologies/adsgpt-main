@@ -10,6 +10,7 @@ import {
   STRING_FIELDS,
   SEVERITIES,
   ACTION_TYPES,
+  findUnguardedConditions,
   SELECTABLE_ACTION_TYPES,
   SCALE_DIRECTIONS,
   MIN_SCALE_PCT,
@@ -258,6 +259,18 @@ const RuleFormModal = ({ open, onClose, rule, prefill, onSaved }) => {
         fieldErrors.conditions[i] = rowErr;
       }
     });
+
+    // A `<`/`<=` on a metric that is 0 when its denominator is 0 also
+    // matches every entity with no denominator at all. Reported against the
+    // offending row so the fix is obvious. Mirrors
+    // nodejs-backend/config/zeroFilledMetrics.js — the backend rejects it
+    // too; this just gets there first.
+    for (const u of findUnguardedConditions(conds)) {
+      fieldErrors.conditions[u.index] = {
+        ...(fieldErrors.conditions[u.index] || {}),
+        field: `${u.field} is 0 when there are no ${u.denominator}, so this also matches entities with none. Add a condition on ${u.denominator}.`,
+      };
+    }
 
     // Mirrors the Joi rule in Validations/autopilotUserRule.validator.js.
     // Keep the two in step: a mismatch surfaces as a server rejection the

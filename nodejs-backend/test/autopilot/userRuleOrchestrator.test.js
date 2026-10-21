@@ -2282,10 +2282,13 @@ const { runUserRuleCycle } = orchestrator;
       stubs.auditByAccount.set("act_42", auditFixture({
         overrides: {
           ads: [
+            // A non-zero roas implies purchases — Meta omits `purchase_roas`
+            // entirely when there are none, which is exactly the zero that
+            // the evaluator now refuses to read as "cheap".
             { ad_id: "live_loser", campaign_id: "camp_1", adset_id: "as_1",
-              ad_name: "Live loser", status: "ACTIVE", spend: 9000, roas: 0.2 },
+              ad_name: "Live loser", status: "ACTIVE", spend: 9000, roas: 0.2, purchases: 2 },
             { ad_id: "paused_winner", campaign_id: "camp_1", adset_id: "as_1",
-              ad_name: "Paused winner", status: "PAUSED", spend: 9000, roas: 7.8 },
+              ad_name: "Paused winner", status: "PAUSED", spend: 9000, roas: 7.8, purchases: 11 },
           ],
         },
       }));
@@ -2534,8 +2537,13 @@ const { runUserRuleCycle } = orchestrator;
         { adset_id: "as_can", adset_name: "CAN", campaign_id: "camp_1", status: "ACTIVE", cpi: 70, installs: 150 },
       ],
       ads: [
-        { ad_id: "ad_ind", ad_name: "IND ad", adset_id: "as_ind", adset_name: "IND", campaign_id: "camp_1", status: "ACTIVE", cpi: 30 },
-        { ad_id: "ad_usa", ad_name: "USA ad", adset_id: "as_usa", adset_name: "USA", campaign_id: "camp_1", status: "ACTIVE", cpi: 90 },
+        // `installs` is not decoration: Meta only reports a cost-per-install
+        // where installs happened, so a cpi WITHOUT installs cannot occur in
+        // real data. The evaluator now refuses an unguarded `cpi <` against
+        // an entity with no installs, and a fixture missing them would be
+        // asserting behaviour the API cannot produce.
+        { ad_id: "ad_ind", ad_name: "IND ad", adset_id: "as_ind", adset_name: "IND", campaign_id: "camp_1", status: "ACTIVE", cpi: 30, installs: 400 },
+        { ad_id: "ad_usa", ad_name: "USA ad", adset_id: "as_usa", adset_name: "USA", campaign_id: "camp_1", status: "ACTIVE", cpi: 90, installs: 150 },
       ],
       allCampaignIds: ["camp_1"],
       allAdsetIds: ["as_ind", "as_usa", "as_can"],
