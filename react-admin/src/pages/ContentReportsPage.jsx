@@ -10,8 +10,10 @@ import { formatDate } from "@/lib/utils";
 const LIMIT = 20;
 const ALL_TIME = { preset: "lifetime", from: "", to: "" };
 
-// Media saved as a path ("/creatives/GPT-409/….webp") lives on the content CDN.
-const CDN = (import.meta.env.VITE_S3_BASE_URL || "https://contents.adsgpt.io").replace(/\/+$/, "");
+// Media saved as a path ("/creatives/GPT-409/….webp") lives on this env's
+// media host. VITE_S3_PREFIX is the admin's documented setting (example.env,
+// UserDetailPage); never fall back to a fixed host — dev and prod differ.
+const CDN = (import.meta.env.VITE_S3_PREFIX || "").replace(/\/+$/, "");
 
 // generatedMedia stores image/video either as a URL string or an object.
 function mediaUrl(item) {
