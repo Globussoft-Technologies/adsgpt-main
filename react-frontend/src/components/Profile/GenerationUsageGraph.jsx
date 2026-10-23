@@ -208,14 +208,6 @@ const GenerationUsageGraph = ({ userId }) => {
     return <GraphSkeleton />;
   }
 
-  // if (!chartData.length) {
-  //   return (
-  //     <div className="flex h-[260px] items-center justify-center text-sm text-gray-400">
-  //       No usage data available
-  //     </div>
-  //   );
-  // }
-
   const monthOptions = MONTHS.map((m, i) => ({ value: i, label: m }));
   const yearOptions = YEARS.map((y) => ({ value: y, label: y.toString() }));
 
@@ -270,69 +262,71 @@ const GenerationUsageGraph = ({ userId }) => {
 
             {isOpen && (
               <div className="absolute top-full left-0 z-50 mt-2 rounded-xl border border-black/10 bg-white p-2 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#20202d]">
-                <DateRange
-                  ranges={tempRange}
-                  onChange={(r) => setTempRange([r.selection])}
-                  moveRangeOnFirstSelection={false}
-                  rangeColors={[isDarkMode ? '#434343' : '#e4e4e7']}
-                  maxDate={new Date()}
-                  navigatorRenderer={(currentFocusedDate, changeShownDate) => {
-                    const month = currentFocusedDate.getMonth();
-                    const year = currentFocusedDate.getFullYear();
+                <div className="max-h-[295px] overflow-y-auto">
+                  <DateRange
+                    ranges={tempRange}
+                    onChange={(r) => setTempRange([r.selection])}
+                    moveRangeOnFirstSelection={false}
+                    rangeColors={[isDarkMode ? '#434343' : '#e4e4e7']}
+                    maxDate={new Date()}
+                    navigatorRenderer={(currentFocusedDate, changeShownDate) => {
+                      const month = currentFocusedDate.getMonth();
+                      const year = currentFocusedDate.getFullYear();
 
-                    return (
-                      <div className="flex items-center justify-between px-2 pt-2 pb-2">
-                        <button
-                          type="button"
-                          className="flex size-7 items-center justify-center rounded-md bg-zinc-100 text-zinc-800 hover:bg-zinc-200 dark:bg-[#2b2b3a] dark:text-white dark:hover:bg-[#38384a]"
-                          onClick={() => {
-                            const d = new Date(currentFocusedDate);
-                            d.setMonth(d.getMonth() - 1);
-                            changeShownDate(d);
-                          }}
-                        >
-                          <FiChevronLeft size={16} />
-                        </button>
-
-                        <div className="flex items-center gap-1">
-                          <InlineDropdown
-                            value={month}
-                            options={monthOptions}
-                            onChange={(val) => {
+                      return (
+                        <div className="flex items-center justify-between px-2 pt-2 pb-2">
+                          <button
+                            type="button"
+                            className="flex size-7 items-center justify-center rounded-md bg-zinc-100 text-zinc-800 hover:bg-zinc-200 dark:bg-[#2b2b3a] dark:text-white dark:hover:bg-[#38384a]"
+                            onClick={() => {
                               const d = new Date(currentFocusedDate);
-                              d.setMonth(val);
+                              d.setMonth(d.getMonth() - 1);
                               changeShownDate(d);
                             }}
-                            renderLabel={(v) => MONTHS[v]}
-                          />
-                          <InlineDropdown
-                            value={year}
-                            options={yearOptions}
-                            onChange={(val) => {
+                          >
+                            <FiChevronLeft size={16} />
+                          </button>
+
+                          <div className="flex items-center gap-1">
+                            <InlineDropdown
+                              value={month}
+                              options={monthOptions}
+                              onChange={(val) => {
+                                const d = new Date(currentFocusedDate);
+                                d.setMonth(val);
+                                changeShownDate(d);
+                              }}
+                              renderLabel={(v) => MONTHS[v]}
+                            />
+                            <InlineDropdown
+                              value={year}
+                              options={yearOptions}
+                              onChange={(val) => {
+                                const d = new Date(currentFocusedDate);
+                                d.setFullYear(val);
+                                changeShownDate(d);
+                              }}
+                              renderLabel={(v) => v}
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            className="flex size-7 items-center justify-center rounded-md bg-zinc-100 text-zinc-800 hover:bg-zinc-200 disabled:opacity-50 dark:bg-[#2b2b3a] dark:text-white dark:hover:bg-[#38384a]"
+                            onClick={() => {
                               const d = new Date(currentFocusedDate);
-                              d.setFullYear(val);
+                              d.setMonth(d.getMonth() + 1);
                               changeShownDate(d);
                             }}
-                            renderLabel={(v) => v}
-                          />
+                            disabled={year === currentYear && month === new Date().getMonth()}
+                          >
+                            <FiChevronRight size={16} />
+                          </button>
                         </div>
-
-                        <button
-                          type="button"
-                          className="flex size-7 items-center justify-center rounded-md bg-zinc-100 text-zinc-800 hover:bg-zinc-200 disabled:opacity-50 dark:bg-[#2b2b3a] dark:text-white dark:hover:bg-[#38384a]"
-                          onClick={() => {
-                            const d = new Date(currentFocusedDate);
-                            d.setMonth(d.getMonth() + 1);
-                            changeShownDate(d);
-                          }}
-                          disabled={year === currentYear && month === new Date().getMonth()}
-                        >
-                          <FiChevronRight size={16} />
-                        </button>
-                      </div>
-                    );
-                  }}
-                />
+                      );
+                    }}
+                  />
+                </div>
                 <div className="flex items-center justify-end gap-2 border-t border-black/5 pt-2 dark:border-white/5">
                   <button
                     onClick={() => {
@@ -362,7 +356,7 @@ const GenerationUsageGraph = ({ userId }) => {
                   TOTAL VIDEOS
                 </p>
                 <p className="mt-0.5 text-xl font-extrabold text-zinc-900 dark:text-white">
-                  {totalVideos !== undefined && totalVideos !== null ? totalVideos : 12}
+                  {totalVideos ?? 0}
                 </p>
               </div>
             )}
@@ -372,7 +366,7 @@ const GenerationUsageGraph = ({ userId }) => {
                   TOTAL IMAGES
                 </p>
                 <p className="mt-0.5 text-xl font-extrabold text-zinc-900 dark:text-white">
-                  {totalImages !== undefined && totalImages !== null ? totalImages : 76}
+                  {totalImages ?? 0}
                 </p>
               </div>
             )}
@@ -381,26 +375,13 @@ const GenerationUsageGraph = ({ userId }) => {
 
         {/* ---------- CHART CONTAINER ---------- */}
         <div className="relative h-[270px] min-h-[270px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={
-                chartData && chartData.length > 0
-                  ? chartData
-                  : [
-                      { date: '2026-09-10', imageCount: 7, videoCount: 0 },
-                      { date: '2026-09-11', imageCount: 60, videoCount: 0 },
-                      { date: '2026-09-15', imageCount: 0, videoCount: 0 },
-                      { date: '2026-09-18', imageCount: 0, videoCount: 0 },
-                      { date: '2026-09-21', imageCount: 0, videoCount: 0 },
-                      { date: '2026-09-28', imageCount: 3, videoCount: 2 },
-                      { date: '2026-09-29', imageCount: 8, videoCount: 4 },
-                      { date: '2026-10-01', imageCount: 0, videoCount: 3 },
-                      { date: '2026-10-05', imageCount: 0, videoCount: 0 },
-                      { date: '2026-10-06', imageCount: 0, videoCount: 3 },
-                    ]
-              }
-              margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
-            >
+          {chartData.length === 0 ? (
+            <div className="flex h-full w-full items-center justify-center text-sm text-zinc-500 dark:text-zinc-400">
+              No usage data available for this period
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke={isDarkMode ? '#242433' : '#E5E7EB'}
@@ -428,8 +409,8 @@ const GenerationUsageGraph = ({ userId }) => {
               <YAxis
                 stroke={isDarkMode ? '#64748B' : '#94A3B8'}
                 allowDecimals={false}
-                domain={[0, 60]}
-                ticks={[0, 15, 30, 45, 60]}
+                domain={[0, 'dataMax']}
+                allowDataOverflow={false}
                 tickLine={false}
                 axisLine={false}
                 tick={{ fontSize: 11, fill: isDarkMode ? '#8E8E93' : '#71717A' }}
@@ -482,25 +463,28 @@ const GenerationUsageGraph = ({ userId }) => {
                   name="Videos"
                 />
               )}
-            </LineChart>
-          </ResponsiveContainer>
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         {/* ---------- CUSTOM BOTTOM LEGEND ---------- */}
-        <div className="mt-3 flex items-center justify-center gap-6">
-          {(selectedType === 'both' || selectedType === 'images') && (
-            <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300">
-              <span className="h-2.5 w-2.5 rounded-full border-2 border-[#4F46E5] bg-transparent" />
-              <span>Images</span>
-            </div>
-          )}
-          {(selectedType === 'both' || selectedType === 'videos') && (
-            <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300">
-              <span className="h-2.5 w-2.5 rounded-full border-2 border-[#F43F5E] bg-transparent" />
-              <span>Videos</span>
-            </div>
-          )}
-        </div>
+        {chartData.length > 0 && (
+          <div className="mt-3 flex items-center justify-center gap-6">
+            {(selectedType === 'both' || selectedType === 'images') && (
+              <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                <span className="h-2.5 w-2.5 rounded-full border-2 border-[#4F46E5] bg-transparent" />
+                <span>Images</span>
+              </div>
+            )}
+            {(selectedType === 'both' || selectedType === 'videos') && (
+              <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                <span className="h-2.5 w-2.5 rounded-full border-2 border-[#F43F5E] bg-transparent" />
+                <span>Videos</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };

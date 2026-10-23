@@ -857,7 +857,7 @@ export default function ProfileHome() {
             </h3>
           </div>
 
-          <div className="profile-account-card overflow-hidden rounded-2xl border border-black/[0.07] bg-white/60 p-6 shadow-sm backdrop-blur-xl transition-all hover:border-black/20 dark:border-white/[0.08] dark:bg-[#141414] dark:hover:border-white/15">
+          <div className="profile-account-card overflow-visible rounded-2xl border border-black/[0.07] bg-white/60 p-6 shadow-sm backdrop-blur-xl transition-all hover:border-black/20 dark:border-white/[0.08] dark:bg-[#141414] dark:hover:border-white/15">
             <GenerationUsageGraph userId={userData?.user_id} />
           </div>
         </div>
