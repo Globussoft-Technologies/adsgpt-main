@@ -21,6 +21,7 @@ const {
   getMobileSubscriptionDetails,
   handleAppleWebhook,
   handleGoogleWebhook,
+  checkPurchaseEligibility,
   // ── V2 handlers (Step 1 — PRD §API 1A·1B·1C·1D ·2.1) ────────────────────────────
   v2EmailAuth,
   v2GoogleAuth,
@@ -48,6 +49,7 @@ router.get("/plans", authenticateJWT, getMobilePlans);
 // Payment Verification Endpoints
 router.post("/payments/apple/verify", authenticateJWT, verifyApplePayment);
 router.post("/payments/google/verify", authenticateJWT, verifyGooglePayment);
+router.post("/payments/apple/purchase-eligibility", authenticateJWT, checkPurchaseEligibility);
 router.post("/payments/apple/restore", authenticateJWT, restoreApplePurchases);
 router.post("/payments/google/restore", authenticateJWT, restoreGooglePurchases);
 router.get("/payments/status", authenticateJWT, getSubscriptionStatus);

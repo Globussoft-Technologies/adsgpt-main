@@ -4790,15 +4790,14 @@ const checkPurchaseEligibility = async (req, res) => {
     
     const subscription = await getUserSubscriptionDetails(amemberUserId, userData, active);
 
-    if (active && subscription.platform === "web") {
-      return res.status(409).json({
-        ok: false,
-        code: "ACTIVE_WEB_SUBSCRIPTION",
-        error: "You already have an active subscription managed via the Web. Please cancel it there before purchasing on this device to avoid duplicate charges.",
-      });
-    }
-
-    return res.status(200).json({ ok: true, eligible: true });
+    // Always 200: the app treats any error status as "couldn't check".
+    const eligible = !(active && subscription.platform === "web");
+    return res.status(200).json({
+      ok: true,
+      eligible,
+      productId: req.body?.productId ?? null,
+      user: { user_id: `GPT-${amemberUserId}` },
+    });
   } catch (error) {
     logger.error("[checkPurchaseEligibility] error:", error);
     return res.status(500).json({ ok: false, error: "Failed to evaluate purchase eligibility." });
