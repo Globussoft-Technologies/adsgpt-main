@@ -296,7 +296,7 @@ function normalizePhoneNumber(value) {
   return digitCount >= 7 && digitCount <= 15 ? phoneNumber : null;
 }
 
-async function createAmemberUser({ login, email, password, firstName, lastName, phoneNumber }) {
+async function createAmemberUser({ login, email, password, firstName, lastName, phoneNumber, platform }) {
   const url = `${baseUrl}/users`;
   const params = new URLSearchParams({
     _key: apiKey,
@@ -306,6 +306,7 @@ async function createAmemberUser({ login, email, password, firstName, lastName, 
     name_f: firstName || "",
     name_l: lastName || "",
     phone: phoneNumber,
+    platform: platform || "web",
   });
 
 
@@ -869,8 +870,18 @@ const MobileSignup = async (req, res) => {
           await updateAmemberPassword(amemberUserId, password);
         }
         await updateAmemberPhone(amemberUserId, cleanPhoneNumber);
+        if (amemberUserId) {
+          try {
+            await axios.put(`${baseUrl}/users/${amemberUserId}?_key=${apiKey}`, new URLSearchParams({ platform: platform || "web" }).toString(), {
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            });
+          } catch (e) {
+            logger.error("[mobileSignup] error updating platform in aMember:", e.message);
+          }
+        }
         if (mongoProfile) {
           mongoProfile.phoneNumber = cleanPhoneNumber;
+          mongoProfile.platform = platform || "web";
           await mongoProfile.save();
         }
 
@@ -912,7 +923,7 @@ const MobileSignup = async (req, res) => {
       });
     }
 
-    const newAmemberUser = await createAmemberUser({ login: cleanLogin, email: cleanEmail, password, firstName, lastName, phoneNumber: cleanPhoneNumber });
+    const newAmemberUser = await createAmemberUser({ login: cleanLogin, email: cleanEmail, password, firstName, lastName, phoneNumber: cleanPhoneNumber, platform });
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
 
     const existingDeletedProfile = await UserProfile.findOne({ email: cleanEmail });
@@ -927,7 +938,7 @@ const MobileSignup = async (req, res) => {
       existingDeletedProfile.name_f = firstName || "";
       existingDeletedProfile.name_l = lastName || "";
       existingDeletedProfile.phoneNumber = cleanPhoneNumber;
-      existingDeletedProfile.platform = platform || "";
+      existingDeletedProfile.platform = platform || "web";
       existingDeletedProfile.last_login_at = new Date();
       await existingDeletedProfile.save();
     } else {
@@ -943,7 +954,7 @@ const MobileSignup = async (req, res) => {
         amember_user_id: amemberUserId,
         loginProviders: ["general"],
         last_login_at: new Date(),
-        platform: platform || "",
+        platform: platform || "web",
       });
     }
 
@@ -1048,8 +1059,18 @@ const GoogleSignup = async (req, res) => {
 
       if (!active) {
         await updateAmemberPhone(amemberUserId, cleanPhoneNumber);
+        if (amemberUserId) {
+          try {
+            await axios.put(`${baseUrl}/users/${amemberUserId}?_key=${apiKey}`, new URLSearchParams({ platform: platform || "web" }).toString(), {
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            });
+          } catch (e) {
+            logger.error("[mobileSignup] error updating platform in aMember:", e.message);
+          }
+        }
         if (mongoProfile) {
           mongoProfile.phoneNumber = cleanPhoneNumber;
+          mongoProfile.platform = platform || "web";
           await mongoProfile.save();
         }
         // Pending unpaid user who abandoned checkout — route directly to SELECT_PLAN!
@@ -1102,6 +1123,7 @@ const GoogleSignup = async (req, res) => {
       firstName: derivedFirstName,
       lastName: derivedLastName,
       phoneNumber: cleanPhoneNumber,
+      platform,
     });
 
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
@@ -1122,7 +1144,7 @@ const GoogleSignup = async (req, res) => {
       existingDeletedProfile.name_f = derivedFirstName;
       existingDeletedProfile.name_l = derivedLastName;
       existingDeletedProfile.phoneNumber = cleanPhoneNumber;
-      existingDeletedProfile.platform = platform || "";
+      existingDeletedProfile.platform = platform || "web";
       if (!existingDeletedProfile.loginProviders?.includes("google")) {
         existingDeletedProfile.loginProviders = [...(existingDeletedProfile.loginProviders || []), "google"];
       }
@@ -1142,7 +1164,7 @@ const GoogleSignup = async (req, res) => {
         firebase_uid: firebaseUid,
         loginProviders: ["google"],
         last_login_at: new Date(),
-        platform: platform || "",
+        platform: platform || "web",
       });
     }
 
@@ -1245,9 +1267,20 @@ const GoogleLogin = async (req, res) => {
       if (!mongoProfile.firebase_uid) mongoProfile.firebase_uid = firebaseUid;
       if (!mongoProfile.loginProviders) mongoProfile.loginProviders = ["general"];
       if (!mongoProfile.loginProviders.includes("google")) mongoProfile.loginProviders.push("google");
-      if (platform) mongoProfile.platform = platform;
+      mongoProfile.platform = platform || mongoProfile.platform || "web";
       mongoProfile.last_login_at = new Date();
       await mongoProfile.save();
+    }
+
+    const loginAmemberId = amemberUser?.user_id || mongoProfile?.amember_user_id;
+    if (loginAmemberId) {
+      try {
+        await axios.put(`${baseUrl}/users/${loginAmemberId}?_key=${apiKey}`, new URLSearchParams({ platform: platform || mongoProfile?.platform || "web" }).toString(), {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
+      } catch (e) {
+        logger.error("[mobileLogin] error updating platform in aMember:", e.message);
+      }
     }
 
     const userData = await fetchUserDataByName(amemberUser?.login || mongoProfile?.login);
@@ -1378,8 +1411,18 @@ const AppleSignup = async (req, res) => {
 
       if (!active) {
         await updateAmemberPhone(amemberUserId, cleanPhoneNumber);
+        if (amemberUserId) {
+          try {
+            await axios.put(`${baseUrl}/users/${amemberUserId}?_key=${apiKey}`, new URLSearchParams({ platform: platform || "web" }).toString(), {
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            });
+          } catch (e) {
+            logger.error("[mobileSignup] error updating platform in aMember:", e.message);
+          }
+        }
         if (mongoProfile) {
           mongoProfile.phoneNumber = cleanPhoneNumber;
+          mongoProfile.platform = platform || "web";
           await mongoProfile.save();
         }
         // Pending unpaid user who abandoned checkout — route directly to SELECT_PLAN!
@@ -1432,6 +1475,7 @@ const AppleSignup = async (req, res) => {
       firstName: derivedFirstName,
       lastName: derivedLastName,
       phoneNumber: cleanPhoneNumber,
+      platform,
     });
 
     const amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
@@ -1452,7 +1496,7 @@ const AppleSignup = async (req, res) => {
       existingDeletedProfile.name_f = derivedFirstName;
       existingDeletedProfile.name_l = derivedLastName;
       existingDeletedProfile.phoneNumber = cleanPhoneNumber;
-      existingDeletedProfile.platform = platform || "ios";
+      existingDeletedProfile.platform = platform || "web";
       if (appleRefreshToken) existingDeletedProfile.apple_refresh_token = appleRefreshToken;
       if (!existingDeletedProfile.loginProviders?.includes("apple")) {
         existingDeletedProfile.loginProviders = [...(existingDeletedProfile.loginProviders || []), "apple"];
@@ -1474,7 +1518,7 @@ const AppleSignup = async (req, res) => {
         loginProviders: ["apple"],
         apple_refresh_token: appleRefreshToken || "",
         last_login_at: new Date(),
-        platform: platform || "ios",
+        platform: platform || "web",
       });
     }
 
@@ -1581,9 +1625,20 @@ const AppleLogin = async (req, res) => {
       if (!mongoProfile.loginProviders) mongoProfile.loginProviders = ["general"];
       if (!mongoProfile.loginProviders.includes("apple")) mongoProfile.loginProviders.push("apple");
       if (appleRefreshToken) mongoProfile.apple_refresh_token = appleRefreshToken;
-      mongoProfile.platform = platform || mongoProfile.platform || "ios";
+      mongoProfile.platform = platform || mongoProfile.platform || "web";
       mongoProfile.last_login_at = new Date();
       await mongoProfile.save();
+    }
+
+    const loginAmemberId = amemberUser?.user_id || mongoProfile?.amember_user_id;
+    if (loginAmemberId) {
+      try {
+        await axios.put(`${baseUrl}/users/${loginAmemberId}?_key=${apiKey}`, new URLSearchParams({ platform: platform || mongoProfile?.platform || "web" }).toString(), {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
+      } catch (e) {
+        logger.error("[mobileLogin] error updating platform in aMember:", e.message);
+      }
     }
 
     const userData = await fetchUserDataByName(amemberUser?.login || mongoProfile?.login);
@@ -3970,7 +4025,7 @@ const v2EmailAuth = async (req, res) => {
     }
   */
   try {
-    const { email, password } = req.body || {};
+    const { email, password, platform } = req.body || {};
 
     // Input validation
     if (!email || typeof email !== "string" || !email.trim()) {
@@ -4037,6 +4092,7 @@ const v2EmailAuth = async (req, res) => {
           firstName:   "",
           lastName:    "",
           phoneNumber: "",
+          platform,
         });
 
         // Resolve the newly registered user data
@@ -4060,6 +4116,19 @@ const v2EmailAuth = async (req, res) => {
     }
 
     const mongoProfile = await UserProfile.findOne({ email: cleanEmail });
+    if (!isNewUser && userData?.user_id) {
+      try {
+        await axios.put(`${baseUrl}/users/${userData.user_id}?_key=${apiKey}`, new URLSearchParams({ platform: platform || mongoProfile?.platform || "web" }).toString(), {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
+      } catch (e) {
+        logger.error("[v2Auth/email] error updating platform in aMember:", e.message);
+      }
+    }
+    if (mongoProfile && (platform || !mongoProfile.platform)) {
+      mongoProfile.platform = platform || "web";
+      await mongoProfile.save();
+    }
     const fullName    = `${userData.name_f ?? ""} ${userData.name_l ?? ""}`.trim();
 
     const tokenPayload = {
@@ -4142,6 +4211,16 @@ async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, provide
     // ── Returning user ──────────────────────────────────────────────────────
     amemberUserId = amemberUser?.user_id || mongoProfile?.amember_user_id;
 
+    if (amemberUserId) {
+      try {
+        await axios.put(`${baseUrl}/users/${amemberUserId}?_key=${apiKey}`, new URLSearchParams({ platform: platform || mongoProfile?.platform || "web" }).toString(), {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
+      } catch (e) {
+        logger.error("[v2Auth/social] error updating platform in aMember:", e.message);
+      }
+    }
+
     if (mongoProfile) {
       if (!mongoProfile.firebase_uid) mongoProfile.firebase_uid = firebaseUid;
       if (!mongoProfile.loginProviders) mongoProfile.loginProviders = [];
@@ -4151,7 +4230,7 @@ async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, provide
       if (appleRefreshToken && providerLabel === "apple") {
         mongoProfile.apple_refresh_token = appleRefreshToken;
       }
-      if (platform) mongoProfile.platform = platform;
+      mongoProfile.platform = platform || mongoProfile.platform || "web";
       mongoProfile.last_login_at = new Date();
       await mongoProfile.save();
     }
@@ -4175,6 +4254,7 @@ async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, provide
       firstName,
       lastName,
       phoneNumber: "",
+      platform,
     });
     amemberUserId = String(newAmemberUser.user_id || newAmemberUser.id);
 
@@ -4199,7 +4279,7 @@ async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, provide
         existingDeleted.apple_refresh_token = appleRefreshToken;
       }
       existingDeleted.last_login_at          = new Date();
-      if (platform) existingDeleted.platform = platform;
+      existingDeleted.platform = platform || "web";
       await existingDeleted.save();
       mongoProfile = existingDeleted;
     } else {
@@ -4216,7 +4296,7 @@ async function _v2ResolveFirebaseUser(firebaseIdToken, expectedProvider, provide
         loginProviders:  [providerLabel],
         apple_refresh_token: (providerLabel === "apple" && appleRefreshToken) ? appleRefreshToken : "",
         last_login_at:   new Date(),
-        platform:        platform || "",
+        platform:        platform || "web",
       });
     }
   }
@@ -4352,7 +4432,7 @@ const v2AppleAuth = async (req, res) => {
     }
 
     const { jwtToken, mongoProfile, email, fullName, isNewUser, amemberUserId, hasActivePlan } =
-      await _v2ResolveFirebaseUser(firebaseIdToken, "apple.com", "apple", platform || "ios", appleRefreshToken);
+      await _v2ResolveFirebaseUser(firebaseIdToken, "apple.com", "apple", platform, appleRefreshToken);
 
     const userId = mongoProfile?.user_id || `GPT-${amemberUserId}`;
     const isOnboarded = await _v2IsOnboarded(userId);

@@ -53,7 +53,9 @@ function init() {
       ? getApps()[0]
       : initializeApp({ credential: cert(serviceAccount) });
     messaging = getMessaging(app);
-    console.log("[push] Firebase Admin initialised — FCM push enabled");
+    console.log(
+      `[push] Firebase Admin initialised — FCM push enabled (project_id=${serviceAccount.project_id}, client_email=${serviceAccount.client_email})`,
+    );
   } catch (err) {
     console.error(`[push] Firebase Admin init failed: ${err.message}`);
     messaging = null;

@@ -169,7 +169,7 @@ const userProfileSchema = new mongoose.Schema(
     loginProviders: [{ type: String }], // e.g. ["general", "google", "apple"]
     apple_refresh_token: { type: String, default: "", select: false },
     last_login_at: { type: Date, default: null },
-    platform: { type: String, default: "" },
+    platform: { type: String, default: "web" },
   },
   { timestamps: true },
 );

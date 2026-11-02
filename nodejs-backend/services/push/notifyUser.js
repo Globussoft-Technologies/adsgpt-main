@@ -38,14 +38,37 @@ function stringifyData(data = {}) {
 
 // Send an FCM push to all of a user's active devices.
 async function sendPushToUser(userId, push) {
-  if (!isPushEnabled()) return; // push not provisioned — silently skip
-  if (!push || !push.title) return;
+  logger.info(`[sendPushToUser] Init for user: ${userId}, title: ${push?.title}, data: ${JSON.stringify(push?.data || {})}`);
+
+  if (!isPushEnabled()) {
+    // push not provisioned — silently skip
+    logger.warn(`[sendPushToUser] Push disabled (Firebase Admin not initialised) — skipping for ${userId}`);
+    return;
+  }
+  if (!push || !push.title) {
+    logger.warn(`[sendPushToUser] No push title — skipping for ${userId}`);
+    return;
+  }
 
   const docs = await DeviceToken.find({ userId, isActive: true })
-    .select("token")
+    .select("token platform appVersion deviceModel")
     .lean();
   const tokens = docs.map((d) => d.token).filter(Boolean);
-  if (tokens.length === 0) return; // user has no registered app devices
+  logger.info(
+    `[sendPushToUser] Active device tokens for ${userId}: ${tokens.length} ${JSON.stringify(
+      docs.map((d) => ({
+        token: `${String(d.token).substring(0, 10)}...`,
+        platform: d.platform,
+        appVersion: d.appVersion,
+        deviceModel: d.deviceModel,
+      })),
+    )}`,
+  );
+  if (tokens.length === 0) {
+    // user has no registered app devices
+    logger.warn(`[sendPushToUser] No active device tokens for ${userId} — nothing to send`);
+    return;
+  }
 
   const messaging = getMessaging();
   const message = {
@@ -62,7 +85,23 @@ async function sendPushToUser(userId, push) {
     },
   };
 
+  logger.info(`[sendPushToUser] Sending FCM multicast to ${tokens.length} token(s) for ${userId}`);
   const resp = await messaging.sendEachForMulticast(message);
+  logger.info(`[sendPushToUser] FCM response for ${userId}: successCount=${resp.successCount}, failureCount=${resp.failureCount}`);
+
+  // Per-token outcome — the error code tells you why a push never arrived
+  // (e.g. messaging/third-party-auth-error = APNs key problem,
+  // messaging/mismatched-credential = wrong Firebase project).
+  resp.responses.forEach((r, i) => {
+    const tokenTag = `${String(tokens[i]).substring(0, 10)}...`;
+    if (r.success) {
+      logger.info(`[sendPushToUser] token ${tokenTag} (${docs[i]?.platform}) accepted by FCM, messageId=${r.messageId}`);
+    } else {
+      logger.error(
+        `[sendPushToUser] send failed for token ${tokenTag} (${docs[i]?.platform}) code=${r.error?.code} message=${r.error?.message}`,
+      );
+    }
+  });
 
   // Retire any tokens FCM rejected as permanently invalid.
   if (resp.failureCount > 0) {
@@ -99,15 +138,22 @@ async function sendPushToUser(userId, push) {
  * @param {object}   opts.push.data      Extra key/values for app deep-linking.
  */
 async function notifyUser(userId, { event, socketPayload, push } = {}) {
-  if (!userId) return;
+  if (!userId) {
+    logger.warn(`[notifyUser] Called without userId (event: ${event}, push: ${push?.title}) — skipping`);
+    return;
+  }
+  logger.info(`[notifyUser] Init for user: ${userId}, event: ${event}, hasSocketPayload: ${!!socketPayload}, push: ${push ? push.title : "none"}`);
 
   // 1) WebSocket — unchanged behaviour for web + foreground app sockets.
   if (event && global.io) {
     try {
       global.io.to(userId).emit(event, socketPayload);
+      logger.info(`[notifyUser] Socket event '${event}' emitted to room ${userId}`);
     } catch (e) {
       logger.error(`[notifyUser] socket emit failed for ${userId}: ${e.message}`);
     }
+  } else if (event) {
+    logger.warn(`[notifyUser] Socket event '${event}' not emitted for ${userId} — global.io not ready`);
   }
 
   // 2) FCM push — for backgrounded/closed native apps. Never blocks the caller.
@@ -115,7 +161,7 @@ async function notifyUser(userId, { event, socketPayload, push } = {}) {
     try {
       await sendPushToUser(userId, push);
     } catch (e) {
-      logger.error(`[notifyUser] push failed for ${userId}: ${e.message}`);
+      logger.error(`[notifyUser] push failed for ${userId}: ${e.code || ""} ${e.message}`);
     }
   }
 }
