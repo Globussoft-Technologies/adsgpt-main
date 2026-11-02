@@ -627,7 +627,15 @@ async function postAmemberInvoice({
   const paysysId = platform === "ios" ? "app-store" : "google-play";
   const beginDateStr = formatDateForAmember(purchasedAt);
   const expireDateStr = formatDateForAmember(expiresAt);
-  const numericAmount = typeof amount === "number" && !Number.isNaN(amount) ? amount : (parseFloat(amount) || 0);
+  let numericAmount = typeof amount === "number" && !Number.isNaN(amount) ? amount : (parseFloat(amount) || 0);
+  // aMember invoices are always USD. Convert here so a caller passing a
+  // non-USD amount (e.g. 2499 INR) never lands in aMember as $2499.
+  if (currency && String(currency).toUpperCase() !== "USD") {
+    const converted = await convertAmountToUSD(numericAmount, currency);
+    logger.info(`[postAmemberInvoice] Converted ${numericAmount} ${currency} -> ${converted} USD`);
+    numericAmount = converted;
+  }
+  currency = "USD";
   const formattedAmount = numericAmount.toFixed(2);
 
   const payload = new URLSearchParams();
@@ -1724,10 +1732,16 @@ async function convertAmountToUSD(amount, originalCurrency) {
       return parseFloat((amount / rate).toFixed(2));
     }
   } catch (error) {
-    console.error("[convertAmountToUSD] Failed to fetch live exchange rates:", error.message);
+    // Fall through: a previously cached (stale) rate table is still used below.
+    logger.error(`[convertAmountToUSD] Failed to fetch live exchange rates: ${error.message}`);
+    if (cachedRates && cachedRates[targetCurrency]) {
+      return parseFloat((amount / cachedRates[targetCurrency]).toFixed(2));
+    }
   }
 
-  return amount;
+  // Never hand back a foreign-currency number that the caller will label USD
+  // (2499 INR would become $2499 in aMember). Fail so the purchase can retry.
+  throw new Error(`No USD exchange rate available for currency ${targetCurrency}`);
 }
 
 // ── Payment Verification Handlers ───────────────────────────────────────────
@@ -2015,6 +2029,13 @@ const verifyApplePayment = async (req, res) => {
       amount = 0.00;
     } else if (typeof decoded.price === "number") {
       amount = decoded.price / 1000.0;
+      // Apple reports the price in the storefront currency (e.g. INR). aMember
+      // invoices are always USD, so convert like the Google and renewal paths.
+      if (decoded.currency) {
+        const originalAmount = amount;
+        amount = await convertAmountToUSD(amount, decoded.currency);
+        logger.info(`[verifyApplePayment] Converted ${originalAmount} ${decoded.currency} -> ${amount} USD`);
+      }
     } else {
       amount = 0.00;
     }
@@ -2112,7 +2133,7 @@ const verifyApplePayment = async (req, res) => {
       store_product_id: productId,
       event_type: existingTx?.event_type || (isTrial ? "free_trial" : (hadExistingLineage ? "renewal" : "initial_purchase")),
       amount,
-      currency: decoded.currency || "USD",
+      currency: "USD", // amount is converted to USD above; original currency stays in raw_payload
       amember_invoice_id: `ios_${transactionId}`,
       purchased_at: purchaseDate,
       expires_at: expiresDate,
@@ -2242,7 +2263,7 @@ const verifyApplePayment = async (req, res) => {
         storeProductId: productId,
         matchedProduct,
         amount,
-        currency: decoded.currency || "USD",
+        currency: "USD",
         purchasedAt: purchaseDate,
         expiresAt: expiresDate,
       });
@@ -3031,7 +3052,12 @@ const handleAppleWebhook = async (req, res) => {
             typeof txInfo.price === "number"
               ? txInfo.price / 1000.0
               : existingTx.amount;
-          const originalCurrency = txInfo.currency || existingTx.currency || "USD";
+          // existingTx.amount is already stored in USD, so only treat the
+          // webhook's currency as the source currency when its price is used.
+          const originalCurrency =
+            typeof txInfo.price === "number"
+              ? txInfo.currency || "USD"
+              : existingTx.currency || "USD";
           renewalAmount = await convertAmountToUSD(renewalAmount, originalCurrency);
           const currency = "USD"; // txInfo.currency || existingTx.currency || "USD";
 
